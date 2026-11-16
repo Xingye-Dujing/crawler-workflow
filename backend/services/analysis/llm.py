@@ -116,7 +116,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         'batch_size': cfg.get('batch_size') or 10,
         # API providers tolerate a little concurrency (free tiers are shared
         # and rate-limited); the local daemon serves one request at a time.
-        'workers': (cfg.get('workers') or 3) if provider == 'openrouter' else 1,
+        'workers': 1 if provider == 'ollama' else (cfg.get('workers') or 3),
         'publish': publish,
         'cancel_event': execution_state.get('cancel_event'),
         'checkpoint_dir': paths.active().checkpoint_dir,

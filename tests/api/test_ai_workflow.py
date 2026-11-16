@@ -1,0 +1,193 @@
+"""The AI HTTP surface, driven by a scripted provider. No network, no paid call."""
+
+import json
+
+import pytest
+
+pytestmark = pytest.mark.api
+
+
+class FakeProvider:
+    def __init__(self, provider_id: str = 'fake_ai'):
+        from ai.types import ModelSpec, ProviderSpec
+
+        capabilities = frozenset({'thinking', 'tools', 'ask_user'})
+        self.spec = ProviderSpec(
+            id=provider_id,
+            label_key='ai.provider.deepseek',
+            notes_key='ai.providerNote.deepseek',
+            protocol='openai',
+            base_url='',
+            models=(ModelSpec('fake-model', 'Fake', 10000, capabilities),),
+            capabilities=capabilities,
+        )
+
+    def supports(self, capability: str, model: str = '') -> bool:
+        return capability in self.spec.capabilities
+
+    def stream(self, request):
+        if request.get('_ask'):
+            yield {
+                'type': 'tool_call',
+                'id': 'call_1',
+                'name': 'ask_user_question',
+                'arguments': {
+                    'questions': [
+                        {
+                            'id': 'scope',
+                            'question': 'Which data?',
+                            'options': [{'label': 'Dataset A'}, {'label': 'Dataset B'}],
+                        }
+                    ]
+                },
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'thinking_delta', 'text': 'thinking'}
+        yield {'type': 'text_delta', 'text': 'Hello '}
+        yield {'type': 'text_delta', 'text': 'world'}
+        yield {'type': 'usage', 'usage': {'prompt_tokens': 4, 'completion_tokens': 2}}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
+class AskThenAnswerProvider(FakeProvider):
+    def __init__(self):
+        super().__init__('fake_ask')
+
+    def stream(self, request):
+        has_call = any(
+            block.get('type') == 'tool_use'
+            for message in request.get('messages', [])
+            for block in message.get('blocks') or []
+        )
+        if not has_call:
+            yield from super().stream({'_ask': True})
+            return
+        yield {'type': 'text_delta', 'text': 'You chose Dataset A.'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
+@pytest.fixture
+def fake_ai(monkeypatch):
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_ai', FakeProvider())
+    monkeypatch.setitem(PROVIDERS, 'fake_ask', AskThenAnswerProvider())
+
+
+@pytest.fixture
+def clean_ai():
+    from ai import store
+
+    store.mark_interrupted()
+    yield
+
+
+def _chat(client, **overrides):
+    body = {
+        'text': 'hello',
+        'provider': 'fake_ai',
+        'model': 'fake-model',
+        'api_key': 'secret-key',
+        'skill': 'project',
+        'context': {},
+    }
+    body.update(overrides)
+    return client.post('/api/ai/chat?stream=0', json=body)
+
+
+def test_chat_returns_canonical_events_and_never_stores_the_key(client, fake_ai, clean_ai):
+    response = _chat(client)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['ok'] is True
+    types = [event['type'] for event in data['events']]
+    assert 'meta' in types and 'text' in types and 'done' in types
+    conversation_id = data['events'][0]['conversation_id']
+    detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
+    assert detail['ok'] is True
+    assert detail['messages']
+    assert 'secret-key' not in json.dumps(detail, ensure_ascii=False)
+
+
+def test_conversation_list_and_delete(client, fake_ai, clean_ai):
+    response = _chat(client)
+    conversation_id = response.get_json()['events'][0]['conversation_id']
+    listing = client.get('/api/ai/conversations').get_json()
+    assert listing['ok'] is True
+    assert any(row['id'] == conversation_id for row in listing['conversations'])
+    deleted = client.delete('/api/ai/conversations/' + conversation_id).get_json()
+    assert deleted['ok'] is True
+    assert client.get('/api/ai/conversations/' + conversation_id).status_code == 404
+
+
+def test_ask_user_pauses_and_answer_resumes(client, fake_ai, clean_ai):
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    data = response.get_json()
+    events = data['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+    assert any(event['type'] == 'paused' for event in events)
+    assert question['questions'][0]['question'] == 'Which data?'
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'message_id': question['message_id'],
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+        'api_key': 'secret-key',
+    }
+    resumed = client.post('/api/ai/answer?stream=0', json=answer)
+    assert resumed.status_code == 200, resumed.get_json()
+    resumed_events = resumed.get_json()['events']
+    assert any(event['type'] == 'text' and 'Dataset A' in event.get('text', '') for event in resumed_events)
+
+
+def test_asking_web_search_of_go_refuses_by_name(client, monkeypatch):
+    from ai.providers import PROVIDERS
+    from ai.providers.opencode_go import OpenCodeGoProvider
+
+    monkeypatch.setitem(PROVIDERS, 'opencode_go', OpenCodeGoProvider())
+    response = _chat(
+        client,
+        provider='opencode_go',
+        model='deepseek-v4.1-flash',
+        web_search=True,
+        skill='project',
+    )
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body['key'] == 'ai.capabilityRefused'
+
+
+def test_skill_studio_crud_and_plugin_install(client, fake_ai, clean_ai):
+    skill = {
+        'id': 'demo.skill',
+        'prompt': 'Answer only from the supplied docs.',
+        'context': ['project', 'docs'],
+        'tools': ['project_facts', 'docs_search'],
+        'suggested': ['hello'],
+        'ask_policy': 'auto',
+    }
+    saved = client.post('/api/ai/skills', json=skill)
+    assert saved.status_code == 200, saved.get_json()
+    assert saved.get_json()['skill']['id'] == 'demo.skill'
+    fetched = client.get('/api/ai/skills/demo.skill').get_json()
+    assert fetched['skill']['prompt'].startswith('Answer only')
+    forked = client.post('/api/ai/skills/demo.skill/fork', json={'id': 'demo.skill.copy'})
+    assert forked.status_code == 200, forked.get_json()
+    plugin = {
+        'id': 'demo.pack',
+        'name': 'Demo pack',
+        'version': '1.0.0',
+        'api': 1,
+        'kind': 'skill-pack',
+        'permissions': ['read:docs'],
+        'skills': [{**skill, 'id': 'demo.pack.reader'}],
+    }
+    installed = client.post('/api/ai/plugins/install', json=plugin)
+    assert installed.status_code == 200, installed.get_json()
+    listed = client.get('/api/ai/plugins').get_json()
+    assert any(row['id'] == 'demo.pack' for row in listed['plugins'])
+    assert client.delete('/api/ai/plugins/demo.pack').status_code == 200
+    client.delete('/api/ai/skills/demo.skill')
+    client.delete('/api/ai/skills/demo.skill.copy')

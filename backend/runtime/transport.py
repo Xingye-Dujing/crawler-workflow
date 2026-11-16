@@ -8,8 +8,6 @@ no test seam to move.
 
 from core.config import Config
 
-from i18n import t
-
 
 def _local_transport_refusal(provider: str) -> str:
     """Why a cloud host answers “没有这种传输”, or '' when the choice is one it can honor.
@@ -22,6 +20,14 @@ def _local_transport_refusal(provider: str) -> str:
     model name: the other shape of this bug is a run that "succeeds" with no analysis
     because nothing was ever listening on 11434.
     """
-    if not Config.CLOUD_MODE or str(provider or '') == 'openrouter':
+    from ai.providers.registry import local_transport_refusal
+
+    refusal = local_transport_refusal(provider)
+    if refusal:
+        return refusal
+    if not Config.CLOUD_MODE:
         return ''
-    return t('api.cloudNoLocalModel', provider=str(provider or ''))
+    # Unknown names are validated by the run door and the /api/llm/test route; this helper
+    # only answers the local-daemon question. A name outside the catalog is not a local
+    # transport, so it must not be refused here as one.
+    return ''

@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 from api import auth as web_auth
 from api.accounts import bp as accounts_bp
+from api.ai import bp as ai_bp
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
 from api.capabilities import bp as capabilities_bp
@@ -653,6 +654,7 @@ app.register_blueprint(components_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(update_bp)
 app.register_blueprint(llm_bp)
+app.register_blueprint(ai_bp)
 
 
 # ─── Execution History API (time-series comparison across runs) ───

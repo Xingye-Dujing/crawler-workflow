@@ -33,10 +33,6 @@ ZH = {
     'api.internalErrorLog': '未处理的异常：{method} {path}（{kind}），详情见日志文件',
     'api.httpError': '请求被拒绝（HTTP {code}）',
     'api.prefixRefusedLog': '忽略不可用的 X-Forwarded-Prefix：{prefix}',
-    'api.cloudNoLocalModel': (
-        '这台服务器没有本地模型可连（“{provider}”需要宿主自己跑一个 Ollama 守护进程）：'
-        '云端部署只支持 OpenRouter，请在“设置 → AI”里改选 OpenRouter 并填入模型与 API Key'
-    ),
     'api.cloudNoLoginWindow': (
         '这台服务器没有可以登录的窗口：请在“Cookie”面板里粘贴 Cookies JSON 保存，'
         '系统会在保存时替该账号建好 Profile 并种进去'
@@ -246,11 +242,6 @@ EN = {
     'api.internalErrorLog': 'unhandled exception: {method} {path} ({kind}); the traceback is in the log file',
     'api.httpError': 'Request refused (HTTP {code})',
     'api.prefixRefusedLog': 'ignoring an unusable X-Forwarded-Prefix: {prefix}',
-    'api.cloudNoLocalModel': (
-        'This server has no local model to talk to ("{provider}" wants an Ollama daemon on its own '
-        'host): a cloud deployment only supports OpenRouter — pick OpenRouter under Settings → AI and '
-        'fill in the model and API key'
-    ),
     'api.cloudNoLoginWindow': (
         'This server has no window to log into: paste the Cookies JSON into the Cookie panel and save, '
         "which builds that account's profile and plants the session into it"

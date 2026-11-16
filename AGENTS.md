@@ -264,6 +264,22 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   per row; `run_pipeline(df, steps, llm=, cancel=)` hands it to `LLM_OPS` only, never via `params`. No model → refused
   before paying; a Stop leaves `未处理` → the node settles PARTIAL, not DONE.
 
+## AI workspace
+
+- **One provider catalog** (`ai/providers/registry.py`) serves the workspace and the row analyzers; a
+  provider capability is a server promise, so an unsupported `thinking`/`web_search`/`files` request is
+  refused by name, never sent as a field the provider ignores. JS holds no model/endpoint list.
+- **Keys stay in the browser**; the server holds one for a request only. `ai.db` and logs must never
+  contain an API key. A turn's assistant row is `streaming` until settled; a crash leaves `interrupted`.
+- **A turn is several assistant rows**: every `tool_use` has an immediate tool result, grouped in the
+  UI by `turn_id`. `ask_user_question` pauses the turn; its answer is a tool result, not a new user
+  message. Read-only tools only; writes are artifacts the user applies.
+- **Context is generated, budgeted and redacted**: project facts come from the existing registries,
+  live data is re-read per account, and an omission is reported in `context_meta`/the inspector.
+- **Plugins are data first**: declarative skill/provider/tool packs are portable; local code plugins are
+  local/admin only and cloud mode refuses them by name. Plugin UI uses OMM-ZEN host components, never
+  arbitrary CSS/HTML.
+
 ## 定时任务 (scheduler)
 
 - **The clock is one thread inside the server process, started only from `__main__`** (under the reloader, only the real

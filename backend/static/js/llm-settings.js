@@ -28,6 +28,14 @@ const LLMSettings = {
             model: '',        // required, a :free model id
             api_key: '',      // localStorage only, never written server-side
         },
+        deepseek: {
+            model: '',
+            api_key: '',
+        },
+        opencode_go: {
+            model: '',
+            api_key: '',
+        },
         batch_size: 10,       // rows between checkpoint saves
         max_chars: 600,       // per-row truncation — long texts burn tokens
         workers: 3,           // openrouter only
@@ -45,6 +53,8 @@ const LLMSettings = {
            block from an older build would drop its newer defaults. Merge both. */
         s.ollama = Object.assign({}, this.defaults.ollama, raw.ollama || {});
         s.openrouter = Object.assign({}, this.defaults.openrouter, raw.openrouter || {});
+        s.deepseek = Object.assign({}, this.defaults.deepseek, raw.deepseek || {});
+        s.opencode_go = Object.assign({}, this.defaults.opencode_go, raw.opencode_go || {});
         /* Migration from the pre-split shape: the single flat `model`/`api_key`
            pair only ever appeared while OpenRouter was selected, so that is
            where it belongs. save() drops the flat keys, making this one-shot. */
@@ -59,8 +69,11 @@ const LLMSettings = {
            from a desktop profile, or from before the flag was set — must not stay the
            active transport. The server refuses that transport by name anyway; this is
            what makes the panel ask for the key it actually needs. */
-        if (typeof CloudMode !== 'undefined' && CloudMode.on) s.provider = 'openrouter';
-        else if (s.provider !== 'openrouter') s.provider = 'ollama';
+        if (typeof CloudMode !== 'undefined' && CloudMode.on) {
+            if (s.provider === 'ollama') s.provider = 'openrouter';
+        } else if (!['ollama', 'openrouter', 'deepseek', 'opencode_go'].includes(s.provider)) {
+            s.provider = 'ollama';
+        }
         return s;
     },
 
@@ -90,7 +103,7 @@ const LLMSettings = {
         return {
             provider: s.provider,
             model: active.model || '',
-            api_key: s.provider === 'openrouter' ? active.api_key || '' : '',
+            api_key: ['openrouter', 'deepseek', 'opencode_go'].includes(s.provider) ? active.api_key || '' : '',
             batch_size: s.batch_size,
             max_chars: s.max_chars,
             workers: s.workers,
@@ -108,6 +121,8 @@ const LLMSettings = {
         put('ai-ollama-model', s.ollama.model || '');
         put('ai-model', s.openrouter.model || '');
         put('ai-key', s.openrouter.api_key || '');
+        put('ai-api-model', (s[s.provider] || {}).model || '');
+        put('ai-api-key', (s[s.provider] || {}).api_key || '');
         put('ai-batch', s.batch_size);
         put('ai-maxchars', s.max_chars);
         this.toggleProviderRows(s.provider);
@@ -121,6 +136,14 @@ const LLMSettings = {
         document.querySelectorAll('.ai-only-openrouter').forEach(el => {
             el.style.display = provider === 'openrouter' ? '' : 'none';
         });
+        document.querySelectorAll('.ai-only-api').forEach(el => {
+            el.style.display = provider === 'deepseek' || provider === 'opencode_go' ? '' : 'none';
+        });
+        const model = document.getElementById('ai-api-model');
+        const key = document.getElementById('ai-api-key');
+        const settings = this.load();
+        if (model) model.value = (settings[provider] || {}).model || '';
+        if (key) key.value = (settings[provider] || {}).api_key || '';
     },
 
     /* The placeholder should show the model the server considers the local
@@ -160,11 +183,13 @@ const LLMSettings = {
 window.LLMSettings = LLMSettings;
 
 function onAIProviderChange(value) {
-    const provider = value === 'openrouter' ? 'openrouter' : 'ollama';
+    const provider = ['openrouter', 'deepseek', 'opencode_go'].includes(value) ? value : 'ollama';
     const s = LLMSettings.save({ provider });
     LLMSettings.toggleProviderRows(provider);
     if (provider === 'openrouter') {
         refreshAIModels();
+    } else if (provider === 'deepseek' || provider === 'opencode_go') {
+        refreshAPIProviderModels();
     } else if (!s.ollama.model) {
         /* The tag must be one the daemon actually has, and listing it is cheap
            — so offer the list instead of making the user guess. */
@@ -183,6 +208,14 @@ function onAIModelInput(value) {
 
 function onAIKeyInput(value) {
     LLMSettings.saveProvider('openrouter', { api_key: value.trim() });
+}
+
+function onAIAPIModelInput(value) {
+    LLMSettings.saveProvider(LLMSettings.load().provider, { model: value.trim() });
+}
+
+function onAIAPIKeyInput(value) {
+    LLMSettings.saveProvider(LLMSettings.load().provider, { api_key: value.trim() });
 }
 
 function onAINumberInput(field, value) {
@@ -226,8 +259,40 @@ async function refreshAIModels() {
     }
 }
 
-/* Local daemon tags — a different endpoint from the OpenRouter catalog because
-   the two providers no longer share a model setting. */
+/* DeepSeek / OpenCode Go model catalogs. The same provider catalog the workspace uses; the
+   endpoint is server-side so the key never reaches a URL on this page. */
+async function refreshAPIProviderModels() {
+    const provider = LLMSettings.load().provider;
+    const sel = document.getElementById('ai-api-models');
+    const btn = document.getElementById('ai-api-refresh-btn');
+    if (!sel || !['deepseek', 'opencode_go'].includes(provider)) return;
+    if (btn) btn.disabled = true;
+    try {
+        const key = (LLMSettings.load()[provider] || {}).api_key || '';
+        const resp = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/models?key=' + encodeURIComponent(key));
+        const result = await resp.json();
+        if (result.ok && result.models.length) {
+            const current = (LLMSettings.load()[provider] || {}).model || '';
+            fillModelSelect(sel, result.models.map((m) => m.id), current, 'ai.pickModel');
+            showToast(I18n.t('toast.aiModelsLoaded').replace('{n}', result.models.length));
+        } else {
+            showToast(I18n.t('toast.aiModelsFail') + ': ' + (result.error || ''));
+        }
+    } catch (e) {
+        showToast(I18n.t('toast.aiModelsFail') + ': ' + e.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function onAIAPIModelPick(id) {
+    if (!id) return;
+    LLMSettings.saveProvider(LLMSettings.load().provider, { model: id });
+    const input = document.getElementById('ai-api-model');
+    if (input) input.value = id;
+}
+
+
 async function refreshOllamaModels() {
     const sel = document.getElementById('ai-ollama-models');
     const btn = document.getElementById('ai-ollama-refresh-btn');
@@ -277,6 +342,10 @@ async function testAIConnection() {
     if (s.provider === 'openrouter') {
         if (!s.openrouter.api_key) { showToast(I18n.t('toast.aiNeedKey')); return; }
         if (!s.openrouter.model) { showToast(I18n.t('toast.aiNeedModel')); return; }
+    } else if (s.provider === 'deepseek' || s.provider === 'opencode_go') {
+        const block = s[s.provider] || {};
+        if (!block.api_key) { showToast(I18n.t('toast.aiNeedKey')); return; }
+        if (!block.model) { showToast(I18n.t('toast.aiNeedModel')); return; }
     } else if (!s.ollama.model) {
         showToast(I18n.t('toast.aiNeedOllamaModel'));
         return;

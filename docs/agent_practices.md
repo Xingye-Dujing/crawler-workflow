@@ -519,6 +519,53 @@ leaves four transparent wedges where the page shows through the overlay. The sho
 key column is left-aligned and uses the body font: a right-aligned monospace column read as a
 cramped code block rather than part of the page.
 
+## AI workspace — why the boundaries are where they are
+
+The workspace is an agent, not a chat box, and the difference is in four boundaries rather than in
+a bigger prompt.
+
+**One provider catalog, because a run must not lie about its transport.** The row analyzers had
+already learned this lesson when `LLMClient` folded an unknown provider into `ollama`: a record said
+OpenRouter ran while a local daemon answered. The workspace adds DeepSeek and OpenCode Go, and a
+second provider table in JS would recreate the same accident across a language boundary. The
+catalog therefore owns the endpoint, model list, capability manifest and cloud/local refusal, and
+the browser only renders what `/api/ai/providers` says. A capability is a promise: if the transport
+cannot carry `thinking` or `web_search`, the request is refused by name rather than sent as a field
+the provider silently ignores. The visible switch disappears because the manifest says so, not
+because a second JS opinion guessed.
+
+**Keys in the browser, a transcript on the server.** The existing AI panel already kept the key in
+`localStorage`; the workspace must not quietly move it into `data/`. The page posts the key with the
+request, the server holds it for that call, and the answer endpoint asks for it again because a
+reloaded assistant row has no key. That is why `ai.db` can be inspected and backed up like every
+other account store without leaking a credential, and why an answer after a page reload refuses
+with `ai.noKey` instead of replaying an old secret.
+
+**A turn is several rows.** The Messages API pairs every `assistant tool_use` with an immediate
+`tool result`; merging rounds into one assistant row produces an invalid history that the provider
+rejects. Each round is therefore its own assistant row, and the page groups them by `turn_id`. The
+`ask_user_question` pause is a tool call whose result arrives later; the answer is appended as a
+tool result and the same turn resumes. A new user message abandons the pending question with a
+cancellation result so the history never ends with an unresolved call.
+
+**Read-only tools, proposal artifacts.** The agent may read the project, but a write is a separate,
+visible act. Workflow drafts, analysis plans, chart specs, reports, skill drafts and plugin
+manifests leave as artifacts; the user clicks Apply/Run through the app's existing route. This keeps
+one authorization path (the app's own buttons), makes a mistaken proposal reversible, and means the
+agent cannot delete a run or rewrite a canvas by hallucinating a tool call.
+
+**Context is generated, not a second catalogue.** Project facts come from the node, capability,
+analysis and chart registries the app already trusts. Live data is re-read per account; the browser
+sends ids and an unsaved canvas draft, never a saved dataset or run as fact. The budget is measured,
+the key is redacted, and an omission is reported in `context_meta` and the inspector rather than
+being silently presented as a complete reading.
+
+**Plugins are data first.** A skill pack, provider pack or constrained HTTP tool is a manifest, not
+code; it is portable and cloud-safe. A local code plugin runs in-process with the server's
+privileges, so it is local/admin only and cloud mode refuses it by name. Plugin UI is rendered by
+host components so OMM-ZEN cannot be broken by a third-party stylesheet, which is also the reason
+the workspace shell, chat, sessions, trace and studio are built from the same host primitives.
+
 ## 定时任务 (scheduler) — why the clock is narrow
 
 - **The clock is one thread, started from exactly one place.** Flask's reloader imports the module twice, so a

@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="css/workspace.css" />
     <link rel="stylesheet" href="css/dialog.css" />
     <link rel="stylesheet" href="css/overlays.css" />
+    <link rel="stylesheet" href="css/ai.css" />
     <link rel="stylesheet" href="css/accounts.css" />
     <link rel="stylesheet" href="css/update.css" />
     <link rel="icon" href="icon.ico" type="image/x-icon" />
@@ -189,6 +190,15 @@
           data-i18n="settingsPanel.slowButton"
         >
           Slow crawl
+        </button>
+        <button
+          class="menu-btn"
+          type="button"
+          id="btn-ai-workspace"
+          onclick="AIWorkspace.toggle()"
+          data-i18n="btn.aiWorkspace"
+        >
+          AI 工作区
         </button>
         <button
           class="menu-btn"
@@ -1894,6 +1904,12 @@
             <option value="openrouter" data-i18n="ai.provider.openrouter">
               OpenRouter API
             </option>
+            <option value="deepseek" data-i18n="ai.provider.deepseek">
+              DeepSeek API
+            </option>
+            <option value="opencode_go" data-i18n="ai.provider.opencode_go">
+              OpenCode Go
+            </option>
           </select>
         </span>
       </div>
@@ -1983,6 +1999,42 @@
             placeholder="sk-or-..."
             autocomplete="off"
             oninput="onAIKeyInput(this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-api">
+        <span data-i18n="ai.model">模型</span>
+        <span class="dd-ctrl">
+          <input
+            type="text"
+            id="ai-api-model"
+            class="settings-input"
+            placeholder="deepseek-flash / deepseek-v4.1-flash"
+            oninput="onAIAPIModelInput(this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-api">
+        <span data-i18n="ai.models">模型列表</span>
+        <span class="dd-ctrl">
+          <select id="ai-api-models" class="settings-select" onchange="onAIAPIModelPick(this.value)">
+            <option value="" data-i18n="ai.refreshModels">— 点右侧刷新获取 —</option>
+          </select>
+          <button class="menu-btn" type="button" id="ai-api-refresh-btn" onclick="refreshAPIProviderModels()" data-i18n="ai.refresh">
+            刷新
+          </button>
+        </span>
+      </div>
+      <div class="dd-item-row ai-only-api">
+        <span data-i18n="ai.key">API Key</span>
+        <span class="dd-ctrl">
+          <input
+            type="password"
+            id="ai-api-key"
+            class="settings-input"
+            placeholder="sk-… / oc_sk-…"
+            autocomplete="off"
+            oninput="onAIAPIKeyInput(this.value)"
           />
         </span>
       </div>
@@ -2508,6 +2560,7 @@
     <script src="js/i18n/accounts.js"></script>
     <script src="js/i18n/components.js"></script>
     <script src="js/i18n/update.js"></script>
+    <script src="js/i18n/ai.js"></script>
     <script src="js/update.js"></script>
     <script src="js/app.js"></script>
     <script src="js/job-poll.js"></script>
@@ -2518,10 +2571,55 @@
     <script src="js/llm-settings.js"></script>
     <script src="js/app-settings.js"></script>
     <script src="js/floating-panels.js"></script>
+    <script src="js/ai/stream.js"></script>
+    <script src="js/ai/render.js"></script>
+    <script src="js/ai/settings.js"></script>
+    <script src="js/ai/context.js"></script>
+    <script src="js/ai/studio.js"></script>
+    <script src="js/ai-workspace.js"></script>
     <!-- Reusable-node templates, inside view and run expansion. After app.js so the
          Style menu's preference and the i18n catalogue are already defined. -->
     <script src="js/reusable.js"></script>
     <script src="js/components.js"></script>
+    <aside id="ai-workspace" class="ai-workspace" aria-label="AI workspace" hidden>
+      <div class="ai-resizer" id="ai-resizer" role="separator" aria-label="Resize AI workspace" aria-orientation="vertical"></div>
+      <header class="ai-head">
+        <button type="button" class="ai-icon-btn" id="ai-history-btn" onclick="AIWorkspace.toggleSessions()" aria-label="Conversations" title="Conversations">☰</button>
+        <div class="ai-head-title" id="ai-title" data-i18n="ai.title">AI Workspace</div>
+        <span class="ai-chip ai-model-chip" id="ai-model-chip">—</span>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.newChat()" aria-label="New conversation" title="New conversation">＋</button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openStudio()" aria-label="Skills and plugins" title="Skills and plugins">◇</button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openSettings()" aria-label="Provider settings" title="Provider settings">⚙</button>
+        <button type="button" class="ai-icon-btn" id="ai-full-btn" onclick="AIWorkspace.toggleFull()" aria-label="Full screen" title="Full screen">⤢</button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.close()" aria-label="Close AI workspace" title="Close AI workspace">×</button>
+      </header>
+      <div class="ai-body">
+        <aside id="ai-sessions" class="ai-sessions" aria-label="Conversations"></aside>
+        <main id="ai-chat" class="ai-chat" aria-live="polite"></main>
+        <aside id="ai-side" class="ai-side" aria-label="Context and agent trace"></aside>
+      </div>
+      <footer class="ai-composer">
+        <div class="ai-context-bar" id="ai-context-bar"></div>
+        <div class="ai-input-wrap">
+          <textarea id="ai-input" class="ai-input" rows="2" placeholder="Ask about the project, a run, a dataset…" data-i18n-placeholder="ai.placeholder" aria-label="Message"></textarea>
+          <div class="ai-composer-row">
+            <div class="ai-toggles">
+              <button type="button" class="ai-toggle" id="ai-thinking-btn" onclick="AIWorkspace.toggleThinking()" data-i18n="ai.thinking" aria-label="Thinking" title="Thinking">Thinking</button>
+              <button type="button" class="ai-toggle" id="ai-search-btn" onclick="AIWorkspace.toggleSearch()" data-i18n="ai.search" aria-label="Web search" title="Web search">Web</button>
+              <select id="ai-skill" class="ai-select" aria-label="Skill" onchange="aiSetSkill(this.value)"></select>
+              <select id="ai-ws-provider" class="ai-select" aria-label="Provider" onchange="aiSetProvider(this.value)"></select>
+              <select id="ai-ws-model" class="ai-select" aria-label="Model" onchange="aiSetModel(this.value)"></select>
+            </div>
+            <div class="ai-send-group">
+              <button type="button" class="ai-icon-btn" onclick="AIWorkspace.attach()" aria-label="Attach a file" title="Attach a file">⌁</button>
+              <button type="button" class="ai-icon-btn ai-stop" id="ai-stop-btn" onclick="AIWorkspace.stop()" aria-label="Stop" title="Stop" hidden>■</button>
+              <button type="button" class="ai-primary" id="ai-send-btn" onclick="AIWorkspace.send()" data-i18n="ai.send" aria-label="Send">Send</button>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </aside>
+
     <div id="components-panel" class="env-overlay" hidden>
       <div class="env-card">
         <div class="console-header">

@@ -636,7 +636,10 @@ document.addEventListener('DOMContentLoaded', () => {
        — datasets, palette, outline, dirtyGuard, resumeBar, the console reconnect, the
        locks and the autosave — and the partial-boot message never printed either. */
     boot('capabilities', () => Capabilities.load());
-
+    boot('aiWorkspace', () => {
+        /* The workspace is optional work: a page that boots without its scripts still runs. */
+        if (typeof AIWorkspace !== 'undefined') AIWorkspace.restore();
+    });
     /* Registered fine-tuned models (the 网暴模型 etc.) are fetched the same way, so
        the bert-mode picker can name them instead of the user typing a path. */
     boot('bertModels', () => BertModels.load());

@@ -182,6 +182,31 @@ CatBus / 采集矩阵 / 平台边界的规则与证据不在这里复述，见 [
 
 > 运行列表只由运行记录（`/api/runs/*`）提供，执行历史不再复制一份。
 
+### AI 工作区
+
+AI 工作区与逐行分析共用 `backend/ai/providers/registry.py` 的供应商目录；密钥只由浏览器发送，服务端在一次请求内持有，不落盘。所有对话/技能/插件都按 `runtime.paths.active()` 的账号隔离。
+
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/ai/bootstrap` | GET | 供应商能力、技能、会话列表、用量、服务端设置与工具目录 |
+| `/api/ai/providers` | GET | 供应商目录（id、label/note key、能力、模型、是否本地） |
+| `/api/ai/providers/<id>/models` | GET | 实时模型列表；取不到时回退到声明的目录 |
+| `/api/ai/providers/<id>/test` | POST | 一次极小的流式往返，验证 key/model/provider |
+| `/api/ai/chat` | POST | 一轮对话（SSE；`?stream=0` 返回事件 JSON）。请求带 `provider/model/api_key/skill/thinking/web_search/context` |
+| `/api/ai/answer` | POST | 回答一个 `ask_user_question` 并继续同一轮（SSE 或 JSON）；密钥再次随请求发送 |
+| `/api/ai/stop` | POST | 设置该会话的取消事件 |
+| `/api/ai/conversations` | GET/POST | 会话列表 / 新建 |
+| `/api/ai/conversations/<id>` | GET/PATCH/DELETE | 会话详情、改名/置顶、删除 |
+| `/api/ai/context` | POST | 预览一次上下文构建（项目事实、实时数据、文档、预算） |
+| `/api/ai/skills` | GET/POST | 技能目录 / 保存用户技能 |
+| `/api/ai/skills/<id>` | GET/DELETE | 完整技能（含提示词）/ 删除用户技能 |
+| `/api/ai/skills/<id>/fork` | POST | 把内置技能 Fork 成用户技能 |
+| `/api/ai/plugins` | GET | 内置与用户插件清单 |
+| `/api/ai/plugins/install` | POST | 安装声明式插件（skill/provider/tool pack）；代码插件仅本地/管理员 |
+| `/api/ai/plugins/<id>/enable` | POST | 启用/禁用并注册/注销贡献 |
+| `/api/ai/plugins/<id>` | DELETE | 卸载插件 |
+| `/api/ai/usage` | GET | 本账号的 token 汇总 |
+
 ### AI / Cookie / 系统
 
 | 端点 | 方法 | 描述 |

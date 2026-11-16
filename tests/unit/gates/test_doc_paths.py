@@ -25,6 +25,8 @@ REPO = Path(__file__).resolve().parents[3]
 #: about someone else's package, and the resolver would have nothing to check it against.
 _PROJECT_DIRS = (
     'api',
+    'ai',
+    'extensions',
     'analyzers',
     'capabilities',
     'core',

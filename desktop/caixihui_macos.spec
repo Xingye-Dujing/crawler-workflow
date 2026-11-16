@@ -56,6 +56,8 @@ except Exception:
 hiddenimports = []
 for package in (
     'api',
+    'ai',
+    'extensions',
     'crawlers',
     'services',
     'analyzers',

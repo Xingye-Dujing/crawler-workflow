@@ -108,6 +108,7 @@ _IMPORT_NAMES = {
 
 #: Top-level packages of this repository, never third-party dependencies.
 _LOCAL_PACKAGES = {
+    'ai',
     'analyzers',
     'api',
     'app',
@@ -116,6 +117,7 @@ _LOCAL_PACKAGES = {
     'core',
     'crawlers',
     'engine',
+    'extensions',
     'i18n',
     'i18n_catalog',
     'nodes',

@@ -10,6 +10,7 @@ import time rather than silently kept from whichever module came last.
 
 from i18n_catalog import (
     accounts,
+    ai,
     analysis,
     api,
     biblio,
@@ -40,4 +41,5 @@ MODULES = (
     accounts,
     components,
     desktop,
+    ai,
 )

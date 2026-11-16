@@ -37,5 +37,12 @@
         "panels/node-biblio.js",
         "panels/node-chart.js",
         "panels/node-verify.js"
+    ],
+    "ai-workspace.js": [
+        "ai/stream.js",
+        "ai/render.js",
+        "ai/settings.js",
+        "ai/context.js",
+        "ai/studio.js"
     ]
 }

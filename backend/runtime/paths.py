@@ -55,6 +55,12 @@ class DataPaths:
     #: One file per tree for the same reason every other store is: an account's logins and
     #: the record of which of them burned are the same person's data.
     pool_db: str
+    #: The AI workspace: conversations, agent runs, user skills, installed plugins and
+    #: uploaded attachments. Per account for the same reason runs and datasets are — the
+    #: transcript contains crawled text, and one account must never read another's.
+    ai_db: str
+    ai_files_dir: str
+    ai_plugins_dir: str
 
     def ensure(self) -> 'DataPaths':
         """Create the directories this scope needs. Idempotent, called when an account is created
@@ -68,6 +74,8 @@ class DataPaths:
             self.profile_dir,
             self.harvest_dir,
             self.reusable_dir,
+            self.ai_files_dir,
+            self.ai_plugins_dir,
         ):
             os.makedirs(directory, exist_ok=True)
         return self
@@ -93,6 +101,9 @@ def system() -> DataPaths:
         locks_json=os.path.join(data_dir, 'locks.json'),
         schedules_json=os.path.join(data_dir, 'schedules.json'),
         pool_db=os.path.join(data_dir, 'pool.db'),
+        ai_db=os.path.join(data_dir, 'ai.db'),
+        ai_files_dir=os.path.join(data_dir, 'ai_files'),
+        ai_plugins_dir=os.path.join(data_dir, 'ai_plugins'),
     )
 
 
@@ -146,6 +157,9 @@ def for_user(user_id: str) -> DataPaths:
         locks_json=os.path.join(root, 'locks.json'),
         schedules_json=os.path.join(root, 'schedules.json'),
         pool_db=os.path.join(root, 'pool.db'),
+        ai_db=os.path.join(root, 'ai.db'),
+        ai_files_dir=os.path.join(root, 'ai_files'),
+        ai_plugins_dir=os.path.join(root, 'ai_plugins'),
     )
 
 

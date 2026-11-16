@@ -145,7 +145,7 @@ class LLMClient:
     #: name it does not know — the client used to fold any other value to 'ollama', which let a
     #: misspelled ``OpenRouter`` silently become a local-daemon call while the run record still
     #: claimed OpenRouter ran.
-    PROVIDERS = ('ollama', 'openrouter')
+    PROVIDERS = ('ollama', 'openrouter', 'deepseek', 'opencode_go')
 
     def __init__(
         self,
@@ -219,7 +219,53 @@ class LLMClient:
             if not self.model:
                 raise LLMError(t('llm.no_model'), 'model')
             return self._openrouter(prompt, max_retries)
+        if self.provider in ('deepseek', 'opencode_go'):
+            if not self.api_key:
+                raise LLMError(t('llm.no_key'), 'auth')
+            if not self.model:
+                raise LLMError(t('llm.no_model'), 'model')
+            return self._api_chat(prompt, max_retries)
         return self._ollama(prompt, max_retries)
+
+    def _api_chat(self, prompt: str, max_retries: int) -> str:
+        """DeepSeek / OpenCode Go through the one provider catalog.
+
+        Thinking is deliberately off for a one-row classification: the reasoning budget would
+        consume the small answer window and return an empty classification. The workspace can turn
+        it on per conversation; a batch run cannot pay for it per row.
+        """
+        from ai.errors import AIError
+        from ai.providers.complete import chat_once
+
+        last = None
+        for attempt in range(1, max_retries + 1):
+            self._check_cancel()
+            try:
+                return chat_once(
+                    self.provider,
+                    self.model,
+                    self.api_key,
+                    prompt,
+                    max_tokens=self.max_tokens,
+                    timeout=self.timeout,
+                    host=self.host,
+                )
+            except AIError as exc:
+                kind = {
+                    'auth': 'auth',
+                    'quota': 'quota',
+                    'model': 'model',
+                    'rate_limit': 'rate_limit',
+                    'network': 'network',
+                    'bad_response': 'bad_response',
+                    'cancelled': 'cancelled',
+                }.get(exc.kind, 'error')
+                last = LLMError(exc.localized(), kind)
+                if kind in ('auth', 'quota', 'model', 'cancelled'):
+                    raise last from exc
+                logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=last))
+            self._backoff(1.5 * attempt, attempt, max_retries)
+        raise last if last is not None else LLMError(t('llm.or_failed'), 'network')
 
     # ── transports ──────────────────────────────────────────────
 
