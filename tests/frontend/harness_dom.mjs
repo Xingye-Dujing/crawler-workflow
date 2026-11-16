@@ -335,6 +335,17 @@ export function makeEl(tag = 'div', id = '') {
        tell apart from a real one. */
     el.querySelectorAll = (sel) => _descendants(el, []).filter((child) => matches(child, sel));
     el.querySelector = (sel) => el.querySelectorAll(sel)[0] || null;
+    /* The sibling accessors a browser has on every element. Product code inserts a parsed card with
+       `appendChild(holder.firstElementChild)`; a stub without it appended `undefined` and the error
+       looked like the product's. Derived from the real children, never invented. */
+    Object.defineProperty(el, 'firstElementChild', {
+        get: () => el.children[0] || null,
+        configurable: true,
+    });
+    Object.defineProperty(el, 'lastElementChild', {
+        get: () => el.children[el.children.length - 1] || null,
+        configurable: true,
+    });
     /* `<select>.options` is the one collection product code reads to ask "is this value
        even on this list" — `openCookieDialog` and `useCookieAccount` refuse to write a
        platform the panel does not hold, and `LLMSettings` decides which transports exist.
@@ -357,9 +368,20 @@ export function makeEl(tag = 'div', id = '') {
     };
     el.insertAdjacentHTML = () => {};
     el.setAttribute = (k, v) => {
-        el[k] = v;
+        if (String(k).startsWith('data-')) el.dataset[_camelize(String(k).slice(5))] = String(v);
+        else el[k] = v;
     };
-    el.getAttribute = (k) => (el[k] === undefined ? null : el[k]);
+    /* A browser answers `getAttribute`/`hasAttribute` for `data-*` exactly as it answers for any
+       other attribute; the stub keeps those in `dataset`, so both spellings must read the same
+       place. Product code asks `hasAttribute('data-ai-conversation')` before reading the id. */
+    el.getAttribute = (k) => {
+        if (String(k).startsWith('data-')) {
+            const held = el.dataset[_camelize(String(k).slice(5))];
+            return held === undefined ? null : held;
+        }
+        return el[k] === undefined ? null : el[k];
+    };
+    el.hasAttribute = (k) => el.getAttribute(k) !== null;
     el.focus = () => {
         /* The dialog's close-button and the lexicon search both rebuild their element and then
            need the caret back on it; a no-op focus made "did it return" unmeasurable. */

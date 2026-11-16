@@ -87,10 +87,13 @@ const AIWorkspace = {
                 }
             });
         }
-        if (this._dom.chat) {
-            this._dom.chat.addEventListener('click', (event) => this._onClick(event));
-            this._dom.chat.addEventListener('change', (event) => this._onChange(event));
-            this._dom.chat.addEventListener('keydown', (event) => {
+        if (this._dom.root) {
+            /* Delegated from the dock, not from the transcript: sessions, the side panel and the
+               context bar are siblings of #ai-chat, so a listener on the chat could never see them
+               (switching conversations, refreshing context and stopping a monitor were inert). */
+            this._dom.root.addEventListener('click', (event) => this._onClick(event));
+            this._dom.root.addEventListener('change', (event) => this._onChange(event));
+            this._dom.root.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' && !event.shiftKey && event.target && event.target.matches('textarea[data-ai-custom]')) {
                     event.preventDefault();
                     const questionId = event.target.getAttribute('data-ai-custom');
@@ -258,7 +261,12 @@ const AIWorkspace = {
                 AIRender.escape(item.label || item.id) + '</option>'
             ).join('');
         }
-        if (this._dom.modelChip) this._dom.modelChip.textContent = (I18n.t(provider?.label_key) || this._provider) + ' / ' + (this._model || '—');
+        if (this._dom.modelChip) {
+            /* Before the bootstrap answer there is no provider row at all; asking `t(undefined)`
+               printed an i18n warning on every open. The id is the honest fallback. */
+            const label = provider?.label_key ? I18n.t(provider.label_key) : this._provider;
+            this._dom.modelChip.textContent = label + ' / ' + (this._model || '—');
+        }
     },
 
     _renderSkillOptions() {
@@ -446,7 +454,10 @@ const AIWorkspace = {
         return this._current;
     },
 
-    _appendUser(text, context, attachments, extra) {
+    /* ``record`` is what separates a new turn from a repaint. ``_renderMessages`` replays stored
+       rows and already has them; pushing there used to append into the array it was iterating,
+       which never terminates. A repaint draws only. */
+    _appendUser(text, context, attachments, extra, record = true) {
         const el = document.createElement('article');
         el.className = 'ai-message user';
         const files = (attachments || []).map((row) =>
@@ -459,11 +470,13 @@ const AIWorkspace = {
             (files ? '<div class="ai-attachments ai-message-files">' + files + '</div>' : '') +
             '<div class="ai-user-text">' + AIRender.escape(text) + '</div></div>';
         this._dom.chat.appendChild(el);
-        this._messages.push({
-            role: 'user',
-            content: text,
-            meta: { context: context || {}, attachments: attachments || [], monitor_event: extra?.monitor_event || '' },
-        });
+        if (record) {
+            this._messages.push({
+                role: 'user',
+                content: text,
+                meta: { context: context || {}, attachments: attachments || [], monitor_event: extra?.monitor_event || '' },
+            });
+        }
         this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
     },
 
@@ -733,9 +746,11 @@ const AIWorkspace = {
             this._renderWelcome();
             return;
         }
-        for (const message of this._messages) {
+        /* A snapshot, and no recording: this function paints the transcript it was given. Iterating
+           the live array while appending to it is an infinite loop, not a slow repaint. */
+        for (const message of [...this._messages]) {
             if (message.role === 'user') {
-                this._appendUser(message.content, message.meta?.context, message.meta?.attachments);
+                this._appendUser(message.content, message.meta?.context, message.meta?.attachments, null, false);
             } else if (message.role === 'assistant') {
                 this._renderStoredAssistant(message);
             } else if (message.role === 'tool') {
