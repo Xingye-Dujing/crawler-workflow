@@ -225,7 +225,11 @@ class LLMClient:
             if not self.model:
                 raise LLMError(t('llm.no_model'), 'model')
             return self._api_chat(prompt, max_retries)
-        return self._ollama(prompt, max_retries)
+        if self.provider == 'ollama':
+            return self._ollama(prompt, max_retries)
+        # An unknown id must not become the local daemon: that is a silent answer from a provider
+        # nobody selected. The run panel and /api/settings refuse it by name too.
+        raise LLMError(t('llm.provider_unknown', provider=self.provider), 'provider')
 
     def _api_chat(self, prompt: str, max_retries: int) -> str:
         """DeepSeek / OpenCode Go through the one provider catalog.

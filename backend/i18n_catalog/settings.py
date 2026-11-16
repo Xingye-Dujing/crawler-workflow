@@ -64,6 +64,7 @@ ZH = {
     'llm.net_error': '网络错误：{err}',
     # ── LLM ───────────────────────────────────────────────────
     'llm.no_key': 'OpenRouter API Key 未填写',
+    'llm.provider_unknown': '未知的模型供应商：{provider}；可用：ollama、openrouter、deepseek、opencode_go。',
     'llm.no_model': 'OpenRouter 模型名未填写',
     'llm.no_ollama_model': 'Ollama 模型名未填写（AI → 模型，可点“刷新”读取本地已拉取的模型）',
     'llm.no_rows': '[{label}] 没有需要处理的行（“{col}”列为空）。',
@@ -221,6 +222,7 @@ EN = {
     'llm.net_error': 'Network error: {err}',
     # ── LLM ───────────────────────────────────────────────────
     'llm.no_key': 'OpenRouter API key is missing',
+    'llm.provider_unknown': 'Unknown model provider: {provider}; use ollama, openrouter, deepseek or opencode_go.',
     'llm.no_model': 'OpenRouter model name is missing',
     'llm.no_ollama_model': 'No Ollama model set (AI → Model — hit Refresh to list what the daemon has)',
     'llm.no_rows': '[{label}] Nothing to process (column "{col}" is empty).',

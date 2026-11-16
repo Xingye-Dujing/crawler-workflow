@@ -131,6 +131,56 @@ def test_router_names_the_skill_it_chose():
     assert skills.route('帮我搭一个工作流') == 'workflow'
 
 
+def test_the_wire_sends_fetch_only_with_the_search_switch():
+    from ai.providers import get_provider
+
+    provider = get_provider('deepseek')
+    model = next(spec.id for spec in provider.spec.models if 'read_url' in spec.capabilities)
+
+    def tools_for(web_search: bool) -> list:
+        payload = provider._payload(
+            {
+                'provider': 'deepseek',
+                'model': model,
+                'api_key': 'k',
+                'messages': [{'role': 'user', 'content': 'x', 'meta': {}}],
+                'thinking': False,
+                'web_search': web_search,
+                'tools': [],
+            }
+        )
+        return [tool.get('name') for tool in payload.get('tools') or []]
+
+    assert 'deepseek_read_url' not in tools_for(False)
+    assert 'deepseek_read_url' in tools_for(True)
+    assert 'deepseek_web_search' in tools_for(True)
+
+
+class _HttpAnswer:
+    def __init__(self, status: int, body: str):
+        self.status_code = status
+        self.text = body
+
+    def json(self):
+        import json
+
+        return json.loads(self.text)
+
+
+def test_listing_models_with_a_key_reports_the_providers_answer(monkeypatch):
+    from ai.errors import AIProviderError
+    from ai.providers import deepseek as transport
+    from ai.providers import get_provider
+
+    provider = get_provider('deepseek')
+    monkeypatch.setattr(transport.requests, 'get', lambda *args, **kwargs: _HttpAnswer(401, '{"error":"bad key"}'))
+    with pytest.raises(AIProviderError) as refusal:
+        provider.list_models('not-a-key')
+    assert refusal.value.status == 401
+    # Without a key there is nothing to ask: the static catalogue is the honest answer.
+    assert provider.list_models('')
+
+
 def test_environment_separates_desktop_local_web_and_cloud(monkeypatch):
     from ai import environment
     from core import machine

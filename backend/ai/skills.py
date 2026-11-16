@@ -331,8 +331,6 @@ def availability(skill: SkillSpec, provider, model: str = '') -> tuple[bool, str
         if source not in CONTEXT_SOURCES:
             return False, f'ai.skillBadContext|{skill.id}|{source}'
     for tool in skill.tools:
-        from ai.tools import TOOLS
-
         if tool not in TOOLS:
             return False, f'ai.skillBadTool|{skill.id}|{tool}'
     return True, ''

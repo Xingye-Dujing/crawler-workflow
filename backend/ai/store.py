@@ -11,6 +11,7 @@ error, so a dead process leaves a visible interruption rather than a vanished an
 import json
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import UTC
 
@@ -167,17 +168,30 @@ def _db_path() -> str:
     return target
 
 
+#: Paths whose tables this process has already created. ``connect`` used to run the whole schema
+#: (and two PRAGMA probes) on EVERY call, which put a schema write on the run thread for each
+#: delivered monitor event. Creating tables is a one-time fact, not a per-connection one.
+_SCHEMA_READY: set[str] = set()
+_SCHEMA_LOCK = threading.Lock()
+
+
 @contextmanager
 def connect():
-    conn = sqlite3.connect(_db_path(), timeout=15)
+    path = _db_path()
+    conn = sqlite3.connect(path, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
-    conn.executescript(SCHEMA)
-    columns = {row['name'] for row in conn.execute('PRAGMA table_info(user_skills)').fetchall()}
-    if 'name' not in columns:
-        conn.execute("ALTER TABLE user_skills ADD COLUMN name TEXT NOT NULL DEFAULT ''")
-    if 'description' not in columns:
-        conn.execute("ALTER TABLE user_skills ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+    with _SCHEMA_LOCK:
+        ready = path in _SCHEMA_READY
+    if not ready:
+        conn.executescript(SCHEMA)
+        columns = {row['name'] for row in conn.execute('PRAGMA table_info(user_skills)').fetchall()}
+        if 'name' not in columns:
+            conn.execute("ALTER TABLE user_skills ADD COLUMN name TEXT NOT NULL DEFAULT ''")
+        if 'description' not in columns:
+            conn.execute("ALTER TABLE user_skills ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        with _SCHEMA_LOCK:
+            _SCHEMA_READY.add(path)
     try:
         yield conn
         conn.commit()
@@ -281,7 +295,18 @@ def touch_conversation(conversation_id: str, **fields) -> None:
 
 def delete_conversation(conversation_id: str) -> bool:
     with connect() as conn:
-        for table in ('messages', 'questions', 'agent_steps', 'agent_runs', 'usage', 'attachments'):
+        # An armed monitor outlives its conversation only as a machine-written turn that reappears
+        # in a conversation the user deleted. Both its rows and its pending deliveries go with it.
+        for table in (
+            'messages',
+            'questions',
+            'agent_steps',
+            'agent_runs',
+            'usage',
+            'attachments',
+            'monitors',
+            'monitor_events',
+        ):
             if table == 'agent_steps':
                 conn.execute(
                     'DELETE FROM agent_steps WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = ?)',
@@ -721,6 +746,11 @@ def purge_older_than(days: int) -> int:
     cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     with connect() as conn:
         cur = conn.execute('DELETE FROM conversations WHERE updated_at < ?', (cutoff,))
+        # Monitors and deliveries belong to a conversation; one whose conversation is gone cannot
+        # be displayed, armed or served, so keeping the row would only leak.
+        conn.execute('DELETE FROM monitors WHERE conversation_id NOT IN (SELECT id FROM conversations)')
+        conn.execute('DELETE FROM monitor_events WHERE conversation_id NOT IN (SELECT id FROM conversations)')
+        conn.execute('DELETE FROM monitor_events WHERE created_at < ?', (cutoff,))
     return cur.rowcount
 
 

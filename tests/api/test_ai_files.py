@@ -1,7 +1,9 @@
 """Files API and standalone Search / Fetch, with a scripted HTTP tier. No network."""
 
+import hashlib
 import io
 import json
+import os
 
 import pytest
 
@@ -58,6 +60,29 @@ def test_files_upload_uses_purpose_before_file_and_returns_public_metadata(clien
     listed = client.get('/api/ai/conversations/' + ai_conversation + '/files').get_json()
     assert listed['attachments'][0]['id'] == attachment['id']
     client.delete('/api/ai/conversations/' + ai_conversation)
+
+
+def test_a_failed_upload_leaves_no_local_copy(client, ai_conversation, monkeypatch):
+    from ai import files
+    from runtime import paths
+
+    monkeypatch.setattr(
+        files.requests,
+        'post',
+        lambda *args, **kwargs: FakeResponse(401, {'error': 'bad key'}),
+    )
+    body = b'this upload must not be stored'
+    response = client.post(
+        '/api/ai/files',
+        data={'file': (io.BytesIO(body), 'nope.txt'), 'conversation_id': ai_conversation, 'api_key': 'bad'},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 400
+    assert response.get_json()['key'] == 'ai.unauthorized'
+    digest = hashlib.sha256(body).hexdigest()[:20]
+    directory = paths.active().ai_files_dir
+    stored = os.listdir(directory) if os.path.isdir(directory) else []
+    assert not [name for name in stored if name.startswith(digest)], 'a rejected upload left its local copy behind'
 
 
 def test_delete_file_calls_the_provider_and_removes_the_row(client, ai_conversation, monkeypatch):

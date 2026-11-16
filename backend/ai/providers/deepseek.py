@@ -196,7 +196,9 @@ class DeepSeekProvider(Provider):
         server_tools = []
         if request.get('web_search') and self.spec.supports('web_search', model):
             server_tools.append({'type': 'deepseek_web_search', 'name': 'deepseek_web_search'})
-        if self.spec.supports('read_url', model):
+        if request.get('web_search') and self.spec.supports('read_url', model):
+            # Fetch is part of what the search toggle promises; sending it while the user turned
+            # search off would hand the provider a capability the turn did not request.
             server_tools.append({'type': 'deepseek_read_url', 'name': 'deepseek_read_url'})
         if server_tools:
             tools.extend(server_tools)
@@ -314,20 +316,26 @@ class DeepSeekProvider(Provider):
     def list_models(self, api_key: str = '', host: str = '') -> list:
         if not api_key:
             return super().list_models(api_key, host)
+        # A key was supplied, so the provider's answer IS the measurement: a 401, a quota refusal
+        # or a network fault used to come back as the static catalogue, which made the panel's
+        # “刷新模型” unable to distinguish a working key from a dead one.
         try:
             response = requests.get(
                 self.spec.models_url,
                 headers={'Authorization': f'Bearer {api_key}'},
                 timeout=15,
             )
-            if response.status_code != 200:
-                raise http_error(response.status_code, response.text[:200])
+        except requests.RequestException as exc:
+            raise AIProviderError('ai.network', kind='network', detail=str(exc)[:300]) from exc
+        if response.status_code != 200:
+            raise http_error(response.status_code, response.text[:200])
+        try:
             payload = response.json()
-        except (requests.RequestException, ValueError, AIProviderError):
-            return super().list_models(api_key, host)
+        except ValueError as exc:
+            raise AIProviderError('ai.badResponse', kind='bad_response', detail=response.text[:200]) from exc
         rows = payload.get('data') if isinstance(payload, dict) else payload
-        models = []
-        for row in rows or ():
-            if isinstance(row, dict) and row.get('id'):
-                models.append({'id': str(row['id']), 'label': str(row.get('id'))})
-        return models or super().list_models(api_key, host)
+        return [
+            {'id': str(row['id']), 'label': str(row.get('label') or row['id'])}
+            for row in rows or ()
+            if isinstance(row, dict) and row.get('id')
+        ]

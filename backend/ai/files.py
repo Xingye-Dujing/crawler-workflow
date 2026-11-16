@@ -86,7 +86,7 @@ def upload_file(
     chosen_purpose = str(purpose or purpose_for(name, mime)).strip()
     if chosen_purpose not in ('user_data', 'text_recognition', 'rich_layout_recognition'):
         raise AIError('ai.fileUnsupported', kind='bad_request')
-    local_path, digest = save_local(data, name)
+    digest = hashlib.sha256(data).hexdigest()
     try:
         response = requests.post(
             DEEPSEEK_BASE + '/files',
@@ -108,6 +108,12 @@ def upload_file(
     file_id = str(payload.get('id') or '')
     if not file_id:
         raise AIProviderError('ai.badResponse', kind='bad_response', detail='missing file id')
+    # The local copy is written only after the provider accepted the upload. Saving first left a
+    # file in ai_files/ with no attachment row whenever the request failed, forever.
+    try:
+        local_path, digest = save_local(data, name)
+    except OSError as exc:
+        raise AIError('ai.fileSaveFailed', kind='error', detail=str(exc)[:200]) from exc
     row = store.add_attachment(
         conversation_id,
         str(payload.get('filename') or name),

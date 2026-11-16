@@ -19,7 +19,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from runtime import account_context
 from runtime.settings import get_setting
 
-from api.http import _bad_body, _json_body
+from api.http import _bad_body, _json_body, _safe_int
 from i18n import get_lang, set_lang, t
 from services import python_runtime, python_scripts
 
@@ -33,6 +33,20 @@ monitors.start()
 
 def _error(exc: AIError, status: int = 400):
     return jsonify(exc.as_dict()), status
+
+
+@bp.before_request
+def _refuse_python_on_cloud():
+    """One rule for the whole Python surface: a cloud host refuses it by name.
+
+    The tools and the canvas node already refuse; without this, a shared host created the
+    account's ``ai_python`` directory and echoed its absolute path for a capability it never has.
+    """
+    from core.config import Config
+
+    if Config.CLOUD_MODE and request.path.startswith('/api/ai/python'):
+        return _error(AIError('ai.pythonCloud', kind='capability'))
+    return None
 
 
 def _public_attachment(row: dict) -> dict:
@@ -165,7 +179,11 @@ def ai_bootstrap():
                 'allow_code_context': bool(get_setting('ai_allow_code_context')),
             },
             'plugins': plugins.public_plugins(),
-            'tools': [spec.schema() for spec in tools.TOOLS.values()],
+            'tools': [
+                {**spec.schema(), 'control': spec.control, 'permission': spec.permission}
+                for spec in tools.TOOLS.values()
+            ],
+            'context_sources': sorted(skills.CONTEXT_SOURCES),
             'runtime': environment.capabilities(),
             'monitors': store.list_monitors(active_only=True),
             'monitor_pending': store.pending_monitor_count(),
@@ -346,7 +364,7 @@ def ai_monitor_delete(monitor_id: str):
 def ai_monitor_events():
     conversation_id = str(request.args.get('conversation_id') or '')
     pending_only = str(request.args.get('pending') or '1') not in ('0', 'false', '')
-    limit = max(1, min(100, int(request.args.get('limit') or 20)))
+    limit = _safe_int(request.args.get('limit'), 20, 1, 100)
     return jsonify(
         {
             'ok': True,
@@ -365,14 +383,15 @@ def ai_python_status():
     runtime = environment.capabilities()
     report = python_runtime.interpreter(refresh=str(request.args.get('refresh') or '') in ('1', 'true'))
     report = {key: value for key, value in report.items() if key != 'command'}
+    plan = python_runtime.install_plan()
+    plan.pop('target', None)
     return jsonify(
         {
             'ok': True,
             'enabled': bool(get_setting('ai_allow_python')),
             'allowed': bool(runtime['code_plugins']),
             'report': report,
-            'workspace': python_runtime.workspace(),
-            'install': python_runtime.install_plan(),
+            'install': plan,
         }
     )
 
@@ -426,7 +445,12 @@ def ai_python_script_fork(script_id: str):
     if data is None:
         return _bad_body()
     try:
-        return jsonify({'ok': True, 'script': python_scripts.fork_script(script_id, str(data.get('id') or ''))})
+        return jsonify(
+            {
+                'ok': True,
+                'script': python_scripts.fork_script(script_id, str(data.get('id') or ''), bool(data.get('overwrite'))),
+            }
+        )
     except AIError as exc:
         return _error(exc)
 
@@ -446,12 +470,20 @@ def ai_python_run():
             code,
             rows,
             data.get('args') if isinstance(data.get('args'), dict) else {},
-            timeout=int(data.get('timeout') or 120),
-            max_rows=int(data.get('max_rows') or 1000),
+            timeout=_safe_int(data.get('timeout'), 120, 1, 3600),
+            max_rows=_safe_int(data.get('max_rows'), 1000, 1, python_runtime.MAX_OUTPUT_ROWS),
             label=str((script or {}).get('name') or 'inline'),
         )
     except AIError as exc:
         return _error(exc)
+    if not result['wrote_output']:
+        return _error(
+            AIError(
+                'ai.pythonNoOutput',
+                kind='error',
+                script=str((script or {}).get('id') or data.get('script_id') or 'inline'),
+            )
+        )
     return jsonify(
         {
             'ok': True,
@@ -459,16 +491,16 @@ def ai_python_run():
             'sample': result['rows'][:20],
             'stdout': result['stdout'],
             'stderr': result['stderr'],
-            'exit_code': result['exit_code'],
             'duration_ms': result['duration_ms'],
             'interpreter': result['interpreter'],
+            'truncated': result['truncated'],
         }
     )
 
 
 @bp.route('/api/ai/python/files', methods=['GET'])
 def ai_python_files():
-    return jsonify({'ok': True, 'files': python_runtime.list_files(), 'workspace': python_runtime.workspace()})
+    return jsonify({'ok': True, 'files': python_runtime.list_files()})
 
 
 @bp.route('/api/ai/python/files', methods=['POST'])
@@ -500,7 +532,7 @@ def ai_file_delete(attachment_id: str):
         return _bad_body()
     row = store.get_attachment(attachment_id)
     if row is None:
-        return _error(AIError('ai.fileUnsupported', kind='not_found'), 404)
+        return _error(AIError('ai.fileNotFound', kind='not_found', file=attachment_id), 404)
     if row.get('file_id'):
         try:
             files.delete_file(str(row['file_id']), str(data.get('api_key') or ''))
@@ -598,7 +630,10 @@ def ai_conversation_update(conversation_id: str):
 
 @bp.route('/api/ai/conversations/<conversation_id>', methods=['DELETE'])
 def ai_conversation_delete(conversation_id: str):
-    return jsonify({'ok': True, 'deleted': store.delete_conversation(conversation_id)})
+    deleted = store.delete_conversation(conversation_id)
+    # Its monitors and deliveries went with the row; the armed list must not keep serving them.
+    monitors.invalidate()
+    return jsonify({'ok': True, 'deleted': deleted})
 
 
 @bp.route('/api/ai/context', methods=['POST'])

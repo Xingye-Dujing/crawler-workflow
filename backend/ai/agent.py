@@ -23,6 +23,7 @@ from ai import environment, skills, store, tools
 from ai.errors import AIError
 from ai.providers import get_provider
 from ai.types import new_id, usage_totals
+from i18n import t
 
 ACTIVE_STREAMS: dict[str, threading.Event] = {}
 _STREAM_LOCK = threading.RLock()
@@ -67,7 +68,7 @@ def _latest_reminder(locale: str, location: str = '') -> str:
 
 def _fallback_title(text: str) -> str:
     cleaned = ' '.join(str(text or '').split())
-    return cleaned[:42] + ('…' if len(cleaned) > 42 else '') or '未命名会话'
+    return cleaned[:42] + ('…' if len(cleaned) > 42 else '') or t('ai.untitled')
 
 
 def _system_prompt(skill, provider, model: str) -> str:
@@ -303,7 +304,7 @@ class AgentService:
         provider, model = _validate_provider(
             meta.get('provider') or 'deepseek',
             meta.get('model') or '',
-            str(meta.get('api_key') or '') or api_key,
+            api_key,
             bool(meta.get('thinking')),
             bool(meta.get('web_search')),
         )
@@ -362,7 +363,7 @@ class AgentService:
                     yield {
                         'type': 'error',
                         'kind': 'tool_limit',
-                        'error': '工具调用次数已达到上限；请缩小问题或分步提问。',
+                        'error': t('ai.toolLimit'),
                     }
                     yield {'type': 'done', 'stop_reason': 'tool_limit'}
                     return
@@ -556,7 +557,7 @@ class AgentService:
             if not conversation.get('title') and title == '':
                 store.touch_conversation(
                     conversation['id'],
-                    title=_fallback_title(_current_text(blocks) or '新会话'),
+                    title=_fallback_title(_current_text(blocks) or t('ai.newConversation')),
                     title_source='fallback',
                 )
             return {
@@ -621,7 +622,7 @@ class AgentService:
         )
         store.update_run(run_id, status='waiting')
         store.add_step(
-            run_id, '等待你的回答', tool='ask_user_question', args={'questions': normalized}, status='running'
+            run_id, t('ai.stepAwaiting'), tool='ask_user_question', args={'questions': normalized}, status='running'
         )
         return {
             'event': {
@@ -656,7 +657,7 @@ class AgentService:
         args = call.get('arguments') if isinstance(call.get('arguments'), dict) else {}
         artifact = {
             'id': new_id('art'),
-            'title': str(args.get('title') or '产物'),
+            'title': str(args.get('title') or t('ai.artifact')),
             'kind': str(args.get('kind') or 'markdown'),
             'payload': args.get('payload') if isinstance(args.get('payload'), dict) else {},
             'summary': str(args.get('summary') or ''),
@@ -685,7 +686,7 @@ class AgentService:
         name = call['name']
         step = store.add_step(
             (state['message'].get('meta') or {}).get('run_id') or '',
-            f'调用 {name}',
+            t('ai.stepTool', tool=name),
             tool=name,
             args=call.get('arguments') or {},
             status='running',
@@ -711,13 +712,25 @@ class AgentService:
                 text = text[:12000] + '\n…[truncated by the workspace; ask for a narrower page]'
             is_error = False
             store.update_step(step['id'], status='done', result=result)
+            # The browser renders the tool card from this event; the 12k cap above only bounded
+            # what the model and the store receive, so an enormous result still crossed the wire.
+            shown = result if len(text) <= 12000 else {'truncated': text}
         except AIError as exc:
             text = json.dumps({'error': exc.localized(), 'key': exc.key}, ensure_ascii=False)
             is_error = True
             store.update_step(step['id'], status='failed', result={'error': exc.localized()})
             yield {'type': 'tool_result', 'id': call['id'], 'name': name, 'ok': False, 'error': exc.localized()}
+        except Exception as exc:  # a malformed argument is a tool result, not a broken conversation
+            # Without this, a ValueError from `int(args['rows'])` escaped after the assistant's
+            # tool_use was stored, leaving a call with no result: every later turn fails the
+            # provider's tool-pair validation, and the conversation cannot be used again.
+            message = t('ai.toolFailed', detail=str(exc)[:300])
+            text = json.dumps({'error': message, 'key': 'ai.toolFailed'}, ensure_ascii=False)
+            is_error = True
+            store.update_step(step['id'], status='failed', result={'error': message})
+            yield {'type': 'tool_result', 'id': call['id'], 'name': name, 'ok': False, 'error': message}
         else:
-            yield {'type': 'tool_result', 'id': call['id'], 'name': name, 'ok': True, 'result': result}
+            yield {'type': 'tool_result', 'id': call['id'], 'name': name, 'ok': True, 'result': shown}
         store.append_message(
             conversation['id'],
             'tool',
@@ -779,7 +792,7 @@ def _abandon_pending(conversation_id: str) -> None:
         store.append_message(
             conversation_id,
             'tool',
-            json.dumps({'cancelled': True, 'reason': '用户没有回答问题，改发了新消息'}, ensure_ascii=False),
+            json.dumps({'cancelled': True, 'reason': t('ai.questionUnanswered')}, ensure_ascii=False),
             status='done',
             meta={
                 'turn_id': (assistant.get('meta') or {}).get('turn_id') or assistant['id'],

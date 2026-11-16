@@ -15,12 +15,35 @@ built — a replayed history can name a tool the current turn does not offer.
 intercepts them and never looks for a handler here.
 """
 
+import re
+
 from core.config import Config
 from runtime.settings import get_setting
 
 from ai.context import docs_search, project_facts
 from ai.errors import AIError
 from ai.types import ToolSpec
+
+
+def _int_arg(value, default: int = 0, minimum: int | None = None, maximum: int | None = None) -> int:
+    """A model-supplied number as a bounded int; a malformed value takes the default.
+
+    The schema says ``integer``, but a model can still send ``"5 rows"``. Raising ValueError
+    escaped the tool event (only ``AIError`` is caught) and left a ``tool_use`` with no result,
+    which made every later turn fail the provider's tool-pair validation.
+    """
+    try:
+        number = int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        # A number with a word after it ("5 rows", "10 行") is what a model actually writes; its
+        # leading integer is the value it meant, and refusing it would spend a round for nothing.
+        match = re.match(r'\s*([+-]?\d+)', str(value or ''))
+        number = int(match.group(1)) if match else int(default)
+    if minimum is not None:
+        number = max(minimum, number)
+    if maximum is not None:
+        number = min(maximum, number)
+    return number
 
 
 def _dataset_frame(dataset_id: str):
@@ -111,8 +134,8 @@ def tool_dataset_peek(args: dict, _ctx: dict) -> dict:
     more asks for ``dataset_page`` (bounded) or runs a Python script, and the answer says which.
     """
     frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
-    limit = max(1, min(20, int(args.get('rows') or 5)))
-    width = max(40, min(400, int(args.get('width') or 120)))
+    limit = _int_arg(args.get('rows'), 5, 1, 20)
+    width = _int_arg(args.get('width'), 120, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     head = frame.head(limit)
     rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in head.to_dict('records')]
@@ -129,9 +152,9 @@ def tool_dataset_peek(args: dict, _ctx: dict) -> dict:
 
 def tool_dataset_page(args: dict, _ctx: dict) -> dict:
     frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
-    offset = max(0, int(args.get('offset') or 0))
-    limit = max(1, min(50, int(args.get('limit') or 20)))
-    width = max(40, min(400, int(args.get('width') or 200)))
+    offset = _int_arg(args.get('offset'), 0, 0)
+    limit = _int_arg(args.get('limit'), 20, 1, 50)
+    width = _int_arg(args.get('width'), 200, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     page = frame.iloc[offset : offset + limit]
     rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in page.to_dict('records')]
@@ -147,12 +170,24 @@ def tool_dataset_page(args: dict, _ctx: dict) -> dict:
 
 
 def tool_dataset_sample(args: dict, _ctx: dict) -> dict:
+    """A bounded page with capped cells.
+
+    It used to read ``frame.head(limit)`` and return whole posts, ignoring the schema's
+    ``columns``/``offset`` — a third unbounded read path beside peek and page.
+    """
     frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
-    limit = max(1, min(50, int(args.get('limit') or 10)))
+    offset = _int_arg(args.get('offset'), 0, 0)
+    limit = _int_arg(args.get('limit'), 10, 1, 50)
+    width = _int_arg(args.get('width'), 200, 40, 400)
+    wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
+    page = frame.iloc[offset : offset + limit]
+    rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in page.to_dict('records')]
     return {
-        'rows': frame.head(limit).to_dict('records'),
-        'columns': [str(column) for column in frame.columns],
+        'rows': rows,
+        'columns': wanted,
+        'offset': offset,
         'total': len(frame),
+        'has_more': offset + len(rows) < len(frame),
     }
 
 
@@ -175,7 +210,7 @@ def tool_run_console(args: dict, _ctx: dict) -> dict:
         raise AIError('ai.toolRefused', kind='bad_request', tool='run_console', reason='run_id is missing')
     from runtime.stores import get_run_store
 
-    limit = max(1, min(200, int(args.get('limit') or 80)))
+    limit = _int_arg(args.get('limit'), 80, 1, 200)
     page = get_run_store().read_log(run_id, limit=limit)
     return {'rows': page.get('rows', []), 'has_more': bool(page.get('has_more'))}
 
@@ -266,7 +301,7 @@ def tool_code_read(args: dict, _ctx: dict) -> dict:
     target = (base / relative).resolve()
     if not str(target).startswith(str(base.resolve())) or not target.is_file():
         raise AIError('ai.toolRefused', kind='not_found', tool='code_read', reason=f'no source file {relative}')
-    limit = max(1, min(400, int(args.get('lines') or 200)))
+    limit = _int_arg(args.get('lines'), 200, 1, 400)
     lines = target.read_text(encoding='utf-8', errors='replace').splitlines()
     return {
         'path': str(target.relative_to(base)).replace('\\', '/'),
@@ -292,7 +327,7 @@ def tool_web_search(args: dict, ctx: dict) -> dict:
     return files.search(
         str(ctx.get('api_key') or ''),
         str(args.get('query') or ''),
-        count=int(args.get('count') or 10),
+        count=_int_arg(args.get('count'), 10, 1, 20),
         need_content=bool(args.get('need_content')),
         ori_question=str(args.get('ori_question') or ''),
     )
@@ -367,13 +402,15 @@ def tool_python_run(args: dict, _ctx: dict) -> dict:
         code,
         rows,
         args.get('args') if isinstance(args.get('args'), dict) else {},
-        timeout=int(args.get('timeout') or 120),
-        max_rows=int(args.get('max_rows') or 1000),
+        timeout=_int_arg(args.get('timeout'), 120, 1, 3600),
+        max_rows=_int_arg(args.get('max_rows'), 1000, 1, python_runtime.MAX_OUTPUT_ROWS),
         label=str((script or {}).get('name') or 'inline'),
     )
     # The AI gets the shape and a sample, not the whole table: a node run keeps every row, but a
     # conversation turn only needs to know whether the script worked and what its output looks like.
-    sample = result['rows'][: min(10, int(args.get('sample_rows') or 5))]
+    sample = result['rows'][: _int_arg(args.get('sample_rows'), 5, 1, 10)]
+    if not result.get('wrote_output', True):
+        raise AIError('ai.pythonNoOutput', kind='error', script=str((script or {}).get('id') or 'inline'))
     return {
         'rows': len(result['rows']),
         'sample': sample,
@@ -382,6 +419,7 @@ def tool_python_run(args: dict, _ctx: dict) -> dict:
         'stderr': result['stderr'][-2000:],
         'duration_ms': result['duration_ms'],
         'interpreter': result['interpreter'],
+        'truncated': bool(result.get('truncated')),
     }
 
 

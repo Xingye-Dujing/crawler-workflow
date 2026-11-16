@@ -12,6 +12,8 @@ prompt tells the model to read the run through its read-only tools, so the evide
 from the run store.
 """
 
+import logging
+import queue
 import threading
 import time
 
@@ -19,6 +21,9 @@ from runtime import paths, run_events
 
 from ai import store
 from ai.errors import AIError
+from i18n import t
+
+logger = logging.getLogger('ai.monitors')
 
 #: The event names a monitor may ask for. ``node.finished`` carries status/rows; ``run.log`` needs a
 #: needle or it would fire on every line.
@@ -167,7 +172,11 @@ def matches(spec: dict, payload: dict) -> bool:
 
 
 def _compact(payload: dict) -> dict:
-    """What a delivery keeps: ids, status and counts — never the crawled text."""
+    """What a delivery keeps: ids, status and counts — never the run's text.
+
+    ``run.log`` used to keep the matched console line, which can quote a crawled post or a
+    script's stderr; the automatic turn reads the console through ``run_console`` instead.
+    """
     keep = (
         'event',
         'run_id',
@@ -182,16 +191,24 @@ def _compact(payload: dict) -> dict:
         'total',
         'failed',
         'skipped',
-        'line',
         'resume',
     )
     return {key: payload.get(key) for key in keep if payload.get(key) not in (None, '')}
 
 
-def _on_event(payload: dict) -> None:
+def _cached_armed() -> list | None:
+    """Armed monitors only while the cache is warm; ``None`` means "ask the worker"."""
+    path = paths.active().ai_db
+    now = time.monotonic()
+    with _CACHE_LOCK:
+        cached = _CACHE.get(path)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+    return None
+
+
+def _deliver(payload: dict) -> None:
     event = str(payload.get('event') or '')
-    if event not in EVENTS:
-        return
     for monitor in _armed():
         spec = monitor.get('spec') or {}
         if not matches(spec, payload):
@@ -201,15 +218,56 @@ def _on_event(payload: dict) -> None:
         store.touch_monitor(monitor['id'], int(spec.get('max_triggers') or 20))
 
 
+def _on_event(payload: dict) -> None:
+    """Queue one matching event. Never opens SQLite on the run thread.
+
+    The run emits one ``run.log`` per console line; a listener that wrote a row inline put a disk
+    commit in front of the crawl. Filtering uses the warm cache when it has one and otherwise
+    defers to the worker, which loads the list off the run thread.
+    """
+    if str(payload.get('event') or '') not in EVENTS:
+        return
+    armed = _cached_armed()
+    if armed is not None and not armed:
+        return
+    _QUEUE.put(payload)
+
+
+_QUEUE: queue.Queue = queue.Queue()
+_WORKER: threading.Thread | None = None
 _STARTED = False
 _LOCK = threading.Lock()
 
 
+def _work() -> None:
+    while True:
+        payload = _QUEUE.get()
+        try:
+            try:
+                _deliver(payload)
+            except Exception:  # a monitoring failure is logged, never raised into the run
+                logger.warning(t('run.eventListenerFailed', event=payload.get('event') or ''), exc_info=True)
+        finally:
+            _QUEUE.task_done()
+
+
+def drain(timeout: float | None = None) -> bool:
+    """Wait until queued deliveries are written; used by tests and shutdown."""
+    started = time.monotonic()
+    while _QUEUE.unfinished_tasks:
+        if timeout is not None and time.monotonic() - started > timeout:
+            return False
+        time.sleep(0.01)
+    return True
+
+
 def start() -> None:
-    """Subscribe once. Called when the AI blueprint is imported."""
-    global _STARTED
+    """Subscribe once and start the one delivery worker. Called when the AI blueprint is imported."""
+    global _STARTED, _WORKER
     with _LOCK:
         if _STARTED:
             return
         _STARTED = True
+        _WORKER = threading.Thread(target=_work, name='ai-monitors', daemon=True)
+        _WORKER.start()
     run_events.subscribe(_on_event)

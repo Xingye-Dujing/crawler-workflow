@@ -219,6 +219,17 @@ class TestFingerprints:
         assert node_fingerprint(n) != node_fingerprint(_node(ntype='process'))
         assert node_fingerprint(n) != node_fingerprint(_node(operation='clean'))
 
+    def test_a_python_node_fingerprint_tracks_the_script_version(self, monkeypatch):
+        """The script's content produces the rows; its version must key them."""
+        from services import python_scripts
+
+        versions = {'demo': 1}
+        monkeypatch.setattr(python_scripts, 'find_script', lambda ref: {'id': ref, 'version': versions[ref]})
+        node = _node(ntype='python', params={'script_id': 'demo'})
+        first = node_fingerprint(node)
+        versions['demo'] = 2
+        assert node_fingerprint(node) != first, '继续 would adopt rows the edited script never produced'
+
     def test_node_fingerprint_ignores_volatile_params(self):
         # A tidied file name must not invalidate a stored crawl.
         plain = _node(params={'dataset_id': 'd1'})
