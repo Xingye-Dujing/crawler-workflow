@@ -23,7 +23,7 @@ ROOT = SPEC_DIR.parent
 BACKEND = ROOT / 'backend'
 if str(SPEC_DIR) not in sys.path:
     sys.path.insert(0, str(SPEC_DIR))
-from frozen_modules import package_module_names
+from frozen_modules import package_module_names, source_snapshot_datas
 # UPX is NOT applied here: PyInstaller compresses nothing and barely says so when the tool is
 # not on PATH, which would make the shipped folder's size a guess. `build_windows.ps1` runs
 # `compress_dist.py` after the prune step — it names the missing tool, verifies each file with
@@ -38,6 +38,8 @@ datas = [
     # First-run assets the launcher copies into the user's data root (never overwritten).
     (str(ROOT / 'data' / 'workflows' / '红果短剧-四个热播榜.json'), 'seed/workflows'),
 ]
+# A read-only source snapshot so the packaged AI can cite a file and a line (the developer skill).
+datas += source_snapshot_datas(BACKEND, ROOT)
 for model in sorted(glob.glob(str(ROOT / 'data' / 'models' / '*.pkl'))):
     datas.append((model, 'seed/models'))
 

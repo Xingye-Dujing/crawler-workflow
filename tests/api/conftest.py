@@ -29,6 +29,7 @@ def _forward_run_console(monkeypatch):
     import nodes.executors.fuse
     import nodes.executors.output
     import nodes.executors.process
+    import nodes.executors.python_node
     import nodes.executors.resume
     import nodes.executors.source
     import nodes.executors.tokenize
@@ -62,6 +63,7 @@ def _forward_run_console(monkeypatch):
     forward(monkeypatch, nodes.executors.fuse, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.output, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.process, 'add_log', app_module)
+    forward(monkeypatch, nodes.executors.python_node, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.resume, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.source, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.tokenize, 'add_log', app_module)

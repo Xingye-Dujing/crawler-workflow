@@ -39,6 +39,7 @@ def public_catalog() -> list:
         item['local_available'] = not (provider.spec.local_only and Config.CLOUD_MODE)
         if provider.spec.local_only and Config.CLOUD_MODE:
             item['why_not_key'] = 'ai.localCloud'
+            item['why_not_text'] = t('ai.localCloud', provider=provider.spec.id)
         out.append(item)
     return out
 

@@ -29,6 +29,49 @@ _SKIP_PREFIXES = ('test_',)
 _SKIP_DIRS = {'__pycache__'}
 
 
+def source_snapshot_datas(backend: Path | str, root: Path | str) -> list[tuple[str, str]]:
+    """A read-only source snapshot for the packaged AI (``source/`` in the bundle).
+
+    A frozen build carries compiled modules, so the AI's developer skill had no file to cite. This
+    copies the *sources* (backend ``.py``, frontend ``.js``, ``docs/*.md``) as data; the running
+    program still comes from the compiled bundle, which is why the snapshot is described as
+    read-only. Probe scripts and caches are excluded, matching every other build list here.
+    """
+    backend_root = Path(backend)
+    repo_root = Path(root)
+    out: list[tuple[str, str]] = []
+    for path in sorted(backend_root.rglob('*.py')):
+        parts = path.relative_to(backend_root).parts
+        if _SKIP_DIRS & set(parts) or path.name.startswith(_SKIP_PREFIXES):
+            continue
+        out.append(
+            (
+                str(path),
+                str(Path('source/backend') / Path(*parts[:-1]).as_posix() if len(parts) > 1 else 'source/backend'),
+            )
+        )
+    for path in sorted((backend_root / 'static' / 'js').rglob('*.js')):
+        parts = path.relative_to(backend_root).parts
+        if _SKIP_DIRS & set(parts):
+            continue
+        out.append((str(path), str(Path('source/backend') / Path(*parts[:-1]).as_posix())))
+    docs = repo_root / 'docs'
+    if docs.is_dir():
+        for path in sorted(docs.rglob('*.md')):
+            parts = path.relative_to(docs).parts
+            out.append(
+                (
+                    str(path),
+                    str(Path('source/docs') / Path(*parts[:-1]).as_posix() if len(parts) > 1 else 'source/docs'),
+                )
+            )
+    for name in ('README.md', 'AGENTS.md'):
+        path = repo_root / name
+        if path.is_file():
+            out.append((str(path), 'source'))
+    return out
+
+
 def package_module_names(backend: Path | str, package: str) -> list[str]:
     """Every dotted module name under ``backend/<package>``, in sorted order.
 

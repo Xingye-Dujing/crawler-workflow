@@ -19,6 +19,7 @@ from nodes.executors import (
     name,
     output,
     process,
+    python_node,
     resume,
     source,
     tokenize,
@@ -44,6 +45,7 @@ _BUILTINS = (
     comment,
     source,
     verify,
+    python_node,
 )
 
 for _module in _BUILTINS:

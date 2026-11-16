@@ -59,6 +59,19 @@ CREATE TABLE IF NOT EXISTS questions (
     created_at TEXT NOT NULL,
     answered_at TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS attachments (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    mime TEXT NOT NULL DEFAULT '',
+    size INTEGER NOT NULL DEFAULT 0,
+    sha256 TEXT NOT NULL DEFAULT '',
+    purpose TEXT NOT NULL DEFAULT 'user_data',
+    file_id TEXT NOT NULL DEFAULT '',
+    path TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_attachments_conversation ON attachments(conversation_id, created_at);
 CREATE TABLE IF NOT EXISTS agent_runs (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
@@ -124,6 +137,27 @@ CREATE TABLE IF NOT EXISTS memories (
     text TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS monitors (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    spec_json TEXT NOT NULL DEFAULT '{}',
+    auto_analyze INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'armed',
+    trigger_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    last_event_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_ai_monitors_conversation ON monitors(conversation_id, status);
+CREATE TABLE IF NOT EXISTS monitor_events (
+    id TEXT PRIMARY KEY,
+    monitor_id TEXT NOT NULL,
+    conversation_id TEXT NOT NULL,
+    event TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    delivered INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_monitor_events_pending ON monitor_events(conversation_id, delivered, created_at);
 """
 
 
@@ -173,6 +207,8 @@ def _row(row) -> dict | None:
         'suggested_json',
         'permissions_json',
         'manifest_json',
+        'spec_json',
+        'payload_json',
     ):
         if key not in data:
             continue
@@ -183,10 +219,16 @@ def _row(row) -> dict | None:
                 data[name] = json.loads(raw)
             except ValueError:
                 data[name] = (
-                    {} if name in ('meta', 'usage', 'answer', 'plan', 'args', 'manifest', 'permissions') else []
+                    {}
+                    if name in ('meta', 'usage', 'answer', 'plan', 'args', 'manifest', 'permissions', 'spec', 'payload')
+                    else []
                 )
         else:
-            data[name] = {} if name in ('meta', 'usage', 'answer', 'plan', 'args', 'manifest', 'permissions') else []
+            data[name] = (
+                {}
+                if name in ('meta', 'usage', 'answer', 'plan', 'args', 'manifest', 'permissions', 'spec', 'payload')
+                else []
+            )
     return data
 
 
@@ -239,7 +281,7 @@ def touch_conversation(conversation_id: str, **fields) -> None:
 
 def delete_conversation(conversation_id: str) -> bool:
     with connect() as conn:
-        for table in ('messages', 'questions', 'agent_steps', 'agent_runs', 'usage'):
+        for table in ('messages', 'questions', 'agent_steps', 'agent_runs', 'usage', 'attachments'):
             if table == 'agent_steps':
                 conn.execute(
                     'DELETE FROM agent_steps WHERE run_id IN (SELECT id FROM agent_runs WHERE conversation_id = ?)',
@@ -377,6 +419,50 @@ def abandon_questions(conversation_id: str) -> int:
             (conversation_id,),
         )
     return cur.rowcount
+
+
+def add_attachment(
+    conversation_id: str,
+    name: str,
+    mime: str,
+    size: int,
+    sha256: str,
+    purpose: str,
+    file_id: str,
+    path: str,
+) -> dict:
+    attachment_id = new_id('att')
+    with connect() as conn:
+        conn.execute(
+            'INSERT INTO attachments (id, conversation_id, name, mime, size, sha256, purpose, file_id, path, '
+            'created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (attachment_id, conversation_id, name, mime, int(size), sha256, purpose, file_id, path, now()),
+        )
+    return get_attachment(attachment_id)
+
+
+def get_attachment(attachment_id: str) -> dict | None:
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM attachments WHERE id = ?', (attachment_id,)).fetchone()
+    return _row(row)
+
+
+def list_attachments(conversation_id: str) -> list:
+    with connect() as conn:
+        rows = conn.execute(
+            'SELECT * FROM attachments WHERE conversation_id = ? ORDER BY created_at',
+            (conversation_id,),
+        ).fetchall()
+    return [_row(row) for row in rows]
+
+
+def delete_attachment(attachment_id: str) -> dict | None:
+    row = get_attachment(attachment_id)
+    if row is None:
+        return None
+    with connect() as conn:
+        conn.execute('DELETE FROM attachments WHERE id = ?', (attachment_id,))
+    return row
 
 
 def create_run(conversation_id: str, message_id: str) -> dict:
@@ -636,3 +722,109 @@ def purge_older_than(days: int) -> int:
     with connect() as conn:
         cur = conn.execute('DELETE FROM conversations WHERE updated_at < ?', (cutoff,))
     return cur.rowcount
+
+
+# ─── Run monitors ─────────────────────────────────────────────────────────
+
+
+def add_monitor(conversation_id: str, spec: dict, auto_analyze: bool = False) -> dict:
+    monitor_id = new_id('mon')
+    with connect() as conn:
+        conn.execute(
+            'INSERT INTO monitors (id, conversation_id, spec_json, auto_analyze, status, created_at) '
+            "VALUES (?, ?, ?, ?, 'armed', ?)",
+            (monitor_id, conversation_id, json.dumps(spec, ensure_ascii=False), 1 if auto_analyze else 0, now()),
+        )
+    return get_monitor(monitor_id)
+
+
+def get_monitor(monitor_id: str) -> dict | None:
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM monitors WHERE id = ?', (monitor_id,)).fetchone()
+    return _row(row)
+
+
+def list_monitors(conversation_id: str = '', active_only: bool = False) -> list:
+    sql = 'SELECT * FROM monitors'
+    clauses, params = [], []
+    if conversation_id:
+        clauses.append('conversation_id = ?')
+        params.append(conversation_id)
+    if active_only:
+        clauses.append("status = 'armed'")
+    if clauses:
+        sql += ' WHERE ' + ' AND '.join(clauses)
+    sql += ' ORDER BY created_at DESC'
+    with connect() as conn:
+        rows = conn.execute(sql, tuple(params)).fetchall()
+    return [_row(row) for row in rows]
+
+
+def delete_monitor(monitor_id: str) -> bool:
+    with connect() as conn:
+        cur = conn.execute('DELETE FROM monitors WHERE id = ?', (monitor_id,))
+    return cur.rowcount > 0
+
+
+def touch_monitor(monitor_id: str, max_triggers: int = 0) -> dict | None:
+    """Count one trigger and retire the monitor when its budget is spent.
+
+    The increment is in the row (``trigger_count = trigger_count + 1``) so a burst of events on
+    several threads cannot collapse into one, the same rule the login failure window follows.
+    """
+    stamp = now()
+    with connect() as conn:
+        conn.execute(
+            'UPDATE monitors SET trigger_count = trigger_count + 1, last_event_at = ? WHERE id = ?',
+            (stamp, monitor_id),
+        )
+        row = conn.execute('SELECT * FROM monitors WHERE id = ?', (monitor_id,)).fetchone()
+        if row is not None and max_triggers and int(row['trigger_count']) >= max_triggers:
+            conn.execute("UPDATE monitors SET status = 'done' WHERE id = ?", (monitor_id,))
+    return _row(row)
+
+
+def add_monitor_event(monitor_id: str, conversation_id: str, event: str, payload: dict) -> dict:
+    event_id = new_id('mev')
+    with connect() as conn:
+        conn.execute(
+            'INSERT INTO monitor_events (id, monitor_id, conversation_id, event, payload_json, created_at) '
+            'VALUES (?, ?, ?, ?, ?, ?)',
+            (event_id, monitor_id, conversation_id, event, json.dumps(payload, ensure_ascii=False), now()),
+        )
+    return {
+        'id': event_id,
+        'monitor_id': monitor_id,
+        'conversation_id': conversation_id,
+        'event': event,
+        'payload': payload,
+    }
+
+
+def list_monitor_events(conversation_id: str = '', pending_only: bool = False, limit: int = 50) -> list:
+    sql = 'SELECT * FROM monitor_events'
+    clauses, params = [], []
+    if conversation_id:
+        clauses.append('conversation_id = ?')
+        params.append(conversation_id)
+    if pending_only:
+        clauses.append('delivered = 0')
+    if clauses:
+        sql += ' WHERE ' + ' AND '.join(clauses)
+    sql += ' ORDER BY created_at ASC LIMIT ?'
+    params.append(max(1, int(limit)))
+    with connect() as conn:
+        rows = conn.execute(sql, tuple(params)).fetchall()
+    return [_row(row) for row in rows]
+
+
+def ack_monitor_event(event_id: str) -> bool:
+    with connect() as conn:
+        cur = conn.execute('UPDATE monitor_events SET delivered = 1 WHERE id = ?', (event_id,))
+    return cur.rowcount > 0
+
+
+def pending_monitor_count() -> int:
+    with connect() as conn:
+        row = conn.execute('SELECT COUNT(*) AS n FROM monitor_events WHERE delivered = 0').fetchone()
+    return int(row['n'] if row is not None else 0)

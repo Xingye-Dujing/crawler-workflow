@@ -6,11 +6,13 @@ canonical events into SSE frames. An API key is read from the request body and h
 provider for that one call; it is never written to SQLite or to a log line.
 """
 
+import contextlib
 import json
 import logging
+import os
 import time
 
-from ai import agent, context, plugins, skills, store, tools
+from ai import agent, context, environment, files, monitors, plugins, skills, store, tools
 from ai.errors import AIError
 from ai.providers import get_provider, list_models, public_catalog
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -19,16 +21,23 @@ from runtime.settings import get_setting
 
 from api.http import _bad_body, _json_body
 from i18n import get_lang, set_lang, t
+from services import python_runtime, python_scripts
 
 logger = logging.getLogger('api.ai')
 
 bp = Blueprint('ai', __name__)
 
 plugins.register_builtin()
+monitors.start()
 
 
 def _error(exc: AIError, status: int = 400):
     return jsonify(exc.as_dict()), status
+
+
+def _public_attachment(row: dict) -> dict:
+    keys = ('id', 'conversation_id', 'name', 'mime', 'size', 'purpose', 'file_id', 'created_at')
+    return {key: row.get(key) for key in keys if key in row}
 
 
 def _sse(payload: dict) -> str:
@@ -157,6 +166,9 @@ def ai_bootstrap():
             },
             'plugins': plugins.public_plugins(),
             'tools': [spec.schema() for spec in tools.TOOLS.values()],
+            'runtime': environment.capabilities(),
+            'monitors': store.list_monitors(active_only=True),
+            'monitor_pending': store.pending_monitor_count(),
         }
     )
 
@@ -274,6 +286,269 @@ def ai_memory_delete(memory_id: str):
     return jsonify({'ok': True, 'deleted': store.delete_memory(memory_id)})
 
 
+@bp.route('/api/ai/files', methods=['POST'])
+def ai_file_upload():
+    upload = request.files.get('file')
+    if upload is None:
+        return _error(AIError('ai.fileUnsupported', kind='bad_request'))
+    conversation_id = str(request.form.get('conversation_id') or '')
+    if not conversation_id or store.get_conversation(conversation_id) is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    provider = str(request.form.get('provider') or 'deepseek')
+    if provider != 'deepseek':
+        return _error(AIError('ai.fileUnsupported', kind='capability'))
+    data = upload.read()
+    try:
+        row = files.upload_file(
+            conversation_id,
+            upload.filename or 'file',
+            upload.mimetype or '',
+            data,
+            str(request.form.get('api_key') or ''),
+            purpose=str(request.form.get('purpose') or ''),
+            provider=provider,
+        )
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'attachment': _public_attachment(row)})
+
+
+@bp.route('/api/ai/monitors', methods=['GET'])
+def ai_monitors():
+    conversation_id = str(request.args.get('conversation_id') or '')
+    return jsonify({'ok': True, 'monitors': store.list_monitors(conversation_id)})
+
+
+@bp.route('/api/ai/monitors', methods=['POST'])
+def ai_monitor_create():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        monitor = monitors.create(
+            str(data.get('conversation_id') or ''),
+            data.get('spec') if isinstance(data.get('spec'), dict) else data,
+            bool(data.get('auto_analyze')),
+        )
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'monitor': monitor})
+
+
+@bp.route('/api/ai/monitors/<monitor_id>', methods=['DELETE'])
+def ai_monitor_delete(monitor_id: str):
+    if store.get_monitor(monitor_id) is None:
+        return _error(AIError('ai.monitorMissing', kind='not_found', monitor=monitor_id), 404)
+    return jsonify({'ok': True, 'deleted': monitors.cancel(monitor_id)})
+
+
+@bp.route('/api/ai/monitors/events', methods=['GET'])
+def ai_monitor_events():
+    conversation_id = str(request.args.get('conversation_id') or '')
+    pending_only = str(request.args.get('pending') or '1') not in ('0', 'false', '')
+    limit = max(1, min(100, int(request.args.get('limit') or 20)))
+    return jsonify(
+        {
+            'ok': True,
+            'events': store.list_monitor_events(conversation_id, pending_only=pending_only, limit=limit),
+        }
+    )
+
+
+@bp.route('/api/ai/monitors/events/<event_id>/ack', methods=['POST'])
+def ai_monitor_event_ack(event_id: str):
+    return jsonify({'ok': True, 'acked': store.ack_monitor_event(event_id)})
+
+
+@bp.route('/api/ai/python/status', methods=['GET'])
+def ai_python_status():
+    runtime = environment.capabilities()
+    report = python_runtime.interpreter(refresh=str(request.args.get('refresh') or '') in ('1', 'true'))
+    report = {key: value for key, value in report.items() if key != 'command'}
+    return jsonify(
+        {
+            'ok': True,
+            'enabled': bool(get_setting('ai_allow_python')),
+            'allowed': bool(runtime['code_plugins']),
+            'report': report,
+            'workspace': python_runtime.workspace(),
+            'install': python_runtime.install_plan(),
+        }
+    )
+
+
+@bp.route('/api/ai/python/install', methods=['POST'])
+def ai_python_install():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        return jsonify({'ok': True, 'result': python_runtime.install_interpreter(bool(data.get('allow_download')))})
+    except AIError as exc:
+        return _error(exc)
+
+
+@bp.route('/api/ai/python/scripts', methods=['GET'])
+def ai_python_scripts():
+    return jsonify({'ok': True, 'scripts': python_scripts.all_scripts()})
+
+
+@bp.route('/api/ai/python/scripts', methods=['POST'])
+def ai_python_script_save():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        return jsonify({'ok': True, 'script': python_scripts.save_script(data)})
+    except AIError as exc:
+        return _error(exc)
+
+
+@bp.route('/api/ai/python/scripts/<script_id>', methods=['GET'])
+def ai_python_script(script_id: str):
+    script = python_scripts.get_script(script_id)
+    if script is None:
+        return _error(AIError('ai.pythonUnknown', kind='not_found', script=script_id), 404)
+    return jsonify({'ok': True, 'script': script})
+
+
+@bp.route('/api/ai/python/scripts/<script_id>', methods=['DELETE'])
+def ai_python_script_delete(script_id: str):
+    try:
+        return jsonify({'ok': True, 'deleted': python_scripts.delete_script(script_id)})
+    except AIError as exc:
+        return _error(exc)
+
+
+@bp.route('/api/ai/python/scripts/<script_id>/fork', methods=['POST'])
+def ai_python_script_fork(script_id: str):
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        return jsonify({'ok': True, 'script': python_scripts.fork_script(script_id, str(data.get('id') or ''))})
+    except AIError as exc:
+        return _error(exc)
+
+
+@bp.route('/api/ai/python/run', methods=['POST'])
+def ai_python_run():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    script = python_scripts.get_script(str(data.get('script_id') or '')) if data.get('script_id') else None
+    code = str(data.get('code') or (script or {}).get('code') or '')
+    if not code:
+        return _error(AIError('ai.pythonUnknown', kind='bad_request', script=str(data.get('script_id') or '')))
+    rows = data.get('rows') if isinstance(data.get('rows'), list) else []
+    try:
+        result = python_runtime.run_code(
+            code,
+            rows,
+            data.get('args') if isinstance(data.get('args'), dict) else {},
+            timeout=int(data.get('timeout') or 120),
+            max_rows=int(data.get('max_rows') or 1000),
+            label=str((script or {}).get('name') or 'inline'),
+        )
+    except AIError as exc:
+        return _error(exc)
+    return jsonify(
+        {
+            'ok': True,
+            'rows': len(result['rows']),
+            'sample': result['rows'][:20],
+            'stdout': result['stdout'],
+            'stderr': result['stderr'],
+            'exit_code': result['exit_code'],
+            'duration_ms': result['duration_ms'],
+            'interpreter': result['interpreter'],
+        }
+    )
+
+
+@bp.route('/api/ai/python/files', methods=['GET'])
+def ai_python_files():
+    return jsonify({'ok': True, 'files': python_runtime.list_files(), 'workspace': python_runtime.workspace()})
+
+
+@bp.route('/api/ai/python/files', methods=['POST'])
+def ai_python_file_write():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        return jsonify(
+            {'ok': True, 'file': python_runtime.write_file(str(data.get('path') or ''), str(data.get('content') or ''))}
+        )
+    except AIError as exc:
+        return _error(exc)
+
+
+@bp.route('/api/ai/conversations/<conversation_id>/files', methods=['GET'])
+def ai_file_list(conversation_id: str):
+    if store.get_conversation(conversation_id) is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    return jsonify(
+        {'ok': True, 'attachments': [_public_attachment(row) for row in store.list_attachments(conversation_id)]}
+    )
+
+
+@bp.route('/api/ai/files/<attachment_id>', methods=['DELETE'])
+def ai_file_delete(attachment_id: str):
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    row = store.get_attachment(attachment_id)
+    if row is None:
+        return _error(AIError('ai.fileUnsupported', kind='not_found'), 404)
+    if row.get('file_id'):
+        try:
+            files.delete_file(str(row['file_id']), str(data.get('api_key') or ''))
+        except AIError as exc:
+            return _error(exc)
+    path = str(row.get('path') or '')
+    if path:
+        with contextlib.suppress(OSError):
+            os.remove(path)
+    store.delete_attachment(attachment_id)
+    return jsonify({'ok': True, 'deleted': True})
+
+
+@bp.route('/api/ai/search', methods=['POST'])
+def ai_search():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    if str(data.get('provider') or 'deepseek') != 'deepseek':
+        return _error(AIError('ai.fileUnsupported', kind='capability'))
+    try:
+        result = files.search(
+            str(data.get('api_key') or ''),
+            str(data.get('query') or ''),
+            count=int(data.get('count') or 10),
+            need_content=bool(data.get('need_content')),
+            ori_question=str(data.get('ori_question') or ''),
+            localization=str(data.get('localization') or ''),
+        )
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, **result})
+
+
+@bp.route('/api/ai/fetch', methods=['POST'])
+def ai_fetch():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    if str(data.get('provider') or 'deepseek') != 'deepseek':
+        return _error(AIError('ai.fileUnsupported', kind='capability'))
+    try:
+        result = files.fetch(str(data.get('api_key') or ''), str(data.get('url') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, **result})
+
+
 @bp.route('/api/ai/conversations', methods=['GET'])
 def ai_conversations():
     return jsonify({'ok': True, 'conversations': store.list_conversations()})
@@ -301,6 +576,7 @@ def ai_conversation(conversation_id: str):
             'conversation': conversation,
             'messages': store.list_messages(conversation_id),
             'pending_questions': store.pending_questions(conversation_id),
+            'attachments': [_public_attachment(row) for row in store.list_attachments(conversation_id)],
         }
     )
 

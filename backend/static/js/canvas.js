@@ -1327,7 +1327,7 @@ const canvas = {
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
        pasteClipboardAt — one paste path, no second implementation to drift. */
-    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment', 'verify'],
+    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'python', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment', 'verify'],
 
     /* The pinned list above is the cold-page fallback (the catalogue fetch is async and a
        restored draft must still validate before it answers). ``tests/unit/test_node_plugins.py``
@@ -1632,6 +1632,7 @@ const canvas = {
         if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
         if (type === 'accumulate') return { lineage_name: '', identity: 'row', key_columns: '' };
         if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
+        if (type === 'python') return { script_id: '', args: '{}', timeout: 120, max_rows: 200000 };
         if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
         if (type === 'biblio') return {
             entity_type: 'keyword',

@@ -865,6 +865,24 @@ SETTINGS = (
         hint='set.aiAllowCodeHint',
         consumer='server',
     ),
+    Setting(
+        'ai_allow_python',
+        'bool',
+        False,
+        'ai',
+        'set.aiAllowPython',
+        hint='set.aiAllowPythonHint',
+        consumer='server',
+    ),
+    Setting(
+        'ai_python_path',
+        'str',
+        '',
+        'ai',
+        'set.aiPythonPath',
+        hint='set.aiPythonPathHint',
+        consumer='server',
+    ),
 )
 
 #: Knobs that are timing/transport internals rather than a user's choice: they keep

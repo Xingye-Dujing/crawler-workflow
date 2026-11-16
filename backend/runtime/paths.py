@@ -61,6 +61,11 @@ class DataPaths:
     ai_db: str
     ai_files_dir: str
     ai_plugins_dir: str
+    #: The AI's Python extension surface: saved scripts (shared by the AI tools and the canvas's
+    #: Python node) and the files those scripts read/write. Per account, because a script can read
+    #: that account's datasets and its output is that person's work.
+    python_scripts_db: str
+    python_workspace_dir: str
 
     def ensure(self) -> 'DataPaths':
         """Create the directories this scope needs. Idempotent, called when an account is created
@@ -76,6 +81,7 @@ class DataPaths:
             self.reusable_dir,
             self.ai_files_dir,
             self.ai_plugins_dir,
+            self.python_workspace_dir,
         ):
             os.makedirs(directory, exist_ok=True)
         return self
@@ -104,6 +110,8 @@ def system() -> DataPaths:
         ai_db=os.path.join(data_dir, 'ai.db'),
         ai_files_dir=os.path.join(data_dir, 'ai_files'),
         ai_plugins_dir=os.path.join(data_dir, 'ai_plugins'),
+        python_scripts_db=os.path.join(data_dir, 'python_scripts.db'),
+        python_workspace_dir=os.path.join(data_dir, 'ai_python'),
     )
 
 
@@ -160,6 +168,8 @@ def for_user(user_id: str) -> DataPaths:
         ai_db=os.path.join(root, 'ai.db'),
         ai_files_dir=os.path.join(root, 'ai_files'),
         ai_plugins_dir=os.path.join(root, 'ai_plugins'),
+        python_scripts_db=os.path.join(root, 'python_scripts.db'),
+        python_workspace_dir=os.path.join(root, 'ai_python'),
     )
 
 

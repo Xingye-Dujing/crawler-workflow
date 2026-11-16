@@ -404,6 +404,10 @@
         <span class="palette-tag">[PRC]</span>
         <span data-i18n="palette.process">Process</span>
       </div>
+      <div class="palette-item cloud-hide" data-type="python" draggable="true" title="Run a saved Python script over the rows">
+        <span class="palette-tag">[PY]</span>
+        <span data-i18n="palette.python">Python script</span>
+      </div>
       <div class="palette-item" data-type="analysis" draggable="true">
         <span class="palette-tag">[ANL]</span>
         <span data-i18n="palette.analysis">Analysis</span>
@@ -2530,6 +2534,7 @@
     <script src="js/panels/node-biblio.js"></script>
     <script src="js/panels/node-chart.js"></script>
     <script src="js/panels/node-verify.js"></script>
+    <script src="js/panels/node-python.js"></script>
     <script src="js/chart-preview.js"></script>
     <script src="js/capabilities.js"></script>
     <script src="js/panels/cookies.js"></script>
@@ -2575,6 +2580,7 @@
     <script src="js/ai/render.js"></script>
     <script src="js/ai/settings.js"></script>
     <script src="js/ai/context.js"></script>
+    <script src="js/ai/watch.js"></script>
     <script src="js/ai/studio.js"></script>
     <script src="js/ai-workspace.js"></script>
     <!-- Reusable-node templates, inside view and run expansion. After app.js so the
@@ -2584,14 +2590,14 @@
     <aside id="ai-workspace" class="ai-workspace" aria-label="AI workspace" hidden>
       <div class="ai-resizer" id="ai-resizer" role="separator" aria-label="Resize AI workspace" aria-orientation="vertical"></div>
       <header class="ai-head">
-        <button type="button" class="ai-icon-btn" id="ai-history-btn" onclick="AIWorkspace.toggleSessions()" aria-label="Conversations" title="Conversations">☰</button>
+        <button type="button" class="ai-icon-btn" id="ai-history-btn" onclick="AIWorkspace.toggleSessions()" aria-label="Conversations" title="Conversations"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
         <div class="ai-head-title" id="ai-title" data-i18n="ai.title">AI Workspace</div>
         <span class="ai-chip ai-model-chip" id="ai-model-chip">—</span>
-        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.newChat()" aria-label="New conversation" title="New conversation">＋</button>
-        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openStudio()" aria-label="Skills and plugins" title="Skills and plugins">◇</button>
-        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openSettings()" aria-label="Provider settings" title="Provider settings">⚙</button>
-        <button type="button" class="ai-icon-btn" id="ai-full-btn" onclick="AIWorkspace.toggleFull()" aria-label="Full screen" title="Full screen">⤢</button>
-        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.close()" aria-label="Close AI workspace" title="Close AI workspace">×</button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.newChat()" aria-label="New conversation" title="New conversation"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openStudio()" aria-label="Skills and plugins" title="Skills and plugins"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openSettings()" aria-label="Provider settings" title="Provider settings"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="9" cy="7" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.2"/><circle cx="15" cy="12" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.2"/><circle cx="10" cy="17" r="2" fill="var(--paper)" stroke="currentColor" stroke-width="1.2"/></svg></button>
+        <button type="button" class="ai-icon-btn" id="ai-full-btn" onclick="AIWorkspace.toggleFull()" aria-label="Full screen" title="Full screen"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" class="ai-icon-btn" onclick="AIWorkspace.close()" aria-label="Close AI workspace" title="Close AI workspace"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
       </header>
       <div class="ai-body">
         <aside id="ai-sessions" class="ai-sessions" aria-label="Conversations"></aside>
@@ -2601,6 +2607,7 @@
       <footer class="ai-composer">
         <div class="ai-context-bar" id="ai-context-bar"></div>
         <div class="ai-input-wrap">
+          <div class="ai-attachments" id="ai-attachments"></div>
           <textarea id="ai-input" class="ai-input" rows="2" placeholder="Ask about the project, a run, a dataset…" data-i18n-placeholder="ai.placeholder" aria-label="Message"></textarea>
           <div class="ai-composer-row">
             <div class="ai-toggles">
@@ -2611,8 +2618,8 @@
               <select id="ai-ws-model" class="ai-select" aria-label="Model" onchange="aiSetModel(this.value)"></select>
             </div>
             <div class="ai-send-group">
-              <button type="button" class="ai-icon-btn" onclick="AIWorkspace.attach()" aria-label="Attach a file" title="Attach a file">⌁</button>
-              <button type="button" class="ai-icon-btn ai-stop" id="ai-stop-btn" onclick="AIWorkspace.stop()" aria-label="Stop" title="Stop" hidden>■</button>
+              <button type="button" class="ai-icon-btn" id="ai-attach-btn" onclick="AIWorkspace.attach()" aria-label="Attach a file" title="Attach a file"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5l-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.6 1.6 0 0 1-2.3-2.3l7.8-7.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button type="button" class="ai-icon-btn ai-stop" id="ai-stop-btn" onclick="AIWorkspace.stop()" aria-label="Stop" title="Stop" hidden><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" fill="currentColor"/></svg></button>
               <button type="button" class="ai-primary" id="ai-send-btn" onclick="AIWorkspace.send()" data-i18n="ai.send" aria-label="Send">Send</button>
             </div>
           </div>

@@ -20,6 +20,7 @@ PERMISSIONS = frozenset(
         'read:run',
         'read:docs',
         'read:code',
+        'read:web',
         'net:http',
         'provider:custom',
         'code:execute',

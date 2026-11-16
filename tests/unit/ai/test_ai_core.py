@@ -22,19 +22,24 @@ def test_deepseek_has_the_full_suite_and_go_does_not_pretend():
     go = get_provider('opencode_go')
     assert deepseek.supports('web_search', 'deepseek-flash')
     assert deepseek.supports('safety', 'deepseek-flash')
-    assert not deepseek.supports('files', 'deepseek-flash')
+    assert deepseek.supports('files', 'deepseek-flash')
+    assert not deepseek.supports('files', 'deepseek-v4-pro')
     assert not go.supports('web_search', 'deepseek-v4.1-flash')
     assert not go.supports('files', 'deepseek-v4.1-flash')
 
 
 def test_cloud_refuses_only_the_local_transport(monkeypatch):
-    from ai.providers.registry import local_transport_refusal
+    from ai.providers.registry import local_transport_refusal, public_catalog
     from core.config import Config
 
     monkeypatch.setattr(Config, 'CLOUD_MODE', True)
     assert local_transport_refusal('ollama')
     assert local_transport_refusal('deepseek') == ''
     assert local_transport_refusal('opencode_go') == ''
+    catalog = {item['id']: item for item in public_catalog()}
+    assert catalog['ollama']['local_available'] is False
+    assert catalog['ollama']['why_not_text']
+    assert catalog['deepseek']['local_available'] is True
 
 
 def test_deepseek_wire_keeps_thinking_and_tool_pairs():
@@ -60,6 +65,21 @@ def test_deepseek_wire_keeps_thinking_and_tool_pairs():
     assert wire[2]['content'][0]['type'] == 'tool_result'
     with pytest.raises(AIError):
         to_wire_messages(messages[:2])
+
+
+def test_deepseek_wire_includes_file_references():
+    from ai.providers.deepseek import to_wire_messages
+
+    messages = [
+        {
+            'role': 'user',
+            'content': 'what is this?',
+            'meta': {'attachments': [{'file_id': 'file-api-1', 'kind': 'image', 'name': 'a.png'}]},
+        }
+    ]
+    wire = to_wire_messages(messages)
+    assert wire[0]['content'][0] == {'type': 'image', 'source': {'type': 'file', 'file_id': 'file-api-1'}}
+    assert wire[0]['content'][1]['type'] == 'text'
 
 
 def test_context_prefix_is_added_to_the_last_user_turn_only():
@@ -109,6 +129,78 @@ def test_router_names_the_skill_it_chose():
     assert skills.route('这个运行为什么失败？') == 'diagnose'
     assert skills.route('这份数据适合什么图？') == 'charts'
     assert skills.route('帮我搭一个工作流') == 'workflow'
+
+
+def test_environment_separates_desktop_local_web_and_cloud(monkeypatch):
+    from ai import environment
+    from core import machine
+    from core.config import Config
+
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(machine, 'is_frozen', lambda: False)
+    local = environment.capabilities()
+    assert local['kind'] == 'local_web' and local['local_source'] and local['ollama']
+    monkeypatch.setattr(machine, 'is_frozen', lambda: True)
+    desktop = environment.capabilities()
+    assert desktop['kind'] == 'desktop' and desktop['user_files'] and not desktop['local_source']
+    monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    cloud = environment.capabilities()
+    assert cloud['kind'] == 'cloud' and not cloud['user_files'] and not cloud['code_plugins']
+
+
+def test_every_host_keeps_the_complete_workspace(monkeypatch):
+    """The three shapes differ only in host powers, never in the workspace's own features.
+
+    A packaged desktop and a cloud page each must keep chat, files, search, sessions, skills and
+    declarative plugins; otherwise "the desktop has AI" would be a half-workspace claim.
+    """
+    from ai import environment
+    from core import machine
+    from core.config import Config
+
+    shared = ('chat', 'sessions', 'skills', 'declarative_plugins', 'files_api', 'web_search')
+    shapes = []
+    for cloud, frozen in ((False, False), (False, True), (True, False)):
+        monkeypatch.setattr(Config, 'CLOUD_MODE', cloud)
+        monkeypatch.setattr(machine, 'is_frozen', lambda frozen=frozen: frozen)
+        caps = environment.capabilities()
+        assert all(caps[name] is True for name in shared), (caps['kind'], caps)
+        shapes.append(caps['kind'])
+    assert shapes == ['local_web', 'desktop', 'cloud']
+
+
+def test_the_prompt_never_grants_source_to_a_bundled_or_cloud_host(monkeypatch):
+    from ai import environment
+    from core import machine
+    from core.config import Config
+
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(machine, 'is_frozen', lambda: True)
+    desktop = environment.prompt_line()
+    assert 'read-only source snapshot' in desktop and 'cannot change the running program' in desktop
+    monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    line = environment.prompt_line()
+    assert 'no local model daemon' in line and 'no user-local filesystem' in line
+    assert 'repository source' in line
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(machine, 'is_frozen', lambda: False)
+    assert 'repository source' in environment.prompt_line()
+    assert 'local_source' in environment.feature_words()
+
+
+def test_developer_skill_is_only_available_where_source_is(monkeypatch):
+    from ai import skills
+    from ai.providers import get_provider
+    from core import machine
+    from core.config import Config
+
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(machine, 'is_frozen', lambda: False)
+    monkeypatch.setattr(skills, 'get_setting', lambda key: True if key == 'ai_allow_code_context' else '')
+    assert skills.availability(skills.BUILTIN['developer'], get_provider('deepseek'))[0] is True
+    monkeypatch.setattr(machine, 'is_frozen', lambda: True)
+    available, reason = skills.availability(skills.BUILTIN['developer'], get_provider('deepseek'))
+    assert available is False and reason.startswith('ai.skillCodeLocal')
 
 
 def test_store_uses_max_seq_and_round_trips_blocks():

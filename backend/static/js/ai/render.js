@@ -203,7 +203,10 @@ const AIRender = {
             ? '<button type="button" class="ai-primary" data-ai-apply-skill="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.openEditor')) + '</button>'
             : artifact.kind === 'plugin_manifest'
                 ? '<button type="button" class="ai-primary" data-ai-apply-plugin="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.openInstaller')) + '</button>'
-                : '';
+                : artifact.kind === 'monitor'
+                    ? '<button type="button" class="ai-primary" data-ai-apply-monitor="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.auto')) + '</button>' +
+                      '<button type="button" class="ai-ghost" data-ai-watch-only="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.watchOnly')) + '</button>'
+                    : '';
         return (
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +

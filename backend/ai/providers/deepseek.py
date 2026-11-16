@@ -22,6 +22,7 @@ DEEPSEEK_CAPABILITIES = frozenset(
         'thinking',
         'web_search',
         'read_url',
+        'files',
         'safety',
         'title',
         'latest_reminder',
@@ -31,6 +32,7 @@ DEEPSEEK_CAPABILITIES = frozenset(
         'continue',
     }
 )
+V4_PRO_CAPABILITIES = frozenset(capability for capability in DEEPSEEK_CAPABILITIES if capability != 'files')
 
 SPEC = ProviderSpec(
     id='deepseek',
@@ -40,7 +42,7 @@ SPEC = ProviderSpec(
     base_url='https://api.deepseek.com/anthropic/v1/messages',
     models=(
         ModelSpec('deepseek-flash', 'DeepSeek V4.1 Flash', 512000, DEEPSEEK_CAPABILITIES),
-        ModelSpec('deepseek-v4-pro', 'DeepSeek V4 Pro', 512000, DEEPSEEK_CAPABILITIES),
+        ModelSpec('deepseek-v4-pro', 'DeepSeek V4 Pro', 512000, V4_PRO_CAPABILITIES),
     ),
     capabilities=DEEPSEEK_CAPABILITIES,
     models_url='https://api.deepseek.com/models',
@@ -121,7 +123,16 @@ def to_wire_messages(messages: list, *, context_text: str = '') -> list:
         content = str(message.get('content') or '')
         if context_text and index == last_user_index:
             content = f'<cai_xi_hui_context>\n{context_text}\n</cai_xi_hui_context>\n\n{content}'
-        out.append({'role': 'user', 'content': [text_block(content)] if content else []})
+        blocks = []
+        for attachment in (message.get('meta') or {}).get('attachments') or ():
+            file_id = str(attachment.get('file_id') or '')
+            if not file_id:
+                continue
+            block_type = 'image' if attachment.get('kind') == 'image' else 'document'
+            blocks.append({'type': block_type, 'source': {'type': 'file', 'file_id': file_id}})
+        if content:
+            blocks.append(text_block(content))
+        out.append({'role': 'user', 'content': blocks})
     # Anthropic accepts adjacent same-role turns, but the API's replay checks and the cache
     # behave better with alternation. Merge text/tool-result user turns; never merge an
     # assistant turn into a user turn.
@@ -205,6 +216,7 @@ class DeepSeekProvider(Provider):
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {request.get("api_key") or ""}',
             'User-Agent': 'CaiXiHui-AI/1.0',
+            'anthropic-beta': 'files-api-2025-04-14',
         }
 
     def stream(self, request: dict):

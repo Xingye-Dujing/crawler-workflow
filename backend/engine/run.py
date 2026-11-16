@@ -42,7 +42,7 @@ from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES
 from nodes.context import NodeCall
 from nodes.labels import node_label
-from runtime import account_context
+from runtime import account_context, run_events
 from runtime.settings import get_setting
 from runtime.state import (
     _completed_lock,
@@ -572,6 +572,20 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
                 label_of=_labels_of,
             )
             results[nid] = result
+            # One event per node attempt, after the store has the terminal status. Monitors match
+            # on the status/row count here; the AI reads the full node table through its own
+            # read-only tool, so the bus stays a notification channel, not a second data path.
+            run_events.publish(
+                'node.finished',
+                run_id=str(ctx.get('run_id') or ''),
+                node_id=nid,
+                node_type=str(node.get('type') or ''),
+                label=label,
+                status=status,
+                rows=len(result) if isinstance(result, list) else 0,
+                wf_idx=wf_idx,
+                workflow=wf_name,
+            )
             if status == NODE_SKIPPED:
                 # Neither done nor failed: it never got input to work on. The
                 # reason was announced by run_node_durable; counting it as
@@ -787,6 +801,13 @@ def _component_run(
         add_log(t('run.resume_from', at=earlier.get('started_at') or '?', rows=saved), wf_idx=wf_idx)
     else:
         add_log(t('run.started', rid=rid), wf_idx=wf_idx)
+    run_events.publish(
+        'run.started',
+        run_id=rid,
+        workflow=getattr(_wf_local, 'name', '') or '',
+        wf_idx=wf_idx,
+        resume=bool(earlier),
+    )
     return dict(
         ctx,
         run_id=rid,
@@ -1286,6 +1307,29 @@ def _run_worker(
             # would leave the last run's answer standing on screen.
             if not execution_state['outcome']:
                 execution_state['outcome'] = 'interrupted' if outcome == RUN_INTERRUPTED else 'failed'
+            final = {
+                'outcome': execution_state['outcome'],
+                'done': execution_state['completed_nodes'],
+                'total': execution_state['total_nodes'],
+                'failed': execution_state['failed_nodes'],
+                'skipped': execution_state['skipped_nodes'],
+            }
+        if ctx is not None:
+            # Published BEFORE the desktop popup and the retention sweep: a monitor's reaction
+            # should not wait on a slow housekeeping pass, and a failed sweep must not swallow the
+            # fact that the run ended. `records` names every row this attempt wrote (serial splits
+            # write one per component), so a monitor bound to any of them matches.
+            run_events.publish(
+                'run.finished',
+                run_id=str(execution_state.get('run_id') or ''),
+                records=list(created) or [run_id],
+                workflow=workflow_name,
+                outcome=final['outcome'],
+                done=final['done'],
+                total=final['total'],
+                failed=final['failed'],
+                skipped=final['skipped'],
+            )
         # The verdict is final; only now is a system notification true. It sits before the
         # housekeeping below so a slow database sweep cannot delay the popup, and it is a no-op on
         # a host with no desktop shell (a source run, a cloud deploy).

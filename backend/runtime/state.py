@@ -19,7 +19,7 @@ import time
 
 from sessions.cookies import CookieManager
 
-from runtime import account_context, paths
+from runtime import account_context, paths, run_events
 from services.runs.history import ExecutionHistoryService
 
 #: 执行历史 service: one process-wide instance whose DATABASE follows the signed-in account
@@ -469,6 +469,13 @@ def _push_log(line: str, wf_idx: int = None, level: str = None):
     # poll behind a disk commit.
     if _log_sink is not None:
         _log_sink(list(parts), idx, level)
+    # The AI workspace's run monitors subscribe here. Outside the lock for the same reason as the
+    # sink: a listener opens a SQLite file on a match and must never be able to block the console
+    # (or deadlock a re-entrant log line). The guard makes an unmonitored run pay one truthiness test.
+    if run_events.has_listeners():
+        run_id = str(execution_state.get('run_id') or '')
+        for part in parts:
+            run_events.publish('run.log', run_id=run_id, line=part, wf_idx=idx, level=level)
 
 
 def add_log(msg: str, wf_idx: int = None, level: str = 'info'):

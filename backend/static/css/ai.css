@@ -78,6 +78,56 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ai-ico {
+  width: 14px;
+  height: 14px;
+  display: block;
+  overflow: visible;
+}
+.ai-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 0;
+}
+.ai-attachments:not(:empty) {
+  margin-bottom: 6px;
+}
+.ai-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 7px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.ai-attachment > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-message-files {
+  margin-bottom: 4px;
+}
+.ai-attachment-x {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1;
+}
+.ai-attachment-x:hover {
+  color: var(--err);
+}
 .ai-icon-btn,
 .ai-primary,
 .ai-ghost,
@@ -111,6 +161,12 @@
   background: var(--hover);
   color: var(--text);
   border-color: var(--line);
+}
+.ai-icon-btn.active {
+  background: var(--hover);
+  border-color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
+  color: var(--text);
 }
 .ai-primary {
   padding: 6px 12px;
@@ -171,7 +227,58 @@
 .ai-side {
   border-left: 1px solid var(--line);
 }
-.ai-sessions-head,
+.ai-sessions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.ai-sessions-head .ai-ghost {
+  padding: 3px 5px;
+  font-size: 10px;
+}
+.ai-monitor-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ai-monitor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line2);
+}
+.ai-monitor-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.ai-monitor-row .ai-ghost {
+  padding: 2px 5px;
+  font-size: 10px;
+}
+.ai-monitor-tag {
+  margin-left: 6px;
+  padding: 1px 4px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .ai-side-block h3 {
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -1048,6 +1155,83 @@
     border-left: 0;
     border-top: 1px solid var(--line);
   }
+}
+
+/* The width is a CSS variable the dock owns, not a viewport fact: a 380px dock on a 1600px
+ * screen still has to compose. JS adds .narrow/.tiny from that measured width. */
+.ai-workspace.narrow .ai-head {
+  gap: 2px;
+  padding: 7px 6px;
+}
+.ai-workspace.narrow .ai-body {
+  grid-template-columns: minmax(0, 1fr);
+  position: relative;
+}
+.ai-workspace.narrow .ai-sessions {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 208px;
+  z-index: 3;
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+}
+.ai-workspace.narrow.sessions-open .ai-sessions {
+  display: block;
+}
+.ai-workspace.narrow .ai-side {
+  display: none;
+}
+.ai-workspace.narrow .ai-head-title,
+.ai-workspace.narrow .ai-model-chip {
+  display: none;
+}
+.ai-workspace.narrow .ai-icon-btn {
+  width: 24px;
+  height: 24px;
+}
+.ai-workspace.narrow .ai-chat {
+  padding: 12px 10px 6px;
+}
+.ai-workspace.narrow .ai-message {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 10px 0;
+}
+.ai-workspace.narrow .ai-message-role {
+  padding-top: 0;
+}
+.ai-workspace.narrow .ai-composer-row {
+  flex-wrap: wrap;
+}
+.ai-workspace.narrow .ai-toggles {
+  flex-wrap: wrap;
+  overflow: visible;
+}
+.ai-workspace.narrow .ai-select {
+  max-width: 100%;
+  flex: 1 1 92px;
+  min-width: 0;
+}
+.ai-workspace.narrow .ai-send-group {
+  margin-left: auto;
+}
+.ai-workspace.narrow .ai-toggle {
+  padding: 4px 6px;
+}
+.ai-workspace.tiny .ai-toggles .ai-select {
+  flex-basis: 100%;
+}
+.ai-workspace.tiny .ai-composer {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+.ai-workspace.tiny .ai-chat {
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 @media (prefers-reduced-motion: reduce) {

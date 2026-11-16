@@ -336,7 +336,7 @@ class TestTheTablesLiveWithTheirOwners:
 #: ``verify`` is here on purpose: its report is "the list's own columns plus five computed
 #: ones", and the static model is handed the UNION of both parents — modelling it would promise
 #: the result table's columns, which the node never emits.
-UNMODELLED_OUTPUTS = {'comment', 'compile', 'output', 'resume', 'source', 'verify', 'visualize'}
+UNMODELLED_OUTPUTS = {'comment', 'compile', 'output', 'resume', 'source', 'verify', 'visualize', 'python'}
 
 #: Node types that read named columns from their input.
 COLUMN_READERS = {'analysis', 'biblio', 'fuse', 'process', 'tokenize', 'verify', 'visualize'}

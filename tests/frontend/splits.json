@@ -36,13 +36,15 @@
         "panels/node-analysis.js",
         "panels/node-biblio.js",
         "panels/node-chart.js",
-        "panels/node-verify.js"
+        "panels/node-verify.js",
+        "panels/node-python.js"
     ],
     "ai-workspace.js": [
         "ai/stream.js",
         "ai/render.js",
         "ai/settings.js",
         "ai/context.js",
+        "ai/watch.js",
         "ai/studio.js"
     ]
 }

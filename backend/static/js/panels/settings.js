@@ -896,6 +896,8 @@ function openSettings(nodeId) {
         html += renderAnalysisSettings(nodeId, node.params);
     } else if (node.type === 'verify') {
         html += renderVerifySettings(nodeId, node.params);
+    } else if (node.type === 'python') {
+        html += renderPythonSettings(nodeId, node.params);
     } else if (node.type === 'visualize') {
         html += renderVisualizeSettings(nodeId, node.params);
     } else if (node.type === 'tokenize') {

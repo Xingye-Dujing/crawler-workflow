@@ -14,6 +14,7 @@ const AIStudio = {
         const tab = host._studioTab || 'skills';
         const tabs = [
             ['skills', I18n.t('ai.tabSkills')],
+            ['python', I18n.t('ai.tabPython')],
             ['plugins', I18n.t('ai.tabPlugins')],
             ['permissions', I18n.t('ai.tabPermissions')],
         ].map(([id, label]) =>
@@ -21,6 +22,7 @@ const AIStudio = {
         ).join('');
         let body = '';
         if (tab === 'skills') body = this.skills(skills, host);
+        else if (tab === 'python') body = this.python(host);
         else if (tab === 'plugins') body = this.plugins(plugins, host);
         else body = this.permissions(context, host);
         container.innerHTML =
@@ -118,6 +120,190 @@ const AIStudio = {
             '<div class="ai-editor-actions"><button type="button" class="ai-primary" data-ai-install-plugin="1">' + AIRender.escape(I18n.t('ai.pluginInstallBtn')) + '</button></div>' +
             '</section>'
         );
+    },
+
+    python(host) {
+        /* The script library and the workspace status. The list and the interpreter verdict come
+           from the server after paint; this HTML is the shell that receives them. */
+        const editor = host._pythonScript || null;
+        const editorHtml = editor
+            ? '<section class="ai-editor"><h3>' + AIRender.escape(editor.id || I18n.t('ai.pythonNew')) + '</h3>' +
+              '<label class="ai-field"><span>ID</span><input class="ai-input" data-ai-python-field="id" value="' + AIRender.escape(editor.id || '') + '"' + (editor.builtin ? ' disabled' : '') + ' /></label>' +
+              '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.skillName')) + '</span><input class="ai-input" data-ai-python-field="name" value="' + AIRender.escape(editor.name || '') + '" /></label>' +
+              '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.skillDescription')) + '</span><input class="ai-input" data-ai-python-field="description" value="' + AIRender.escape(editor.description || '') + '" /></label>' +
+              '<label class="ai-field"><span>Code</span><textarea class="ai-textarea ai-code-input" rows="14" data-ai-python-field="code">' + AIRender.escape(editor.code || '') + '</textarea></label>' +
+              '<div class="ai-editor-actions">' +
+              (editor.builtin
+                  ? '<button type="button" class="ai-primary" data-ai-python-fork="' + AIRender.escape(editor.id) + '">' + AIRender.escape(I18n.t('ai.fork')) + '</button>'
+                  : '<button type="button" class="ai-primary" data-ai-python-save="1">' + AIRender.escape(I18n.t('ai.save')) + '</button>') +
+              '<button type="button" class="ai-ghost" data-ai-python-cancel="1">' + AIRender.escape(I18n.t('ai.close')) + '</button></div></section>'
+            : '';
+        return (
+            '<div class="ai-studio-toolbar"><span class="ai-hint">' + AIRender.escape(I18n.t('ai.pythonHint')) + '</span>' +
+            '<button type="button" class="ai-primary" data-ai-python-new="1">' + AIRender.escape(I18n.t('ai.pythonNew')) + '</button></div>' +
+            '<div id="ai-python-status" class="ai-python-status"></div>' +
+            '<div id="ai-python-list" class="ai-skill-grid"></div>' +
+            '<section class="ai-editor"><h3>' + AIRender.escape(I18n.t('ai.pythonTry')) + '</h3>' +
+            '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.pythonScript')) + '</span><select class="ai-select" id="ai-python-run-id"></select></label>' +
+            '<label class="ai-field"><span>rows JSON</span><textarea class="ai-textarea ai-code-input" rows="3" id="ai-python-run-rows">[{"text":"hello"}]</textarea></label>' +
+            '<label class="ai-field"><span>args JSON</span><textarea class="ai-textarea ai-code-input" rows="2" id="ai-python-run-args">{}</textarea></label>' +
+            '<div class="ai-editor-actions"><button type="button" class="ai-primary" data-ai-python-run="1">' + AIRender.escape(I18n.t('ai.pythonRun')) + '</button></div>' +
+            '<pre class="ai-code" id="ai-python-output"></pre></section>' + editorHtml
+        );
+    },
+
+    async loadPython(host) {
+        const body = document.getElementById('ai-python-status');
+        if (!body) return;
+        try {
+            const [status, listing] = await Promise.all([
+                fetch('/api/ai/python/status').then((response) => response.json()),
+                fetch('/api/ai/python/scripts').then((response) => response.json()),
+            ]);
+            const report = status.report || {};
+            const line = report.available
+                ? (report.version || '?') + ' · ' + (report.path || '')
+                : I18n.t('ai.pythonMissing');
+            body.innerHTML = '<span class="ai-chip">' + AIRender.escape(line) + '</span>' +
+                (status.enabled ? '<span class="ai-chip">' + AIRender.escape(I18n.t('ai.pythonOn')) + '</span>' : '<span class="ai-chip warn">' + AIRender.escape(I18n.t('ai.pythonOff')) + '</span>') +
+                (!report.available && status.install && status.install.supported
+                    ? '<button type="button" class="ai-ghost" data-ai-python-install="1">' + AIRender.escape(I18n.t('ai.pythonDownload')) + '</button>'
+                    : '');
+            const scripts = listing.scripts || [];
+            const list = document.getElementById('ai-python-list');
+            if (list) {
+                list.innerHTML = scripts.map((script) =>
+                    '<article class="ai-skill-card"><div class="ai-skill-head"><strong>' + AIRender.escape(script.name) + '</strong>' +
+                    '<span class="ai-tag">' + AIRender.escape(script.builtin ? I18n.t('ai.builtin') : 'v' + script.version) + '</span></div>' +
+                    '<p class="ai-skill-desc">' + AIRender.escape(script.description || '') + '</p>' +
+                    '<div class="ai-skill-meta"><span class="ai-chip">' + AIRender.escape(script.id) + '</span></div>' +
+                    '<div class="ai-skill-actions"><button type="button" class="ai-ghost" data-ai-python-edit="' + AIRender.escape(script.id) + '">' + AIRender.escape(I18n.t(script.builtin ? 'ai.fork' : 'ai.edit')) + '</button>' +
+                    (!script.builtin ? '<button type="button" class="ai-ghost danger" data-ai-python-delete="' + AIRender.escape(script.id) + '">' + AIRender.escape(I18n.t('ai.delete')) + '</button>' : '') +
+                    '</div></article>'
+                ).join('') || '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.pythonEmpty')) + '</p>';
+            }
+            const runSelect = document.getElementById('ai-python-run-id');
+            if (runSelect) {
+                runSelect.innerHTML = scripts.map((script) =>
+                    '<option value="' + AIRender.escape(script.id) + '">' + AIRender.escape(script.name) + '</option>'
+                ).join('');
+            }
+        } catch (error) {
+            body.textContent = I18n.t('ai.error') + ': ' + error.message;
+        }
+    },
+
+    async editPython(host, scriptId) {
+        try {
+            const response = await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId));
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'not found');
+            host._pythonScript = data.script;
+            AIWorkspace.openStudio('python');
+        } catch (error) {
+            host._toast(error.message);
+        }
+    },
+
+    newPython(host) {
+        host._pythonScript = { id: '', name: '', description: '', code: '# Reads CIXI_INPUT JSONL, writes CIXI_OUTPUT JSONL.\n', builtin: false };
+        AIWorkspace.openStudio('python');
+    },
+
+    async savePython(host) {
+        const editor = host._pythonScript || {};
+        const read = (name) => host._dom.chat.querySelector('[data-ai-python-field="' + name + '"]');
+        const payload = {
+            id: (read('id')?.value || editor.id || '').trim(),
+            name: (read('name')?.value || '').trim(),
+            description: (read('description')?.value || '').trim(),
+            code: read('code')?.value || '',
+        };
+        try {
+            const response = await fetch('/api/ai/python/scripts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'save failed');
+            host._pythonScript = null;
+            host._toast(I18n.t('ai.saved'));
+            AIWorkspace.openStudio('python');
+        } catch (error) {
+            host._toast(I18n.t('ai.error') + ': ' + error.message);
+        }
+    },
+
+    async deletePython(host, scriptId) {
+        try {
+            await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId), { method: 'DELETE' });
+            AIWorkspace.openStudio('python');
+        } catch (error) {
+            host._toast(error.message);
+        }
+    },
+
+    async forkPython(host, scriptId) {
+        try {
+            const response = await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId) + '/fork', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: scriptId + '_mine' }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'fork failed');
+            host._pythonScript = data.script;
+            AIWorkspace.openStudio('python');
+        } catch (error) {
+            host._toast(error.message);
+        }
+    },
+
+    async runPython(host) {
+        const output = document.getElementById('ai-python-output');
+        let rows = [];
+        let args = {};
+        try {
+            rows = JSON.parse(document.getElementById('ai-python-run-rows')?.value || '[]');
+            args = JSON.parse(document.getElementById('ai-python-run-args')?.value || '{}');
+        } catch (error) {
+            if (output) output.textContent = I18n.t('ai.pythonBadJson');
+            return;
+        }
+        const scriptId = document.getElementById('ai-python-run-id')?.value || '';
+        if (output) output.textContent = I18n.t('ai.pythonRunning');
+        try {
+            const response = await fetch('/api/ai/python/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script_id: scriptId, rows, args, max_rows: 200 }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'run failed');
+            if (output) {
+                output.textContent = JSON.stringify({ rows: data.rows, sample: data.sample, stderr: data.stderr, duration_ms: data.duration_ms }, null, 2);
+            }
+        } catch (error) {
+            if (output) output.textContent = I18n.t('ai.error') + ': ' + error.message;
+        }
+    },
+
+    async installPython(host) {
+        if (!(await host._confirm(I18n.t('ai.pythonDownloadConfirm')))) return;
+        try {
+            const response = await fetch('/api/ai/python/install', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ allow_download: true }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'install failed');
+            host._toast(I18n.t('ai.pythonInstalled'));
+            AIWorkspace.openStudio('python');
+        } catch (error) {
+            host._toast(I18n.t('ai.error') + ': ' + error.message);
+        }
     },
 
     permissions(context, host) {

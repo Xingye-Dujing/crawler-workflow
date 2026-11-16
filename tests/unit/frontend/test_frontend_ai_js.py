@@ -43,3 +43,24 @@ class TestAIStreamAndRenderer:
         assert 'data-ai-answer="A"' in out['question']
         assert 'data-ai-question="q1"' in out['question']
         assert 'data-ai-copy-artifact="a1"' in out['artifact']
+
+
+class TestRuntimeSurfaces:
+    def test_the_runtime_chip_lists_only_the_powers_this_host_has(self):
+        out = _run()
+        assert 'ai.runtime.desktop' in out['runtimeTitle']
+        assert 'ai.runtime.daemon' in out['runtimeTitle']
+        assert 'ai.runtime.files' in out['runtimeTitle']
+        assert 'ai.runtime.codePlugins' in out['runtimeTitle']
+        assert 'ai.runtime.source' not in out['runtimeTitle']
+
+    def test_an_unavailable_skill_shows_the_servers_reason(self):
+        out = _run()
+        assert 'disabled' in out['skillOptions']
+        assert 'needs the repository source' in out['skillOptions']
+
+    def test_a_cloud_only_refusal_is_disabled_in_the_provider_picker(self):
+        out = _run()
+        assert 'value="ollama"' in out['providerOptions']
+        assert 'disabled' in out['providerOptions']
+        assert 'no local daemon on a cloud host' in out['providerOptions']

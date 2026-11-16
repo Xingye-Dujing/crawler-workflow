@@ -20,7 +20,7 @@ BACKEND = ROOT / 'backend'
 APP_VERSION = os.environ.get('CIXI_APP_VERSION') or '1.0.0'
 if str(SPEC_DIR) not in sys.path:
     sys.path.insert(0, str(SPEC_DIR))
-from frozen_modules import package_module_names
+from frozen_modules import package_module_names, source_snapshot_datas
 
 datas = [
     (str(BACKEND / 'static'), 'static'),
@@ -29,6 +29,8 @@ datas = [
     (str(ROOT / 'README.md'), '.'),
     (str(ROOT / 'data' / 'workflows' / '红果短剧-四个热播榜.json'), 'seed/workflows'),
 ]
+# A read-only source snapshot so the packaged AI can cite a file and a line (the developer skill).
+datas += source_snapshot_datas(BACKEND, ROOT)
 for model in sorted(glob.glob(str(ROOT / 'data' / 'models' / '*.pkl'))):
     datas.append((model, 'seed/models'))
 

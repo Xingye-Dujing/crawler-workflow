@@ -52,6 +52,9 @@ PLUGINS: dict[str, NodePlugin] = {
     'resume': NodePlugin('resume', 'nodeType.resume', 'data'),
     'comment': NodePlugin('comment', 'nodeType.comment', 'data'),
     'process': NodePlugin('process', 'nodeType.process', 'process'),
+    # 扩展: a saved Python script over the upstream rows. The script lives in the account's
+    # python_scripts library, so the workflow references it by id/name rather than inlining code.
+    'python': NodePlugin('python', 'nodeType.python', 'process'),
     'analysis': NodePlugin('analysis', 'nodeType.analysis', 'analysis'),
     'tokenize': NodePlugin('tokenize', 'nodeType.tokenize', 'process'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),

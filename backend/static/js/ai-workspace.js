@@ -5,6 +5,14 @@
  * A turn is a transcript plus an agent trace; the composer sends a canonical request and every
  * provider is reduced to the same event names by the server.
  */
+/* The host label keys are also spelled here so the i18n reachability gate sees the literal keys;
+ * the server's `runtime.label_key` remains the value shown, this table only maps kind → key. */
+const AI_RUNTIME_KEYS = {
+    desktop: 'ai.runtime.desktop',
+    local_web: 'ai.runtime.local_web',
+    cloud: 'ai.runtime.cloud',
+};
+
 const AIWorkspace = {
     _init: false,
     _open: false,
@@ -23,8 +31,11 @@ const AIWorkspace = {
     _plan: [],
     _usage: null,
     _contextMeta: null,
+    _attachments: [],
+    _uploading: false,
     _studioTab: 'skills',
     _editingSkill: null,
+    _pythonScript: null,
     _abort: null,
     _renderTimer: null,
     _dom: {},
@@ -51,15 +62,23 @@ const AIWorkspace = {
             modelChip: 'ai-model-chip',
             sessionsBtn: 'ai-history-btn',
             fullBtn: 'ai-full-btn',
+            attachments: 'ai-attachments',
+            attachBtn: 'ai-attach-btn',
         };
         for (const [key, id] of Object.entries(ids)) this._dom[key] = document.getElementById(id);
         const root = this._dom.root;
         if (!root) return;
+        this._sessionsOpen = !!AISettings.load().sessionsOpen;
+        root.classList.toggle('sessions-open', this._sessionsOpen);
         AISettings.save({ open: this._open });
         this._provider = AISettings.providerId(null);
         this._model = AISettings.modelFor(this._provider, null);
         this._skill = AISettings.load().skill || 'auto';
         this._scope = AISettings.load().scope || 'summary';
+        if (this._dom.sessionsBtn) {
+            this._dom.sessionsBtn.setAttribute('aria-expanded', this._sessionsOpen ? 'true' : 'false');
+            this._dom.sessionsBtn.classList.toggle('active', this._sessionsOpen);
+        }
         if (this._dom.input) {
             this._dom.input.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -87,6 +106,15 @@ const AIWorkspace = {
     restore() {
         const settings = AISettings.load();
         if (settings.open) this.open({ silent: true });
+        /* Monitors are page-level: a run can finish while the dock is closed, and the delivery must
+           still reach the account that armed it. The poller never calls a provider without a key. */
+        if (typeof AIWatch !== 'undefined') AIWatch.start();
+    },
+
+    _applyWidthClass(width) {
+        if (!this._dom.root) return;
+        this._dom.root.classList.toggle('narrow', !this._full && width < 480);
+        this._dom.root.classList.toggle('tiny', !this._full && width < 390);
     },
 
     _bindDock() {
@@ -94,6 +122,7 @@ const AIWorkspace = {
         if (!root) return;
         const width = Math.max(360, Math.min(900, Number(AISettings.load().width) || 520));
         root.style.setProperty('--ai-width', width + 'px');
+        this._applyWidthClass(width);
         if (this._dom.resizer) {
             let dragging = false;
             let startX = 0;
@@ -102,12 +131,14 @@ const AIWorkspace = {
                 if (!dragging) return;
                 const next = Math.max(360, Math.min(900, startWidth + (startX - event.clientX)));
                 root.style.setProperty('--ai-width', next + 'px');
+                this._applyWidthClass(next);
             };
             const up = () => {
                 if (!dragging) return;
                 dragging = false;
                 const value = parseInt(root.style.getPropertyValue('--ai-width'), 10) || width;
                 AISettings.save({ width: value });
+                this._applyWidthClass(value);
                 document.removeEventListener('pointermove', move);
                 document.removeEventListener('pointerup', up);
             };
@@ -166,12 +197,18 @@ const AIWorkspace = {
         this._dom.root.classList.toggle('full', this._full);
         document.body.classList.toggle('ai-focus', this._full);
         AISettings.save({ full: this._full });
+        const width = parseInt(this._dom.root.style.getPropertyValue('--ai-width'), 10) || 520;
+        this._applyWidthClass(width);
         if (this._dom.fullBtn) this._dom.fullBtn.setAttribute('aria-pressed', this._full ? 'true' : 'false');
     },
 
     toggleSessions() {
         this._sessionsOpen = !this._sessionsOpen;
         this._dom.root.classList.toggle('sessions-open', this._sessionsOpen);
+        if (this._dom.sessionsBtn) {
+            this._dom.sessionsBtn.classList.toggle('active', this._sessionsOpen);
+            this._dom.sessionsBtn.setAttribute('aria-expanded', this._sessionsOpen ? 'true' : 'false');
+        }
         AISettings.save({ sessionsOpen: this._sessionsOpen });
         this._renderSessions();
     },
@@ -201,10 +238,12 @@ const AIWorkspace = {
     _renderProviderOptions() {
         const providers = this._bootstrap?.providers || [];
         if (this._dom.provider) {
-            this._dom.provider.innerHTML = providers.map((item) =>
-                '<option value="' + AIRender.escape(item.id) + '"' + (item.id === this._provider ? ' selected' : '') + '>' +
-                AIRender.escape(I18n.t(item.label_key) || item.id) + '</option>'
-            ).join('');
+            this._dom.provider.innerHTML = providers.map((item) => {
+                const why = item.local_available === false ? (item.why_not_text || I18n.t('ai.noCapability')) : '';
+                const title = why ? ' title="' + AIRender.escape(why) + '"' : '';
+                return '<option value="' + AIRender.escape(item.id) + '"' + title + (item.id === this._provider ? ' selected' : '') + '' + (item.local_available === false ? ' disabled' : '') + '>' +
+                    AIRender.escape(I18n.t(item.label_key) || item.id) + (item.local_available === false ? ' — ' + AIRender.escape(why) : '') + '</option>';
+            }).join('');
         }
         this._renderModelOptions();
         this._renderToggles();
@@ -226,11 +265,28 @@ const AIWorkspace = {
         const skills = this._bootstrap?.skills || [];
         if (this._dom.skill) {
             this._dom.skill.innerHTML = '<option value="auto">' + AIRender.escape(I18n.t('ai.skill')) + ': auto</option>' +
-                skills.map((skill) =>
-                    '<option value="' + AIRender.escape(skill.id) + '"' + (skill.id === this._skill ? ' selected' : '') + '' + (skill.available === false ? ' disabled' : '') + '>' +
-                    AIRender.escape(skill.name || I18n.t(skill.name_key) || skill.id) + (skill.available === false ? ' — ' + AIRender.escape(I18n.t('ai.skillUnavailable')) : '') + '</option>'
-                ).join('');
+                skills.map((skill) => {
+                    const why = skill.available === false
+                        ? (skill.why_not_text || I18n.t('ai.skillUnavailable'))
+                        : '';
+                    const title = why ? ' title="' + AIRender.escape(why) + '"' : '';
+                    return '<option value="' + AIRender.escape(skill.id) + '"' + title + (skill.id === this._skill ? ' selected' : '') + '' + (skill.available === false ? ' disabled' : '') + '>' +
+                        AIRender.escape(skill.name || I18n.t(skill.name_key) || skill.id) + (skill.available === false ? ' — ' + AIRender.escape(why) : '') + '</option>';
+                }).join('');
         }
+    },
+
+    _runtimeTitle() {
+        /* The chip names the host; its tooltip says which host powers are present here. The
+           workspace itself is complete on every host, so only these optional powers are listed. */
+        const runtime = this._bootstrap?.runtime;
+        if (!runtime) return '';
+        const pieces = [I18n.t(AI_RUNTIME_KEYS[runtime.kind] || 'ai.runtime.cloud')];
+        if (runtime.ollama) pieces.push(I18n.t('ai.runtime.daemon'));
+        if (runtime.user_files) pieces.push(I18n.t('ai.runtime.files'));
+        if (runtime.local_source) pieces.push(I18n.t('ai.runtime.source'));
+        if (runtime.code_plugins) pieces.push(I18n.t('ai.runtime.codePlugins'));
+        return pieces.join(' · ');
     },
 
     _renderToggles() {
@@ -250,6 +306,11 @@ const AIWorkspace = {
             this._dom.search.setAttribute('aria-pressed', search ? 'true' : 'false');
             this._dom.search.title = capabilities.includes('web_search') ? I18n.t('ai.search') : I18n.t('ai.noCapability');
         }
+        if (this._dom.attachBtn) {
+            const files = capabilities.includes('files');
+            this._dom.attachBtn.disabled = !files || this._uploading || this._sending;
+            this._dom.attachBtn.title = files ? I18n.t('ai.attach') : I18n.t('ai.noCapability');
+        }
     },
 
     _renderComposer() {
@@ -257,6 +318,15 @@ const AIWorkspace = {
         this._renderSkillOptions();
         this._renderToggles();
         this._renderContextBar();
+        this._renderAttachments();
+    },
+
+    _renderAttachments() {
+        if (!this._dom.attachments) return;
+        this._dom.attachments.innerHTML = this._attachments.map((row) =>
+            '<span class="ai-attachment"><span>' + AIRender.escape(row.name || 'file') + '</span>' +
+            '<button type="button" class="ai-attachment-x" data-ai-remove-attachment="' + AIRender.escape(row.id) + '" aria-label="Remove ' + AIRender.escape(row.name || 'file') + '">×</button></span>'
+        ).join('');
     },
 
     _renderContextBar() {
@@ -268,6 +338,7 @@ const AIWorkspace = {
         if (context.run_id) pieces.push('运行 ' + context.run_id);
         this._dom.context.innerHTML =
             '<span class="ai-chip">' + AIRender.escape(I18n.t('ai.context')) + '</span>' +
+            (this._bootstrap?.runtime ? '<span class="ai-chip ai-runtime-chip" title="' + AIRender.escape(this._runtimeTitle()) + '">' + AIRender.escape(I18n.t(AI_RUNTIME_KEYS[this._bootstrap.runtime.kind] || 'ai.runtime.cloud')) + '</span>' : '') +
             '<span class="ai-hint">' + AIRender.escape(pieces.join(' · ') || I18n.t('ai.contextEmpty')) + '</span>' +
             '<button type="button" class="ai-ghost" data-ai-context-refresh="1">' + AIRender.escape(I18n.t('ai.contextRefresh')) + '</button>';
     },
@@ -304,8 +375,9 @@ const AIWorkspace = {
             '</button>'
         ).join('');
         this._dom.sessions.innerHTML =
-            '<div class="ai-sessions-head"><strong>' + AIRender.escape(I18n.t('ai.sessions')) + '</strong></div>' +
-            '<div class="ai-session-list">' + (items || '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</p>') + '</div>';
+            '<div class="ai-sessions-head"><strong>' + AIRender.escape(I18n.t('ai.sessions')) + '</strong>' +
+            '<button type="button" class="ai-ghost" data-ai-new-session="1">' + AIRender.escape(I18n.t('ai.newChat')) + '</button></div>' +
+            '<div class="ai-session-list">' + (items || '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.noSessions')) + '</p>') + '</div>';
     },
 
     _renderSide() {
@@ -316,6 +388,15 @@ const AIWorkspace = {
             '<li class="ai-trace-step ' + (step.status || 'pending') + '"><span class="ai-trace-dot"></span>' + AIRender.escape(step.title) + '</li>'
         ).join('');
         const usage = this._usage ? AIRender.usage(this._usage) : '';
+        const monitors = (this._bootstrap?.monitors || [])
+            .filter((item) => item.status === 'armed' && (!item.conversation_id || item.conversation_id === this._conversationId));
+        const monitorRows = monitors.map((item) => {
+            const spec = item.spec || {};
+            const title = spec.note || (spec.events || []).join(', ') || I18n.t('ai.monitor.notice');
+            return '<li class="ai-monitor-row"><span class="ai-monitor-text">' + AIRender.escape(title) + '</span>' +
+                (item.auto_analyze ? '<span class="ai-chip">' + AIRender.escape(I18n.t('ai.monitor.autoTag')) + '</span>' : '') +
+                '<button type="button" class="ai-ghost" data-ai-disarm-monitor="' + AIRender.escape(item.id) + '">' + AIRender.escape(I18n.t('ai.monitor.disarm')) + '</button></li>';
+        }).join('');
         this._dom.side.innerHTML =
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.context')) + '</h3>' +
             (meta.scope ? '<div class="ai-chip-row"><span class="ai-chip">' + AIRender.escape(meta.scope) + '</span><span class="ai-chip">' + AIRender.escape(I18n.t('ai.contextTokens', { tokens: meta.tokens || 0, chars: meta.chars || 0 })) + '</span></div>' : '') +
@@ -325,6 +406,8 @@ const AIWorkspace = {
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.runId')) + '</span><input class="ai-input" data-ai-manual="run_id" value="' + AIRender.escape(AIContext.manual.run_id || '') + '" /></label>' +
             '<button type="button" class="ai-ghost" data-ai-context-apply="1">' + AIRender.escape(I18n.t('ai.applyContext')) + '</button></div>' +
             '</section>' +
+            '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.monitor.heading')) + '</h3>' +
+            '<ul class="ai-monitor-list">' + (monitorRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.monitor.empty')) + '</li>') + '</ul></section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.agentTrace')) + '</h3>' +
             '<ol class="ai-trace">' + (plan || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.planEmpty')) + '</li>') + '</ol></section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.usage')) + '</h3>' + (usage || '<p class="ai-hint">—</p>') + '</section>';
@@ -363,12 +446,24 @@ const AIWorkspace = {
         return this._current;
     },
 
-    _appendUser(text, context) {
+    _appendUser(text, context, attachments, extra) {
         const el = document.createElement('article');
         el.className = 'ai-message user';
-        el.innerHTML = '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.you')) + '</div><div class="ai-message-body"><div class="ai-user-text">' + AIRender.escape(text) + '</div></div>';
+        const files = (attachments || []).map((row) =>
+            '<span class="ai-attachment">' + AIRender.escape(row.name || 'file') + '</span>'
+        ).join('');
+        const monitor = extra?.monitor_event
+            ? '<span class="ai-monitor-tag">' + AIRender.escape(I18n.t('ai.monitor.notice')) + '</span>'
+            : '';
+        el.innerHTML = '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.you')) + monitor + '</div><div class="ai-message-body">' +
+            (files ? '<div class="ai-attachments ai-message-files">' + files + '</div>' : '') +
+            '<div class="ai-user-text">' + AIRender.escape(text) + '</div></div>';
         this._dom.chat.appendChild(el);
-        this._messages.push({ role: 'user', content: text, meta: { context: context || {} } });
+        this._messages.push({
+            role: 'user',
+            content: text,
+            meta: { context: context || {}, attachments: attachments || [], monitor_event: extra?.monitor_event || '' },
+        });
         this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
     },
 
@@ -399,7 +494,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-studio-tab],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -410,6 +505,11 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-conversation')) {
             this.selectConversation(target.getAttribute('data-ai-conversation'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-new-session')) {
+            this.newChat();
+            if (this._sessionsOpen) this.toggleSessions();
             return;
         }
         if (target.hasAttribute('data-ai-context-refresh')) {
@@ -441,8 +541,7 @@ const AIWorkspace = {
         if (target.hasAttribute('data-ai-copy-artifact')) {
             const id = target.getAttribute('data-ai-copy-artifact');
             const artifact = (this._current?.artifacts || []).find((item) => item.id === id);
-            if (artifact && navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(artifact.payload || {}, null, 2));
-            this._toast(I18n.t('ai.copied'));
+            if (artifact) this._copyText(JSON.stringify(artifact.payload || {}, null, 2));
             return;
         }
         if (target.hasAttribute('data-ai-apply-skill')) {
@@ -453,9 +552,59 @@ const AIWorkspace = {
             this._applyPluginArtifact(target.getAttribute('data-ai-apply-plugin'));
             return;
         }
+        if (target.hasAttribute('data-ai-apply-monitor')) {
+            this._applyMonitor(target.getAttribute('data-ai-apply-monitor'), true);
+            return;
+        }
+        if (target.hasAttribute('data-ai-watch-only')) {
+            this._applyMonitor(target.getAttribute('data-ai-watch-only'), false);
+            return;
+        }
+        if (target.hasAttribute('data-ai-disarm-monitor')) {
+            this._disarmMonitor(target.getAttribute('data-ai-disarm-monitor'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-remove-attachment')) {
+            this._removeAttachment(target.getAttribute('data-ai-remove-attachment'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-new')) {
+            AIStudio.newPython(this);
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-edit')) {
+            AIStudio.editPython(this, target.getAttribute('data-ai-python-edit'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-save')) {
+            AIStudio.savePython(this);
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-cancel')) {
+            this._pythonScript = null;
+            this.openStudio('python');
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-delete')) {
+            AIStudio.deletePython(this, target.getAttribute('data-ai-python-delete'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-fork')) {
+            AIStudio.forkPython(this, target.getAttribute('data-ai-python-fork'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-run')) {
+            AIStudio.runPython(this);
+            return;
+        }
+        if (target.hasAttribute('data-ai-python-install')) {
+            AIStudio.installPython(this);
+            return;
+        }
         if (target.hasAttribute('data-ai-studio-tab')) {
             this._studioTab = target.getAttribute('data-ai-studio-tab');
             AIStudio.render(this._dom.chat, this);
+            if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') AIStudio.loadPython(this);
             return;
         }
         if (target.hasAttribute('data-ai-studio-close')) {
@@ -586,7 +735,7 @@ const AIWorkspace = {
         }
         for (const message of this._messages) {
             if (message.role === 'user') {
-                this._appendUser(message.content, message.meta?.context);
+                this._appendUser(message.content, message.meta?.context, message.meta?.attachments);
             } else if (message.role === 'assistant') {
                 this._renderStoredAssistant(message);
             } else if (message.role === 'tool') {
@@ -653,26 +802,42 @@ const AIWorkspace = {
     },
 
     async send() {
-        if (this._sending) {
-            this._toast(I18n.t('ai.busy'));
-            return;
-        }
         const text = (this._dom.input?.value || '').trim();
-        if (!text) return;
+        await this._sendText(text, {});
+    },
+
+    async _sendText(text, options) {
+        const opts = options || {};
+        if (this._sending) {
+            if (!opts.monitor) this._toast(I18n.t('ai.busy'));
+            return false;
+        }
+        const pendingAttachments = opts.monitor ? [] : this._attachments.slice();
+        if (!text && !pendingAttachments.length) return false;
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         const key = AISettings.keyFor(this._provider);
         if (provider?.requires_key && !key) {
             this._toast(I18n.t('ai.keyMissing'));
             this.openSettings();
-            return;
+            return false;
         }
         if (!this._model) {
             this._toast(I18n.t('ai.modelMissing'));
-            return;
+            return false;
         }
-        const context = AIContext.collect();
-        this._dom.input.value = '';
-        this._appendUser(text, context);
+        if (pendingAttachments.length && !(provider?.capabilities || []).includes('files')) {
+            this._toast(I18n.t('ai.fileUnsupported'));
+            return false;
+        }
+        const context = opts.monitor ? {} : AIContext.collect();
+        if (!opts.monitor) {
+            this._dom.input.value = '';
+            this._appendUser(text, context, pendingAttachments);
+            this._attachments = [];
+            this._renderAttachments();
+        } else {
+            this._appendUser(text, context, [], { monitor_event: opts.monitorEventId });
+        }
         this._current = null;
         this._sending = true;
         this._setSending(true);
@@ -688,6 +853,8 @@ const AIWorkspace = {
             locale: (typeof I18n !== 'undefined' && I18n.lang) || 'zh',
             context,
             scope: this._scope,
+            attachments: pendingAttachments.map((row) => row.id),
+            monitor_event_id: opts.monitorEventId || '',
         };
         try {
             await this._stream('/api/ai/chat', body);
@@ -697,6 +864,75 @@ const AIWorkspace = {
             this._sending = false;
             this._setSending(false);
         }
+        return true;
+    },
+
+    async deliverMonitor(event) {
+        const monitor = (this._bootstrap?.monitors || []).find((item) => item.id === event.monitor_id);
+        const auto = !!monitor?.auto_analyze;
+        if (!auto) {
+            if (this._open && this._conversationId === event.conversation_id) {
+                const meta = event.payload || {};
+                this._appendUser(
+                    I18n.t('ai.monitor.notice') + ': ' + String(meta.event || '') + ' · ' + String(meta.run_id || ''),
+                    {},
+                    [],
+                    { monitor_event: event.id }
+                );
+            }
+            this._toast(I18n.t('ai.monitor.armed') + ' · ' + I18n.t('ai.monitor.notice'));
+            return true;
+        }
+        // A turn already streaming owns the transcript; leave the event pending so the next tick
+        // delivers it after the answer, instead of interleaving two conversations.
+        if (this._sending) return false;
+        const target = String(event.conversation_id || '');
+        if (target && target !== this._conversationId) {
+            if (!this._open) this.open({ silent: true });
+            await this.selectConversation(target);
+        }
+        const conversation = (this._bootstrap?.conversations || []).find((item) => item.id === (target || this._conversationId));
+        if (conversation?.provider) {
+            this._provider = conversation.provider;
+            this._model = conversation.model || AISettings.modelFor(this._provider, this._bootstrap?.providers);
+        }
+        const facts = JSON.stringify(event.payload || {}, null, 2);
+        const text = I18n.t('ai.monitor.promptHead') + '\n```json\n' + facts + '\n```\n' + I18n.t('ai.monitor.promptAsk');
+        return this._sendText(text, { monitor: true, monitorEventId: event.id });
+    },
+
+    async _applyMonitor(artifactId, auto) {
+        const artifact = (this._current?.artifacts || []).find((item) => item.id === artifactId);
+        if (!artifact) return;
+        try {
+            const conversationId = await this._ensureConversation();
+            const response = await fetch('/api/ai/monitors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversation_id: conversationId,
+                    spec: artifact.payload || {},
+                    auto_analyze: !!auto,
+                }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'monitor failed');
+            this._bootstrap.monitors = [data.monitor, ...(this._bootstrap.monitors || [])];
+            this._renderSide();
+            this._toast(I18n.t('ai.monitor.armed'));
+        } catch (error) {
+            this._toast(I18n.t('ai.monitor.failed') + ': ' + error.message);
+        }
+    },
+
+    async _disarmMonitor(monitorId) {
+        try {
+            await fetch('/api/ai/monitors/' + encodeURIComponent(monitorId), { method: 'DELETE' });
+        } catch (error) {
+            /* the row may already be retired; the list refresh below tells the truth */
+        }
+        this._bootstrap.monitors = (this._bootstrap?.monitors || []).filter((item) => item.id !== monitorId);
+        this._renderSide();
     },
 
     async _stream(url, body) {
@@ -708,6 +944,7 @@ const AIWorkspace = {
         if (this._dom.send) this._dom.send.disabled = sending;
         if (this._dom.stop) this._dom.stop.hidden = !sending;
         if (this._dom.input) this._dom.input.disabled = sending;
+        this._renderToggles();
     },
 
     _onEvent(event) {
@@ -910,10 +1147,12 @@ const AIWorkspace = {
         this._plan = [];
         this._usage = null;
         this._contextMeta = null;
+        this._attachments = [];
         this._mode = 'chat';
         this._renderWelcome();
         this._renderSessions();
         this._renderSide();
+        this._renderAttachments();
         if (this._dom.title) this._dom.title.textContent = I18n.t('ai.title');
         if (this._dom.input) this._dom.input.focus();
     },
@@ -1087,9 +1326,13 @@ const AIWorkspace = {
         }
     },
 
-    openStudio() {
+    openStudio(tab) {
+        if (tab) this._studioTab = tab;
         this._mode = 'studio';
         AIStudio.render(this._dom.chat, this);
+        if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') {
+            AIStudio.loadPython(this);
+        }
     },
 
     async _loadSkillForEdit(id) {
@@ -1212,6 +1455,34 @@ const AIWorkspace = {
         if (typeof showToast === 'function') showToast(message);
     },
 
+    _copyText(text) {
+        /* A packaged window (WebView2/WKWebView) and a plain-http LAN page are both outside the
+           secure-context guarantee, so navigator.clipboard can be absent or reject. The textarea
+           fallback is the only path left; it must not leave a visible node behind. */
+        const done = () => this._toast(I18n.t('ai.copied'));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, () => this._copyWithTextarea(text, done));
+            return;
+        }
+        this._copyWithTextarea(text, done);
+    },
+
+    _copyWithTextarea(text, done) {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'readonly');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        try {
+            area.select();
+            if (document.execCommand && document.execCommand('copy')) done();
+            else this._toast(I18n.t('ai.error'));
+        } finally {
+            area.remove();
+        }
+    },
+
     setProviderFromBar(value) {
         this._provider = value;
         AISettings.setProvider(value);
@@ -1244,27 +1515,78 @@ const AIWorkspace = {
         this._renderToggles();
     },
 
-    attach() {
+    async attach() {
+        const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        if (!(provider?.capabilities || []).includes('files')) {
+            this._toast(I18n.t('ai.fileUnsupported'));
+            return;
+        }
+        const key = AISettings.keyFor(this._provider);
+        if (!key) {
+            this._toast(I18n.t('ai.keyMissing'));
+            this.openSettings();
+            return;
+        }
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.txt,.md,.csv,.json,.log';
-        input.onchange = () => {
+        input.accept = '.pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.json,.log,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp';
+        input.onchange = async () => {
             const file = input.files && input.files[0];
             if (!file) return;
-            if (!/\.(txt|md|csv|json|log)$/i.test(file.name)) {
-                this._toast(I18n.t('ai.fileUnsupported'));
-                return;
+            this._uploading = true;
+            this._renderToggles();
+            try {
+                const conversationId = await this._ensureConversation();
+                const form = new FormData();
+                form.append('file', file);
+                form.append('conversation_id', conversationId);
+                form.append('provider', this._provider);
+                form.append('api_key', key);
+                const response = await fetch('/api/ai/files', { method: 'POST', body: form });
+                const data = await response.json();
+                if (!data.ok) throw new Error(data.error || 'upload failed');
+                this._attachments.push(data.attachment);
+                this._renderAttachments();
+                this._toast(I18n.t('ai.saved'));
+            } catch (error) {
+                this._toast(I18n.t('ai.error') + ': ' + error.message);
+            } finally {
+                this._uploading = false;
+                this._renderToggles();
             }
-            const reader = new FileReader();
-            reader.onload = () => {
-                const text = String(reader.result || '').slice(0, 200000);
-                this._dom.input.value += `\n\n--- ${file.name} ---\n${text}`;
-                this._dom.input.focus();
-            };
-            reader.onerror = () => this._toast(I18n.t('ai.error'));
-            reader.readAsText(file);
         };
         input.click();
+    },
+
+    async _ensureConversation() {
+        if (this._conversationId) return this._conversationId;
+        const response = await fetch('/api/ai/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: this._provider, model: this._model, skill: this._skill || 'auto' }),
+        });
+        const data = await response.json();
+        if (!data.ok) throw new Error(data.error || 'conversation failed');
+        this._conversationId = data.conversation.id;
+        if (this._bootstrap) {
+            this._bootstrap.conversations = [data.conversation, ...(this._bootstrap.conversations || [])];
+            this._renderSessions();
+        }
+        return this._conversationId;
+    },
+
+    async _removeAttachment(id) {
+        this._attachments = this._attachments.filter((row) => row.id !== id);
+        this._renderAttachments();
+        try {
+            await fetch('/api/ai/files/' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: AISettings.keyFor(this._provider) }),
+            });
+        } catch (e) {
+            /* local chip removal is enough; the server row is cleaned on the next delete */
+        }
     },
 };
 window.AIWorkspace = AIWorkspace;

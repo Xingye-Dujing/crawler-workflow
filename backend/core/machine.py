@@ -15,6 +15,7 @@ import ntpath
 import os
 import platform
 import posixpath
+import shutil
 import socket
 import sys
 from pathlib import Path
@@ -836,3 +837,48 @@ def find_catbus_cli(explicit: str = '', env: dict | None = None, system: str | N
         return explicit if catbus_entry_usable(explicit) else ''
     found = catbus_candidates(env, system)
     return found[0] if found else ''
+
+
+# ─── Python interpreter (AI/Python node) ─────────────────────────────────
+
+
+def python_candidates(env: dict | None = None, system: str | None = None) -> list[str]:
+    """Executable paths to probe for a real Python 3, per OS.
+
+    This is a machine fact, so it lives with the other per-OS lookups. A source run already has
+    ``sys.executable``; a frozen build looks at PATH and the common per-user install folders, and
+    the installer may hand over a managed copy with an environment variable.
+    """
+    source = os.environ if env is None else env
+    found = [str(source.get(name) or '').strip() for name in ('CIXI_PYTHON_BIN', 'AI_PYTHON_BIN')]
+    name = platform_name(system)
+    if name == 'win32':
+        local = source.get('LOCALAPPDATA', '')
+        for version in ('Python313', 'Python312', 'Python311'):
+            if local:
+                found.append(os.path.join(local, 'Programs', 'Python', version, 'python.exe'))
+        found.extend([r'C:\Python313\python.exe', r'C:\Python312\python.exe', r'C:\Python311\python.exe'])
+    for candidate in ('python3', 'python'):
+        resolved = shutil.which(candidate)
+        if resolved:
+            found.append(resolved)
+    return [item for item in found if item]
+
+
+def python_launcher_names(system: str | None = None) -> tuple[str, ...]:
+    """A launcher that needs an argument (the Windows ``py`` launcher), if this OS has one."""
+    return ('py', 'py.exe') if platform_name(system) == 'win32' else ()
+
+
+def embedded_python_executable(target: str, system: str | None = None) -> str:
+    """The executable inside a downloaded embeddable build."""
+    if platform_name(system) == 'win32':
+        return os.path.join(target, 'python.exe')
+    return os.path.join(target, 'bin', 'python3')
+
+
+def venv_python(repo: str, system: str | None = None) -> str:
+    """The checkout's own interpreter, with the per-OS layout."""
+    if platform_name(system) == 'win32':
+        return os.path.join(repo, '.venv', 'Scripts', 'python.exe')
+    return os.path.join(repo, '.venv', 'bin', 'python3')

@@ -307,6 +307,9 @@ ZH = {
     'run.reportLatexSaved': '论文成稿已编译：{name}（{figures} 张图 / {tables} 张三线表）',
     'run.reportSaved': '报告已生成：{name}（{size} 字节）',
     'run.restored': '节点 {nid} 沿用上次结果（{n} 行），不再重跑',
+    'run.pythonDone': 'Python 节点 {nid} 运行脚本“{script}”：输出 {n} 行，用时 {ms} ms',
+    'run.pythonStderr': 'Python 节点 {nid} 的脚本 stderr：{text}',
+    'run.eventListenerFailed': '运行事件监听器失败：{event}',
     'run.resume_crawl': '节点 {nid} 从上次中断处继续抓取（已有 {have} 行）',
     'run.resume_from': '续跑模式：接着 {at} 那次往下跑，此前已保存 {rows} 行',
     # A 风控 refusal is the OPPOSITE advice from a dead cookie: the session may be fine and
@@ -786,6 +789,9 @@ EN = {
     'run.reportLatexSaved': 'Paper document compiled: {name} ({figures} figures / {tables} tables)',
     'run.reportSaved': 'Report written: {name} ({size} bytes)',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',
+    'run.pythonDone': 'Python node {nid} ran “{script}”: {n} rows in {ms} ms',
+    'run.pythonStderr': 'Python node {nid} stderr: {text}',
+    'run.eventListenerFailed': 'A run event listener failed: {event}',
     'run.resume_crawl': 'Node {nid} continues crawling from where it stopped ({have} rows already saved)',
     'run.resume_from': 'Resuming the run interrupted at {at} — {rows} rows already stored',
     # A 风控 refusal is the OPPOSITE advice from a dead cookie: the session may be fine and

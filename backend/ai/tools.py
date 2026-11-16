@@ -10,6 +10,7 @@ intercepts them and never looks for a handler here.
 """
 
 from core.config import Config
+from runtime.settings import get_setting
 
 from ai.context import docs_search, project_facts
 from ai.errors import AIError
@@ -67,7 +68,7 @@ def tool_dataset_profile(args: dict, _ctx: dict) -> dict:
                 'dtype': str(series.dtype),
                 'missing': int(series.isna().sum()),
                 'unique': int(series.nunique(dropna=True)),
-                'sample': [str(value)[:200] for value in series.dropna().head(3).tolist()],
+                'sample': [str(value)[:120] for value in series.dropna().head(2).tolist()],
             }
         )
     return {
@@ -75,6 +76,67 @@ def tool_dataset_profile(args: dict, _ctx: dict) -> dict:
         'rows': len(frame),
         'columns': columns,
         'truncated': len(frame.columns) > 80,
+        'next': 'Use dataset_peek for a few full rows; page only when the answer needs them.',
+    }
+
+
+def _project_columns(frame, raw) -> list:
+    names = []
+    if isinstance(raw, str):
+        raw = [part.strip() for part in raw.split(',') if part.strip()]
+    for item in raw or ():
+        name = str(item or '').strip()
+        if name and name in frame.columns and name not in names:
+            names.append(name)
+    return names
+
+
+def _bounded_cell(value, width: int) -> object:
+    if value is None or not isinstance(value, str):
+        return value
+    return value[:width] + ('…' if len(value) > width else '')
+
+
+def tool_dataset_peek(args: dict, _ctx: dict) -> dict:
+    """Names, dtypes and a handful of rows — the cheapest answer to most questions.
+
+    The default is five rows and a 120-character cell because crawling tables carry whole posts;
+    sending them to a model is the expensive part of this workspace. A caller that truly needs
+    more asks for ``dataset_page`` (bounded) or runs a Python script, and the answer says which.
+    """
+    frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
+    limit = max(1, min(20, int(args.get('rows') or 5)))
+    width = max(40, min(400, int(args.get('width') or 120)))
+    wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
+    head = frame.head(limit)
+    rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in head.to_dict('records')]
+    return {
+        'dataset_id': str(args.get('dataset_id') or _ctx.get('dataset_id') or ''),
+        'total_rows': len(frame),
+        'shown_rows': len(rows),
+        'columns': [{'name': str(column), 'dtype': str(frame[column].dtype)} for column in wanted],
+        'rows': rows,
+        'omitted_columns': max(0, len(frame.columns) - len(wanted)),
+        'next': 'If this is enough, stop. Otherwise ask for specific columns or dataset_page(offset=…).',
+    }
+
+
+def tool_dataset_page(args: dict, _ctx: dict) -> dict:
+    frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
+    offset = max(0, int(args.get('offset') or 0))
+    limit = max(1, min(50, int(args.get('limit') or 20)))
+    width = max(40, min(400, int(args.get('width') or 200)))
+    wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
+    page = frame.iloc[offset : offset + limit]
+    rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in page.to_dict('records')]
+    return {
+        'dataset_id': str(args.get('dataset_id') or _ctx.get('dataset_id') or ''),
+        'offset': offset,
+        'limit': limit,
+        'total_rows': len(frame),
+        'rows': rows,
+        'has_more': offset + len(rows) < len(frame),
+        'next_offset': offset + len(rows),
     }
 
 
@@ -142,18 +204,22 @@ def tool_list_runs(_args: dict, _ctx: dict) -> dict:
 
 
 def tool_code_search(args: dict, _ctx: dict) -> dict:
-    """A bounded read-only source search; local/admin only, never cloud."""
-    if Config.CLOUD_MODE:
+    """A bounded read-only source search; local/desktop snapshot only, never cloud."""
+    from ai import environment
+
+    root_text = environment.code_root()
+    if not root_text:
         raise AIError('ai.codeCloudRefused', kind='capability')
     query = str(args.get('query') or '').strip()
     if not query:
         raise AIError('ai.toolRefused', kind='bad_request', tool='code_search', reason='query is missing')
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1]
+    root = Path(root_text)
+    search_root = root / 'backend' if (root / 'backend').is_dir() else root
     hits = []
-    for path in list(root.rglob('*.py'))[:2000] + list((root / 'static' / 'js').rglob('*.js'))[:2000]:
-        if 'node_modules' in path.parts or 'vendor' in path.parts:
+    for path in list(search_root.rglob('*.py'))[:2000] + list((search_root / 'static' / 'js').rglob('*.js'))[:2000]:
+        if 'node_modules' in path.parts or 'vendor' in path.parts or '__pycache__' in path.parts:
             continue
         try:
             text = path.read_text(encoding='utf-8', errors='replace')
@@ -163,10 +229,173 @@ def tool_code_search(args: dict, _ctx: dict) -> dict:
             continue
         for line_number, line in enumerate(text.splitlines(), 1):
             if query in line:
-                hits.append({'path': str(path.relative_to(root)), 'line': line_number, 'text': line.strip()[:240]})
+                hits.append(
+                    {
+                        'path': str(path.relative_to(search_root)).replace('\\', '/'),
+                        'line': line_number,
+                        'text': line.strip()[:240],
+                    }
+                )
                 if len(hits) >= 20:
                     return {'hits': hits, 'truncated': True}
     return {'hits': hits, 'truncated': False}
+
+
+def tool_code_read(args: dict, _ctx: dict) -> dict:
+    """One source file (bounded), for a citation or a patch proposal."""
+    from ai import environment
+
+    root_text = environment.code_root()
+    if not root_text:
+        raise AIError('ai.codeCloudRefused', kind='capability')
+    from pathlib import Path
+
+    root = Path(root_text)
+    relative = str(args.get('path') or '').strip().replace('\\', '/')
+    if not relative or '..' in relative.split('/') or relative.startswith('/'):
+        raise AIError(
+            'ai.toolRefused', kind='bad_request', tool='code_read', reason='path must stay inside the source tree'
+        )
+    base = root / 'backend' if (root / 'backend').is_dir() else root
+    target = (base / relative).resolve()
+    if not str(target).startswith(str(base.resolve())) or not target.is_file():
+        raise AIError('ai.toolRefused', kind='not_found', tool='code_read', reason=f'no source file {relative}')
+    limit = max(1, min(400, int(args.get('lines') or 200)))
+    lines = target.read_text(encoding='utf-8', errors='replace').splitlines()
+    return {
+        'path': str(target.relative_to(base)).replace('\\', '/'),
+        'lines': len(lines),
+        'start': 1,
+        'content': '\n'.join(lines[:limit]),
+        'truncated': len(lines) > limit,
+    }
+
+
+def tool_web_search(args: dict, ctx: dict) -> dict:
+    """The standalone DeepSeek Search API, available to the research skill."""
+    if str(ctx.get('provider') or '') != 'deepseek':
+        raise AIError(
+            'ai.capabilityRefused',
+            kind='capability',
+            provider=ctx.get('provider') or '',
+            model=ctx.get('model') or '',
+            capability='web_search',
+        )
+    from ai import files
+
+    return files.search(
+        str(ctx.get('api_key') or ''),
+        str(args.get('query') or ''),
+        count=int(args.get('count') or 10),
+        need_content=bool(args.get('need_content')),
+        ori_question=str(args.get('ori_question') or ''),
+    )
+
+
+def tool_web_fetch(args: dict, ctx: dict) -> dict:
+    """The standalone DeepSeek Fetch API, available to the research skill."""
+    if str(ctx.get('provider') or '') != 'deepseek':
+        raise AIError(
+            'ai.capabilityRefused',
+            kind='capability',
+            provider=ctx.get('provider') or '',
+            model=ctx.get('model') or '',
+            capability='read_url',
+        )
+    from ai import files
+
+    return files.fetch(str(ctx.get('api_key') or ''), str(args.get('url') or ''))
+
+
+def _python_ready() -> None:
+    if Config.CLOUD_MODE:
+        raise AIError('ai.pythonCloud', kind='capability')
+    if not get_setting('ai_allow_python'):
+        raise AIError('ai.pythonDisabled', kind='capability')
+
+
+def tool_python_scripts(_args: dict, _ctx: dict) -> dict:
+    from services import python_scripts
+
+    return {
+        'scripts': [
+            {
+                'id': item['id'],
+                'name': item['name'],
+                'description': item['description'],
+                'builtin': item['builtin'],
+                'version': item['version'],
+                'tags': item.get('tags') or [],
+            }
+            for item in python_scripts.all_scripts()
+        ]
+    }
+
+
+def tool_python_script(args: dict, _ctx: dict) -> dict:
+    from services import python_scripts
+
+    script = python_scripts.find_script(str(args.get('script_id') or args.get('name') or ''))
+    if script is None:
+        raise AIError('ai.pythonUnknown', kind='not_found', script=str(args.get('script_id') or ''))
+    return {'script': script}
+
+
+def tool_python_save_script(args: dict, _ctx: dict) -> dict:
+    _python_ready()
+    from services import python_scripts
+
+    return {'script': python_scripts.save_script(args)}
+
+
+def tool_python_run(args: dict, _ctx: dict) -> dict:
+    _python_ready()
+    from services import python_runtime, python_scripts
+
+    script = python_scripts.find_script(str(args.get('script_id') or args.get('name') or ''))
+    code = str(args.get('code') or (script or {}).get('code') or '')
+    if not code:
+        raise AIError('ai.pythonUnknown', kind='bad_request', script=str(args.get('script_id') or ''))
+    rows = args.get('rows') if isinstance(args.get('rows'), list) else []
+    result = python_runtime.run_code(
+        code,
+        rows,
+        args.get('args') if isinstance(args.get('args'), dict) else {},
+        timeout=int(args.get('timeout') or 120),
+        max_rows=int(args.get('max_rows') or 1000),
+        label=str((script or {}).get('name') or 'inline'),
+    )
+    # The AI gets the shape and a sample, not the whole table: a node run keeps every row, but a
+    # conversation turn only needs to know whether the script worked and what its output looks like.
+    sample = result['rows'][: min(10, int(args.get('sample_rows') or 5))]
+    return {
+        'rows': len(result['rows']),
+        'sample': sample,
+        'columns': list(sample[0].keys()) if sample else [],
+        'stdout': result['stdout'][-2000:],
+        'stderr': result['stderr'][-2000:],
+        'duration_ms': result['duration_ms'],
+        'interpreter': result['interpreter'],
+    }
+
+
+def tool_python_files(_args: dict, _ctx: dict) -> dict:
+    from services import python_runtime
+
+    return {'workspace': python_runtime.workspace(), 'files': python_runtime.list_files()}
+
+
+def tool_python_read(args: dict, _ctx: dict) -> dict:
+    from services import python_runtime
+
+    return python_runtime.read_file(str(args.get('path') or ''))
+
+
+def tool_python_write(args: dict, _ctx: dict) -> dict:
+    _python_ready()
+    from services import python_runtime
+
+    return python_runtime.write_file(str(args.get('path') or ''), str(args.get('content') or ''))
 
 
 ASK_USER_SCHEMA = {
@@ -232,6 +461,7 @@ PRESENT_SCHEMA = {
                 'report_draft',
                 'skill_draft',
                 'plugin_manifest',
+                'monitor',
                 'markdown',
             ],
         },
@@ -277,9 +507,47 @@ TOOLS = {
         ),
         ToolSpec(
             'dataset_sample',
-            'Read up to 50 rows from a dataset.',
-            {'type': 'object', 'properties': {'dataset_id': {'type': 'string'}, 'limit': {'type': 'integer'}}},
+            'Read up to 50 rows from a dataset. Prefer dataset_peek unless you need a specific page.',
+            {
+                'type': 'object',
+                'properties': {
+                    'dataset_id': {'type': 'string'},
+                    'limit': {'type': 'integer'},
+                    'columns': {'type': 'array', 'items': {'type': 'string'}},
+                    'offset': {'type': 'integer'},
+                },
+            },
             handler=tool_dataset_sample,
+        ),
+        ToolSpec(
+            'dataset_peek',
+            'Cheapest look at a table: column names/dtypes and a few rows (default 5, cells capped). '
+            'Use this first; escalate to dataset_page or a Python script only when the answer needs it.',
+            {
+                'type': 'object',
+                'properties': {
+                    'dataset_id': {'type': 'string'},
+                    'columns': {'type': 'array', 'items': {'type': 'string'}},
+                    'rows': {'type': 'integer'},
+                    'width': {'type': 'integer'},
+                },
+            },
+            handler=tool_dataset_peek,
+        ),
+        ToolSpec(
+            'dataset_page',
+            'Read a bounded page (max 50 rows) of a dataset when a peek is not enough. Says has_more.',
+            {
+                'type': 'object',
+                'properties': {
+                    'dataset_id': {'type': 'string'},
+                    'offset': {'type': 'integer'},
+                    'limit': {'type': 'integer'},
+                    'columns': {'type': 'array', 'items': {'type': 'string'}},
+                    'width': {'type': 'integer'},
+                },
+            },
+            handler=tool_dataset_page,
         ),
         ToolSpec(
             'list_runs',
@@ -313,10 +581,43 @@ TOOLS = {
         ),
         ToolSpec(
             'code_search',
-            'Search this checkout’s Python and JavaScript source. Local/desktop only.',
+            'Search this checkout’s Python and JavaScript source. Local/desktop snapshot only.',
             {'type': 'object', 'properties': {'query': {'type': 'string'}}, 'required': ['query']},
             permission='read:code',
             handler=tool_code_search,
+        ),
+        ToolSpec(
+            'code_read',
+            'Read one source file (bounded) for a citation or a patch proposal.',
+            {
+                'type': 'object',
+                'properties': {'path': {'type': 'string'}, 'lines': {'type': 'integer'}},
+                'required': ['path'],
+            },
+            permission='read:code',
+            handler=tool_code_read,
+        ),
+        ToolSpec(
+            'web_search',
+            'Search the web with the provider’s standalone Search API; returns structured results.',
+            {
+                'type': 'object',
+                'properties': {
+                    'query': {'type': 'string'},
+                    'count': {'type': 'integer'},
+                    'need_content': {'type': 'boolean'},
+                },
+                'required': ['query'],
+            },
+            permission='read:web',
+            handler=tool_web_search,
+        ),
+        ToolSpec(
+            'web_fetch',
+            'Fetch one web page as Markdown with the provider’s standalone Fetch API.',
+            {'type': 'object', 'properties': {'url': {'type': 'string'}}, 'required': ['url']},
+            permission='read:web',
+            handler=tool_web_fetch,
         ),
         ToolSpec(
             'ask_user_question',
@@ -334,9 +635,89 @@ TOOLS = {
             control=True,
         ),
         ToolSpec(
+            'python_scripts',
+            'List saved Python scripts (id, name, description, built-in, version). Metadata only.',
+            {'type': 'object', 'properties': {}},
+            handler=tool_python_scripts,
+            permission='read:python',
+        ),
+        ToolSpec(
+            'python_script',
+            'Read one saved script in full, including its code, before editing or explaining it.',
+            {'type': 'object', 'properties': {'script_id': {'type': 'string'}, 'name': {'type': 'string'}}},
+            handler=tool_python_script,
+            permission='read:python',
+        ),
+        ToolSpec(
+            'python_save_script',
+            'Create or update a reusable script in the account library. id/name/code are required; '
+            'code reads CIXI_INPUT JSONL and writes CIXI_OUTPUT JSONL, args come from CIXI_ARGS.',
+            {
+                'type': 'object',
+                'properties': {
+                    'id': {'type': 'string'},
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'code': {'type': 'string'},
+                    'inputs': {'type': 'array', 'items': {'type': 'string'}},
+                    'outputs': {'type': 'array', 'items': {'type': 'string'}},
+                    'tags': {'type': 'array', 'items': {'type': 'string'}},
+                },
+                'required': ['id', 'name', 'code'],
+            },
+            handler=tool_python_save_script,
+            permission='write:python',
+        ),
+        ToolSpec(
+            'python_run',
+            'Run a saved script or inline code on the rows you pass, and return a small sample plus '
+            'stdout/stderr — never the whole output table.',
+            {
+                'type': 'object',
+                'properties': {
+                    'script_id': {'type': 'string'},
+                    'name': {'type': 'string'},
+                    'code': {'type': 'string'},
+                    'rows': {'type': 'array', 'items': {'type': 'object'}},
+                    'args': {'type': 'object'},
+                    'timeout': {'type': 'integer'},
+                    'max_rows': {'type': 'integer'},
+                    'sample_rows': {'type': 'integer'},
+                },
+            },
+            handler=tool_python_run,
+            permission='exec:python',
+        ),
+        ToolSpec(
+            'python_files',
+            'List files in the account Python workspace (ai_python).',
+            {'type': 'object', 'properties': {}},
+            handler=tool_python_files,
+            permission='read:python',
+        ),
+        ToolSpec(
+            'python_read',
+            'Read one file from the account Python workspace.',
+            {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path']},
+            handler=tool_python_read,
+            permission='read:python',
+        ),
+        ToolSpec(
+            'python_write',
+            'Write a text file in the account Python workspace (path traversal is refused).',
+            {
+                'type': 'object',
+                'properties': {'path': {'type': 'string'}, 'content': {'type': 'string'}},
+                'required': ['path', 'content'],
+            },
+            handler=tool_python_write,
+            permission='write:python',
+        ),
+        ToolSpec(
             'present_artifact',
-            'Present a workflow draft, analysis plan, chart spec, report, skill draft or plugin manifest. '
-            'The user applies it.',
+            'Present a workflow draft, analysis plan, chart spec, report, skill draft, plugin manifest or a '
+            'run monitor. The user applies it; kind="monitor" payload = {run_id, events, node_ids, statuses, '
+            'min_rows, console_contains, outcomes, max_triggers, note}.',
             PRESENT_SCHEMA,
             permission='artifact',
             control=True,
@@ -345,10 +726,12 @@ TOOLS = {
 }
 
 
-def schemas(allow_code: bool = False) -> list:
+def schemas(allow_code: bool = False, allow_python: bool = False) -> list:
     out = []
     for tool in TOOLS.values():
         if tool.permission == 'read:code' and not allow_code:
+            continue
+        if tool.permission in ('read:python', 'write:python', 'exec:python') and not allow_python:
             continue
         out.append(tool.schema())
     return out

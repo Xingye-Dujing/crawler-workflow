@@ -19,7 +19,7 @@ from runtime import account_context
 from runtime.settings import get_setting
 
 from ai import context as context_builder
-from ai import skills, store, tools
+from ai import environment, skills, store, tools
 from ai.errors import AIError
 from ai.providers import get_provider
 from ai.types import new_id, usage_totals
@@ -86,6 +86,7 @@ def _system_prompt(skill, provider, model: str) -> str:
         f'{skills.GLOBAL_POLICY}\n\n'
         f'Active skill: {skill.id}\n{skill.prompt}\n\n'
         f'Provider: {provider.spec.id} / {model}. Declared capabilities: {capability_words}.\n'
+        f'{environment.prompt_line()}\n'
         f'{tools_line}\n{ask_line}'
     )
 
@@ -153,7 +154,8 @@ class AgentService:
 
     def send(self, conversation_id: str, payload: dict):
         text = str(payload.get('text') or '').strip()
-        if not text:
+        raw_attachments = payload.get('attachments') or []
+        if not text and not raw_attachments:
             raise AIError('ai.apiNoText', kind='bad_request')
         provider_id = str(payload.get('provider') or 'deepseek')
         model = str(payload.get('model') or '')
@@ -197,6 +199,34 @@ class AgentService:
             'context_meta': context_meta,
             'latest_reminder': reminder,
         }
+        attachments = []
+        for attachment_id in payload.get('attachments') or ():
+            row = store.get_attachment(str(attachment_id))
+            if row is None or row.get('conversation_id') != conversation['id']:
+                raise AIError('ai.fileUnsupported', kind='bad_request')
+            if not provider.supports('files', model):
+                raise AIError(
+                    'ai.capabilityRefused',
+                    kind='capability',
+                    provider=provider.spec.id,
+                    model=model,
+                    capability='files',
+                )
+            attachments.append(
+                {
+                    'id': row['id'],
+                    'file_id': row.get('file_id') or '',
+                    'kind': 'image' if str(row.get('mime') or '').startswith('image/') else 'document',
+                    'name': row.get('name') or 'file',
+                    'purpose': row.get('purpose') or '',
+                }
+            )
+        if attachments:
+            skill_meta['attachments'] = attachments
+        # An automatic turn started by a run monitor is marked so the transcript can say so —
+        # and so a reader can tell a machine notice from something the user typed.
+        if payload.get('monitor_event_id'):
+            skill_meta['monitor_event'] = str(payload['monitor_event_id'])[:80]
         user = store.append_message(
             conversation['id'],
             'user',
@@ -314,7 +344,8 @@ class AgentService:
         cancel_event = _active(conversation['id'])
         max_rounds = max(0, int(get_setting('ai_max_tool_rounds') or 4))
         allow_code = bool(get_setting('ai_allow_code_context'))
-        tool_schemas = tools.schemas(allow_code=allow_code)
+        allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
+        tool_schemas = tools.schemas(allow_code=allow_code, allow_python=allow_python)
         if provider.supports('tools', model) and skill.tools:
             allowed = set(skill.tools) | {'ask_user_question', 'update_plan', 'present_artifact'}
             tool_schemas = [tool for tool in tool_schemas if tool['name'] in allowed]
@@ -390,7 +421,7 @@ class AgentService:
                     if call['name'] == 'present_artifact':
                         yield from self._artifact_event(conversation, state, call, run_id)
                         continue
-                    yield from self._tool_event(conversation, state, call, turn_id)
+                    yield from self._tool_event(conversation, state, call, turn_id, api_key, provider.spec.id, model)
         finally:
             clear_active(conversation['id'])
 
@@ -637,7 +668,16 @@ class AgentService:
         store.add_step(run_id, artifact['title'], tool='present_artifact', args=artifact, status='done')
         yield {'type': 'artifact', 'artifact': artifact}
 
-    def _tool_event(self, conversation: dict, state: dict, call: dict, turn_id: str):
+    def _tool_event(
+        self,
+        conversation: dict,
+        state: dict,
+        call: dict,
+        turn_id: str,
+        api_key: str = '',
+        provider: str = '',
+        model: str = '',
+    ):
         name = call['name']
         step = store.add_step(
             (state['message'].get('meta') or {}).get('run_id') or '',
@@ -654,8 +694,16 @@ class AgentService:
             'step_id': step['id'],
         }
         try:
-            result = tools.execute(name, call.get('arguments') or {}, {'turn_id': turn_id})
+            result = tools.execute(
+                name,
+                call.get('arguments') or {},
+                {'turn_id': turn_id, 'api_key': api_key, 'provider': provider, 'model': model},
+            )
             text = json.dumps(result, ensure_ascii=False, default=str)
+            # The tool result is what the provider is billed for. A dataset or script output can be
+            # enormous; the workspace's own tools are bounded, and this is the last backstop.
+            if len(text) > 12000:
+                text = text[:12000] + '\n…[truncated by the workspace; ask for a narrower page]'
             is_error = False
             store.update_step(step['id'], status='done', result=result)
         except AIError as exc:
