@@ -97,7 +97,7 @@ ToolSpec(
   allows only http/https links, and never executes raw HTML.
 - Use host components/classes and OMM-ZEN tokens; no filled black/blue, no arbitrary plugin CSS.
 - The composer toggles are driven by the server capability manifest, not a local guess.
-- `ask_user_question` is answered with `AIWorkspace.answerQuestion`/`_maybeAnswer`; do not turn a
+- `ask_user_question` is answered with `AIWorkspace._answerOption`/`_answerCustom`/`_maybeAnswer`; do not turn a
   pending question into a new user message.
 - Add a harness/unit test for any result-affecting JS change.
 

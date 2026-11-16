@@ -67,8 +67,9 @@ AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分�
  "outcomes": ["failed"], "max_triggers": 20, "note": "分析节点失败时告诉我"}
 ```
 
-- 引擎在 `runtime.run_events` 发布 `run.started` / `node.finished` / `run.finished`，仅在存在控制台监控时发布 `run.log`。
-- `ai.monitors` 匹配条件，写一条持久投递；达到 `max_triggers` 自动结束。事件只含 id、状态、计数，不含爬取正文。
+- 引擎在 `runtime.run_events` 发布 `run.started` / `node.finished` / `run.finished`；订阅者存在时 `run.log` 每行都发布，由 `ai.monitors` 在工作线程里筛选。
+- `ai.monitors` 匹配条件后写一条持久投递；达到 `max_triggers` 自动结束。事件只含 id、状态、计数，不含爬取正文（控制台行也不进投递，模型用 `run_console` 自己读）。
+- 投递写入在专用线程队列里完成，运行线程不做磁盘 I/O；`run.log` 的筛选命中后也只排队。
 - 浏览器 `ai/watch.js` 轮询投递并在工作区打开/收到事件时反应；自动分析用浏览器里的 Key 发起一轮对话，
   用户行标记 `monitor_event`。服务端从不自行花钱，Key 不进监控表。
 
@@ -112,7 +113,7 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 
 只用既有 token（`--paper`、`--text`/`--ink`、`--line`/`--line2`、`--accent`、`--ok`/`--warn`/`--err`、
 `--radius`、`--font`）；选中是内嵌墨色下划线，勾选是发丝方框 + 墨色勾，没有纯黑/纯蓝填充。
-动效只用 transform/opacity，`prefers-reduced-motion: reduce` 下全部关闭；dock 层级在浮动面板之上、对话框之下。
+动效以 transform/opacity 为主（少数状态用背景/边框色过渡），`prefers-reduced-motion: reduce` 下全部关闭；dock 层级在浮动面板之上、对话框之下。
 
 ## 9. HTTP 端点
 

@@ -125,7 +125,7 @@ $env:CIXI_DRIVER_PATH='C:\path\to\chromedriver.exe'
 - **Python 是扩展接口**：脚本库 `services/python_scripts.py` 同时供 AI 与画布 Python 节点；节点存
   `script_id` 不内联代码；契约 `CIXI_INPUT`/`CIXI_OUTPUT`/`CIXI_ARGS`；仅本地/桌面，`ai_allow_python` 门控，
   云端按名拒绝；不是沙箱。写通用脚本，声明输入/输出，先保存再跑样本。
-- 桌面构建可带只读 `source/` 快照供 AI 引用；不能改运行中的程序。
+- 桌面构建**可**带只读 `source/` 快照供 AI 引用（取决于该构建是否打包 `source/`）；不能改运行中的程序。
 - 运行监控是订阅：AI 提条件、用户开启、引擎发事件、浏览器用本地 Key 反应；服务端不自行花钱。
 
 | 宿主 | 差异 |
