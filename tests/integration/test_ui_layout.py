@@ -97,7 +97,7 @@ def app_url(tmp_path_factory):
     log_path = root / 'logs' / '_ui_layout_server.log'
     with log_path.open('w', encoding='utf-8') as log:
         proc = subprocess.Popen(
-            [sys.executable, 'app.py'],
+            [sys.executable, str(REPO / 'tools' / 'ui_test_server.py'), str(port)],
             cwd=str(REPO / 'backend'),
             stdout=log,
             stderr=subprocess.STDOUT,
@@ -273,7 +273,8 @@ def _load_app(driver, app_url):
     _install_boot_error_collector(driver)
     attempts = []
     for attempt in (1, 2):
-        driver.get(app_url + '/')
+        # A retry must not ask for the same URL: a cached or half-closed entry would be reused.
+        driver.get(app_url + '/' if attempt == 1 else app_url + '/?retry=1')
         state = _wait_for_boot(driver)
         if _booted(state):
             if attempt > 1:

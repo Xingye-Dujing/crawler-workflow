@@ -69,9 +69,16 @@ const LLMSettings = {
            from a desktop profile, or from before the flag was set — must not stay the
            active transport. The server refuses that transport by name anyway; this is
            what makes the panel ask for the key it actually needs. */
+        /* The AI workspace owns the one key store. A key typed there (or here) must not have to be
+           typed twice; reading through keeps the row analyzers working without a second copy. */
+        if (typeof AISettings !== 'undefined') {
+            ['openrouter', 'deepseek', 'opencode_go'].forEach((id) => {
+                if (!s[id].api_key && AISettings.keyFor(id)) s[id].api_key = AISettings.keyFor(id);
+            });
+        }
         if (typeof CloudMode !== 'undefined' && CloudMode.on) {
             if (s.provider === 'ollama') s.provider = 'openrouter';
-        } else if (!['ollama', 'openrouter', 'deepseek', 'opencode_go'].includes(s.provider)) {
+        } else if (!String(s.provider || '').trim()) {
             s.provider = 'ollama';
         }
         return s;
@@ -91,6 +98,9 @@ const LLMSettings = {
     saveProvider(provider, patch) {
         const s = this.load();
         s[provider] = Object.assign({}, s[provider], patch);
+        if (patch && patch.api_key && typeof AISettings !== 'undefined') {
+            AISettings.setKey(provider, patch.api_key);
+        }
         return this.save({ [provider]: s[provider] });
     },
 
@@ -183,7 +193,9 @@ const LLMSettings = {
 window.LLMSettings = LLMSettings;
 
 function onAIProviderChange(value) {
-    const provider = ['openrouter', 'deepseek', 'opencode_go'].includes(value) ? value : 'ollama';
+    // The select's options and the server's provider list are the authority; this only rejects a
+    // blank. An unknown id is refused by name on the server, never silently rewritten here.
+    const provider = String(value || '').trim() || LLMSettings.load().provider;
     const s = LLMSettings.save({ provider });
     LLMSettings.toggleProviderRows(provider);
     if (provider === 'openrouter') {

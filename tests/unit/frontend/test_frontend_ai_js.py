@@ -55,11 +55,16 @@ class TestAIStreamAndRenderer:
 class TestRuntimeSurfaces:
     def test_the_runtime_chip_lists_only_the_powers_this_host_has(self):
         out = _run()
-        assert 'ai.runtime.desktop' in out['runtimeTitle']
-        assert 'ai.runtime.daemon' in out['runtimeTitle']
-        assert 'ai.runtime.files' in out['runtimeTitle']
-        assert 'ai.runtime.codePlugins' in out['runtimeTitle']
-        assert 'ai.runtime.source' not in out['runtimeTitle']
+        assert 'Desktop app' in out['runtimeTitle']
+        assert 'local model daemon' in out['runtimeTitle']
+        assert 'user files' in out['runtimeTitle']
+        assert 'code plugins' in out['runtimeTitle']
+        assert 'repository source' not in out['runtimeTitle']
+
+    def test_i18n_answers_whether_a_key_exists(self):
+        out = _run()
+        assert out['hasKnown'] is True
+        assert out['hasUnknown'] is False
 
     def test_an_unavailable_skill_shows_the_servers_reason(self):
         out = _run()
@@ -94,6 +99,18 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['disarm'] is True, '停止监控 in the side panel is inert'
         assert out['context'] is True, '刷新上下文 in the context bar is inert'
         assert out['ignored'] is True, 'a click outside any data-ai target acted'
+        assert out['renameRowFound'] and out['deleteRowFound']
+        assert out['rename'] is True, '重命名 in the session row is inert'
+        assert out['delete'] is True, '删除会话 in the session row is inert'
+
+    def test_the_skill_editor_lists_what_the_server_offers(self):
+        out = _run_workspace()['editor']
+        assert out['contextChecks'] == ['project', 'run'], out['contextChecks']
+        assert out['toolChecks'] == ['run_status'], 'a control tool was offered as a skill tool'
+
+    def test_a_saved_provider_id_is_not_rewritten_in_the_browser(self):
+        out = _run_workspace()['provider']
+        assert out['stored'] == 'custom_provider'
 
     def test_the_python_node_picker_offers_one_empty_placeholder(self):
         out = _run_workspace()['pythonPanel']

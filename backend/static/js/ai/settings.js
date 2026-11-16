@@ -42,8 +42,11 @@ const AISettings = {
         } catch (e) {
             /* a broken legacy value is not a reason to lose the new settings */
         }
-        if (!['deepseek', 'opencode_go', 'openrouter', 'ollama'].includes(settings.provider)) {
-            settings.provider = 'deepseek';
+        /* No provider whitelist here: the server's catalog answers which providers exist
+           (`_loadBootstrap` reconciles against `data.providers`). A raw value that is not a
+           non-empty string is the only thing this can judge. */
+        if (typeof settings.provider !== 'string' || !settings.provider.trim()) {
+            settings.provider = this.defaults.provider;
         }
         return settings;
     },

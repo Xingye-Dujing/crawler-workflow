@@ -68,6 +68,15 @@ for (const row of [sessionRow, disarmRow, refreshRow]) {
     dispatchOn(workspace._dom.root, 'click', { target: row });
 }
 
+const renameRow = workspace._dom.sessions.querySelector('[data-ai-rename-conversation]');
+const deleteRow = workspace._dom.sessions.querySelector('[data-ai-delete-conversation]');
+workspace._renameConversation = async (id) => calls.push('rename:' + id);
+workspace._deleteConversation = async (id) => calls.push('delete:' + id);
+for (const row of [renameRow, deleteRow]) {
+    if (!row) continue;
+    dispatchOn(workspace._dom.root, 'click', { target: row });
+}
+
 out.delegated = {
     session: calls.includes('conversation:c1'),
     disarm: calls.includes('disarm:m1'),
@@ -81,7 +90,30 @@ out.delegated = {
     sessionRowFound: !!sessionRow,
     disarmRowFound: !!disarmRow,
     refreshRowFound: !!refreshRow,
+    rename: calls.includes('rename:c1'),
+    delete: calls.includes('delete:c1'),
+    renameRowFound: !!renameRow,
+    deleteRowFound: !!deleteRow,
 };
+
+/* The skill editor's two lists are the server's answer. */
+workspace._bootstrap.context_sources = ['project', 'run'];
+workspace._bootstrap.tools = [
+    { name: 'run_status', control: false },
+    { name: 'ask_user_question', control: true },
+];
+const editorHtml = sandbox.AIStudio.editor({ id: 'mine', context: [], tools: [] }, workspace);
+const editor = sandbox.document.createElement('div');
+editor.innerHTML = editorHtml;
+const contextChecks = editor
+    .querySelectorAll('[data-ai-skill-context]')
+    .map((el) => String(el.getAttribute('data-ai-skill-context')));
+const toolChecks = editor.querySelectorAll('[data-ai-skill-tool]').map((el) => String(el.getAttribute('data-ai-skill-tool')));
+out.editor = { contextChecks, toolChecks };
+
+/* A saved provider id is not rewritten by a browser-side list; the server catalog decides. */
+sandbox.AISettings.save({ provider: 'custom_provider' });
+out.provider = { stored: sandbox.AISettings.load().provider };
 
 /* The canvas Python node's settings form. Its script picker must offer one empty placeholder and
  * nothing whose VALUE is the placeholder sentence (that sentence would be stored as script_id), and

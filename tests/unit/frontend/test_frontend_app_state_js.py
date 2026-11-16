@@ -83,10 +83,10 @@ class TestLlmPayload:
         assert st['payload_ollama']['model'] == 'local-tag'
         assert st['payload_openrouter']['model'] == 'catalog:free'
 
-    def test_an_unknown_provider_normalises_to_the_local_one(self, st):
-        """The backend treats every non-OpenRouter value as Ollama; a panel that
-        kept 'openai' would desync the two."""
-        assert st['payload_unknown_provider']['provider'] == 'ollama'
+    def test_an_unknown_provider_travels_as_itself_for_the_server_to_refuse(self, st):
+        """A browser-side rewrite would answer from a provider the user did not pick; the server
+        refuses an unknown id by name instead."""
+        assert st['payload_unknown_provider']['provider'] == 'openai'
         assert st['payload_unknown_provider']['api_key'] == ''
 
     def test_a_pre_split_draft_is_migrated_into_the_openrouter_block(self, st):

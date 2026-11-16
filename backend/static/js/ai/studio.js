@@ -38,8 +38,8 @@ const AIStudio = {
         const editor = host._editingSkill;
         const cards = skills.map((skill) => {
             const builtin = skill.builtin;
-            const name = skill.name || I18n.t(skill.name_key) || skill.id;
-            const description = skill.description || I18n.t(skill.description_key) || '';
+            const name = skill.name || (I18n.has(skill.name_key) ? I18n.t(skill.name_key) : skill.id);
+            const description = skill.description || (I18n.has(skill.description_key) ? I18n.t(skill.description_key) : '');
             const badge = builtin ? I18n.t('ai.builtin') : I18n.t('ai.userSkill');
             const unavailable = skill.available === false;
             return (
@@ -64,9 +64,11 @@ const AIStudio = {
     },
 
     editor(skill, host) {
-        const contextSources = ['project', 'canvas', 'dataset', 'run', 'docs', 'code'];
+        // Both lists are the server's answer: a new context source or a new control tool must not
+        // need a browser edit, and a cloud host must not offer `code` here.
+        const contextSources = host._bootstrap?.context_sources || [];
         const toolList = (host._bootstrap?.tools || [])
-            .filter((tool) => !['ask_user_question', 'update_plan', 'present_artifact'].includes(tool.name))
+            .filter((tool) => !tool.control)
             .map((tool) => tool.name);
         const selectedContext = new Set(skill.context || []);
         const selectedTools = new Set(skill.tools || []);
@@ -128,10 +130,10 @@ const AIStudio = {
         const editor = host._pythonScript || null;
         const editorHtml = editor
             ? '<section class="ai-editor"><h3>' + AIRender.escape(editor.id || I18n.t('ai.pythonNew')) + '</h3>' +
-              '<label class="ai-field"><span>ID</span><input class="ai-input" data-ai-python-field="id" value="' + AIRender.escape(editor.id || '') + '"' + (editor.builtin ? ' disabled' : '') + ' /></label>' +
+              '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.fieldId')) + '</span><input class="ai-input" data-ai-python-field="id" value="' + AIRender.escape(editor.id || '') + '"' + (editor.builtin ? ' disabled' : '') + ' /></label>' +
               '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.skillName')) + '</span><input class="ai-input" data-ai-python-field="name" value="' + AIRender.escape(editor.name || '') + '" /></label>' +
               '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.skillDescription')) + '</span><input class="ai-input" data-ai-python-field="description" value="' + AIRender.escape(editor.description || '') + '" /></label>' +
-              '<label class="ai-field"><span>Code</span><textarea class="ai-textarea ai-code-input" rows="14" data-ai-python-field="code">' + AIRender.escape(editor.code || '') + '</textarea></label>' +
+              '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.fieldCode')) + '</span><textarea class="ai-textarea ai-code-input" rows="14" data-ai-python-field="code">' + AIRender.escape(editor.code || '') + '</textarea></label>' +
               '<div class="ai-editor-actions">' +
               (editor.builtin
                   ? '<button type="button" class="ai-primary" data-ai-python-fork="' + AIRender.escape(editor.id) + '">' + AIRender.escape(I18n.t('ai.fork')) + '</button>'
@@ -145,8 +147,8 @@ const AIStudio = {
             '<div id="ai-python-list" class="ai-skill-grid"></div>' +
             '<section class="ai-editor"><h3>' + AIRender.escape(I18n.t('ai.pythonTry')) + '</h3>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.pythonScript')) + '</span><select class="ai-select" id="ai-python-run-id"></select></label>' +
-            '<label class="ai-field"><span>rows JSON</span><textarea class="ai-textarea ai-code-input" rows="3" id="ai-python-run-rows">[{"text":"hello"}]</textarea></label>' +
-            '<label class="ai-field"><span>args JSON</span><textarea class="ai-textarea ai-code-input" rows="2" id="ai-python-run-args">{}</textarea></label>' +
+            '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.rowsJson')) + '</span><textarea class="ai-textarea ai-code-input" rows="3" id="ai-python-run-rows">[{"text":"hello"}]</textarea></label>' +
+            '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.argsJson')) + '</span><textarea class="ai-textarea ai-code-input" rows="2" id="ai-python-run-args">{}</textarea></label>' +
             '<div class="ai-editor-actions"><button type="button" class="ai-primary" data-ai-python-run="1">' + AIRender.escape(I18n.t('ai.pythonRun')) + '</button></div>' +
             '<pre class="ai-code" id="ai-python-output"></pre></section>' + editorHtml
         );
@@ -312,7 +314,7 @@ const AIStudio = {
             '<section class="ai-permissions">' +
             '<h3>' + AIRender.escape(I18n.t('ai.permissionsTitle')) + '</h3>' +
             '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.permissionsBody')) + '</p>' +
-            '<div class="ai-skill-meta">' + capabilities.map((cap) => '<span class="ai-chip">' + AIRender.escape(I18n.t('ai.cap.' + cap) || cap) + '</span>').join('') + '</div>' +
+            '<div class="ai-skill-meta">' + capabilities.map((cap) => '<span class="ai-chip">' + AIRender.escape(I18n.has('ai.cap.' + cap) ? I18n.t('ai.cap.' + cap) : cap) + '</span>').join('') + '</div>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.contextScope')) + '</span><select class="ai-select" data-ai-scope>' +
             ['off', 'summary', 'full'].map((value) => '<option value="' + value + '"' + (host._scope === value ? ' selected' : '') + '>' + AIRender.escape(I18n.t(this.CONTEXT_KEYS[value])) + '</option>').join('') +
             '</select></label>' +

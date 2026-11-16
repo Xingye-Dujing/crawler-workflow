@@ -290,6 +290,29 @@
   display: grid;
   gap: 2px;
 }
+.ai-session-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.ai-session-actions {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  gap: 2px;
+  background: var(--panel, var(--hover));
+}
+.ai-session-row:hover .ai-session-actions,
+.ai-session-row:focus-within .ai-session-actions {
+  display: flex;
+}
+.ai-session-actions .ai-icon-btn {
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 5px;
+}
 .ai-session {
   display: flex;
   justify-content: space-between;

@@ -174,9 +174,12 @@ for (const sc of scenarios) {
        seed below then owns the draft and the scenario's assertions cannot see a stranger's
        save. `settle` is still held at 60 turns for the slower Windows runner. */
     await settle();
-    /* A writer queued by the previous scenario lands during settle, AFTER the delete
-       above — delete once more so a late write cannot resurrect the draft this
-       scenario is explicitly testing without. */
+    /* A writer can also be a TIMER (a capability fetch resolves on one), which ``settle``'s
+       microtask turns do not drain. Give it a real tick and clear again, so "this browser has no
+       draft" cannot be flipped by a save the previous scenario scheduled. */
+    delete sandbox.__stored.crawler_open_file;
+    delete sandbox.__stored.crawler_canvas;
+    await new Promise((r) => setTimeout(r, 5));
     delete sandbox.__stored.crawler_open_file;
     delete sandbox.__stored.crawler_canvas;
     if (sc.hasDraft !== false) sandbox.__stored.crawler_canvas = JSON.stringify({ nodes: [], view: {} });

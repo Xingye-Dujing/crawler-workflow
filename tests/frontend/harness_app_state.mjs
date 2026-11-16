@@ -10,7 +10,7 @@
  *     a local Ollama run inherit an OpenRouter catalog id;
  *   · `payload()` must never leak the OpenRouter key when Ollama is active, and
  *     must never send an Ollama tag while OpenRouter is chosen;
- *   · `load()` normalises an unknown provider to the local one, and migrates the
+ *   · `load()` keeps an unknown provider id as itself (the server refuses it by name) and migrates the
  *     pre-split flat `model`/`api_key` pair;
  *   · `save()` drops the flat keys so a cleared OpenRouter id cannot resurface;
  *   · `RunState.set/toggle/setRunning` persist and re-sync the top menu;
@@ -98,8 +98,8 @@ clearStored();
 LLMSettings.save({ provider: 'ollama', ollama: { model: 'local-tag' }, openrouter: { model: 'catalog:free', api_key: 'sk-secret' } });
 out.payload_ollama = LLMSettings.payload();
 
-/* A hand-edited provider must not desync the panel from the backend, which treats
-   every non-OpenRouter value as the local daemon. */
+/* A hand-edited provider travels as itself; the server refuses an unknown id by name instead of
+   silently answering from the local daemon. */
 clearStored();
 setLlm({ provider: 'openai', model: 'x', ollama: { model: 'local-tag' } });
 out.payload_unknown_provider = LLMSettings.payload();

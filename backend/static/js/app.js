@@ -212,6 +212,13 @@ const I18n = {
         return vars ? I18n.fill(text, vars) : text;
     },
 
+    /* Whether a key has a row in the CURRENT language. A call site that wants "the label, or the
+       raw id when this host/plugin has no translation" must ask this: `t()` returns the key on a
+       miss, so `I18n.t(x) || x` always keeps the key. */
+    has(key) {
+        return Object.prototype.hasOwnProperty.call(this.dict[this.lang] || {}, key);
+    },
+
     /* Fill EVERY occurrence of each slot. `String.prototype.replace` with a string needle
        replaces the FIRST occurrence only, and the cookie-delete template names the platform
        twice — so `.replace('{platform}', …)` left a literal `{platform}` inside a Chinese
@@ -244,6 +251,12 @@ const I18n = {
            information), so it has to switch language with the rest of the panel. */
         document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
             el.placeholder = this.t(el.dataset.i18nPlaceholder);
+        });
+        /* The dock's icon buttons have no visible text, so their accessible name IS the only label
+           a screen reader (or a hover tooltip) gets. */
+        document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+            el.setAttribute('aria-label', this.t(el.dataset.i18nAriaLabel));
+            if (!el.title) el.title = this.t(el.dataset.i18nAriaLabel);
         });
         /* Menu labels and the open dropdown are rendered by TopMenu, not by
            data-i18n attributes, so they need an explicit refresh. */
