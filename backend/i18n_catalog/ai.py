@@ -69,6 +69,7 @@ ZH = {
     'ai.pythonInstallWindows': '只有 Windows 桌面版提供自动下载；其他系统请先安装 Python 3。',
     'ai.pythonInstallUrl': '下载地址不可用：{url}',
     'ai.pythonInstallSize': '下载内容超过 {mb} MB 上限，已中止。',
+    'ai.pythonInstallChecksum': '下载的 Python 包校验失败，已中止；请稍后重试。',
     'ai.pythonOutputTruncated': '…（输出已截断）',
     'ai.skillUnavailable': '技能“{skill}”需要“{capability}”，而 {provider} 不提供它。',
     'ai.skillCodeLocal': '技能“{skill}”需要读取仓库源码，只在本地网页版（源码运行）可用；桌面版与云端不提供。',
@@ -178,6 +179,7 @@ EN = {
     ),
     'ai.pythonInstallUrl': 'The download URL is unavailable: {url}',
     'ai.pythonInstallSize': 'The download exceeded the {mb} MB limit and was stopped.',
+    'ai.pythonInstallChecksum': 'The downloaded Python archive failed its checksum and was discarded; try again later.',
     'ai.pythonOutputTruncated': '… (output truncated)',
     'ai.skillUnavailable': 'Skill “{skill}” needs “{capability}”, which {provider} does not offer.',
     'ai.skillCodeLocal': (

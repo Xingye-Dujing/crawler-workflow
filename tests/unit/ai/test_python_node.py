@@ -204,6 +204,42 @@ def test_the_node_prints_a_truncated_output(monkeypatch):
     assert '1' in logs[1]
 
 
+def test_a_downloaded_interpreter_with_a_bad_checksum_is_refused(monkeypatch, tmp_path):
+    import requests
+    from ai.errors import AIError
+
+    from services import python_runtime
+
+    class FakeResponse:
+        status_code = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def iter_content(self, size):
+            yield b'x' * 1_000_001  # big enough to pass the size floor, wrong digest
+
+    monkeypatch.setattr(
+        python_runtime,
+        'install_plan',
+        lambda: {
+            'available': False,
+            'needs_permission': True,
+            'supported': True,
+            'url': python_runtime.PYTHON_EMBED_URL,
+            'version': python_runtime.PYTHON_EMBED_VERSION,
+            'target': str(tmp_path / 'python'),
+        },
+    )
+    monkeypatch.setattr(requests, 'get', lambda *args, **kwargs: FakeResponse())
+    with pytest.raises(AIError) as refusal:
+        python_runtime.install_interpreter(True)
+    assert refusal.value.key == 'ai.pythonInstallChecksum'
+
+
 def test_python_candidates_are_read_for_the_target_os(tmp_path, monkeypatch):
     from core import machine
 

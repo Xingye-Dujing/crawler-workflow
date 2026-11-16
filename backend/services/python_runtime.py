@@ -19,6 +19,7 @@ download path instead of failing on the first run.
 """
 
 import contextlib
+import hashlib
 import json
 import os
 import subprocess
@@ -422,6 +423,9 @@ PYTHON_EMBED_VERSION = '3.11.9'
 PYTHON_EMBED_URL = (
     f'https://www.python.org/ftp/python/{PYTHON_EMBED_VERSION}/python-{PYTHON_EMBED_VERSION}-embed-amd64.zip'
 )
+#: The published artifact's SHA-256. A download that does not match is refused by name: an
+#: interpreter is executed, so a truncated or swapped archive is not a warning to carry on past.
+PYTHON_EMBED_SHA256 = '009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b'
 
 
 def install_plan() -> dict:
@@ -466,6 +470,7 @@ def install_interpreter(allow_download: bool) -> dict:
     handle, archive_path = tempfile.mkstemp(suffix='.zip')
     os.close(handle)
     total = 0
+    digest = hashlib.sha256()
     try:
         try:
             with requests.get(PYTHON_EMBED_URL, timeout=(15, 300), stream=True) as response:
@@ -478,11 +483,14 @@ def install_interpreter(allow_download: bool) -> dict:
                             raise AIError(
                                 'ai.pythonInstallSize', kind='bad_response', mb=MAX_INSTALL_BYTES // (1024 * 1024)
                             )
+                        digest.update(chunk)
                         sink.write(chunk)
         except requests.RequestException as exc:
             raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL) from exc
         if total < 1_000_000:
             raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL)
+        if digest.hexdigest() != PYTHON_EMBED_SHA256:
+            raise AIError('ai.pythonInstallChecksum', kind='bad_response')
         try:
             safe_extract(archive_path, target)
         except ArchiveError as exc:
