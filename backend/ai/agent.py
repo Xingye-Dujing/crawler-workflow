@@ -346,9 +346,10 @@ class AgentService:
         allow_code = bool(get_setting('ai_allow_code_context'))
         allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
         tool_schemas = tools.schemas(allow_code=allow_code, allow_python=allow_python)
+        offered = set()
         if provider.supports('tools', model) and skill.tools:
-            allowed = set(skill.tools) | {'ask_user_question', 'update_plan', 'present_artifact'}
-            tool_schemas = [tool for tool in tool_schemas if tool['name'] in allowed]
+            offered = set(skill.tools) | {'ask_user_question', 'update_plan', 'present_artifact'}
+            tool_schemas = [tool for tool in tool_schemas if tool['name'] in offered]
         else:
             tool_schemas = []
         system = _system_prompt(skill, provider, model)
@@ -421,7 +422,9 @@ class AgentService:
                     if call['name'] == 'present_artifact':
                         yield from self._artifact_event(conversation, state, call, run_id)
                         continue
-                    yield from self._tool_event(conversation, state, call, turn_id, api_key, provider.spec.id, model)
+                    yield from self._tool_event(
+                        conversation, state, call, turn_id, api_key, provider.spec.id, model, offered
+                    )
         finally:
             clear_active(conversation['id'])
 
@@ -677,6 +680,7 @@ class AgentService:
         api_key: str = '',
         provider: str = '',
         model: str = '',
+        offered=None,
     ):
         name = call['name']
         step = store.add_step(
@@ -698,6 +702,7 @@ class AgentService:
                 name,
                 call.get('arguments') or {},
                 {'turn_id': turn_id, 'api_key': api_key, 'provider': provider, 'model': model},
+                offered,
             )
             text = json.dumps(result, ensure_ascii=False, default=str)
             # The tool result is what the provider is billed for. A dataset or script output can be

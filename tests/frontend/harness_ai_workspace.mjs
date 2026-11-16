@@ -20,7 +20,7 @@ const jsDir = process.argv[2];
 const sandbox = baseSandbox();
 vm.createContext(sandbox);
 fixWindow(vm, sandbox);
-loadPageScripts(sandbox, { jsDir, only: ['app.js', 'ai-workspace.js'] });
+loadPageScripts(sandbox, { jsDir, only: ['app.js', 'ai-workspace.js', 'panels/settings.js', 'panels/data-views.js'] });
 
 const workspace = sandbox.AIWorkspace;
 workspace.init();
@@ -81,6 +81,25 @@ out.delegated = {
     sessionRowFound: !!sessionRow,
     disarmRowFound: !!disarmRow,
     refreshRowFound: !!refreshRow,
+};
+
+/* The canvas Python node's settings form. Its script picker must offer one empty placeholder and
+ * nothing whose VALUE is the placeholder sentence (that sentence would be stored as script_id), and
+ * “管理脚本” must call the studio entry that exists. */
+vm.runInContext('loadPythonNodePanel = function () {};', sandbox);
+const pythonHtml = vm.runInContext('renderPythonSettings("n-python", {script_id: "", args: "{}"})', sandbox);
+const holder = sandbox.document.createElement('div');
+holder.innerHTML = pythonHtml;
+const pick = vm.runInContext("I18n.t('settings.pythonPick')", sandbox);
+const pickOptions = holder
+    .querySelectorAll('option')
+    .filter((option) => String(option.textContent) === pick)
+    .map((option) => String(option.value));
+const manageButton = holder.querySelectorAll('button').find((button) => String(button.onclick || '').includes('openStudio'));
+out.pythonPanel = {
+    pickOptions,
+    manage: !!manageButton,
+    manageTarget: manageButton ? String(manageButton.onclick) : '',
 };
 
 fs.writeFileSync(1, JSON.stringify(out));

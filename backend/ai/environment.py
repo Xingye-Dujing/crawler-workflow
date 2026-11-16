@@ -31,7 +31,13 @@ def code_root() -> str:
     ``source/`` snapshot (the desktop specs collect ``backend/**/*.py`` and ``docs/**/*.md``); it is
     enough to cite a file or line, and it deliberately cannot edit the running program — the
     extension path on a desktop is the Python workspace, not a patched bundle.
+
+    A cloud host answers ``''`` even when it runs from a checkout: ``CLOUD_MODE`` is the server's
+    verdict about the host, and the deploy shape (source vs wheel) must not silently grant one
+    account the server's own source. This is the single place all three consumers ask.
     """
+    if Config.CLOUD_MODE:
+        return ''
     if machine.is_frozen():
         base = str(getattr(sys, '_MEIPASS', '') or '')
         snapshot = os.path.join(base, 'source')

@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 
 from core.config import Config
-from runtime.state import add_log
+from runtime.state import add_log, execution_state
 
 from i18n import t
 from nodes.context import NodeCall, node_params
@@ -56,7 +56,10 @@ def run(node: dict, call: NodeCall) -> list:
         call.current_input or [],
         _args(params),
         timeout=int(params.get('timeout') or 120),
-        cancel_event=(call.run_ctx or {}).get('cancel_event'),
+        # 停止 lives on the run's own state, not on ``call.run_ctx``: the engine never passes a
+        # run_ctx to an executor (``engine/run.py``), so reading the call meant the cancel branch
+        # could not fire and a stopped run waited out the script's full timeout.
+        cancel_event=execution_state.get('cancel_event'),
         max_rows=int(params.get('max_rows') or python_runtime.MAX_OUTPUT_ROWS),
     )
     rows = result['rows']

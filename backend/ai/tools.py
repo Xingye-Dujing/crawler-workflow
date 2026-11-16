@@ -1,9 +1,15 @@
-"""Read-only verbs the agent may call.
+"""The verbs the agent may call.
 
-A tool never writes application state. It reads a dataset, a run, the capability matrix or the
-docs and returns a bounded JSON/text result; a write is an *artifact* rendered as a proposal and
-performed by the user through the app's normal route. That boundary is why an AI mistake cannot
-delete a run or rewrite a canvas.
+Most tools only read: a dataset, a run, the capability matrix or the docs, and return a bounded
+JSON/text result. Writes to application state are **artifacts**: a proposal the user applies
+through the app's normal route. That boundary is why an AI mistake cannot delete a run or rewrite
+a canvas.
+
+Two groups are the deliberate exception, both off by default and both refused on a cloud host:
+``read:code`` (the repository source) needs ``ai_allow_code_context``, and ``read:python`` /
+``write:python`` / ``exec:python`` (the account's script workspace) need ``ai_allow_python``.
+The permission is checked HERE, at execution time, not only where the turn's schema list is
+built — a replayed history can name a tool the current turn does not offer.
 
 ``ask_user_question``, ``update_plan`` and ``present_artifact`` are control tools: the runtime
 intercepts them and never looks for a handler here.
@@ -737,14 +743,34 @@ def schemas(allow_code: bool = False, allow_python: bool = False) -> list:
     return out
 
 
-def execute(name: str, args: dict, ctx: dict) -> dict:
+def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
+    """Run one offered tool, refusing anything this turn did not promise or the user disabled.
+
+    ``allowed`` is the set of tool names the turn's schema list contained. The schema list already
+    applies the skill allowlist and the two switches; enforcing it again here closes the gap that
+    a model (or a replayed ``tool_use``) can call a tool that was never offered.
+    """
     tool = TOOLS.get(name)
     if tool is None:
         raise AIError('ai.toolUnknown', kind='bad_request', tool=name)
+    if allowed is not None and name not in allowed:
+        raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='not offered in this turn')
     if tool.control:
         raise AIError(
             'ai.toolRefused', kind='bad_request', tool=name, reason='control tools are handled by the runtime'
         )
     if tool.handler is None:
         raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='no handler')
+    if tool.permission == 'read:code':
+        from ai import environment
+
+        if not (get_setting('ai_allow_code_context') and environment.capabilities()['local_source']):
+            raise AIError('ai.codeCloudRefused', kind='capability')
+    if tool.permission in ('read:python', 'write:python', 'exec:python'):
+        from ai import environment
+
+        if Config.CLOUD_MODE:
+            raise AIError('ai.pythonCloud', kind='capability')
+        if not (get_setting('ai_allow_python') and environment.capabilities()['code_plugins']):
+            raise AIError('ai.pythonDisabled', kind='capability')
     return tool.handler(args or {}, ctx or {})

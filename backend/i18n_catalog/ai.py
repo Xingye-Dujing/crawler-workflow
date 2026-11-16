@@ -40,6 +40,7 @@ ZH = {
     'ai.pythonCloud': '共享云主机不允许执行用户 Python；请在本机网页版或桌面版使用 Python 扩展。',
     'ai.pythonDisabled': '先在设置里开启“允许 AI 执行 Python”。',
     'ai.pythonMissing': '没有检测到可用的 Python 3 解释器；请在设置里指定路径，或允许下载。',
+    'ai.pythonSpawnFailed': '无法启动 Python：{detail}',
     'ai.pythonUnknown': '找不到脚本：{script}',
     'ai.pythonBadId': '脚本 id 只能是小写字母、数字、下划线，且以字母开头：{script}',
     'ai.pythonBuiltin': '内置脚本不能覆盖；请先 Fork 成自己的脚本。',
@@ -129,6 +130,7 @@ EN = {
     'ai.pythonCloud': 'A shared cloud host does not execute user Python; use the local web app or the desktop app.',
     'ai.pythonDisabled': 'Enable “Allow AI Python execution” in settings first.',
     'ai.pythonMissing': 'No usable Python 3 interpreter was found; set its path in settings or allow the download.',
+    'ai.pythonSpawnFailed': 'Python could not be started: {detail}',
     'ai.pythonUnknown': 'No such script: {script}',
     'ai.pythonBadId': (
         'A script id may only contain lowercase letters, digits and underscores, starting with a letter: {script}'

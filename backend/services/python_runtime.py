@@ -23,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 
@@ -35,6 +36,10 @@ from runtime.settings import get_setting
 MAX_OUTPUT_ROWS = 200_000
 MAX_STDOUT = 20_000
 MAX_FILE_BYTES = 2 * 1024 * 1024
+#: How much of each pipe is kept for the panel. The rest is read and discarded: the read is what
+#: keeps the child from blocking on a full pipe, the cap is what keeps a runaway print from
+#: filling memory.
+MAX_CAPTURE_BYTES = 256 * 1024
 
 
 def _interpreter_candidates() -> list:
@@ -207,6 +212,32 @@ def _decode(data: bytes) -> str:
     return data.decode('utf-8', 'replace')[:MAX_STDOUT]
 
 
+def _pump(stream, sink: dict) -> None:
+    """Drain one pipe into ``sink``; never let the child block on a full pipe.
+
+    A child that writes more than the OS pipe buffer (~64 KB on POSIX, a few KB on Windows)
+    blocks in ``write`` until the parent reads. A parent that only calls ``poll()`` therefore
+    waits for a process that has already finished its work, and a 0.1 s script is reported as
+    a 120 s timeout. Reading continues past the cap on purpose: stopping the read is the
+    deadlock, and the kept prefix is what the panel shows.
+    """
+    kept = []
+    size = 0
+    try:
+        while True:
+            chunk = stream.read(8192)
+            if not chunk:
+                break
+            if size < MAX_CAPTURE_BYTES:
+                take = chunk[: MAX_CAPTURE_BYTES - size]
+                kept.append(take)
+                size += len(take)
+    finally:
+        with contextlib.suppress(Exception):
+            stream.close()
+        sink['data'] = b''.join(kept)
+
+
 def run_code(
     code: str,
     rows: list,
@@ -248,56 +279,80 @@ def run_code(
     )
     command = [*found['command'], script_path]
     started = time.monotonic()
+    proc = None
+    readers = []
+    sinks = ({}, {})
     try:
-        proc = subprocess.Popen(
-            command,
-            cwd=root,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            **popen_kwargs(),
-        )
+        try:
+            proc = subprocess.Popen(
+                command,
+                cwd=root,
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                **popen_kwargs(),
+            )
+        except OSError as exc:
+            # The interpreter probed a second ago, so the OS is answering about the spawn itself.
+            # The old code reported "no Python" here, which is a different fact and a wrong fix.
+            raise AIError('ai.pythonSpawnFailed', kind='capability', detail=str(exc)[:200]) from exc
+        readers = [
+            threading.Thread(target=_pump, args=(proc.stdout, sinks[0]), daemon=True),
+            threading.Thread(target=_pump, args=(proc.stderr, sinks[1]), daemon=True),
+        ]
+        for reader in readers:
+            reader.start()
         while proc.poll() is None:
             if cancel_event is not None and cancel_event.is_set():
-                proc.kill()
                 raise AIError('ai.cancelled', kind='cancelled')
             if time.monotonic() - started > max(1, int(timeout)):
-                proc.kill()
                 raise AIError('ai.pythonTimeout', kind='timeout', seconds=int(timeout))
-            time.sleep(0.2)
-        stdout, stderr = proc.communicate(timeout=10)
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise AIError('ai.pythonMissing', kind='capability', detail=str(exc)[:200]) from exc
-    duration = int((time.monotonic() - started) * 1000)
-    out_text = _decode(stdout or b'')
-    err_text = _decode(stderr or b'')
-    if proc.returncode != 0:
-        raise AIError('ai.pythonFailed', kind='error', code=proc.returncode, detail=(err_text or out_text)[-800:])
-    result_rows = []
-    if os.path.isfile(output_path):
-        with open(output_path, encoding='utf-8', errors='replace') as handle:
-            for index, line in enumerate(handle):
-                if index >= max(1, int(max_rows)):
-                    break
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    raise AIError('ai.pythonOutput', kind='bad_response', label=label, line=index + 1) from None
-                result_rows.append(row if isinstance(row, dict) else {'value': row})
-    for path in (input_path, output_path, script_path):
-        with contextlib.suppress(OSError):
-            os.remove(path)
-    return {
-        'rows': result_rows,
-        'stdout': out_text,
-        'stderr': err_text,
-        'exit_code': proc.returncode,
-        'duration_ms': duration,
-        'interpreter': found['version'],
-    }
+            time.sleep(0.1)
+        proc.wait()
+        for reader in readers:
+            reader.join(timeout=5)
+        out_text = _decode(sinks[0].get('data', b''))
+        err_text = _decode(sinks[1].get('data', b''))
+        duration = int((time.monotonic() - started) * 1000)
+        if proc.returncode != 0:
+            raise AIError('ai.pythonFailed', kind='error', code=proc.returncode, detail=(err_text or out_text)[-800:])
+        result_rows = []
+        if os.path.isfile(output_path):
+            with open(output_path, encoding='utf-8', errors='replace') as handle:
+                for index, line in enumerate(handle):
+                    if index >= max(1, int(max_rows)):
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        raise AIError('ai.pythonOutput', kind='bad_response', label=label, line=index + 1) from None
+                    result_rows.append(row if isinstance(row, dict) else {'value': row})
+        return {
+            'rows': result_rows,
+            'stdout': out_text,
+            'stderr': err_text,
+            'exit_code': proc.returncode,
+            'duration_ms': duration,
+            'interpreter': found['version'],
+        }
+    finally:
+        # Every exit path — success, timeout, stop, non-zero code — leaves with its temp files
+        # removed. The input file is the account's upstream rows; a failed script must not keep a
+        # copy of the table it never produced output for.
+        if proc is not None:
+            if proc.poll() is None:
+                with contextlib.suppress(Exception):
+                    proc.kill()
+            with contextlib.suppress(Exception):
+                proc.wait(timeout=5)
+        for reader in readers:
+            reader.join(timeout=2)
+        for path in (input_path, output_path, script_path):
+            with contextlib.suppress(OSError):
+                os.remove(path)
 
 
 def run_script(

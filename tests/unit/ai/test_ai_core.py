@@ -146,6 +146,8 @@ def test_environment_separates_desktop_local_web_and_cloud(monkeypatch):
     monkeypatch.setattr(Config, 'CLOUD_MODE', True)
     cloud = environment.capabilities()
     assert cloud['kind'] == 'cloud' and not cloud['user_files'] and not cloud['code_plugins']
+    # A cloud host runs from a checkout too; the deploy shape must not hand it the server source.
+    assert not cloud['local_source'] and environment.code_root() == ''
 
 
 def test_every_host_keeps_the_complete_workspace(monkeypatch):
@@ -201,6 +203,45 @@ def test_developer_skill_is_only_available_where_source_is(monkeypatch):
     monkeypatch.setattr(machine, 'is_frozen', lambda: True)
     available, reason = skills.availability(skills.BUILTIN['developer'], get_provider('deepseek'))
     assert available is False and reason.startswith('ai.skillCodeLocal')
+    # The same switch on a cloud source deploy is still a refusal by name: the verdict comes from
+    # the host kind, not from "is this a checkout".
+    monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    monkeypatch.setattr(machine, 'is_frozen', lambda: False)
+    available, reason = skills.availability(skills.BUILTIN['developer'], get_provider('deepseek'))
+    assert available is False and reason.startswith('ai.skillCodeLocal')
+
+
+def test_a_tool_the_turn_never_offered_is_refused_at_execution_time():
+    """A replayed ``tool_use`` can name a tool this turn's schema list does not contain."""
+    from ai import tools
+    from ai.errors import AIError
+
+    with pytest.raises(AIError) as refusal:
+        tools.execute('project_facts', {}, {}, allowed={'run_status'})
+    assert refusal.value.key == 'ai.toolRefused'
+    assert refusal.value.params.get('reason') == 'not offered in this turn'
+
+
+def test_source_reads_need_the_users_code_switch(monkeypatch):
+    from ai import tools
+    from ai.errors import AIError
+
+    monkeypatch.setattr(tools, 'get_setting', lambda key: False if key == 'ai_allow_code_context' else '')
+    with pytest.raises(AIError) as refusal:
+        tools.execute('code_read', {'path': 'app.py'}, {}, allowed={'code_read'})
+    assert refusal.value.key == 'ai.codeCloudRefused'
+
+
+def test_python_tools_are_refused_on_a_cloud_host(monkeypatch):
+    from ai import tools
+    from ai.errors import AIError
+    from core.config import Config
+
+    monkeypatch.setattr(tools, 'get_setting', lambda key: True)
+    monkeypatch.setattr(Config, 'CLOUD_MODE', True)
+    with pytest.raises(AIError) as refusal:
+        tools.execute('python_scripts', {}, {}, allowed={'python_scripts'})
+    assert refusal.value.key == 'ai.pythonCloud'
 
 
 def test_store_uses_max_seq_and_round_trips_blocks():

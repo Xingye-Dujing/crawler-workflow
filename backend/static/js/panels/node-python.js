@@ -13,7 +13,10 @@ function _pythonSelectOptions(scripts, current) {
     if (current && !rows.some(function (row) { return row.v === current; })) {
         rows.unshift({ v: current, l: current });
     }
-    return selectOptionTags(rows, current, I18n.t('settings.pythonPick'));
+    /* The placeholder is its own empty option above; passing the sentence here would make
+       `selectOptionTags` emit a SECOND option whose VALUE is that sentence (it treats `defVal` as
+       the stored value), and the async refill would then keep it as the node's script_id. */
+    return selectOptionTags(rows, current, '');
 }
 
 function renderPythonSettings(nodeId, p) {
@@ -27,7 +30,7 @@ function renderPythonSettings(nodeId, p) {
         _pythonSelectOptions([], current) +
         '</select>' +
         '<div style="display:flex;gap:6px;margin-top:4px;">' +
-        '<button class="menu-btn" onclick="AIWorkspace.open({prompt:true});AIStudio.tab(\'python\')">' +
+        '<button class="menu-btn" onclick="AIWorkspace.openStudio(\'python\')">' +
         I18n.t('settings.pythonManage') + '</button>' +
         '<span class="settings-hint" id="python-status-' + nodeId + '">' + I18n.t('settings.pythonChecking') + '</span>' +
         '</div></div>';

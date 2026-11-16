@@ -62,6 +62,75 @@ def test_a_cloud_host_refuses_the_python_node(monkeypatch):
         python_node.run(node, _call())
 
 
+def test_the_node_reads_the_runs_own_cancel_event(monkeypatch):
+    """停止 lives on ``execution_state``; the engine passes no ``run_ctx`` to an executor."""
+    from nodes.executors import python_node
+    from runtime.state import execution_state
+
+    from services import python_runtime, python_scripts
+
+    monkeypatch.setattr(python_scripts, 'find_script', lambda ref: {'id': ref, 'name': 'demo', 'code': 'pass'})
+    seen = {}
+
+    def run_script(*_args, **kwargs):
+        seen.update(kwargs)
+        return {'rows': [], 'stdout': '', 'stderr': '', 'duration_ms': 1, 'interpreter': '3.11'}
+
+    monkeypatch.setattr(python_runtime, 'run_script', run_script)
+    marker = object()
+    monkeypatch.setitem(execution_state, 'cancel_event', marker)
+    node = {'id': 'n1', 'type': 'python', 'params': {'script_id': 'demo'}}
+    python_node.run(node, _call())
+    assert seen.get('cancel_event') is marker
+
+
+def test_a_noisy_script_finishes_instead_of_being_reported_as_a_timeout(monkeypatch):
+    """A child that fills the pipe blocks in ``write``; the parent must drain it, not poll it."""
+    import os
+
+    from core.config import Config
+
+    from services import python_runtime
+
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(python_runtime, 'get_setting', lambda key: True if key == 'ai_allow_python' else '')
+    code = (
+        'import os\n'
+        'with open(os.environ["CIXI_OUTPUT"], "w", encoding="utf-8") as out:\n'
+        '    out.write(\'{"a": 1}\\n\')\n'
+        'for _ in range(6000):\n'
+        '    print("x" * 200)\n'
+    )
+    result = python_runtime.run_code(code, [{'row': 1}], timeout=30)
+    assert result['rows'] == [{'a': 1}]
+    runs = os.path.join(python_runtime.workspace(), 'runs')
+    assert os.listdir(runs) == [], 'a finished run left its temp files behind'
+
+
+def test_stop_kills_the_script_instead_of_waiting_out_its_timeout(monkeypatch):
+    import threading
+    import time
+
+    from ai.errors import AIError
+    from core.config import Config
+
+    from services import python_runtime
+
+    monkeypatch.setattr(Config, 'CLOUD_MODE', False)
+    monkeypatch.setattr(python_runtime, 'get_setting', lambda key: True if key == 'ai_allow_python' else '')
+    cancel = threading.Event()
+    timer = threading.Timer(0.3, cancel.set)
+    timer.start()
+    try:
+        started = time.monotonic()
+        with pytest.raises(AIError) as refusal:
+            python_runtime.run_code('import time\ntime.sleep(30)\n', [], timeout=25, cancel_event=cancel)
+    finally:
+        timer.cancel()
+    assert refusal.value.key == 'ai.cancelled'
+    assert time.monotonic() - started < 10, '停止 waited for the script instead of killing it'
+
+
 def test_dataset_peek_sends_a_few_capped_rows_not_the_table(monkeypatch):
     import pandas as pd
     from ai import tools

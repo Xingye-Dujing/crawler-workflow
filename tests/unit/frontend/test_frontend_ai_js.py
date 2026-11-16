@@ -94,3 +94,9 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['disarm'] is True, '停止监控 in the side panel is inert'
         assert out['context'] is True, '刷新上下文 in the context bar is inert'
         assert out['ignored'] is True, 'a click outside any data-ai target acted'
+
+    def test_the_python_node_picker_offers_one_empty_placeholder(self):
+        out = _run_workspace()['pythonPanel']
+        assert out['pickOptions'] == [''], 'the placeholder sentence became an option VALUE (and a script_id)'
+        assert out['manage'] is True
+        assert out['manageTarget'] == "AIWorkspace.openStudio('python')", out['manageTarget']
