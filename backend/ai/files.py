@@ -48,10 +48,10 @@ def _check_key(api_key: str) -> str:
     return key
 
 
-def _error(status: int, body: str, *, fetch: bool = False) -> AIProviderError:
-    if fetch and status == 403:
+def _error(status: int, body: str, *, is_fetch: bool = False) -> AIProviderError:
+    if is_fetch and status == 403:
         return AIProviderError('ai.fetchBlocked', kind='capability', status=status, detail=body[:300])
-    if fetch and status == 404:
+    if is_fetch and status == 404:
         return AIProviderError('ai.fetchNotFound', kind='not_found', status=status, detail=body[:300])
     return http_error(status, body)
 
@@ -200,7 +200,7 @@ def fetch(api_key: str, url: str) -> dict:
     except requests.RequestException as exc:
         raise AIProviderError('ai.network', kind='network', detail=str(exc)[:300]) from exc
     if response.status_code != 200:
-        raise _error(response.status_code, response.text[:400], fetch=True)
+        raise _error(response.status_code, response.text[:400], is_fetch=True)
     try:
         payload = response.json()
     except ValueError as exc:

@@ -32,12 +32,6 @@ class _Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
     server_version = 'CixiUITest/1.0'
 
-    def log_message(self, format, *args):
-        # The tier asserts on the page, not on access logs; the switch exists so a debugging run can
-        # still ask for them without a second handler.
-        if os.environ.get('CIXI_UI_TEST_LOG'):
-            super().log_message(format, *args)
-
     def do_GET(self):
         self._serve()
 
