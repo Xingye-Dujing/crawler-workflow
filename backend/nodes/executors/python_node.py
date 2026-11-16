@@ -41,6 +41,19 @@ def _args(params: dict) -> dict:
     return parsed
 
 
+def _int_param(params: dict, key: str, default: int, minimum: int = 1, maximum: int | None = None) -> int:
+    raw = params.get(key)
+    if raw is None or str(raw).strip() == '':
+        return default
+    try:
+        value = int(float(raw))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RuntimeError(t('ai.pythonBadNumber', field=key, value=str(raw))) from exc
+    if value < minimum:
+        raise RuntimeError(t('ai.pythonBadNumber', field=key, value=str(raw)))
+    return min(value, maximum) if maximum is not None else value
+
+
 def run(node: dict, call: NodeCall) -> list:
     params = node_params(node) or node.get('params') or {}
     label = node_label(node, str(node.get('id') or ''))
@@ -55,14 +68,17 @@ def run(node: dict, call: NodeCall) -> list:
         script,
         call.current_input or [],
         _args(params),
-        timeout=int(params.get('timeout') or 120),
+        timeout=_int_param(params, 'timeout', 120, 1, 3600),
         # 停止 lives on the run's own state, not on ``call.run_ctx``: the engine never passes a
-        # run_ctx to an executor (``engine/run.py``), so reading the call meant the cancel branch
-        # could not fire and a stopped run waited out the script's full timeout.
+        # run_ctx to an executor, so reading the call meant the cancel branch could not fire.
         cancel_event=execution_state.get('cancel_event'),
-        max_rows=int(params.get('max_rows') or python_runtime.MAX_OUTPUT_ROWS),
+        max_rows=_int_param(params, 'max_rows', python_runtime.MAX_OUTPUT_ROWS, 1, python_runtime.MAX_OUTPUT_ROWS),
     )
     rows = result['rows']
+    if not result.get('wrote_output', True):
+        # Exit code 0 with no output file is a broken contract, not an empty filter: a script that
+        # legitimately keeps zero rows still opens and closes CIXI_OUTPUT.
+        raise RuntimeError(t('run.pythonNoOutput', nid=label, script=script.get('name') or script.get('id')))
     add_log(
         t(
             'run.pythonDone',
@@ -72,6 +88,8 @@ def run(node: dict, call: NodeCall) -> list:
             ms=result['duration_ms'],
         )
     )
+    if result.get('truncated'):
+        add_log(t('run.pythonTruncated', nid=label, n=len(rows), max=result.get('max_rows') or len(rows)))
     if result.get('stderr'):
         # A script's stderr is a fact the user asked for, not a hidden log: one attributed line.
         add_log(t('run.pythonStderr', nid=label, text=result['stderr'][-300:]))

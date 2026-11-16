@@ -8,7 +8,7 @@
 
 function _pythonSelectOptions(scripts, current) {
     var rows = (scripts || []).map(function (item) {
-        return { v: item.id, l: item.name + (item.builtin ? ' · built-in' : '') };
+        return { v: item.id, l: item.name + (item.builtin ? ' · ' + I18n.t('ai.builtinTag') : '') };
     });
     if (current && !rows.some(function (row) { return row.v === current; })) {
         rows.unshift({ v: current, l: current });

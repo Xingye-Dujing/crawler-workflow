@@ -15,7 +15,6 @@ import ntpath
 import os
 import platform
 import posixpath
-import shutil
 import socket
 import sys
 from pathlib import Path
@@ -848,20 +847,40 @@ def python_candidates(env: dict | None = None, system: str | None = None) -> lis
     This is a machine fact, so it lives with the other per-OS lookups. A source run already has
     ``sys.executable``; a frozen build looks at PATH and the common per-user install folders, and
     the installer may hand over a managed copy with an environment variable.
+
+    ``env``/``system`` are read the way every other table here reads them: the PATH is split with
+    the TARGET's separator and joined with its shape, so asking "what would a Linux box look for"
+    from Windows answers Linux paths instead of this machine's. PATH is scanned on disk rather than
+    through ``shutil.which`` for the same reason (``which`` reads the asking machine).
     """
     source = os.environ if env is None else env
-    found = [str(source.get(name) or '').strip() for name in ('CIXI_PYTHON_BIN', 'AI_PYTHON_BIN')]
     name = platform_name(system)
+    join, sep = _path_shape(name)
+    found = [str(source.get(var) or '').strip() for var in ('CIXI_PYTHON_BIN', 'AI_PYTHON_BIN')]
+    names = ('python3', 'python')
     if name == 'win32':
-        local = source.get('LOCALAPPDATA', '')
+        local = str(source.get('LOCALAPPDATA') or '').strip()
         for version in ('Python313', 'Python312', 'Python311'):
             if local:
-                found.append(os.path.join(local, 'Programs', 'Python', version, 'python.exe'))
-        found.extend([r'C:\Python313\python.exe', r'C:\Python312\python.exe', r'C:\Python311\python.exe'])
-    for candidate in ('python3', 'python'):
-        resolved = shutil.which(candidate)
-        if resolved:
-            found.append(resolved)
+                found.append(join(local, 'Programs', 'Python', version, 'python.exe'))
+        found.extend(
+            [
+                join('C:\\', 'Python313', 'python.exe'),
+                join('C:\\', 'Python312', 'python.exe'),
+                join('C:\\', 'Python311', 'python.exe'),
+            ]
+        )
+        # The python.org installer's default (no PATH entry) puts only this launcher on PATH.
+        found.extend(python_launcher_names(system))
+        names = ('python3.exe', 'python.exe')
+    for directory in str(source.get('PATH') or '').split(sep):
+        directory = directory.strip()
+        if not directory:
+            continue
+        for candidate in names:
+            path = join(directory, candidate)
+            if os.path.isfile(path):
+                found.append(path)
     return [item for item in found if item]
 
 

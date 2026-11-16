@@ -286,6 +286,30 @@ def stable_params(params) -> dict:
     return out
 
 
+def _script_version_into(params, node_type: str) -> dict:
+    """Fold the referenced Python script's version into the parameters that are hashed.
+
+    A python node's output is produced by the library's CONTENT, but its params hold only a
+    ``script_id``. Editing the script kept the fingerprint, so 继续 adopted rows the new code never
+    produced. Resolved lazily: ``services.runs.store`` must not import the script library at load.
+    """
+    if node_type != 'python':
+        return params
+    out = dict(params or {})
+    reference = str(out.get('script_id') or out.get('script') or '').strip()
+    if not reference:
+        return out
+    try:
+        from services import python_scripts
+
+        script = python_scripts.find_script(reference)
+    except Exception:  # a missing library is "no version", never a crash while hashing
+        script = None
+    if script:
+        out['_script_version'] = int(script.get('version') or 0)
+    return out
+
+
 def node_fingerprint(node: dict, upstream: tuple = ()) -> str:
     """What makes a node's stored output reusable.
 
@@ -297,7 +321,7 @@ def node_fingerprint(node: dict, upstream: tuple = ()) -> str:
     return _sha1(
         node.get('type', ''),
         node.get('operation', ''),
-        _dumps(stable_params(node.get('params'))),
+        _dumps(stable_params(_script_version_into(node.get('params'), str(node.get('type') or '')))),
         '|'.join(sorted(upstream)),
     )
 

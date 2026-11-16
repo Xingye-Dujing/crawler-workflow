@@ -317,8 +317,25 @@ def save_script(payload: dict) -> dict:
         raise AIError('ai.pythonTooLarge', kind='bad_request', script=script_id, kb=MAX_CODE_BYTES // 1024)
     stamp = now()
     with connect() as conn:
-        existing = conn.execute('SELECT id, version FROM python_scripts WHERE id = ?', (script_id,)).fetchone()
+        existing = conn.execute('SELECT * FROM python_scripts WHERE id = ?', (script_id,)).fetchone()
         version = (int(existing['version']) + 1) if existing is not None else 1
+
+        def keep(key: str, column: str) -> list:
+            """A key the caller did not send keeps what the script already had.
+
+            The studio's save sent only id/name/description/code, so every save silently erased
+            the tags and column hints a fork or an earlier edit recorded.
+            """
+            if key in data:
+                return _clean_list(data.get(key))
+            if existing is None:
+                return []
+            try:
+                parsed = json.loads(existing[column] or '[]')
+            except ValueError:
+                return []
+            return parsed if isinstance(parsed, list) else []
+
         conn.execute(
             'INSERT INTO python_scripts (id, name, description, code, inputs_json, outputs_json, tags_json, '
             'version, builtin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?) '
@@ -330,9 +347,9 @@ def save_script(payload: dict) -> dict:
                 name,
                 str(data.get('description') or '').strip()[:500],
                 code,
-                json.dumps(_clean_list(data.get('inputs')), ensure_ascii=False),
-                json.dumps(_clean_list(data.get('outputs')), ensure_ascii=False),
-                json.dumps(_clean_list(data.get('tags')), ensure_ascii=False),
+                json.dumps(keep('inputs', 'inputs_json'), ensure_ascii=False),
+                json.dumps(keep('outputs', 'outputs_json'), ensure_ascii=False),
+                json.dumps(keep('tags', 'tags_json'), ensure_ascii=False),
                 version,
                 stamp,
                 stamp,
@@ -352,13 +369,23 @@ def delete_script(script_id: str) -> bool:
     return cur.rowcount > 0
 
 
-def fork_script(script_id: str, new_id: str = '') -> dict:
+def fork_script(script_id: str, new_id: str = '', overwrite: bool = False) -> dict:
+    from ai.errors import AIError
+
     source = get_script(script_id)
     if source is None:
-        from ai.errors import AIError
-
         raise AIError('ai.pythonUnknown', kind='not_found', script=script_id)
-    target = (new_id or f'{source["id"]}_mine').strip()
+    base = (new_id or f'{source["id"]}_mine').strip()
+    target = base
+    if not overwrite and get_script(target) is not None:
+        # A fork is a new artifact: clicking twice must not replace the user's edited copy with a
+        # pristine one. The second click gets a free id instead.
+        if new_id:
+            raise AIError('ai.pythonForkExists', kind='bad_request', script=target)
+        suffix = 2
+        while get_script(f'{base}{suffix}') is not None:
+            suffix += 1
+        target = f'{base}{suffix}'
     payload = {
         'id': target,
         'name': f'{source["name"]} (mine)',

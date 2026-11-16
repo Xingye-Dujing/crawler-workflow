@@ -29,9 +29,11 @@ import uuid
 
 from core import machine
 from core.config import Config
-from core.procs import popen_kwargs
+from core.procs import popen_kwargs, reap_process
 from runtime import paths
 from runtime.settings import get_setting
+
+from i18n import t
 
 MAX_OUTPUT_ROWS = 200_000
 MAX_STDOUT = 20_000
@@ -40,6 +42,9 @@ MAX_FILE_BYTES = 2 * 1024 * 1024
 #: keeps the child from blocking on a full pipe, the cap is what keeps a runaway print from
 #: filling memory.
 MAX_CAPTURE_BYTES = 256 * 1024
+#: A ceiling for the interpreter download: the embeddable build is ~11 MB, so anything near this
+#: is a redirected or hostile response, not an upgrade.
+MAX_INSTALL_BYTES = 200 * 1024 * 1024
 
 
 def _interpreter_candidates() -> list:
@@ -47,6 +52,12 @@ def _interpreter_candidates() -> list:
     configured = str(get_setting('ai_python_path') or '').strip()
     if configured:
         out.append(configured)
+    # The interpreter this account downloaded, resolved at call time. It deliberately does NOT go
+    # into the system-level settings.json: that file is shared, so account B would have run its
+    # scripts with account A's binary (and a deleted account left a dangling path).
+    managed = machine.embedded_python_executable(os.path.join(paths.active().data_dir, 'python'))
+    if os.path.isfile(managed):
+        out.append(managed)
     if not machine.is_frozen():
         out.append(sys.executable)
         repo = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -68,6 +79,7 @@ def _probe(command: list) -> dict | None:
             capture_output=True,
             timeout=8,
             check=False,
+            env={**os.environ, 'PYTHONIOENCODING': 'utf-8'},
             **popen_kwargs(),
         )
     except (OSError, subprocess.SubprocessError):
@@ -80,13 +92,23 @@ def _probe(command: list) -> dict | None:
     return {'command': command, 'path': lines[-1].strip(), 'version': lines[0].strip()}
 
 
-_CACHE: dict = {'at': 0.0, 'value': None}
+_CACHE: dict = {'key': None, 'at': 0.0, 'value': None}
+
+
+def _cache_key() -> tuple:
+    """What a cached interpreter answer belongs to: the configured path and this account."""
+    return (str(get_setting('ai_python_path') or '').strip(), paths.active().data_dir)
 
 
 def interpreter(refresh: bool = False) -> dict:
-    """Detect a usable interpreter. Cached for a minute; ``refresh`` re-probes."""
+    """Detect a usable interpreter. Cached for a minute; ``refresh`` re-probes.
+
+    The cache is keyed by the setting and the account, so fixing ``ai_python_path`` (or switching
+    accounts) answers immediately instead of serving the old verdict for a minute.
+    """
     now = time.monotonic()
-    if not refresh and _CACHE['value'] is not None and now - _CACHE['at'] < 60:
+    key = _cache_key()
+    if not refresh and _CACHE['value'] is not None and _CACHE['key'] == key and now - _CACHE['at'] < 60:
         return _CACHE['value']
     result = {
         'available': False,
@@ -94,7 +116,7 @@ def interpreter(refresh: bool = False) -> dict:
         'version': '',
         'source': '',
         'reason': 'ai.pythonMissing',
-        'downloadable': sys.platform.startswith('win') and machine.is_frozen(),
+        'downloadable': machine.is_windows() and machine.is_frozen(),
     }
     for candidate in _interpreter_candidates():
         command = [candidate]
@@ -114,15 +136,16 @@ def interpreter(refresh: bool = False) -> dict:
             }
         )
         break
-    _CACHE.update({'at': now, 'value': result})
+    _CACHE.update({'key': key, 'at': now, 'value': result})
     return result
 
 
-def workspace() -> str:
+def workspace(create: bool = True) -> str:
     target = paths.active().ensure().python_workspace_dir
-    os.makedirs(target, exist_ok=True)
-    for child in ('scripts', 'runs'):
-        os.makedirs(os.path.join(target, child), exist_ok=True)
+    if create:
+        os.makedirs(target, exist_ok=True)
+        for child in ('scripts', 'runs'):
+            os.makedirs(os.path.join(target, child), exist_ok=True)
     return target
 
 
@@ -140,10 +163,14 @@ def _safe_path(relative: str) -> str:
 
 
 def list_files() -> list:
-    root = workspace()
+    root = workspace(create=False)
     out = []
+    if not os.path.isdir(root):
+        return out
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [name for name in dirnames if name not in ('__pycache__', '.runs')]
+        # `runs/` holds per-execution temp files (and the upstream rows a script reads); it is not
+        # the user's workspace, and a scan that lists it hands those files back as editable.
+        dirnames[:] = [name for name in dirnames if name not in ('__pycache__', '.runs', 'runs')]
         for filename in filenames:
             if filename.endswith(('.pyc',)):
                 continue
@@ -209,7 +236,11 @@ def _clean_env() -> dict:
 
 
 def _decode(data: bytes) -> str:
-    return data.decode('utf-8', 'replace')[:MAX_STDOUT]
+    text = data.decode('utf-8', 'replace')
+    if len(text) <= MAX_STDOUT:
+        return text
+    # A silent cut made a long traceback look complete; say so in the text the panel shows.
+    return text[:MAX_STDOUT] + t('ai.pythonOutputTruncated')
 
 
 def _pump(stream, sink: dict) -> None:
@@ -248,7 +279,7 @@ def run_code(
     max_rows: int = MAX_OUTPUT_ROWS,
     label: str = 'script',
 ) -> dict:
-    """Run *code* against *rows*; return ``{rows, stdout, stderr, exit_code, duration_ms}``."""
+    """Run *code* against *rows*; return ``{rows, stdout, stderr, duration_ms, ...}``."""
     from ai.errors import AIError
 
     if Config.CLOUD_MODE:
@@ -304,8 +335,12 @@ def run_code(
             reader.start()
         while proc.poll() is None:
             if cancel_event is not None and cancel_event.is_set():
+                with contextlib.suppress(Exception):
+                    reap_process(proc.pid)
                 raise AIError('ai.cancelled', kind='cancelled')
             if time.monotonic() - started > max(1, int(timeout)):
+                with contextlib.suppress(Exception):
+                    reap_process(proc.pid)
                 raise AIError('ai.pythonTimeout', kind='timeout', seconds=int(timeout))
             time.sleep(0.1)
         proc.wait()
@@ -317,10 +352,14 @@ def run_code(
         if proc.returncode != 0:
             raise AIError('ai.pythonFailed', kind='error', code=proc.returncode, detail=(err_text or out_text)[-800:])
         result_rows = []
-        if os.path.isfile(output_path):
+        truncated = False
+        wrote_output = os.path.isfile(output_path)
+        cap = max(1, min(int(max_rows), MAX_OUTPUT_ROWS))
+        if wrote_output:
             with open(output_path, encoding='utf-8', errors='replace') as handle:
                 for index, line in enumerate(handle):
-                    if index >= max(1, int(max_rows)):
+                    if index >= cap:
+                        truncated = True
                         break
                     line = line.strip()
                     if not line:
@@ -334,9 +373,11 @@ def run_code(
             'rows': result_rows,
             'stdout': out_text,
             'stderr': err_text,
-            'exit_code': proc.returncode,
             'duration_ms': duration,
             'interpreter': found['version'],
+            'wrote_output': wrote_output,
+            'truncated': truncated,
+            'max_rows': cap,
         }
     finally:
         # Every exit path — success, timeout, stop, non-zero code — leaves with its temp files
@@ -345,7 +386,7 @@ def run_code(
         if proc is not None:
             if proc.poll() is None:
                 with contextlib.suppress(Exception):
-                    proc.kill()
+                    reap_process(proc.pid)
             with contextlib.suppress(Exception):
                 proc.wait(timeout=5)
         for reader in readers:
@@ -391,7 +432,7 @@ def install_plan() -> dict:
     return {
         'available': False,
         'needs_permission': True,
-        'supported': sys.platform.startswith('win') and machine.is_frozen(),
+        'supported': machine.is_windows() and machine.is_frozen(),
         'url': PYTHON_EMBED_URL,
         'version': PYTHON_EMBED_VERSION,
         'target': os.path.join(paths.active().data_dir, 'python'),
@@ -405,12 +446,9 @@ def install_interpreter(allow_download: bool) -> dict:
     ``sys.executable`` and a macOS/Linux desktop should use the system Python rather than a second
     private copy the user cannot update. Nothing is downloaded until ``allow_download`` is true.
     """
-    import io
-    import zipfile
 
     import requests
     from ai.errors import AIError
-    from runtime.settings import save_settings
 
     plan = install_plan()
     if plan['available']:
@@ -421,21 +459,41 @@ def install_interpreter(allow_download: bool) -> dict:
         return {**plan, 'downloaded': False}
     target = plan['target']
     os.makedirs(target, exist_ok=True)
+    import tempfile
+
+    from services.components.archive import ArchiveError, safe_extract
+
+    handle, archive_path = tempfile.mkstemp(suffix='.zip')
+    os.close(handle)
+    total = 0
     try:
-        response = requests.get(PYTHON_EMBED_URL, timeout=(15, 300))
-    except requests.RequestException as exc:
-        raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL) from exc
-    if response.status_code != 200 or len(response.content) < 1_000_000:
-        raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL)
-    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
-        for member in archive.namelist():
-            name = os.path.normpath(member)
-            if name.startswith('..') or os.path.isabs(name):
-                continue
-            archive.extract(member, target)
+        try:
+            with requests.get(PYTHON_EMBED_URL, timeout=(15, 300), stream=True) as response:
+                if response.status_code != 200:
+                    raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL)
+                with open(archive_path, 'wb') as sink:
+                    for chunk in response.iter_content(64 * 1024):
+                        total += len(chunk)
+                        if total > MAX_INSTALL_BYTES:
+                            raise AIError(
+                                'ai.pythonInstallSize', kind='bad_response', mb=MAX_INSTALL_BYTES // (1024 * 1024)
+                            )
+                        sink.write(chunk)
+        except requests.RequestException as exc:
+            raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL) from exc
+        if total < 1_000_000:
+            raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL)
+        try:
+            safe_extract(archive_path, target)
+        except ArchiveError as exc:
+            raise AIError('ai.pythonInstallUrl', kind='bad_response', url=PYTHON_EMBED_URL) from exc
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(archive_path)
     executable = machine.embedded_python_executable(target)
     if not os.path.isfile(executable):
         raise AIError('ai.pythonInstallUrl', kind='network', url=PYTHON_EMBED_URL)
-    save_settings({'ai_python_path': executable})
+    # No settings write: the account's own workspace is searched at call time, so another account
+    # never inherits this binary and deleting this account cannot leave a dangling setting.
     result = interpreter(refresh=True)
     return {**result, 'downloaded': True}
