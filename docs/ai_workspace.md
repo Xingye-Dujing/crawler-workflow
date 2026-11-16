@@ -62,7 +62,7 @@ has no key.
 ## Skills and context
 
 Built-in skills are code (`backend/ai/skills.py`); user skills are rows in `ai.db` and can be
-created, forked, edited, tested, exported and deleted in the studio. A skill declares:
+created, forked, edited and deleted in the studio. A skill declares:
 
 - a prompt;
 - context sources (`project`, `canvas`, `dataset`, `run`, `docs`, `code`);

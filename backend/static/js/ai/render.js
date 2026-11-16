@@ -199,12 +199,17 @@ const AIRender = {
         if (!artifact) return '';
         const label = I18n.t('ai.artifact') + ' · ' + String(artifact.kind || 'markdown');
         const summary = artifact.summary ? '<p class="ai-artifact-summary">' + this.inline(artifact.summary) + '</p>' : '';
+        const apply = artifact.kind === 'skill_draft'
+            ? '<button type="button" class="ai-primary" data-ai-apply-skill="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.openEditor')) + '</button>'
+            : artifact.kind === 'plugin_manifest'
+                ? '<button type="button" class="ai-primary" data-ai-apply-plugin="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.openInstaller')) + '</button>'
+                : '';
         return (
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +
             summary +
             '<details class="ai-artifact-body"><summary>' + this.escape(I18n.t('ai.preview')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(artifact.payload || {}, null, 2)) + '</pre></details>' +
-            '<div class="ai-artifact-actions"><button type="button" class="ai-ghost" data-ai-copy-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.copy')) + '</button><span class="ai-hint">' + this.escape(I18n.t('ai.applyHint')) + '</span></div>' +
+            '<div class="ai-artifact-actions">' + apply + '<button type="button" class="ai-ghost" data-ai-copy-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.copy')) + '</button><span class="ai-hint">' + this.escape(I18n.t('ai.applyHint')) + '</span></div>' +
             '</section>'
         );
     },

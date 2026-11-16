@@ -399,7 +399,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-studio-tab],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-studio-tab],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -443,6 +443,14 @@ const AIWorkspace = {
             const artifact = (this._current?.artifacts || []).find((item) => item.id === id);
             if (artifact && navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(artifact.payload || {}, null, 2));
             this._toast(I18n.t('ai.copied'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-apply-skill')) {
+            this._applySkillArtifact(target.getAttribute('data-ai-apply-skill'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-apply-plugin')) {
+            this._applyPluginArtifact(target.getAttribute('data-ai-apply-plugin'));
             return;
         }
         if (target.hasAttribute('data-ai-studio-tab')) {
@@ -949,6 +957,40 @@ const AIWorkspace = {
         });
         if (!answer || answer.value !== true) return '';
         return String(answer.input || '').trim();
+    },
+
+    _artifactById(id) {
+        const artifacts = this._current?.artifacts || [];
+        return artifacts.find((item) => item.id === id) || null;
+    },
+
+    _applySkillArtifact(id) {
+        const artifact = this._artifactById(id);
+        if (!artifact) return;
+        const payload = artifact.payload || {};
+        this._editingSkill = {
+            id: payload.id || '',
+            name: payload.name || '',
+            description: payload.description || '',
+            prompt: payload.prompt || '',
+            context: payload.context || [],
+            tools: payload.tools || [],
+            suggested: payload.suggested || [],
+            ask_policy: payload.ask_policy || 'auto',
+        };
+        this._mode = 'studio';
+        this._studioTab = 'skills';
+        AIStudio.render(this._dom.chat, this);
+    },
+
+    _applyPluginArtifact(id) {
+        const artifact = this._artifactById(id);
+        if (!artifact) return;
+        this._mode = 'studio';
+        this._studioTab = 'plugins';
+        AIStudio.render(this._dom.chat, this);
+        const box = this._dom.chat.querySelector('[data-ai-plugin-manifest]');
+        if (box) box.value = JSON.stringify(artifact.payload || {}, null, 2);
     },
 
     async _deleteConversation(id) {
