@@ -1,72 +1,41 @@
-# 功能更新与发版流程
+# 发版流程
 
-这份文档只讲**主程序**的更新与发布。Chrome / chromedriver / Node / CatBus / BERT 模型包仍走
-“环境与组件”或在线安装器，不属于自更新范围。
+本文只讲**主程序**的更新与发布。Chrome / chromedriver / Node / CatBus / BERT 模型包走“环境与组件”或在线安装器
+（见 [`installer.md`](installer.md)），不属于自更新范围。
 
-相关实现：`backend/services/update.py`、`backend/api/update.py`、`backend/services/version.py`、
-根目录 `version.json`、`backend/static/js/update.js`；安装器一侧是
-`backend/services/components/feed.py`、`backend/services/components/catalog.py`、
-`backend/services/components/default_catalog.json`。
+实现：`backend/services/update.py`、`backend/api/update.py`、`backend/services/version.py`、根目录 `version.json`、
+`backend/static/js/update.js`；安装器一侧是 `backend/services/components/`（`feed.py`、`catalog.py`、
+`default_catalog.json`）。
 
 ## 版本号
 
 - 版本号写在 `backend/services/version.py` 的 `APP_VERSION`，同时写进根目录 `version.json` 的 `version`。
-- 格式是日期加构建号，例如 `2026.11.11.1`；比较时按数字段逐段比较，所以 `.2` 一定比 `.1` 新。
-- **两边必须一致**：只改 `APP_VERSION` 不改 `version.json`，用户收不到提示；只改 `version.json` 不改代码，
-  用户更新后会一直提示同一个版本。
+- 格式为日期加构建号（`2026.11.11.1`），按数字段逐段比较，所以 `.2` 一定比 `.1` 新。
+- **两边必须一致**：只改 `APP_VERSION`，用户收不到提示；只改 `version.json`，更新后一直提示同一版本。
+- 版本号是 **3 或 4 段数字**（`2026.11.14.2`）。构建脚本的 `-Version` 接受 `^\d+(\.\d+){2,3}$`，
+  拒绝斜杠、空格与预发布后缀，且**必须显式传**：脚本默认 `1.0.0` 只服务于本机手工构建，漏传会把安装器与回执按
+  `1.0.0` 盖章。四段只在 `APP_VERSION` 与 `version.json` 里使用。GitHub 发布 workflow 把 `version` 设为必填，
+  并在打包前用 `tools/check_release_version.py` 拒绝任何不是 `APP_VERSION` 前缀的值。
 
-## 安装器为什么不用每次重建
+## 发布清单（按顺序）
 
-在线安装器（Windows 的 `CaiXiHui-Online-Setup.exe`、macOS 的 `CaiXiHui-Online-Setup-macOS-*.dmg`）不再把
-主程序的下载地址、大小和 SHA-256 编进自己里面。它的组件清单里，`app` 一项写的是**发布清单地址**：
+顺序不能换：`version.json` 一更新，已装客户端立刻开始提示，新下载的安装器也立刻装这一版。
 
-```json
-"win32": {
-  "archive": "zip", "install_as": "app", "strip_prefix": "CaiXiHui",
-  "verify": ["CaiXiHui.exe"],
-  "feed": [
-    "https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json",
-    "https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json"
-  ]
-}
-```
-
-安装时它读这份 `version.json`，按当前系统/架构取包，校验 SHA-256 再安装。于是：
-
-- **同一份安装器，永远安装当次最新的主程序**；只有安装器自己的代码或 Chrome/Node 这些组件版本变了才需要重建它；
-- 主程序装好之后，后续功能更新走应用内的更新弹窗（`docs/installer.md` 的“主程序自更新”）；
-- 清单读不到时安装器**按名字拒绝**（显示 URL 和原因），不会退回去装一个旧版本；“安装”按钮本身就是重试；
-- `version.json` 里没有当前平台的包时同样拒绝，不会装错架构。
-
-因此发版时**不要**再改 `default_catalog.json` 的 `app` 条目，也不要为了新版本重建在线安装器。
-
-## 发布顺序（重要）
-
-必须按下面的顺序，否则用户会看到“有新版本”但下载不到包：
-
-1. 改代码、跑全量测试和 lint（见下）；
-2. 改 `backend/services/version.py` 的 `APP_VERSION`；
-3. 构建 Windows 和 macOS 新包；
-4. 把新包上传到**新的 release tag**（Gitee 先腾空间，见下面第 5 步）；
-5. 更新 `version.json` 的版本号、大小、SHA-256、下载地址/分片；
-6. 更新 Release 说明；
-7. 提交并推送 `version.json`、`docs/`、代码。
-
-`version.json` 是最后一步：它一更新，已装自更新版本的客户端会开始提示，**新下载的安装器也会立刻装到这一版**。
-
-### 每个版本用新 tag，不要覆盖同名附件
-
-Gitee/GitHub Release 的附件按“地址”下载，而摘要写在清单里。如果复用旧 tag 并把同名附件换成新字节：
-
-- 旧 `version.json` 指向的包会变成另一份字节，正在更新的客户端校验失败；
-- 上一版发出的在线安装器会下载到新字节却按旧摘要校验，直接失败。
-
-所以：**新版本 = 新 tag**（例如 `exe-2026-12`），旧 tag 的附件一个字节都不要动。
-
+1. 跑发布前检查（下节），0 失败才继续。
+2. 改 `backend/services/version.py` 的 `APP_VERSION`。
+3. 构建 Windows 包（`-Clean -Installer -Version <三段或四段>`），记录两个产物的字节数与 SHA-256。
+4. 按 99,614,720 B 切片，记录每片的大小与 SHA-256。
+5. 先删 Gitee 旧 tag 的附件（仓库附件总量 1 GB）。
+6. 上传 Windows 资产到 GitHub（完整文件）与 Gitee（分片 + 安装器）。
+7. 用**新 tag** 触发 macOS workflow，取四个 DMG 的摘要。
+8. 更新 `version.json`：版本号、大小、SHA-256、`url`/`parts`。
+9. 按 `version.json` 的 `notes` 写 Release 说明。
+10. 提交并推送 `version.json`、代码与 `docs/`。
+11. 用 `CIXI_UPDATE_FEED` 指向这份清单排练一次更新（见“排练”）。
 
 ## 发布前必须通过
 
-在仓库根目录、`.venv/` 下执行：
+在仓库根目录、`.venv/` 下执行（Windows 的 `Scripts/`，Linux/macOS 为 `bin/`）：
 
 ```bash
 .venv/Scripts/python.exe -m pytest -q
@@ -76,10 +45,8 @@ Gitee/GitHub Release 的附件按“地址”下载，而摘要写在清单里�
 .venv/Scripts/python.exe tools/ci_lint_tiers.py tests
 ```
 
-全量 fast 必须 **0 失败**。失败了不构建、不发布；CI 的 `fast (windows/ubuntu/macos)` 会跑同样的
-测试和 lint，不能靠放宽 gate 消红。
-
-涉及爬虫、LLM、checkpoint/resume 的改动，发版前再加设备层：
+全量 fast 必须 **0 失败**。失败不构建、不发布；CI 的 `fast (windows/ubuntu/macos)` 跑同样的测试与 lint，
+不能靠放宽 gate 消红。涉及爬虫、LLM、checkpoint/resume 的改动另加设备层：
 
 ```bash
 .venv/Scripts/python.exe -m pytest -q -m "integration or live_ollama"
@@ -87,69 +54,19 @@ Gitee/GitHub Release 的附件按“地址”下载，而摘要写在清单里�
 
 ## Windows 构建与上传
 
-### 1. 构建离线 Setup + 绿色版
-
 ```powershell
 powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Installer -Version 2026.11.11
 ```
 
-**`-Version` 必须显式传，而且是三段数字**（Inno 的 `VersionInfoVersion` 会自己补 `.0`）：脚本默认值是
-`1.0.0`，漏传会把安装器/收据按 1.0.0 盖章，而应用内 `APP_VERSION` 是四段（`2026.11.11.2`）。
-四段版本只存在于 `backend/services/version.py` 与 `version.json`；构建脚本只接受 `^\d+\.\d+\.\d+$`。
-GitHub 的发布 workflow 把 `version` 设为必填，并在打包前用 `tools/check_release_version.py` 拒绝任何
-不是 `APP_VERSION` 前缀的值——脚本自己的默认值只服务于本机手工构建。
+产出 `dist\CaiXiHui-Setup.exe` 与 `dist\CaiXiHui-win64.zip`。
 
-产出：
+**分片**：`version.json` 与 Gitee 上传都按 **99,614,720 B** 一片，最后一片通常更小。Gitee 单个附件上限 100 MB，
+所以 `CaiXiHui-win64.zip` 与 `CaiXiHui-Setup.exe` **都要切**；GitHub 传完整文件。下载页让用户按顺序拼接
+（Windows：`copy /b CaiXiHui-Setup.exe.001+CaiXiHui-Setup.exe.002 CaiXiHui-Setup.exe`；POSIX：`cat ... >`），
+再校验总 SHA-256。
 
-- `dist\CaiXiHui-Setup.exe`
-- `dist\CaiXiHui-win64.zip`
-
-记录两个文件的字节数和 SHA-256。
-
-### 2. 分片
-
-`version.json` 和 Gitee 上传都使用 **99,614,720 B** 一片。切完后记录每一片的 SHA-256 和大小；
-最后一片通常小于 99,614,720 B。
-
-Gitee 单个附件的上限是 100 MB，所以 **`CaiXiHui-win64.zip` 和 `CaiXiHui-Setup.exe` 都要切**
-（上一版 Gitee 上的资产就是 `.001`/`.002` 的 Setup 与 zip）；GitHub 传完整文件。下载页要让用户先
-按顺序拼接（Windows：`copy /b CaiXiHui-Setup.exe.001+CaiXiHui-Setup.exe.002 CaiXiHui-Setup.exe`，
-POSIX：`cat ... > CaiXiHui-Setup.exe`），再校验总 SHA-256。
-
-### 3. 更新 version.json 的 win32 条目
-
-把 `CaiXiHui-win64.zip` 的总 SHA-256、总大小，以及两个分片的 URL/SHA-256/大小写进 `version.json` 的
-`platforms.win32`（**不是** `default_catalog.json`）：
-
-```
-https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/<新tag>/CaiXiHui-win64.zip.001
-```
-
-**只发 Windows 的版本不要保留旧的 `darwin-*` 条目**：`version.json` 的版本号一升，Mac 客户端会提示更新，
-然后去下载上一版 DMG（装回去仍是旧版本，形成循环）。删掉 `darwin-*` 后 `asset_ready` 为假，Mac 端不提示，
-下次带 macOS 构建时再加回来。
-
-### 4. 在线安装器（只在安装器本身变化时重建）
-
-```powershell
-powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1 -Clean
-desktop\.venv-build\Scripts\python.exe desktop\patch_manifest.py --check dist\CaiXiHui-Online-Setup.exe
-```
-
-`patch_manifest.py --check` 必须显示 `requireAdministrator`。产出 `dist\CaiXiHui-Online-Setup.exe`。
-
-需要重建的只有：安装器页面/流程改了、`backend/services/components/` 里的代码改了、Chrome/chromedriver/Node/
-CatBus 的版本或地址变了。**主程序出新版本不需要重建它**——它读 `version.json` 决定装哪一版。
-新发布里仍建议把当前这份安装器一起上传，让下载页只有一处入口。
-
-### 5. 先腾 Gitee 的空间（仓库附件总量 1 GB）
-
-Gitee 一个仓库的 Release 附件总量上限是 **1 GB**，而每个 Windows 版本的分片合计约 260 MB。
-实测到第 4、5 个版本时，分片传完后再传 `CaiXiHui-Online-Setup.exe` 收到
-`验证失败，文件大小已超过仓库附件大小：1 GB`，于是国内下载页缺了在线安装器——**同一份
-`version.json` 却已经指向这个 tag**，那是最难查的一类缺件。
-
-所以**每次发布都先删旧 tag 的附件，只保留当前 tag**：
+**先腾 Gitee 空间**：仓库 Release 附件总量上限 1 GB，而每个 Windows 版本的分片合计约 260 MB。
+每次发布只保留当前 tag 的附件：
 
 ```powershell
 $env:GITEE_TOKEN = '<带 projects 权限的私人令牌>'      # 只从环境变量读，命令行里不出现
@@ -157,94 +74,43 @@ $env:GITEE_TOKEN = '<带 projects 权限的私人令牌>'      # 只从环境变
 .venv\Scripts\python.exe tools\prune_gitee_releases.py --tag exe-2026-11.13 --tag manual-2026-11
 ```
 
-只删**附件**：Release 条目、说明文字和 git tag 都保留，旧版本的下载页仍然解释得清它是哪一版；
-要保留的不止一个 tag 时把 `--tag` 写两遍（使用手册是独立的 `manual-2026-11`，不是旧程序版本）；
-当前 tag 在远端没有 Release 时脚本按名拒绝——`--tag` 拼错就会清空全仓库的资产，不能只靠小心。
-Gitee 列 Release 时不返回附件 id 和字节数，所以脚本对每个要删的 Release 再读一次
-`attach_files`（那里的 `size` 才是真的）；生成出来的 `<tag>.zip` / `.tar.gz` 是源码链接，不是附件，
-不能这样删，也不占那 1 GB。清理后再上传，分片与安装器才都装得下。GitHub 没有这个额度，旧 tag 的附件照旧留着。
+只删**附件**，Release 条目、说明与 git tag 都保留；要保留多个 tag 时把 `--tag` 写两遍（使用手册是独立的
+`manual-2026-11`）。当前 tag 在远端没有 Release 时脚本按名拒绝——`--tag` 拼错会清空全仓资产，不能只靠小心。
+生成的 `<tag>.zip`/`.tar.gz` 是源码链接，不是附件，不占那 1 GB。GitHub 没有这个额度，旧 tag 的附件照旧保留。
 
-### 6. 上传 Windows 资产
+**上传**：GitHub 传 `CaiXiHui-Setup.exe`、`CaiXiHui-win64.zip`、`CaiXiHui-Online-Setup.exe`；
+Gitee 传 `CaiXiHui-win64.zip.001/.002`、`CaiXiHui-Setup.exe.001/.002` 与不分片的在线安装器。
+上传顺序不影响旧客户端，它们看的还是旧 `version.json`。
 
-上传到 GitHub Release（完整文件）和 Gitee Release（国内直连以 Gitee 为准；Gitee 只传分片）：
+**在线安装器只在自身变化时重建**：安装器页面/流程、`backend/services/components/` 的代码、组件版本或地址改了才需要；
+主程序出新版本不需要。每次发布仍建议把当前安装器一起上传，让下载页只有一处入口：
 
-GitHub：
-
-- `CaiXiHui-Setup.exe`
-- `CaiXiHui-win64.zip`
-- `CaiXiHui-Online-Setup.exe`
-
-Gitee：
-
-- `CaiXiHui-win64.zip.001`、`.002`（`version.json` 的 win32 `parts` 指向这里）
-- `CaiXiHui-Setup.exe.001`、`.002`（手动下载页拼接用）
-- `CaiXiHui-Online-Setup.exe`（13 MB，不需要分片）
-
-上传后再用 `version.json` 指向它们。上传顺序不影响旧客户端，因为它们看的还是旧 `version.json`。
-
-## macOS 构建与上传
-
-macOS 包由 GitHub Actions 的 `.github/workflows/macos-build.yml` 构建，不能在 Windows 上直接打：
-
-1. 先推代码并把 release tag 推到新 tag；
-2. 触发 workflow，二选一：
-   - **推 tag**（`git push origin exe-2026-12`）：workflow 用 `github.ref_name` 作为发布 tag，不需要填；
-   - **手动触发**（Actions → Run workflow）：`release_tag` 填新 tag，默认值 `exe-2026-11` 只是输入框的占位。
-   tag 必须以 `exe-` 开头，否则在打包前就按名退出；上传不带 `--clobber`，同名资产会让 workflow 失败而不是
-   覆盖已经发布的字节。
-3. workflow 产出并上传：
-   - `CaiXiHui-macOS-arm64.dmg`
-   - `CaiXiHui-macOS-x86_64.dmg`
-   - `CaiXiHui-Online-Setup-macOS-arm64.dmg`
-   - `CaiXiHui-Online-Setup-macOS-x86_64.dmg`
-4. 从 Release API 读取四个文件的字节数和 SHA-256，把两个**应用 DMG**写进 `version.json` 的
-   `platforms.darwin-arm64` / `platforms.darwin-x64`：
-
-```json
-"darwin-arm64": {
-  "archive": "dmg",
-  "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/<新tag>/CaiXiHui-macOS-arm64.dmg",
-  "sha256": "<应用 DMG 的 SHA-256>",
-  "size": 123456789
-}
+```powershell
+powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1 -Clean
+desktop\.venv-build\Scripts\python.exe desktop\patch_manifest.py --check dist\CaiXiHui-Online-Setup.exe
 ```
 
-安装器的构建步骤不再需要应用 DMG 或 tag（`desktop/build_macos_installer.py --clean --arch <arch>`）：
-它和 Windows 一样从 `version.json` 取包，所以同一份安装器可以跨版本使用。两个安装器 DMG 的摘要不写进
-`version.json`，它们只是下载入口。
+`--check` 必须显示 `requireAdministrator`。附件按地址下载、摘要写在清单里，所以**新版本 = 新 tag**
+（例如 `exe-2026-12`）：复用旧 tag 并换同名附件会让正在更新的客户端与上一版发出的安装器按旧摘要校验失败，
+旧 tag 的附件一个字节都不要动。
 
-macOS 自更新从 GitHub Release 下载 DMG。访问不了 GitHub 的 Mac 仍应使用在线安装器或完整 DMG。
+## macOS
 
-## 更新清单的可选签名（建议开启）
+macOS 包只能由 `.github/workflows/macos-build.yml` 在 GitHub 的 macOS runner 上构建：
 
-`version.json` 里的 SHA-256 只能证明"下载到的字节 = 清单说的字节"，而清单本身就是**最先被改的那一份**：
-能改 Gitee/GitHub 上 `version.json` 的人，同时改掉 `url` 与 `sha256` 即可让客户端装上一份任意程序。
-所以客户端支持对清单做**离线签名校验**，且是"配置了公钥就失败即拒绝"（fail closed）：
+1. 推代码并把 release tag 推到新 tag；
+2. 触发 workflow：推 tag（workflow 用 `github.ref_name`），或手动触发填 `release_tag`。
+   tag 必须以 `exe-` 开头，否则打包前按名退出；上传不带 `--clobber`，同名资产让 workflow 失败而不是覆盖已发布字节。
+3. 产出并上传 `CaiXiHui-macOS-arm64.dmg`、`CaiXiHui-macOS-x86_64.dmg`、
+   `CaiXiHui-Online-Setup-macOS-arm64.dmg`、`CaiXiHui-Online-Setup-macOS-x86_64.dmg`。
+4. 从 Release API 读四个文件的大小与 SHA-256，把两个**应用 DMG**写进 `version.json` 的
+   `platforms.darwin-arm64` / `platforms.darwin-x64`。
 
-- 公钥位置：环境变量 `CIXI_UPDATE_PUBKEY`（PEM 文本，或指向 PEM 文件的路径），或打包版数据根下的
-  `update-pubkey.pem`。**没有配置公钥时**自更新照常可用，但 `/api/update/check` 会返回 `signed: false`，
-  更新卡片的详情里会写明这条链没有信任根。
-- 签名方式：对清单去掉 `signature` 字段后的 JSON（`sort_keys=True`、紧凑分隔符、`ensure_ascii=True`）做
-  Ed25519 签名，结果以 base64 写回清单的 `signature` 字段。校验用 `cryptography`（`requirements.txt` 已声明）。
-- 配套规则（与签名一起生效，避免"签了名却仍可从明文/畸形地址取包"）：
-  - 下载地址必须是 `https://`，**每一跳重定向都重新校验**（302 到 `http://`/`ftp://` 会被拒绝）；
-  - **总包与每个分片都必须有 `sha256`**，缺摘要的条目不算“可下载”，客户端连下载都不会开始
-    （只有摘要才能把清单说的字节和装上去的字节对上；摘要缺失不是“未知”，是“未校验”）；
-  - 清单本身限读 1 MiB；单包上限 4 GiB；传输 60 秒没有新字节按名失败；
-  - 清单里的 `version` 必须是点分版本号，客户端只用它当作 `data/updates/` 下的**一个目录名**（带 `..`、
-    分隔符的版本号一律按名拒绝——这个值直接进 `shutil.rmtree` 的路径）；
-  - 解压后还要过**形状校验**：包内必须有 `CaiXiHui.exe` 与 `_internal`（macOS 是 `.app` 里的可执行文件），
-    否则不替换安装。摘要只证明“是清单说的字节”，不证明“这是本程序”。
+安装器构建不需要应用 DMG 或 tag（`desktop/build_macos_installer.py --clean --arch <arch>`），它和 Windows 一样
+从 `version.json` 取包，所以同一份安装器跨版本可用。两个安装器 DMG 的摘要不写进 `version.json`，它们只是下载入口。
+macOS 自更新从 GitHub Release 下载 DMG；访问不了 GitHub 的 Mac 用在线安装器或完整 DMG。
 
-发行脚本若要生成签名，用仓库根的工具（需要私钥，**私钥不要进仓库**）：
-
-```bash
-python tools/sign_release_feed.py version.json --key release-private.pem   # 写回 signature 字段
-```
-
-未签名 → 已签名的切换是兼容的：没配公钥的旧客户端忽略 `signature` 字段。
-
-## version.json 模板
+## version.json
 
 ```json
 {
@@ -278,14 +144,34 @@ python tools/sign_release_feed.py version.json --key release-private.pem   # 写
 }
 ```
 
-`version.json` 由仓库 raw 地址提供，客户端依次尝试：
+- `win32` 可给单包 `url`，也可给 `parts`（Gitee 分片）；两种都能装。
+- **总包与每个分片都必须有 `sha256`**，缺摘要的条目不算可下载，客户端连下载都不开始。
+- 只发 Windows 的版本**删掉旧的 `darwin-*` 条目**：版本号一升，Mac 客户端会提示并去下载上一版 DMG，
+  形成循环；删掉后 `asset_ready` 为假，Mac 端不提示。
+- 清单由仓库 raw 地址提供，两个地址都要读到同一份文件，Gitee 为主：
 
-```
-https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json
-https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json
-```
+  ```
+  https://gitee.com/Xingye-Dujing/crawler-workflow/raw/main/version.json
+  https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.json
+  ```
 
-两个地址都要能读到同一份文件；Gitee 是主路径。
+## 清单的可选签名
+
+`version.json` 的 SHA-256 只证明“下载到的字节 = 清单说的字节”，而清单本身是最先被改的那一份。客户端因此支持
+清单离线签名，规则是“配置了公钥就失败即拒绝”：
+
+- 公钥：环境变量 `CIXI_UPDATE_PUBKEY`（PEM 文本或文件路径），或打包版数据根下的 `update-pubkey.pem`。
+  没配公钥时自更新照常可用，但 `/api/update/check` 返回 `signed: false`，更新卡片说明这条链没有信任根。
+- 签名对象是清单去掉 `signature` 后的 JSON（`sort_keys=True`、紧凑分隔符、`ensure_ascii=True`），Ed25519 签名后
+  以 base64 写回 `signature`；校验用 `cryptography`（已声明在 `requirements.txt`）。
+- 与签名一起生效的规则：下载地址必须 `https://` 且**每一跳重定向都重新校验**；清单限读 1 MiB；单包上限 4 GiB；
+  传输 60 秒没有新字节按名失败；清单的 `version` 必须是点分版本号（它直接进 `data/updates/` 的目录名）；
+  解压后过**形状校验**（`CaiXiHui.exe` 与 `_internal`，macOS 是 `.app` 里的可执行文件）。
+- 生成签名用仓库根工具（私钥不进仓库，未签名到已签名是兼容的）：
+
+  ```bash
+  python tools/sign_release_feed.py version.json --key release-private.pem
+  ```
 
 ## 更新时保留什么
 
@@ -293,55 +179,27 @@ https://raw.githubusercontent.com/Xingye-Dujing/crawler-workflow/main/version.js
 
 - 安装器选的数据目录：`data-root.txt`（在线安装布局在 `app/data-root.txt`，便携版在 exe 旁边）；
 - `portable.txt`、`install-manifest.json`、`components/`；
-- `data/` / `Data/`、`logs/`、`mplconfig/`、Cookie、模型、BERT 模型、上传文件、导出文件；
-- Windows 旧程序放 `app.previous`（每次替换前重建一份，不累积），macOS 旧 `.app` 放
-  `CaiXiHui.app.previous` 作为回滚。
+- `data/`、`logs/`、`mplconfig/`、Cookie、模型、BERT 模型、上传与导出文件；
+- Windows 旧程序放 `app.previous`（每次替换前重建，不累积），macOS 旧 `.app` 放 `CaiXiHui.app.previous`。
 
-Windows 更新脚本按“逐项替换程序文件”的方式换 `CaiXiHui.exe`、`_internal`、`seed`、`samples` 等，
-不会整目录删掉 `app/`，所以 `data-root.txt`、`portable.txt` 和用户数据都留在原处。每个被占用的文件最多重试
-20 秒（杀毒软件、正在退出的旧进程），失败就逐项移回旧文件并把旧版本启动起来。
+Windows 更新脚本逐项替换 `CaiXiHui.exe`、`_internal`、`seed`、`samples` 等，不整目录删 `app/`，所以
+`data-root.txt`、`portable.txt` 与用户数据留在原处。被占用的文件最多重试 20 秒，失败就逐项移回并启动旧版本。
+唯一的非程序写入是**安装回执**：新版本启动时把 `current-version` 与 `versions/<新版本>/install.json` 改成自己的版本
+（`backend/services/update_receipt.py`，`method: self-update`），让“安装器装的是哪一版”继续等于“现在跑的是哪一版”。
+安装目录不可写时（如在 `Program Files` 且当前用户无权限）拒绝更新并提示用安装器，不先退出再失败。
 
-唯一的“非程序本体”写入是**安装回执**：新版本启动时把 `current-version` 与
-`versions/<新版本>/install.json` 改写成它自己的版本（`backend/services/update_receipt.py`），
-记录 `method: self-update`。这是为了让“安装器装的是哪一版”继续等于“现在跑的是哪一版”；
-`install-manifest.json` 与组件目录仍然不动。
+## 排练与回滚
 
-如果安装目录不可写（例如装在 `Program Files` 且当前用户无权限），应用会拒绝更新并提示用安装器，
-不会先退出再失败。
+`CIXI_UPDATE_FEED` 覆盖清单地址（逗号分隔可给多个），指向本地/内网清单即可走完整条链路。
 
-## 排练一次更新（不上线也能验）
+必看四条：下载中关窗口后能装完并自启；清单 `sha256` 改错会按名失败且**程序不退出**；替换脚本换成立刻退出的程序会得到
+“更新程序没能启动（10 秒内没有回执）”而不是进程消失；采集进行中“立即更新”可以下载，“重启并完成更新”被服务端拒绝。
 
-`CIXI_UPDATE_FEED` 覆盖清单地址（逗号分隔可给多个），指向一份本地/内网清单即可把整条链路走一遍：
+回滚：
 
-```bash
-# 1. 按 release 的目录结构准备一份包；2. 写一份 version.json（版本高于当前 APP_VERSION）
-set CIXI_UPDATE_FEED=https://你的镜像/version.json
-# 3. 启动打包版 → 立即更新 → 中途关掉窗口 → 等它自己重启成新版本
-# 4. 看 <data>/updates/update.log 的时间线，以及 <data>/updates/job.json 的最终状态
-```
-
-必看的四条：下载中关窗口后能装完并自启；把清单的 `sha256` 改错会按名失败且**程序不退出**；把替换脚本换成
-一个立刻退出的程序会得到“更新程序没能启动（10 秒内没有回执）”而不是进程消失；采集进行中“立即更新”可以下载、
-“重启并完成更新”被服务端拒绝。
-
-## 从没有自更新的旧版本升上来
-
-2026.11.11 及更早的 Windows 版本里，替换脚本因为一个子进程标志（`DETACHED_PROCESS`）从来没有真正执行过：
-点“立即更新”后程序退出，然后什么都不会发生。**这一版必须手动安装一次**（完整 Setup 或 zip），之后的应用内
-更新才会真正替换程序。发版说明里要写清这一句。
-
-## 回滚
-
-- Windows：关闭程序，把 `app.previous` 里的程序文件移回原位；保留 `data/`、`components/` 等。
+- Windows：关闭程序，把 `app.previous` 里的程序文件移回原位，保留 `data/`、`components/`。
 - macOS：把 `CaiXiHui.app.previous` 改回 `CaiXiHui.app`。
-- 更新脚本在复制中途失败会自动移回旧程序并重新启动；新版本启动后 15 秒内退出也会自动回滚。两种情况都会写
-  `<data>/updates/update.log`，应用启动后也会读到 `job.json` 里的失败状态并在更新卡片上按名说明
-  （`update.err.swap_lost` / `update.err.<code>`），不会出现“点完更新什么都没发生”。
+- 替换中途失败与“新版本 15 秒内退出”会自动回滚，原因写 `<data>/updates/update.log`，启动后按名显示
+  （`update.err.swap_lost` / `update.err.<code>`）。
 
-## 首次安装与后续更新
-
-- **旧版本（没有自更新代码）不会自己弹窗**：先手动安装一次本版本。
-- 之后的**主程序**更新，用户可以只在应用内点“立即更新”完成，不需要每次重新下载完整安装器。
-- 组件更新（Chrome / chromedriver / Node / CatBus / BERT）仍走“环境与组件”或在线安装器；
-  如果新版本需要新的组件版本，发版说明里要单独写清楚。
-- 应用每次启动检查一次，之后每 6 小时检查一次；离线或读不到 `version.json` 时静默跳过，不阻塞工作区。
+客户端每次启动检查一次，之后每 6 小时一次；离线或读不到 `version.json` 时静默跳过，不阻塞工作区。

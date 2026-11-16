@@ -1,1680 +1,285 @@
-# agent_practices.md — the *why* behind each AGENTS.md rule
-
-Every rule in `AGENTS.md` is stated bare there because that file loads into **every** session and must stay small.
-The evidence — the measurement, the crash, the feature it once cost — lives here, and this file is **not** auto-loaded.
-Read the matching section before rewriting, doubting, or "simplifying away" a rule: each was paid for (a live re-run,
-a broken feature, a silently-skipped green tier, a blank page). **Grep by the bolded rule title** — the same anchor
-`AGENTS.md` uses; every bolded title survives on purpose.
-
-Dedup with the other docs: **crawler imperatives** live only in
-`docs/crawler_rules.md` (linked, never copied here). A whole-project refactor (Stages 0–11) is complete; its
-process ledger was a temporary archive and has been removed, so this file records why each rule exists, not the
-migration narration.
-
-## Commands / deps — why the model-degradation rules exist
-
-Code may never **silently** answer with a model other than the one it claims — a column labeled `bert` that actually
-ran `snownlp` is a fabricated, unauditable result. Each sanctioned degradation PRINTS the method that ran. The two
-that exist: a topic step's `method=auto` (`_resolve_topic_method`) picks **embedding** when the encoder imports,
-**LDA** when it does not; `sentiment`/`emotion`/`tendency` default to `bert` (`_effective_bert_model` reads the node's
-model or `model_registry.json`'s `operation` default) and `_resolve_bert_mode` degrades to the dependency-free mode
-(`snownlp`/`ml`) with a printed line. The analyzers still refuse an unrunnable `bert` **by name** (defense in depth),
-and a multi-model BERT comparison never degrades. torch/transformers go to `requirements-optional.txt` (not CI-installed)
-precisely so CI exercises the degrade-and-print path rather than hiding it.
-
-The local post-edit `ruff format` (OpenCode's `formatter` → `.opencode/hooks/format.mjs`, formerly the Qoder
-`PostToolUse` hook) **silently fails on a restricted workspace** (measured `os error 5`: ruff writes a temp file then
-renames) — the edit stays unformatted while the formatter looks fine. Hence run `ruff format` by hand before committing;
-CI (`ruff check` + `ruff format --check`) is the unskippable gate.
-
-## How tests are written here
-
-- **Isolation happens at conftest import; the suite fails if `data/`/`logs/` gains a byte.** `tests/conftest.py`
-  redirects every write path *before any test module imports* — collection imports all modules before any fixture runs,
-  and `app.py` captures `Config.COOKIE_DIR`/`history.db` into module-level singletons at its own import, so a later
-  redirect is too late. `test_test_tiers.py` refuses the import statically; the session-finish snapshot refuses the write.
-- **A warning is a test that noticed something and passed anyway — fix what it noticed, never mute it.** Fixes landed
-  from warnings: a class-scoped fixture is `@pytest.fixture` FIRST, `@classmethod` SECOND (an instance-method fixture's
-  `self` is discarded before tests run). pytest is unpinned, so CI moved 9.1.1→9.2.0 mid-day on 2026-10-28 and the old
-  order stopped being registered — every such test errored at setup `fixture '<name>' not found`. Measured in a throwaway
-  venv: swapped order, `@staticmethod` and module-level fixtures all pass on 9.1.1 AND 9.2.0; only the old order breaks.
-  Pinned: `tests/unit/gates/test_test_tiers.py::TestClassScopedFixturesAreVersionProof`. Other fixes: close file
-  responses; never let a cookie-save open a **real Chrome inside the fast tier** (the plant swallowed a socket failure,
-  answered “种入失败”, left a `UserWarning`); a no-browser test says so (`profiles_off`). Not ours, left visible:
-  jieba 0.42.1 imports deprecated `pkg_resources`, and anyio's plugin warns about `CallSpec2` under 9.2.0.
-- **A stateful rule needs a stateless suite.** The suite shares ONE cookie directory, so `quiet_jar` snapshots/restores
-  it per test — a login another test saved is a precondition this one never set up.
-- **The frontend may not hold a second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields
-  the mode requires; if not loaded it refuses rather than guesses — and the form obeys the same rule (`boolParam`,
-  `selectOptionTags`), so a stored value off the list shows as itself, never option #0.
-- **A canvas shortcut belongs to the canvas only while the user is not typing.** `canvas._isTypingTarget()` asks what the
-  element IS (`isContentEditable`, `.cselect`, …), because an earlier growing *tag list* left out a paste box.
-- **The camera is not part of the model.** Putting pan/zoom in `getState()` made every pan an undo step. `addNode`
-  randomizes only for a non-finite value, never `x || …`, because a saved x/y of `0` is a real position.
-- **One page boot must not be a single point of failure:** a throw inside the one `DOMContentLoaded` body skipped every
-  later step (canvas.init never ran, page stayed blank, nothing readable in console) — hence `boot(name, fn)`.
-- **Six frontend rules, each costing a feature when forgotten.** (1) `if (window.X)` cannot see a top-level `const X`
-  (not on `window`). (2) The DOM stub's matcher is real (`harness_dom.mjs`); fabricating a child hides a broken selector.
-  (3) A wrapper with an empty parameter list acts on whatever was selected *before*. (4) A name inside
-  `onclick="fn('…')"` spans two grammars: `attrJsArg` JS-escapes the literal *then* HTML-escapes the attribute. (5) A node
-  captured before an `await` is gone after it (panels/run-list rebuild) — re-look it up (`_rowFor`). (6) **A wrapper
-  installed in another file is not the function your harness loads**: `app.js` re-assigned `window.openCookieDialog`
-  with one parameter while the real one took two, so the account argument died *in the browser only* — forward
-  `(...args)` and measure a change behind a patched global in the browser tier too.
-- **A feature matrix must enumerate every dimension that classifies the thing under test**, not only the bug's dimension.
-- **A live case's numbers are computed from the site, never chosen.** Derive an ask/threshold/floor from what the crawl
-  reported (the card's 评论数, the page's own count, the board's size) and make the assertion two-sided — two D-cells of
-  `test_live_weibo_workflow.py` each cost a live re-run for breaking this.
-- **A browser-measured assertion must report how much it measured, or it is not an assertion.**
-  `tests/integration/test_ui_layout.py` audits containers **by id**, never falls back to `<body>`, reports a
-  per-container floor, and resolves on-screen wording from `I18n` in the browser. **State the viewport:** on Windows
-  `set_window_size`/`set_window_rect` are silently ignored (a dialog's `calc(100vh - …)` cap is taken once, on first
-  open), so "fits a 1366×768 laptop" can be measuring a 1920×1080 window wearing another test's cap — emulate
-  (`Emulation.setDeviceMetricsOverride`) and assert the size CSS sees with a `100vh` probe, because `window.innerHeight`
-  reports the un-emulated one.
-- **A closed panel must be gone, not merely moved — and only pixels can prove it.** `#clipboard-drawer` hid with
-  `transform: translateX(100%)` under `right: 12px`; a percentage translate is the box's own width, so the closed edge
-  landed 12px INSIDE the viewport and its last 12 columns painted over the canvas. Measured in Chrome at 960×920
-  (`clientWidth` 938): `rect.left=926`, a 60×340 `Page.captureScreenshot` strip against the same box forced
-  `display:none` read **813 differing pixels, worst channel delta 41** (a closed-vs-closed control read 0/0 first — that
-  control is what makes those pixels quotable). The shadow (`--shadow-soft` blurs 3px past the border box, not
-  hit-testable) is why the rect fix alone is not the fix: the drawer also carries `visibility: hidden`, delayed 0.15s.
-  `test_ui_layout.py` pins both halves (each fails independently) plus the byte-identical strip. `clientWidth`, never
-  `innerWidth`: it excludes a classic scrollbar.
-- **A test may not assume the machine's own zone.** GitHub CI runs UTC, this box runs UTC+8, so the scheduler's
-  blank-zone case written as `... == '2026-10-16 08:00 (服务器本地)'` was a +08:00 literal wearing a test's clothes (failed
-  CI as `1 failed, 6498 passed` while green locally). The expectation belongs to the machine (`astimezone()`, the same
-  definition `scheduling.store.describe_time` uses); a NAMED zone stays a literal (`'Asia/Shanghai'`→`08:00`).
-  **Python on Windows honours `TZ`** — `$env:TZ='UTC'` reproduced CI's failure and removing it restored `+08:00` — so
-  `$env:TZ='UTC'; pytest -q` is a cheap CI-equivalent gate (reads 6501 passed).
-- **The `integration` UI tier performs no server writes** — no data-dir switch exists, so a run/upload lands in the
-  user's real `data/`/`logs/`. Stub `fetch`.
-- **A fail-loudly flag must fire for the run that asked for the guarantee, not for the directory it happened to import.**
-  With `CRAWLER_REQUIRE_BROWSER=1` the session probe in `tests/integration/conftest.py` started Chrome for *any* file in
-  that directory — including `test_weibo_crawler.py`, whose 66 cases drive a fake driver in 0.9 s and are marked `unit` —
-  giving 66 ERRORs reading `SocketBlockedError`: a confident claim the device tier is broken, from a session that never
-  requested a device. Fixed by `pytest_collection_modifyitems` recording whether any selected item carries
-  `integration`/`live_ollama` and gating the probe on it. Pinned: `tests/unit/gates/test_test_tiers.py` drives the hook
-  with both selection shapes.
-- **A comment naming its callers is a claim, and callers can be deleted around it.** `weibo/crawler.py` carried a block
-  headed *"compatibility shims (kept for callers outside this module)"* with four methods; measured, each appeared
-  **exactly once in the repo — at its own definition**. Count occurrences repo-wide before believing a "kept for callers"
-  note.
-- **A whole-class move is only safe if the copy is proved, not promised.** `PlayerUI` (559 lines, 29 methods) went from
-  `hongguo/harvest.py` to `hongguo/player_ui.py`; the script asserted the moved text appears in the new file **as one
-  contiguous run**, differing only by the four allowed renames (crossing names lost their leading underscore — an
-  underscore imported by another module invites copying it). A hand-typed 83-line `naming.py` was checked the same way.
-  Two ordering rules, both costing a cycle: **check before you write** (the first version wrote `harvest.py` then asserted
-  no stale name, leaving a second `class PlayerUI:` + an import; only `git checkout --` saved it) and **the seams move
-  with the code** (three tests patched `harvest.time.sleep` to drive a `PlayerUI` walk; `time` is one module object so they
-  still worked — the shape that breaks quietly when the old module stops importing it — so they now patch `player_ui.time`).
-- **A rename pass must be written as three rules, not one.** Moving five modules into `sessions/` was 661 references, and
-  two over-reaches came from one string substitution: ① `cookie_manager` is BOTH the module and the jar *instance*
-  (`state.cookie_manager`), so rewriting `cookie_manager.`→`cookies.` broke 28 instance calls; ② `api.browser_profiles`
-  contains `browser_profiles` as a *word*, so a word-boundary rule rewrote the route's own import path. Surviving rules:
-  import lines by exact form, attribute sites only where the file cannot mean the instance, instance spellings left alone.
-  `ruff check` is the cheap first net: it reported 23 F821 + 2 F401 before any test ran.
-- **`git mv` stages the rename, not the edits that follow it.** Moving the scheduling trio, the add list named only
-  `scheduling/__init__.py`, so `clock.py`/`store.py` were committed **with their old imports**; the commit summary still
-  printed the `M` lines and the local gate was green (worktree right), but CI answered `E0611` in two and a half minutes.
-  Rule: after `git mv`, every moved path is a **new path** added explicitly; read `git diff --cached --stat` — the runner
-  tests the index, local green says nothing about it.
-- **Before "creating" a file, ask whether it already exists — and run the whole family, not the new test.** Stage 8's
-  first knife overwrote `tests/frontend/page_scripts.mjs` (which already existed with `loadPageScripts`, imported by four
-  harnesses); the Write result said **updated** and `git status --short` showed `M`. Caught by running every
-  `tests/unit/frontend/test_frontend_*.py` — 58 errors. Two rules: check existence (`??`=new, `M`=overwriting someone);
-  a new test file is not the blast radius of a shared helper — the family that imports it is.
-- **A rename pass must not run before the path rules, and cannot see modules held through another module.** Moving `utils/`
-  into `core/` ended with two wounds: ① rule `\bmachine_deps\b`→`machine` rewrote the *string literal*
-  `'utils/machine_deps.py'` inside `WINDOWS_TABLES` and the Dockerfile-env scan — a path that existed in prose nowhere on
-  disk; path rules run first and a word rule skips quoted spans. ② Tests reached the module through the *production
-  module's attribute* (`bridge.machine_deps`, `harvest_module.machine_deps`), invisible to import/attribute rules; only the
-  full suite named them (5 failed + 10 errors). Grep `\.<old name>\b` across tests, not just imports of the old path.
-- **`getattr(x, name, None)` is the seam shape that never reports.** `tests/live_run_harness.py::real_jar/no_jar` located
-  the cookie jar through `getattr(module, 'cookie_manager', None)` with `module`=the imported `app`, but the instance had
-  moved to `state.cookie_manager` (`runtime/state.py`), so the lookup answered `None`, the guard skipped the patch, and
-  **88 live cases redirected only `Config.COOKIE_DIR`** — a live case could crawl with the user's real session while
-  claiming it proved the anonymous path. Nothing failed. Census after this: search `getattr(<module-ish>, '` in every
-  tier's helpers; a helper that *optionally* patches something must assert the thing exists (these now import `state` and
-  patch `cookie_manager.cookie_dir` unconditionally). An optional seam is an untestable seam.
-- **A dotted-prose rule is a code rewrite when it runs over `.py` files.** Moving `crawl_capabilities` into
-  `capabilities/registry.py` applied `\bcrawl_capabilities\.`→`capabilities.registry.` everywhere, so
-  `capabilities.CAPABILITIES` (the module's local alias) became an attribute of a module with no `registry` member. ruff
-  named 22 F821 in 9 files; three more had an alias bound where the same bug is a run-time `AttributeError` and no linter
-  sees it. Rule: dotted/prose rewrites belong to `.md` and hand-edited docstrings; `.py` code changes by import/attribute
-  rules only.
-- **A re-export needs `__all__`, and an order pin is a contract only where order is data.** Collapsing five chart-type sets
-  into `services/charts/registry.py` hit both: ① `contracts.py` kept re-exports that the post-edit `ruff --fix` deleted as
-  F401 (a name imported only to hand on is *unused* unless `__all__` says otherwise); ② deriving `ECHARTS_ONLY_TYPES`
-  put types in panel order and a pre-existing test compared it **as a list** — membership lists both sides test only with
-  `in` must be compared as sets; the order pin belongs only to `CHART_TYPES`.
-- **A carve's rename map needs a whole-token guard, and "the file parses" is not proof the wiring exists.** Splitting
-  `capabilities/registry.py` into `platforms/<id>.py` broke twice: ① plain `str.replace` of private atoms made `_TIMES`
-  collide with the suffix of `COMMENT_TIMES` (and `_ACCOUNT`/`_BOARD` similarly) producing `*COMMENTTIMES` and an F821 on
-  a name nobody wrote — the guard is `(?<!\w)OLD(?!\w)` and the old name is gone **as a token**; ② writing each body
-  without the `CAPABILITY = ` prefix left a bare `Capability(...)` statement — legal Python that `ruff format` wrapped in
-  parens, surfacing only as "module has no attribute 'CAPABILITY'" at assembly. The honest proof is a before/after
-  comparison of the **behaviour** (`as_dict()` byte-identical, every mode/field equal), not the moved text alone.
-- **Splitting a data table by AST line spans breaks on parenthesised values; delimit entries by TOKENS.** Moving the
-  4,600-line catalogue into `i18n_catalog/<domain>.py` failed twice: ① taking an entry as `lines[key_line:value_node.end_lineno]`
-  is wrong for the multi-line parenthesised form — every generated module lost its `),` and failed to parse; `tokenize`
-  ends an entry at the comma whose bracket depth is the dict's own level, carrying 281 comment lines with it. ② The walk
-  started the first entry at the `_ZH = {` line; the start is the line **after** the brace. ③ The proof compares the
-  **values** (`ast.dump` per key), not text (re-indenting is legitimate), and the split creates a hazard a single dict
-  could not: a domain file not in `MODULES` holds messages that can never print while parity/reachability/`audit()` stay
-  green. So the merge refuses a key claimed twice at import, and `test_i18n.py::test_every_catalogue_module_is_merged`
-  compares `MODULES` to disk.
-- **The UI tier's driver is `page_load_strategy='eager'`: `driver.get` returning is not evidence that a script ran.** A
-  CI run failed `test_opening_the_settings_panel...` with `JavascriptException: canvas is not defined` while `I18n`
-  (defined in a LATER script) was fine — the page booted, one earlier script had not; same bytes passed locally and
-  before. A test driving page bindings must wait by name (`readyState === 'complete'` plus `typeof canvas === 'object'`)
-  and on timeout fail with the document's script list and each script's transfer size. All 54 navigations in
-  `test_ui_layout.py` now go through `_load_app`.
-- **The mirror case is the same flake, and it costs one reload:** on 2026-11-14 the Windows runner hit `canvas` present,
-  `I18n` undefined (`readyState` complete) with `app.js` downloaded — the one script that defines both `I18n` and the boot
-  body had not executed. A rerun of the same commit was green, so it is the browser dropping a static request, not a
-  product regression. `_load_app` now installs an `error`/`unhandledrejection` collector with
-  `Page.addScriptToEvaluateOnNewDocument` (not `driver.get_log('browser')`: the crawl driver never asks for
-  `goog:loggingPrefs`, so that log is always empty), retries the navigation ONCE, and prints the first attempt's state
-  when the reload was needed; two failed navigations still fail, now with the page's own JS errors beside the script
-  list. A deterministic boot regression cannot be rescued by a reload, so the retry only absorbs a transport abort.
-  - **2026-11-15: the retry must not re-validate what just failed.** Three consecutive full device runs each failed
-    exactly one `test_ui_layout` boot case, at a different test each time, while the same case passed 3/3 alone — and
-    each failure reported the two LARGEST scripts' symbols missing (`app.js` → `I18n`/`Auth`, or `workflow.js` →
-    `workflow`). Werkzeug answers `Connection: close` on every response and the page loads ~63 separate scripts, so a
-    long run can interrupt one large response while Chrome writes its cache entry; because the server sends
-    `Cache-Control: no-cache`, the retry's `304` hands the same entry back and the second attempt fails identically.
-    `_load_app` therefore calls `Network.setCacheDisabled` + `Network.clearBrowserCache` between the attempts (forced
-    `200` bodies), and the collector now listens in the CAPTURE phase — a `<script>` that never loads fires an error on
-    the element, which does not bubble and was invisible to the window listener. Three full device runs after the change
-    were green (201 passed / 5 CatBus skips). The mechanism is inferred from those four failure dumps, not proven with a
-    corrupted entry: the capture listener names the resource on the next failure.
-- **A harness that reads module files by hand is a second opinion about the split map — and the map must read each file
-  once.** Three harnesses (`harness_menu`/`harness_app_state`/`harness_schedules`) did their own `argv.map(readFileSync)`
-  instead of `companions.mjs`, so when `LLMSettings`/`AppSettings` moved out of `app.js` their boots died with
-  `ReferenceError`. Fixing them surfaced the other half: a harness naming `workflow.js` **and** one companion evaluates a
-  file twice, and in the shared global a second top-level `const` is `SyntaxError: Identifier 'Outline' has already been
-  declared`. `sourcesWithCompanions` dedupes per call (owner still first). Static scans moved to
-  `static_assets.js_text('app.js')`; `I18N_USERS` was a hand-kept list of 14 files while the tree has 37, leaving 709
-  literal `I18n.t('…')` calls outside the word audit (every one in fact clean) — now derived (`js/**/*.js` minus `i18n/`)
-  with a scope floor.
-- **An object cannot be split by concatenation, and its members cannot be re-bound.** `canvas` is one top-level `const`
-  object of 158 members that markup and every panel call by name, so a second file has exactly one way to add to it:
-  `Object.assign(canvas, { …members… })`. Hazards: ① `Object.assign` does not complain when a member is declared twice —
-  the later silently replaces the earlier, the duplicate-key accident spread over two files no diff shows;
-  ② the *proof* of a member split is not the byte rejoin alone (that says nothing was lost) but the key-surface compare
-  (old single file vs family: names + kinds + function arities identical). Both are pinned by
-  `tests/unit/frontend/test_frontend_canvas_sections_js.py` (loads each section against a bare object so a section cannot
-  borrow members from another file, asserts per-section key sets disjoint, union equals `Object.keys(canvas)`). The
-  one-off `build/verify_canvas_split.py` / `verify_canvas_surface.py` scripts that produced this proof were deleted; the
-  **158-member surface is pinned by the test, not the script.** Also `page_js` exists because "who binds `canvas`" is a
-  per-PAGE question (the studio page has its own local `canvas`).
-- **Moving a Python function moves its patch seam with it — and a stale seam is GREEN, not red.** Run-path tests patch
-  `app.add_log` and rely on `tests/api/conftest.py` forwarding it into the module that resolves it. The fixture listed
-  `engine.run`; when the scheduled fire's narration moved to `engine/run_schedule.py`, its `add_log` resolved THERE, so two
-  schedule cases asserted on a list nobody filled (they failed loudly only because the assertion demanded the lines; a case
-  asserting "no line printed" would have passed the whole way through). The census is now read from the source:
-  `tests/unit/gates/test_console_seam_census.py` parses every `engine/*.py` for `from runtime.state import add_log` and
-  requires each hit in the forward list, and rejects the reverse. Companion fact: `start_scheduled_run` reaches `begin_run`
-  as `run_engine.begin_run` looked up INSIDE the function — `tests/api/test_run_races.py` refuses a by-value
-  `from engine.run import begin_run` anywhere, which is what keeps "one fake run start" meaning one thing.
-- **Lifting a nested helper out of a closure is proved with `ast` + `symtable`, never a byte diff.** Re-indenting changes a
-  multi-line string's VALUE (the inner functions' docstrings shift 4 spaces, which a byte compare calls a change and a
-  careless `dedent` would really be), so the check is per-function `ast.dump` equal (added params removed from the lifted
-  side), multi-line strings equal after stripping each line's leading whitespace, single-line strings strict; then
-  `symtable` states the point (lifted function has no free variables; its former host no longer lists it). Both ran
-  AGAINST THE FORMATTED FILE, not just the bytes the script wrote. The same proof normalises TWO traps on the last six
-  lifts (`run`→`_run_worker`): ① fold the original's constants but do NOT drop its call arguments (dropping both sides
-  turned short calls into zero-arg and "failed" a verbatim move); ② align the rename (`run`→`_run_worker`) first — the
-  rename itself is pinned by the gate (thread `target`/`name='run'`). Call sites that don't travel with the block
-  (`_inputs_for(nid)` inside `_run_single_workflow`) are a third class the arity change turns loud — list them from
-  `grep` before proving. The lift buys reachability: a closure is invisible to every test. Captured names becoming
-  parameters can RAISE an intermediate helper's free-variable count (`_component_run` now closes `resumable`/`resuming` to
-  hand them down): the goal is a visible source for each value, not the smallest closure. All ten helpers are now at
-  module scope; pinned by `tests/unit/gates/test_run_worker_module_scope.py` (no FunctionDef nested inside a module-level
-  function of `engine/run.py`: the lift is permanent or it is caught).
-- **A prefix→directory move has five traps the rename rules cannot see (all hit in one group).** Moving eleven
-  `services/biblio_*` into `services/biblio/` went 122 references clean then failed five ways: ① **`ruff --fix` deletes the
-  import a pending rename is about to use** — edit call sites BEFORE import lines, every time; ② **a multi-name from-import
-  is two names in one line** (`from services import biblio_formats, biblio_sources` matched the first rule and produced a
-  named ImportError) — one rule per *name*; ③ **a module one directory deeper changes every `Path(__file__).parents[N]`**
-  (geo's basemap pointed at a nonexistent path, 34 tests red) — grep `__file__` first; ④ **a module alias can collide with
-  a local variable** (`metrics.py` assigns `cluster = …`, so `cluster.cluster_graph(…)` was F823 — import it `as
-  clustering`); ⑤ **`git mv` stages the moves, not the sibling importers**. The proof is a residual scan that REFUSES to
-  finish, not a green suite.
-- **Count references by the NAME a file binds, not by the module path.** Before moving `net_probe`, grep for
-  `services\.net_probe` reported 2 references; the move rewrote **50** `net_probe.` call sites (callers bind via
-  `from services import net_probe`). Inventory asks for the binder then greps the bare name. Same day: a **bare module
-  reference** `monkeypatch.setattr(net_probe, '_session', …)` is invisible to an attribute rule (name followed by comma)
-  and shows only as F821 (23 sites); the multi-name import matched the first rule and left the second; and `--fix` deleted
-  a freshly re-added import once more.
-- **A readiness sentinel that shares a prefix with success is a tolerance arm wearing a costume.**
-  `test_a_run_detail_splits_its_workflows_without_growing_a_bar` failed on CI with "the detail row never appeared" while
-  its gate said fine — its bounded poll returned `"ok | the detail row never rendered"` on timeout and the Python side
-  asserted `outcome.startswith('ok')`. Fixed by removing the second round trip: expand **and** measure inside one
-  `execute_async_script`, returning `{found, …}` or `{found: false, …}` — no sentinel to lie, and the stub installed
-  **before** anything renders (the page's own boot repaint drops the expansion row).
-- **An async browser seam must resolve on the DOM, and its error arm must not be `done()`.** The earlier fix wrapped
-  `Promise.resolve(runsManager.detail(...)).then(() => done(), () => done())`, wrong twice: `detail` renders in a task
-  *after* the promise settles, and the rejection arm answered `done()` as if nothing failed, throwing away the only cause.
-  Correct shape: await the promise, **keep the outcome**, then poll the document for the element (bounded). Lesson
-  generalizes: a tolerance arm in a test helper is the same bug class as one in a crawler — what "a warning is a test that
-  noticed something" is about.
-- The `live_site` tier retries a crawl once **only** when the crawler itself reported `login_wall`. An empty that NAMES
-  its refusal (wall/risk) is the site's answer — assert the naming; an unnamed empty is real "found nothing" and stays red.
-
-## Run, resume and record invariants
-
-- **One server per data root, by design (local single-user tool).** `RunStore.__init__` calls `promote_stale_runs()`,
-  which marks every run still `running` as interrupted, so a second instance on the same `data/` kills the first's live
-  run. `CRAWLER_DATA_ROOT` gives a process its own `data/`+`logs/` (the `/smoke-verify` boot and the UI tier use it).
-- **One run at a time; a busy server queues instead of refusing.** `begin_run()` owns the whole start path, so the queue
-  drains by calling *that* function, never a weaker second one. The worker's `finally` clears
-  `execution_state['thread']` **first** (the claim also checks thread liveness). Queues are in-memory
-  (`tests/conftest.py` clears `_RUN_QUEUE`).
-- **A test that calls an executor function directly must leave the app quiet:** `clean_globals` *fails* a test that leaks
-  `execution_state['running']`.
-- **Checkpointing is the core value.** Three measured rules: the streaming row sink writes **one transaction per row** on
-  purpose; the next free slot is `MAX(seq)+1`, **never `COUNT(*)`** (deleted rows make COUNT collide); a **cursor records
-  position, not content** (ids come from `Crawler.seed`, so an id list must not go back into `mark_position`).
-- **A label is not an input.** A node's fingerprint feeds children AND the dedupe scope (`'item:'+node_fingerprint`), so
-  a *name* inside one invalidates a chain. `_VOLATILE_PARAMS` (labels + switches like `recrawl`/`enabled`) answers "choose
-  data, or just describe?" — ids stay in, labels and switches out.
-- **A result view is pinned to a RUN, not each node's newest rows.** `latest_rows(node_id, workflow_name)` answered "the
-  latest table" one node at a time; loaded together it could stitch node-1 from last night to node-2 from this morning and
-  present a run that never happened. `/api/runs/for-workflow` lists this canvas's records by the structure fingerprint 继续
-  uses; the browser pins `run_id` into every preview/chart payload and the resolver reads **only** that run's rows. Live
-  node states come from `attempt_records` (reset per attempt), never `owned_records` (kept across runs).
-- **A disabled node is not on the canvas:** `effective_workflow` drops it (`enabled`/type/all-upstream gone; cascades;
-  fan-in survives on one live input); validate/naming/fingerprint/execution run on that graph.
-- **Reuse has four rules** because each was violated once: `done` AND `restored` are reusable; a stored result with **zero
-  rows** is never reused; the source node is never adopted (resumes by cursor); `begin_node` reporting `dropped_stale`
-  cancels reuse.
-- **Startup recovery shares the end-of-run settlement.** A node leaves `running` only through `finish_node`, which a kill
-  skips, so `node_runs.row_count` still holds the 0 `begin_node` wrote. `promote_stale_runs` must call `settle_nodes`
-  (status *and* count from rows) — the panel's 已存行数 and 续跑's "adopt the fullest node" read that column.
-- **One definition of "completed":** counts are taken **after** settling over `attempted_nodes` (the record keeps nodes the
-  canvas deleted); a node 停止 cut short counts in its own `stopped_node_ids` bucket — reporting the user's own button as
-  “1 个失败” is a lie.
-- **A resumed run re-describes itself:** left at first-attempt values the 并行/串行 and 无头/窗口 chips describe a run that
-  never happened, and the stale name (the key every preview/chart/export probe uses) makes the kept rows unfindable.
-- **A phase column's order is not data, and a records round trip erases it.** `bin_time` writes an ORDERED categorical
-  (`pd.cut`), but every node boundary rebuilds the table with `pd.DataFrame(current_input)` (`engine/run.py`), leaving plain
-  strings whose code-point order puts 二次爆发期 before 发酵期. A step emitting a phase table must also emit its position
-  column (`stage_order`/阶段序号, a NUMBER) — the only thing surviving the boundary.
-- **A quoted row count is only true of the merge order that produced it.** 近重复去重（SimHash）keeps whichever row of a
-  group arrived first: six files in canvas order give 3778/4366/4993/4526/623 per phase, in filename order 3620/4454/5032/
-  4555/625 — and every 事件标注 volume with them. Measure through the canvas's OWN upstream order (walk `connections`).
-- **A coherence sweep is not a decision, and only the canvas's own sweep may be quoted.** 主题数扫描 draws 2000 docs by
-  default and the draw follows row order, so its argmax moved between merge orders (8,5,6,7,3 ↔ 2,7,3,4,2). 波动期's
-  coherence spans 0.227–0.337 across 2..8 and 发酵期's 5..8 sit within 0.004, so argmax is noise with a number on it. Hence
-  the justifying scan runs `coherence_max_documents=0` fed by that canvas's own phase filters; where flat, state the
-  tie-break (highest coherence at **≥3 topics**) in the node title — an unseen floor is judgement dressed as measurement.
-- **A score is a function of the column it was read from.** The same 18286 rows scored on `正文` give
-  0.211/0.200/0.217/0.228/0.238, on `cleaned_text` 0.164/0.170/0.173/0.199/0.200 — same shape, ~0.04 apart. Quote the
-  column or the curve can't be audited.
-- **An unused LDA topic is the model's answer, not the user's mistake.** An argmax can leave a topic with zero documents;
-  `topic_by_stage` fills that row from the topic's own word distribution, files `doc_n = 0`, logs one named warning —
-  never kills the run or empties 特征词.
-- **A recall device must not look like a classifier.** `aggression`'s word-list mode states a miss is unmeasurable, keeps
-  the lists in code, and deliberately does NOT count 辟谣 accusations as violent. A missing text column **raises** rather
-  than returning blanks.
-- **The analysis node's one non-deterministic step borrows the process node's client:** the run report echoes every step's
-  `params` into the console and durable record, so a client in `params` would be a live object written into a ledger —
-  hence `llm=`/`cancel=` go only to the ops in `LLM_OPS`. A Stop leaves `未处理` rows the model never saw, which settles
-  that node PARTIAL, not DONE.
-- **Retention must release what it destroyed:** `purge` deletes a run's rows so it also calls `forget_run_items` (an
-  `item_seen` entry whose rows are gone would make a later crawl under-collect silently). An explicit `delete_run` still
-  *keeps* claims: there the user removed a record knowing the crawl was paid for.
-- **`' + '` is a composed lookup key, not a permission:** widening the exact-name probe unconditionally would hand a
-  canvas genuinely called `节奏` the table of someone else's `节奏 + BPM` — hence widen only on a miss.
-- **A node id is a storage key — never re-mint one on restore.** Run records, resume cursors, LLM caches and
-  `workflow_fingerprint` key on node ids. `addNode`'s `nodeId` + `reserveId` keep `nextId` past a restored id; both
-  restore paths pass file ids straight through (pinned by `harness_state.mjs`). That id is also the box's **DOM** id, so
-  `getElementById(<node id>)` lets a workflow file address chrome the node doesn't own — reach elements through
-  `canvas._nodeEl(id)`, and `test_frontend_state_js.py` fails any variable-argument `getElementById` in `canvas.js`.
-- **Recorded rows are addressed by workflow, never by bare node id:** ids like `node-2` repeat on every canvas, so
-  `_durable_node_rows` returns nothing rather than guessing when it has no identity. The browser sends `workflow_name`
-  from `workflow.runName()` (name-node label, then file name).
-- **Parallel is one record; serial is one record per workflow that started.** Parallel joins labels with `' + '` in canvas
-  order (also a **lookup key**, pinned by `TestRowLookupStillWorks`); serial opens each workflow's own row **as reached**.
-  Every row keeps the **canvas** fingerprint (resume banner + `/api/runs/resumable`); the response returns workflow zero's
-  row; 继续 adopts each by name. **A chip describes what happened:** `并行 ×N` only when `mode=='parallel'`, serial says
-  `串行 ×1`; resume state stays per workflow (`fingerprints_for_workflow`) so B's failure restores A.
-- **A cursor records what the node PROVED, never what it attempted.** `execute_comment_node`
-  (`nodes/executors/comment.py`) wrote
-  `{'url_index': idx-1}` *before* handing a link to its adapter, so a pass that walked all ten dramas left the cursor at
-  `9`. Both end-of-node refusals raise *after* the loop, so 继续 skipped 1..9 and re-walked the last link alone (fresh
-  harness, `skipped_targets` empty, both gates slept) — the node settled **DONE** over the hole the console had named. The
-  write now happens after the walk and only while the run of completed inputs is unbroken; rewinding is safe because the
-  ledger refuses a re-walked comment (`item_key`). Pinned by
-  `test_a_tail_refusal_leaves_the_cursor_behind_the_hole_it_named`.
-- **A row's ledger key is its site identity, not its content.** `run_store.item_key` identifies by link, else
-  title+author+body-head, else a whole-row hash. Comment columns deliberately avoid those field lists (every comment of one
-  article would share a key and all but the first would be dropped) — which left them on the whole-row hash carrying
-  volatile `楼层`, which a fresh harness renumbers from 1. A comment is now keyed by (`平台`, `评论ID`). Changing the function
-  rotates existing keys, so a saved comment node re-files its set exactly once.
-- **An atomic node's result is one transaction.** `replace_rows` committed the `DELETE` first, then built the payload and
-  committed the `INSERT` in a second one. A process killed between them — or one row that refused to serialise — left
-  the node with no rows and no `finish_node`, so `settle_nodes` read zero and the record said a table that HAD been
-  produced had produced nothing: the crawl was paid for and reported as empty. The payload is built before anything is
-  deleted and both writes share one commit; the abort rolls back, because no other write in this store needs a rollback
-  and an open transaction would be committed by the NEXT write on the same connection, far from its cause.
-- **The console's line list and its total are one pair, and a claim swaps them as one.** `/api/workflow/status` reads
-  `logs` with `_log_total` under `_completed_lock`; the new claim replaced them key by key OUTSIDE that lock, so a poll
-  landing in the gap got the previous run's tail with the new run's total of zero — the browser's delta cursor repeats
-  or skips lines after a reload, which is the invariant `test_console_buffer.py` exists to hold. `reset_console_state`
-  now takes the same lock (proved by parking the lock in the test and watching the reset block on it).
-
-## Console, messages and i18n
-
-- **A missing `t()` keyword is a printed bug, not a crash.** `t()` deliberately returns the raw template when a param is
-  missing (never abort a crawl for a sentence), so a forgotten `{reads}` prints `阅读={reads}`. Key parity, reachability
-  and zh/en matching are all blind to it; `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)` with `ast`
-  and refuses the mismatch.
-- **A `{platform}` slot is answered with a word, not the key:** `zhihu` keys the matrix/cookie file, `i18n` localizes it
-  (splitting on `,`/`、` only), and `test_frontend_contract.py` (`TestChromeOfThePageItself`) keeps the two lists equal.
-- **Console messages reference nodes through `node_label` (→ `title #nid`), never a bare `nid`,** while store keys/results/
-  resume plumbing still use the raw `nid`. BOTH restore paths re-apply title + element text BEFORE `updateNodeDisplay`
-  (whose re-stamp guard reads the element).
-- **The run console keeps its own history per view, because the server cannot give it back** (it ships only the last 200
-  lines of the *whole* run). `consoleViews` holds `{seen, lines}` per view (`'all'` + each workflow id), every view is fed
-  on every poll, `switchWfTab` repaints without moving the cursor.
-- **The console is ALSO persisted per run (`run_store.run_log`), as a pure side effect that may never move the live
-  console.** `_push_log` (runtime/state.py) writes through `RunLogWriter` via `set_log_sink`, armed only inside a run's
-  window (flush every 200 lines + on error + once in the worker's `finally`). The durable viewer
-  (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach
-  (`execution_state['logs']/_log_total/_wf_logs/_wf_log_total` + `?tail=5000`) must stay byte-identical with or without a
-  sink** — a shifted total is a cursor that skips/repeats live lines after reload. `test_console_buffer.py` fails that
-  invariant; it is the guarantee, not a nuisance test.
-- **Every thread that logs must pin its own language:** `set_lang` is thread-local and a daemon starts fresh, so `run()`,
-  the parallel pool wrapper and **both cookie workers** set the request's language first. A test asserting console text
-  asserts on the reason, not a pasted sentence.
-- **One failure, one line:** `LogBufferHandler` forwards every `logger.*` into the buffer (format is the message alone, so
-  a traceback still goes only to the file), so `logger.exception(...)` **and** a matching `add_log` print twice. Keep the
-  logger call for the file; let `wf.node_failed` be the single attributed console line.
-- **A line printed by a side effect that runs per PAGE LOAD is noise by construction.** App boot fires `POST
-  /api/data/clear` to sweep orphaned files, and that route logged “清理孤立文件 0 个，保留 0 个…” unconditionally — after
-  ~80 page loads the console test's 3 stubbed lines were buried under eighty and the device tier failed on CI while
-  passing here. The rule (from `services/runs/housekeeping.py`): **silence is the normal case, say something only when
-  something went**; manual 清理 keeps its toast from the response. A test that opens a page is a writer of the console.
-  Pinned: `tests/api/test_data_api.py::TestClear` (空扫描不得留行; 删 1 个点名 1 个).
-- **A job a page starts by itself must be awaitable, or it races everything after it.** `workflow.reconnectConsole()`
-  reads `/api/workflow/status?tail=` during boot; a test that emptied `#console-output` then read it was reading the
-  *server's* history. Two fixes: the method keeps its in-flight promise (`_reconnect`, released in `finally`) — which also
-  stops boot and a “立即执行” fire from each fetching/each opening/each shouting “已重新连接控制台” (`harness_console.mjs`
-  measures `asked: 1`/`toasts: 1`; against a non-sharing gate reports `2`/`2`); and the tier gained
-  `_settle_console_replay(driver)` called **before** any clear.
-- **Anything that chooses data, cost or a name is refused BY NAME, never guessed** (mode/`select`/missing column via
-  `data_analysis.validate_step`, analyzer `method`/`mode` via `app.enum_param`), and refusals `raise` rather than return
-  `[]`. **Read a switch, never compare it** (`core/refs.as_bool`; blank = default).
-- **`_push_log` stores one entry per physical line** — the total advances by lines, not `add_log` calls (a multi-line
-  driver `Message:` rendered as several rows and the browser cursor skipped/repeated).
-- **A line a stranger can write is not a run line: a pre-auth refusal is file-log only.** The origin and
-  forwarded-prefix guards run BEFORE the login gate, and `_push_log` accepts a record whose caller has no identity
-  (internal writers do). Their text is request-supplied, so `logger.warning(..., extra={'console': False})` and
-  `LogBufferHandler` skips it — otherwise an anonymous client could author a line in the signed-in owner's console,
-  write it into a live run's durable `run_log`, and evict the run's own history by repeating the request.
-- **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision, not a filtering hook:** no "Executing node…"/
-  "Node…completed" line, but progress counters still count them and every fact still prints (with `node_label`, or a
-  silenced node that fails is undiagnosable).
-- Run-gating lives in `execute()` → `_cookieGateBeforeRun`. **`execute()` asks no cookie question of its own** — its
-  2026-09 shape was a `/api/cookies/status` loop refusing on each platform's *default-account* boolean, which blocked a
-  node on a saved named account and blocked wechat entirely. The probe is `cookie_preflight_before_run` per platform
-  **whose mode needs a session** (`Mode.needs_session`; weibo 热搜 answers anonymously, wechat has no session to want);
-  a login wall **refuses** (no "run anyway"); “无法核对” (timeout/captcha/busy) **never blocks**.
-  - **A named cookie and a named profile belong together:** one account = one `data/cookies/<platform>@<account>.json`
-    *and* one `chrome_profile/<platform>/<account>`.
-  - **A node's 账号 is a session question asked once:** `engine.workflow._account_session_errors` refuses when
-    `sessions.preflight.has_session_to_test` finds neither that account's cookie file *nor* a carrying profile — blank
-    included, because blank IS an account (默认账号), not a wildcard.
-  - **Every account has one name and one spelling:** the default is `default` (never blank in the box), folded at the ONE
-    point `CookieManager.key`/`path_segment` (`''`⇄`default`, lowercase always — `Work` and `work` are the same session on
-    a case-insensitive FS) so `sessions.profiles`, the preflight cache and the JS box route through it. The candidate list
-    and a new node's preselection are both `CookieManager.accounts_in_order`.
-  - **Every cookie mutation path re-reads `/api/capabilities`, and only through `refreshAccountCandidates()`:** the node's
-    账号 box reads its options from that payload (rebuilt at send time from the files on disk), never from a JS list. A
-    path that wrote a cookie and skipped the re-read left the open data-source panel offering only the logins it knew at
-    page load — the paste box did it, the **login window's `saved` phase did not** (2026-11-14). `Capabilities.reload()`
-    then waits out a request that predates the write, because `load()` hands an in-flight promise to the next caller and
-    that answer is exactly "refreshed with the old list".
-  - **A cookie write also invalidates the PROFILE table, and a platform switch invalidates the platform summary.** The
-    guide's `cookie.refreshHint` says “that profile still holds an older cookie”, which only the server's
-    `/api/browser/profiles` can answer — cached for the page, it kept the pre-save sentence (and the save that was
-    *deferred* because the profile was busy never showed the hint at all). `reloadCookieProfiles()` waits out an
-    in-flight read exactly like `Capabilities.reload()`, and every mutation path (save, login-window `saved`, delete,
-    profile delete, rename) calls it. Separately, the dialog's `#cookie-platform` handler is
-    `onCookiePlatformChange()`, not `renderCookieGuide()`: a new platform changes the line under the account box and the
-    per-platform summary + saved-logins dock (built from `/api/cookies/status`), so the switch also re-reads the disk —
-    the reported shape (2026-11-14) was the guide moving while the line still named the platform just left.
-  - **A new settings key needs all four:** the bool branch in `settings_store.save_settings`, both browser catalogues, and
-    the `AppSettings` wiring.
-
-## Settings: why one registry and one preset
-
-The settings store used to be a flat `DEFAULTS` dict plus a hand-written validator chain. A
-new key had to be added in four places, and forgetting one made it silently unsaveable — the
-panel showed a value the server never used. `runtime/settings_schema.py` is now the single
-declaration: type, default, bounds, group, both-language label keys, who reads it, whether it
-is portable, and which presets write it. `runtime/settings.py` only loads/validates/persists
-and builds export/import packages; the settings page renders from `GET /api/settings/schema`.
-`tests/unit/gates/test_settings_schema.py` fails a key that no consumer reads, a label missing
-from either language, and a platform module that calls `get_setting` or `time.sleep`.
-
-Platforms keep **measured baselines** because a card wait or a stuck-round count is a fact
-about that site, like a selector. They are not configuration: every value goes through
-`crawlers/engine/pacing.py`, where the user's scales apply once. That is what makes "slow
-down every platform" a real promise instead of a switch half the crawlers ignore.
-
-The scales are **one per operation**, not three for the whole crawl (2026-11-13, user
-request: “滚动间隔、展开间隔等等全部分开设置”). Three scales forced one compromise on
-every pause: an account that needed slower scrolling also paid it on every reply expansion
-and every polite round, and no setting could express “scroll slowly, expand normally”.
-The dimension is named at the call site (`scroll_nap`, `expand_nap`, `click_nap`,
-`arrival_nap`, `between_pages`, `wait`, `rounds`, `nap`, and the `*_wait` twins for the
-timeout that belongs to the same operation), so a pause cannot silently borrow the wrong
-knob — and a session handed a no-op `nap` (tests, fast walks) is silent in every dimension.
-`poll_tick` stays unscaled on purpose: a loop whose iteration count comes from a fixed
-budget must keep the same wall clock.
-
-**Page-to-page is its own interval** (2026-11-14): 小红书 watches how fast pages are opened,
-not only how a panel is scrolled, so the comment executor and the note-detail crawl pause
-between links — jittered, because a constant interval is still a metronome — through
-`pacing.between_pages()` and the `crawl_page_scale` knob. It fires between two pages, never
-before the first one.
-
-慢速采集 is a **preset**, not a multiplier: it writes concrete values for all seven
-dimensions and stores the values it replaced, so one click restores exactly what the user
-had. A second hidden factor would make the panel's numbers stop describing the run, and
-the user could not reason about the pace.
-
-**A saved value must be one something reads, and a live value must not be re-frozen.**
-Three audits on 2026-11-13, each a value the panel showed and the program did not honour:
-the toolbar's 并行/无头 were reset on every start because the boot re-read of the last file
-applied its stale settings over the browser's own choice (`loadFromJSON(..., {keepRunSwitches})`);
-`default_comment_*`/`default_keep_parts` were fetched once at boot, so a new node kept the
-previous defaults until a page reload (`AppSettings.refreshAfterSave()` re-asks
-`/api/node-types` and `/api/capabilities`); and `housekeeping_interval_minutes` was resolved
-when the housekeeper was built, so a saved change waited for a restart (the interval is a
-callable now). Dead metadata was removed rather than rendered: the stored `zoom` (the camera
-lives in the canvas draft) and `Setting.unit` (the label already carries “(s)”).
-
-### 组件来源只在安装器真的存在时出现 / The component-source choice follows the installer
-
-`bundled` names the installer's own component tree. A source checkout, a portable zip and a
-cloud container carry no `install-manifest.json`, so `services.components.source.installer_available()`
-is false and `effective()` folds the choice to `system`. `GET /api/config`, the settings schema
-and `GET /api/components` publish that verdict; the page hides the picker and the
-installer-managed component rows without keeping a second opinion. Manual components
-(Ollama/BERT/MiKTeX) are **detected on the machine in every mode** and must read the same
-capability state as the matrix above — calling them “未安装” while the capability row says
-“可用” is the contradiction the panel used to show.
-
-### 纸面、圆角与遮罩 / Paper, radius and masks
-
-`--radius` (the 样式 slider) is the ONE corner knob for cards and controls. Two deliberate
-exceptions are written down here so nobody "fixes" them: a settings field is a full-width rule,
-not a card (`border-radius: 0`), and a full-screen mask/`env-overlay` is square — rounding a mask
-leaves four transparent wedges where the page shows through the overlay. The shortcut sheet's
-key column is left-aligned and uses the body font: a right-aligned monospace column read as a
-cramped code block rather than part of the page.
-
-## AI workspace — why the boundaries are where they are
-
-The workspace is an agent, not a chat box, and the difference is in four boundaries rather than in
-a bigger prompt.
-
-**One provider catalog, because a run must not lie about its transport.** The row analyzers had
-already learned this lesson when `LLMClient` folded an unknown provider into `ollama`: a record said
-OpenRouter ran while a local daemon answered. The workspace adds DeepSeek and OpenCode Go, and a
-second provider table in JS would recreate the same accident across a language boundary. The
-catalog therefore owns the endpoint, model list, capability manifest and cloud/local refusal, and
-the browser only renders what `/api/ai/providers` says. A capability is a promise: if the transport
-cannot carry `thinking` or `web_search`, the request is refused by name rather than sent as a field
-the provider silently ignores. The visible switch disappears because the manifest says so, not
-because a second JS opinion guessed.
-
-**Keys in the browser, a transcript on the server.** The existing AI panel already kept the key in
-`localStorage`; the workspace must not quietly move it into `data/`. The page posts the key with the
-request, the server holds it for that call, and the answer endpoint asks for it again because a
-reloaded assistant row has no key. That is why `ai.db` can be inspected and backed up like every
-other account store without leaking a credential, and why an answer after a page reload refuses
-with `ai.noKey` instead of replaying an old secret.
-
-**A turn is several rows.** The Messages API pairs every `assistant tool_use` with an immediate
-`tool result`; merging rounds into one assistant row produces an invalid history that the provider
-rejects. Each round is therefore its own assistant row, and the page groups them by `turn_id`. The
-`ask_user_question` pause is a tool call whose result arrives later; the answer is appended as a
-tool result and the same turn resumes. A new user message abandons the pending question with a
-cancellation result so the history never ends with an unresolved call.
-
-**Read-only tools, proposal artifacts.** The agent may read the project, but a write is a separate,
-visible act. Workflow drafts, analysis plans, chart specs, reports, skill drafts and plugin
-manifests leave as artifacts; the user clicks Apply/Run through the app's existing route. This keeps
-one authorization path (the app's own buttons), makes a mistaken proposal reversible, and means the
-agent cannot delete a run or rewrite a canvas by hallucinating a tool call.
-
-**Context is generated, not a second catalogue.** Project facts come from the node, capability,
-analysis and chart registries the app already trusts. Live data is re-read per account; the browser
-sends ids and an unsaved canvas draft, never a saved dataset or run as fact. The budget is measured,
-the key is redacted, and an omission is reported in `context_meta` and the inspector rather than
-being silently presented as a complete reading.
-
-**Plugins are data first.** A skill pack, provider pack or constrained HTTP tool is a manifest, not
-code; it is portable and cloud-safe. A local code plugin runs in-process with the server's
-privileges, so it is local/admin only and cloud mode refuses it by name. Plugin UI is rendered by
-host components so OMM-ZEN cannot be broken by a third-party stylesheet, which is also the reason
-the workspace shell, chat, sessions, trace and studio are built from the same host primitives.
-
-## 定时任务 (scheduler) — why the clock is narrow
-
-- **The clock is one thread, started from exactly one place.** Flask's reloader imports the module twice, so a
-  `scheduler.start()` at import scope gives **two clocks ticking the same `data/schedules.json`** (a canvas that spends
-  accounts gets crawled twice). Hence `start()` only under `__main__` and only when `not debug or
-  os.environ.get('WERKZEUG_RUN_MAIN') == 'true'`; `start`/`stop` are idempotent.
-- **A fire is the same start as a manual Run, because `begin_run` owns the whole start path.** `scheduling` may not import
-  `app` (the Blueprint imports it), so app.py installs two seams at import
-  (`set_run_starter(engine.run_schedule.start_scheduled_run)`,
-  `set_canvas_source(engine.run_schedule.scheduled_canvas)` — both moved out of `engine.run` on 2026-10-29).
-  `start_scheduled_run` then calls `begin_run` (the *only* path), which is what makes a busy server **queue** the fire.
-  The scheduler is refused by name (`sched.notWired`) when nothing was wired.
-- **A crash in the starter is not a refusal.** `_fire` records `error` (traceback to the log file) for an exception and
-  `refused` for an executor saying no — "my canvas needs a model" vs "something is broken"; the `except` is per-task so the
-  tick continues for others.
-- **One rule about a canvas, asked three times, from one function.** `engine.run_schedule.scheduled_canvas` wraps the
-  same `_workflow_needs_llm` the executor uses; the panel's `runnable`/`why_not`, the save-time and fire-time checks all
-  go through it. A scheduled canvas may not need a model at all (a cloud box has neither Ollama nor a person), so it is
-  refused **while being chosen** in the picker's own label, not in a history row nobody reads.
-- **A missed moment is recorded, never replayed.** `note_missed()` runs once before the thread starts; `_reanchor()`
-  re-arms from *now*; **at most one missed event per restart** (`missed.count` accumulates across restarts — what “错过 N
-  次” reads). Accounting goes to the task's own `last_run`/`history` (20 entries); only a run that really started gets one
-  console line, language pinned from the task (`set_lang` in `_fire`).
-- **The browser may not hold a second opinion about time or state.** `next_run_local`/`last_run_local` are rendered
-  server-side in the *task's* zone, and the trigger sentence comes from the store's `describe_trigger`; a status token the
-  catalogue doesn't know shows **as itself**. `schedules.js` has no time arithmetic and no status vocabulary;
-  `tests/unit/frontend/test_frontend_schedules.py` drives the real file under node.
-- **The dock list and the dock matrix are two places, and both are needed.** `DOCKED_PANELS` is the list
-  `closeDockedPanels` walks (a panel missing stacks on the console); `tests/frontend/harness_panels.mjs` proves "opening
-  any one closes the others AND clears the stale inline height". Adding `schedules-panel` surfaced that `cookies-panel` had
-  never been in the harness — hence `test_the_dock_matrix_in_the_shared_harness_still_covers_every_panel`.
-- **cron is hand-rolled on purpose (stdlib `zoneinfo`, zero new deps), with `next_after()` strictly *after* the given
-  moment.** Edges pinned in `tests/unit/scheduling/test_cron.py`: a spring-forward hour that doesn't exist is **skipped
-  whole**, an autumn ambiguous hour runs on its **first** pass (`fold=0`), `0` and `7` are both Sunday, day-of-month ×
-  day-of-week combine POSIX-style (OR), and an expression that can never fire (`0 0 30 2 *`) is refused **at save time**
-  by name.
-
-## 桌面打包 / Desktop packaging
-
-- **A double-clicked exe can only be accepted by double-clicking it.** Measured 2026-10-24: the shipped `CaiXiHui.exe`
-  flashed a console and exited; my verification had used `CIXI_NO_BROWSER=1` + an explicit `CRAWLER_DATA_ROOT` inside the
-  workspace — precisely the two things that hid the failing line (`main()`'s first `root.mkdir()` on
-  `%APPDATA%\CaiXiHui` raising `PermissionError [WinError 5]`).
-- **Windows destroys the console when the process exits**, so for a frozen entry a printed error is invisible. Every exit
-  path must (a) block in a `MessageBoxW`, (b) append the traceback to `startup_error.log` (data root → exe folder →
-  `%LOCALAPPDATA%` → temp, in turn). `input('按回车…')` is not visibility — it covered two paths and `suppress` swallowed the
-  EOFError on a redirected console.
-- **A location is probed, never declared.** `_root_is_writable()` creates the dir and actually writes+removes a probe
-  file; on refusal the next candidate is taken with the OS's words printed. `mkdir` alone is not the test (a protected
-  folder can accept a dir and refuse the first file). Antivirus / Controlled Folder Access denying an unsigned exe write
-  access to `Roaming` is the scenario.
-- **An isolation root must not fall through.** `CRAWLER_DATA_ROOT` is the ONLY candidate when set; a refusal there is a
-  named startup refusal, not a fallback (silently joining the shared AppData root would let a smoke run's
-  `promote_stale_runs()` settle the user's live run). The fallback chain exists for the double-click default only.
-- **The mutex is per data root.** "One server per data root" is the app's rule, so the mutex name hashes the root; a
-  root-blind name let an installed copy refuse a portable one.
-- **The window is the program.** A user close ends the process (`native_window.terminate_process`), because the GUI host
-  leaves non-daemon threads behind and a windowless process keeps the data-root mutex — the next double-click then reports
-  “已有 采析绘 窗口在运行，但本次没能把它调到前台”. Minimise does not fire `closed` and keeps the run/scheduler alive.
-  A *programmatic* `close()` (page never loaded, install finished) must not terminate inside the event: `run()` still has
-  to return its failure so the caller can write the log and show the dialog.
-- **“安装器安装的” is an installer fact, not the absence of a setting.** It applies only when
-  `install-manifest.json` exists. A source checkout, portable zip, offline Setup and cloud container have no installer
-  tree; treating their empty tree as installer mode refused every crawl with “安装器未安装”. Their effective source is
-  本机. The component manager can still create a tree in a source run; the runtime reads the manifest from the same root.
-- **A self-update replaces the program, never the user's data.** `services/update.py` stages the app payload under
-  `<data>/updates`, verifies the feed hash, and hands the swap to a per-OS script after the process exits. Windows keeps
-  `components/`, `data/`, `logs/`, cookies, models and `install-manifest.json`; macOS moves the whole `.app` with a
-  `.previous` rollback. The feed's `version` is bumped only after the assets are uploaded, and a source run refuses by
-  name (`supported: false`) instead of replacing a developer checkout.
-- **The manifest outranks a stale export.** When installer mode is in force, the installed record is checked first, then
-  the launcher's `CHROME_PATH`/`CIXI_DRIVER_PATH`/`CIXI_NODE_BIN`/`CIXI_CATBUS_CLI` (only if inside the component root),
-  and only then a configured path. An old export pointing at an older version must not shadow the current install; the
-  probe and the crawler read the same order, or the panel goes green while the run refuses.
-- **A failure reporter must not be able to fail first.** `fail_loudly` files the log and shows the dialog BEFORE printing:
-  on a redirected console with a non-UTF codepage the first Chinese char raises `UnicodeEncodeError`, losing both file and
-  dialog. `_print_safe` degrades to `sys.stdout.buffer`, never back through the stream that threw.
-- **The acceptance run is part of the artifact.** Double-clicking `dist/CaiXiHui/CaiXiHui.exe` writes `data/`, `logs/`,
-  `mplconfig/`, `instance.json` into the folder the zip/installer pack; `prune_dist.py` clears them before compression.
-- **Dialogs are frozen-only.** A source run has a live terminal, so `_message_box()` returns unless `is_frozen()`; the stub
-  in `tests/unit/desktop/test_desktop_packaging.py` asserts the `MessageBoxW` call really happens when frozen (an
-  early-return test alone kept passing after the dialog call was deleted).
-- **pip hangs on a restricted workspace at `Looking in indexes`, network fine.** It unpacks into `%TEMP%` and caches under
-  `%LOCALAPPDATA%\pip`, both denied. Fix in `desktop/build_windows.ps1`: `TMP`/`TEMP`/`TMPDIR` → `build/tmp` +
-  `--no-cache-dir`.
-- **A UTF-8 Chinese string in a `.ps1` can stop the build from starting.** Windows PowerShell 5.1 reads a BOM-less script
-  in the machine's ANSI codepage, so a `Write-Host '中文…'` literal arrives as GBK bytes and one looks like a quote
-  terminator → `字符串缺少终止符` on a line far from the real one (a parse error that still looked like success).
-  `desktop/build_windows.ps1` is ASCII-only (pinned by `test_the_files_other_tools_parse_are_pure_ascii`).
-- **The same locale trap eats `requirements-*.txt`, and one em dash is enough.** pip's `auto_decode` uses the preferred
-  encoding and honours UTF-8 only with a BOM, so a Chinese comment or a `—` → `UnicodeDecodeError: 'gbk'`. The test checks
-  raw bytes of the ps1, both `desktop/requirements-*.txt` and the two root requirement files.
-- **A Mac download is per-CPU, and an `.app` is copied, never unzipped.** Chrome for Testing ships
-  `mac-arm64`/`mac-x64` as separate archives, so the catalogue keys are `darwin-arm64`/`darwin-x64` (Windows keeps
-  `win32`) and `platform_asset_key` is the only chooser. A downloaded `.app` must be mounted from its DMG and copied
-  with `ditto`: Python's `zipfile` extraction drops the framework symlinks and executable bits, and the installed app
-  then cannot start. Chrome/Node archives use `services/components/macos.py` (`ditto`/`tar`) for the same reason;
-  `safe_extract` stays the portable, symlink-refusing path for Windows. Pinned by
-  `tests/unit/desktop/test_macos_installer.py`.
-- **An imported BERT pack has two paths: the user's source archive and a storage folder that follows the data
-  directory.** The installer reads the source; the models go to `<data>/bert_models`, never inside `app/` (that folder
-  is replaced wholesale on update). The registry label is relative to `app/` only when the storage folder is inside the
-  install root; otherwise absolute (the macOS data folder). Complete folders and existing registry names are left
-  untouched. Pinned by `tests/unit/desktop/test_bert_install.py`.
-- **UPX: do the pass yourself, never trust a packer that skips quietly.** PyInstaller's `upx=True` compresses nothing when
-  it can't find the tool and only prints it in a scroll-past line. `desktop/compress_dist.py` runs with `upx --best
-  --force`, treats a missing `upx` on PATH as a **build failure by name**, verifies each output with `upx -t`, restores
-  unverifiable files, skips `UPX!`-marked files, prints the byte delta. Two measured details: UPX 5.0.2 **rejects**
-  `--no-version-info` (exit 1), and `--best` costs ~30 s on the 20 MB OpenBLAS DLL (pass parallel across 307 PE files).
-- **Dead payload is only dead when you can name the reader.** Dropped by `prune_dist.py` (measured): `jieba/lac_small`
-  (13 MB, reachable only via `cut(..., use_paddle=True)`); snownlp's Python-2 marshals `seg.marshal`/`tag.marshal`/
-  `sentiment.marshal` (on 3.11 the extension-less copies are read by nothing while the `.3` files are the models — a 3-char
-  suffix decides whether the sentiment fallback boots); and the training corpora. NOT droppable: `scipy/spatial` +
-  `scipy/interpolate` (reached via `scipy.stats`/`sklearn.cluster._optics`) and matplotlib's DejaVu fonts.
-- **A file's extension is a promise to some readers and a suggestion to others.** `backend/static/icon.ico` was the app's
-  PNG renamed: browser content-sniffs it (favicon looked right), PyInstaller copied invalid bytes printing "Copying icon",
-  Inno Setup refused to compile (`Resource update error: Icon file is invalid`) only *after* the folder/zip took ten
-  minutes. Fix: `tools/build_icon.py` turns `icon.jpg` into a circular 1024×1024 PNG master and generates a real ICO
-  (16/24/32/48/64/128/256, transparent corners); `test_desktop_packaging.py::TestTheIconIsWhatItsNameSays` parses every
-  frame offset and the alpha at the centre/corner, and the build checks the header bytes **before** the expensive steps.
-- **A background build's exit code is only as trustworthy as its wrapper.** A failed-on-icon run reported *completed
-  (exit code 0)* because the command ended with an `echo`; the log's own last line was `powershell exit=1`. Launch the
-  build as the **last** thing the shell does and read the log's own summary lines.
-- **A packer's warning is a switch you think is on.** Inno Setup 7 prints `LZMAUseSeparateProcess is obsolete and ignored`
-  — same class as a tool-ignored option: an option the tool ignores is documentation, not configuration; `installer.iss` is
-  now verified by compiling it.
-- **A packer must collect by the file tree, not by a static-import graph the build's own interpreter can't see.**
-  `hiddenimports += collect_submodules(pkg)` was called before `pathex=[BACKEND]` reached `Analysis`, so the spec's
-  interpreter couldn't see `backend/` and `collect_submodules('nodes')` returned an **empty list** — `nodes.executors`
-  (reached only by `importlib.import_module('nodes.executors')`) meant **zero plugins shipped**, and the exe died on
-  launch `No module named 'nodes.executors'`. This held for every build (the 2026-10-28 exe was equally dead). Fix:
-  `desktop/frozen_modules.py` (pure `pathlib`, no imports) replaces `collect_submodules`; both test and build read the same
-  function; measured **314** first-party modules. Pinned: `tests/unit/desktop/test_desktop_packaging.py` (each `.py` in a
-  named package is collected; `nodes.executors`/`runtime.gate`/`engine.run_logs`/`engine.run_schedule` present;
-  `frozen_modules` imports no first-party or PyInstaller; removing `nodes` really drops `nodes.executors`).
-
-## Lint 标准 / Lint standards
-
-### pylint is three tiers, because one honest answer does not fit three kinds of file
-
-Product code takes `.pylintrc`; `tests/` takes `.pylintrc.tests`; the `backend/test_*.py` probes take
-`.pylintrc.probes`. **Nested config files are ignored by pylint** (measured: a subdir `.pylintrc` did not apply), so each
-tier is its own invocation with an explicit `--rcfile`. `tests/unit/gates/test_lint_gate.py` pins the exemptions' shape
-(pytest idioms not in the product list, `C0413` not either, `exclude-protected` a named member not a message). The
-"lint-gate is only a gate if it linted everything" bullets follow; the whole tier is its own grep anchor.
-
-- **`pylint packaging` was never our folder — the directory is `desktop/` for that reason.** A bare target `packaging`
-  resolved to the PyPA distribution in site-packages, linting a third-party library over our files. Two fixes: the workflow
-  lists FILES and refuses an empty list, and no project directory shares a name with an installed distribution.
-- **Why the test tree is exempt from exactly three messages.** `W0621` (a fixture is requested BY NAME so test and
-  module-level fixture must share it), `W0613` (an autouse/requested fixture's argument IS the use), `W0212` (half the
-  suite questions the public surface). Those three remain findings in product code.
-- **`global` in product code is a seam, not a smell — where it is one.** All 14 sites are state a caller rebinds on
-  purpose (store singletons, `settings_store` cache, `state.set_log_sink`, the scheduler's starter/counters). `W0603` is
-  exempted in `.pylintrc`/`.pylintrc.probes` with that written down, NOT in `.pylintrc.tests`.
-- **A checker's false positive is usually an imprecise type.** `_RUN_QUEUE: list = []` made every subscript `E1136`;
-  naming the element (`QueueEntry`) cleared ten. `report_service`'s `E1135` survived a `TypedDict` (traced to a `None`
-  literal); a frozen `@dataclass` is readable. `_abort = None` produced `E1102`; annotating `Callable[[], bool] | None` and
-  reading `self._abort` removed both it and the defensive `getattr`. `sys.stdout._original` became `unwrap()` on the tee.
-- **`webdriver.Chrome` is invisible to checkers** (selenium's exports are lazy `__getattr__`). Importing the full
-  `...chrome.webdriver.WebDriver` name removed the only inline `# pylint: disable` in the crawler core — and **moved a test
-  seam**: `test_driver_options.py` patched `base_module.webdriver.Chrome` (11 ERROR, 53 passed hid them). Patch the name
-  the module constructs; read the whole summary, not the pass count.
-- **`W1203` cannot be fixed by lazy `%` here.** `test_i18n.py::TestNoHardcodedConsoleText` counts `%s` tokens as
-  untranslated prose and `t(key) + ': %s'` only trades the finding for `W1201`; the answer is a named catalogue slot in
-  both languages.
-- **Unused arguments find real bugs.** `sessions.profiles.status(size=False)` was documented twice as skipping the walk and
-  never read the flag — `/api/cookies/status` re-walked every profile (measured 236 MB) once per account row.
-- **The formatting hook eats an import added a hair too early OR too late.** `ruff check --fix` deletes an unused import at
-  that moment (`import math` one edit early silently disappears → `F821`); and moving an import into its using function
-  while a module-level twin still existed made the local name a redefinition (`F811` autofix deleted the new one, six
-  suites died `NameError`). Land use and import in the same edit; delete the old binding first; grep the symbol before
-  believing the move.
-
-### 引号 / Quotation marks — one bracket system per language
-
-- **中文用 “ ”，英文用 `" "`，角括号（U+300C–U+300F）一律不用。** 这个仓库中英混排：中文 README 与英文
-  docstring 在同一文件里，i18n 目录的两种语言键值成对。两套引号并存时，“界面就是这么写的”“这是节点标题”“这是
-  一条路径”在标点上长成同一种形状，读者没法从标点判断这句话是在引用什么。统一到各语言自己的引号之后，句子才回到
-  它本来的语言里读。
-- **引号跟随句子所在的语言，而不是被引内容的字母表。** 英文句子里引一句中文原文，仍用中文引号（“…”、
-  “1 个失败”）；中文句子里引一个英文产品名，也仍用中文引号（“Ollama”）。只有整句都是英文时，才用英文引号。
-- **门禁**：`tests/unit/gates/test_quote_style.py` 扫 `backend/ tests/ docs/ desktop/ tools/ deploy/ .github/
-  .opencode/ ml_train/scripts` 与根目录文件，逐文件报首个行号。四处按事实豁免，不是为了让扫描变绿：
-  `backend/static/vendor`、`backend/static/geo`（SHA-256 钉住的第三方字节，改一个字符就废掉 pin，见
-  `test_vendored_assets`）、`ml_train/datasets`、`ml_train/models`（爬来的语料与第三方模型卡原文）、
-  `desktop/.venv-build`（打包 venv 的 site-packages）。
-- **一次性全仓替换（2303 对）只有四处要手工看**：两处 `.strip('…')` 的字符集合与一处标题正则的字符类，它们
-  本意是“去掉装饰字符”，换成新的引号集合（“”‘’）后语义不变；另一处是写坏的引号——闭合写成了 `»`，扫描按
-  配对找不到才被发现。**批量替换按括号配对做，不是按行做**，否则跨行引用会被拆成两个半句。
-
-### A lint gate is only a gate if it linted everything
-
-- **只 lint 改动文件 = 没 lint.** Running pylint over just touched files let three *already committed* violations survive
-  (a `W0108` lambda, a `W0212` reaching `bridge._RUNNABLE_STATES`, a `W0201` stub attr), each behind a "both tiers 10.00/10"
-  claim from a partial target list. The gate is the whole product tree and the whole test tree (every `tests/**/*.py`, not
-  only `test_*.py` — conftest and helpers too), every time.
-- **The target list must be absolute, forward-slashed, free of `\r`.** A relative list makes `tests/` helpers report false
-  `E0401` (they import each other by a path the relative run lacks); backslashes from Git Bash eat into `backendapp.py`;
-  Windows `write_text` writes CRLF so every arg ends `\r` and all files report `F0001`. Generate absolute with `/`, invoke
-  via `tr -d '\r'` (reproduction: `build/make_lint_lists.py`, still present).
-- **PowerShell: `@( (Get-ChildItem a), (Get-ChildItem b) ) | ForEach-Object FullName` lints NOTHING.** Measured on the
-  first CI run carrying the pylint steps (run 40450524569, 0.7 s): the comma builds an array of **two arrays**,
-  `ForEach-Object -MemberName` does not member-enumerate it, `$t.Count`=2 with empty items, pylint got two blank args and
-  printed `No files to lint: exiting.` — and `if (-not $targets)` did **not** fire (array-of-empties is truthy). The
-  shape that works: statements inside `@()` + `ForEach-Object { $_.FullName }`; both CI steps print `linting NNN files`.
-  Pinned: `test_lint_gate.py::TestTheStandards::test_ci_runs_the_two_tiers_it_can_and_says_why_not_the_third`.
-- **A gate whose machine differs from the runner's proves less than it says.** The product tier read 10.00/10 for weeks
-  here and reported **19 × `E0401`** the first CI run (`torch`/`transformers`/`onnx`/`sentence_transformers`/`bertopic`/
-  `uiautomation` — all in `requirements-optional.txt`, all imported inside a probing guard, all absent on a hosted runner).
-  Fix: `ignored-modules=` in `.pylintrc` **by name, never by switching `E0401` off**; `test_lint_gate.py` pins both
-  directions (nothing exempted that isn't a declared optional, nothing the product imports that's left out).
-- **A byte pin and `* text=auto` cannot coexist.** `vendor/echarts.min.js` is SHA-256-pinned, but the repo's
-  `* text=auto eol=lf` converted its 45 CRLF pairs at commit (upstream really ships those CRLFs), so the blob in git was a
-  **different file** than reviewed — CI checked out the blob and failed the pin, this box read its own copy and passed.
-  Fixed by `backend/static/vendor/** -text` + `git add --renormalize`, guarded by
-  `test_vendored_assets.TestThePinnedBytesAreTheStoredBytes` (`git check-attr text` + hash `git show :<path>`).
-  **A check reading the working copy proves nothing about what is stored.**
-- **A stub that fakes one backend silently assumes the machine picks that backend.** The three bert analyzer suites
-  installed a fake `transformers.pipeline` and were green for weeks (this box has torch); CI installs
-  `requirements.txt` (onnxruntime+tokenizers) and never torch, so `bert_runtime()` answered `'onnx'` and the product
-  correctly refused a non-directory model name — 13 cases reddened. The fix is not a skip: the case states its runtime
-  (`monkeypatch bert_runtime → 'torch'`). Same lesson, second instance: 红果's "missing player refused by name" dropped the
-  stack seam, so it only tested the player where mitmproxy/uiautomation are installed; now the case says the stack is
-  present, plus a second case pinning the stack refusal (naming the two packages, NOT blaming the player).
-- **`subprocess.run` without `check=` is a finding worth taking literally.** W1510 sent two cases to exit 4. `check=False`
-  is the honest spelling when the test asserts on `returncode` itself; in `test_boot_import_budget` it turned an
-  `AttributeError: 'NoneType' has no attribute 'strip'` (seen once on the runner, unreproducible here) into an assertion
-  carrying the child's return code and stderr. When a failure can't be reproduced, make it name itself: the next run's
-  decisive measurement was `CompletedProcess(returncode=0, stderr='', stdout=None)` — the child ran cleanly, so the **pipe**
-  differed. **A test should read its answer through the transport the claim depends on**, and "which modules did `import
-  app` load" does not depend on a captured stdout: the child writes its report to a `tmp_path` file. Harness facts are only
-  knowable from the harness — this took two CI runs.
-- **Fixing one step of a pipeline does not prove the next ran.** Once both pylint tiers passed on the runner, CI reached
-  the **fast tier for the first time in this repo's history** and reported **27 failures** all green on the writing box.
-  Five shapes: a stub patching the torch pipeline while the product loads ONNX (13 × `TestBertMode`); a byte-SHA pin on a
-  vendored `.js` checkout re-writes line endings for; a `main()` that refuses when `upx` isn't on PATH while its test
-  asserts exit 0; a subprocess whose `stdout` came back `None`; a refusal test reading a machine-local path. Rule: **a
-  green step nobody has seen run is a claim, not a gate** — each fixed by making the *test ask the machine*.
-- **A wrapper that reports the exit code is part of the gate.** A background command ending in `echo done`, or piping the
-  checker through `tail`, reports 0 even when the checker failed; the measured exit must be the shell's last one and the
-  evidence the checker's own summary line. Same trap one layer up: a redirect to a nonexistent dir (`build/fast.log` before
-  `mkdir build`) never runs the suite.
-
-## Cross-platform / Win・Linux・macOS 三套系统
-
-Developed on Windows, deployed on a **Linux cloud server** (`CRAWLER_CLOUD=1`), macOS in scope. Three read-only audits
-produced this list; every entry was a real defect on at least one platform, not a style preference. Rules in AGENTS.md
-"Cross-platform"; evidence here.
-
-- **The default is all three; "we only use Windows" is not a design reason.** The user stated this on 2026-11-09 after a
-  Windows-only BERT installer field was proposed. Every capability must be designed, implemented and tested for Windows,
-  Linux and macOS in the same change. A desktop package feature needs its macOS counterpart (`.app`/DMG) and the Linux
-  source path; a single-OS branch is allowed only when the capability is physically absent elsewhere, and then the server
-  answers the refusal by name and the UI entry disappears — never a silent Windows-only control.
-
-- **Chrome discovery was a Windows-only table.** `chrome_candidates` built `%PROGRAMFILES%…chrome.exe` and nothing else,
-  so a server with `/usr/bin/chromium` answered “本机没有可用的 Chrome”; the Docker image worked **only** because it
-  exports `CHROME_BIN`. Tables are now per-OS (`CHROME_PATHS`/`CHROME_PATH_NAMES`/`XELATEX_PATHS`/`CTEX_FONTSET` in
-  `core/machine.py`), and a test asserts each is indexed by **exactly** the three platforms.
-- **Ask the target OS for its separators, not the host.** `Path('/Users/x')/'Applications'` renders backslashes on a
-  Windows test asking about macOS, and `os.pathsep` splits a Linux `PATH` wrong. Build candidates with `ntpath`/`posixpath`
-  chosen by the *requested* system.
-- **Matplotlib's CJK stack named only Windows fonts.** It resolved to `DejaVu Sans` (every Han char a box); the image
-  installs `fonts-noto-cjk` (**Noto Sans CJK SC**) and `fonts-wqy-zenhei` (**WenQuanYi Zen Hei** — not "Micro Hei").
-  Windows names stay first so a desktop's answer doesn't move.
-- **A remedy sentence is a different sentence per OS.** Telling a Linux user to open the MiKTeX console is advice nobody can
-  follow; hence `deps.<family>.<platform>` keys chosen by `core.machine.remedy` — a **computed** key, so the contract walks
-  the value universe (`REMEDY_PREFIXES × REMEDY_PLATFORMS × both languages`).
-- **仿宋 (FangSong) is a Windows font.** Every paper figure asked `\setCJKmainfont{FangSong}`; on TeX Live the whole PDF
-  feature died "The font "FangSong" cannot be found". Off Windows the ctex line carries that OS's font set
-  (`fontset=fandol`/`macnew`) and no `\setCJK` line; the emitted comment names the family actually used. Windows keeps its
-  three lines byte-for-byte (26/26 compiles).
-- **`taskkill` under `contextlib.suppress(Exception)` also swallowed the line that marked the session dead.** On Linux:
-  nothing killed, `DeadDriver()` never assigned, console read as stopped, and the next crawl waited `PROFILE_LOCK_TIMEOUT`
-  (900 s) for a profile a live Chrome held. Off Windows the reap is `os.kill(SIGKILL)` with the driver's **direct children
-  first** (field 4 of `/proc/<pid>/stat`). Two facts: Windows' `signal` has **no `SIGKILL`**, and `os.killpg` is unusable
-  (chromedriver shares the server's process group).
-- **A filename limit limits what the OS counts.** Windows counts characters per component; ext4/APFS count **UTF-8 bytes**
-  (NAME_MAX 255). 100 Chinese chars are ~300 bytes. `sanitize_filename` cuts by both, byte budget 200 not 255 (the writer
-  appends a suffix after the cap).
-- **A container with no `LANG` has an ASCII stdout, and a Chinese log line dies inside the logging handler** (which
-  swallows it, so the line vanishes). Not "always force UTF-8" (a Chinese cp936 console writes Han fine): if the stream
-  can't encode a Han probe, reconfigure and say so; else only `errors='replace'`. The image sets `PYTHONUTF8=1`/
-  `LANG=C.UTF-8`.
-- **A Windows-only capability needs four answers, not one.** 红果评论 drives a desktop player through a proxy whose CA is
-  installed into the Windows cert store. Refusing inside the node makes the user pay a run start for an answer known at
-  load. So the matrix carries `requires='windows_desktop'`; `/api/capabilities` answers whether THIS machine meets it;
-  `validate` refuses before run; the panel lists the option **disabled with the reason named** and hides the desktop-only
-  rows through `html[data-win-desktop]`; a missing verdict leaves everything visible. `requirement_met` is the one predicate.
-- **`pip install -r requirements-optional.txt` was a Windows-only command.** `uiautomation` is a comtypes-based Windows
-  sdist, so the optional stack couldn't install on a server; both harvest packages now carry `sys_platform == "win32"`. The
-  other gap was `tzdata` (Windows and slim images have no system zoneinfo dir → `ZoneInfoNotFoundError`).
-- **A deploy knob nobody reads is worse than none.** The Dockerfile exported `CHROMEDRIVER_PATH`; `core/config.py` reads
-  `CIXI_DRIVER_PATH`. The image looked configured and was not.
-- **Two tests were pinning a Windows spelling rather than an answer.** `test_lint_gate.py` required the literal
-  `Get-ChildItem` (an ubuntu runner would fail the gate, not the code) and `test_browser_startup_refusals.py` named its
-  fake driver `chromedriver.exe`. `test_hongguo_harvest.py` faked `sys.platform='win32'` and never asked what the other
-  branch does; it now refuses `linux`, `darwin` and a cloud Windows host explicitly.
-- **Two `replace('\\', '/')` calls were kept, on purpose** (`api/studio.py::save-pdf` folds both separators before
-  `basename` so a Windows-style path is refused on Linux exactly as a POSIX one is on Windows; `analyzers/sentiment.py::
-  resolve_bert_model` folds so a registry path typed on Windows still resolves). An audit called these mangling; reading
-  each route says otherwise.
-- **The scan that keeps the rule has to be able to fire without crying.** A `[A-Za-z]:\` pattern matched the `\s` of every
-  regex in `analyzers/` and flagged 20 unrelated lines; it now looks for the artifacts that break Linux (install roots,
-  `taskkill`, `ctypes.windll`/`winreg`/`msvcrt`, quoted `.exe`), skips docstrings/trailing comments, and re-asserts every
-  exempted file still holds an artifact. An allowlist entry that exempts nothing is a lie waiting to be read.
-- **A refusal sentence that names a Windows file is itself a Windows fact.** `crawl.chromeMissing` told every system to
-  point at “它的 chrome.exe” and `disguise_headless` sent `'platform': 'Win32'` — both survived because the zh/en parity
-  check compares the two languages to *each other*. Now the executable name comes from `machine.chrome_executable_name()`
-  (reading the same `CHROME_PATH_NAMES` the probe uses) and the platform token from `NAVIGATOR_PLATFORMS`. Deleting
-  `i18n.py` from `WINDOWS_TABLES` is what makes it stick (`test_each_exempted_file_actually_holds_a_windows_artifact`).
-- **A browser that cannot answer is refused, not silently replaced.** The cloud hotfix for hongguo's wedged renderer fell
-  back to a temporary profile; that swaps the device identity mid-run, and `docs/crawler_notes.md` measures that a
-  `use_profile=False` crawl is *not* the same table as a profile crawl, so the code may not make that choice for the user.
-  The repo's answer is three structural fixes instead: start every Chrome on `about:blank` (the default new-tab page's
-  Google fetch is what hung the startup navigation and, behind it, every command), switch the component updater off (its
-  CRX caches are what grew hongguo's profile until the renderer wedged), and probe the renderer once with a hard bound —
-  refusing **by name** with the next step when it does not answer, because every later command would wait on the same
-  socket. The probe runs on a `daemon` thread: a pool thread is joined at interpreter exit, which turns "bounded" into
-  "waited for twice". Closing a wedged session reaps that session's process tree through `core/procs` (never a global
-  `taskkill`). A platform with no session keeps no profile at all (`needs_profile = False`), because the directory can
-  only accumulate Chrome's own caches; that attribute and the matrix's `needs_session` are one fact, and
-  `test_platform_rules.py` refuses a platform where they disagree.
-- **A general exemption is not a licence for the one rule the file broke.** `hongguo/harvest.py` is on the Windows-table
-  list because it genuinely talks to the certificate store and finds the player window through `ctypes.windll`; that
-  said nothing about the inline `taskkill /F /T /PID` sitting in its `close()`, nor about four spawn sites
-  (`charts/pdf.py`, the harvest proxy and player, `trust.py`, and `core/procs` itself) starting a console-subsystem
-  child with no `creationflags`. On a packaged server, which has no console of its own, each PDF compile, each harvest
-  and each reaped browser flashed a black window. Two gates now own the rules: every `subprocess.run/Popen` site in
-  `backend/` must pass `procs.popen_kwargs()` (AST-scanned, with a positive control), and `taskkill` may appear in
-  code in `core/procs.py` alone.
-- **`sentiment.resolve_bert_model` anchors on the project root, and that is not the data root.** An audit read the
-  `BASE_DIR` joins as a missed scope. They are a different family of model: the registry stores `ml_train/models/<name>`
-  — the training workspace, which lives next to the checkout and is never under `CRAWLER_DATA_ROOT` — while
-  `ml_base.MODEL_DIR` (`Config.DATA_DIR/models`) holds the sklearn joblib files. Two homes, two owners, one knob each.
-- **What CI now proves, and what it still cannot.** The platform tables above landed as code + substitution tests because
-  this box has no Linux runtime. Since 2026-11 `.github/workflows/ci.yml` runs the fast tier and the real-Chrome device
-  tier on Windows, Ubuntu and macOS (all six jobs green on run #42519799665, head `4f0ee16`). The first matrix runs found
-  the expected portability debt — 48 platform-pinned assertions in the fast tier (ctex's `fontset`, component assets,
-  Chrome/Node discovery polluted by the runner's own installs, MDS tolerance, directory order) plus real product facts
-  (`os.startfile`, `--accept-lang`, the hongguo window probes) — which is the evidence that the matrix asks a different
-  question on each OS. **Still unproven by CI**: a real cloud-server boot and crawl, a `fandol` compile, `live_site`/
-  Ollama/CatBus, and the packaged desktop window. The Linux packages are in README/`docs/config.md`; run them once on the
-  server and report what differs.
-
-## The second crawl backend (CatBus) — why the boundary is where it is
-
-The **imperatives** (the must-obey crawl rules) live only in `docs/crawler_rules.md` → “第二采集后端 / The second crawl
-backend (CatBus)”; read that before touching CatBus. What is kept here is the *why-evidence* AGENTS points at:
-
-- **Why a subprocess, not a port.** CatBus is a Node program already speaking this app's row shape: one JSONL row per
-  record on stdout, one summary envelope on last stderr line, exit codes classifying failure (1 unclassified / 2
-  usage-unsupported / 3 login / 4 not-implemented / 5 risk control / 6 network / 7 upstream), and a `capabilities`
-  command answering 平台×模式 machine-readably. Porting eleven platform clients to Python would be a second implementation
-  to keep in step; the boundary is one file (`services/ingest/catbus.py`).
-- **Why the manifest is read, never copied.** A local "what CatBus supports" table would be the second opinion the
-  frontend rule exists to stop; `probe()` runs `capabilities` (cached, `PROBE_TTL`) and `columns_for`/`identity_for`/
-  `mode_state` answer out of that document.
-- **Streaming was an upstream change, paid for first.** The adapter printed every row after the run finished while this app
-  stores one row per transaction — 停止 mid-crawl would have thrown away everything bought; the adapter now writes each row
-  as produced (CatBus commit `4528af3`).
-- **`windowsHide` is not a `Popen` keyword.** `windowsHide=True` raised `TypeError` (caught only because a test drove a
-  real child). The Windows answer is `creationflags=CREATE_NO_WINDOW`, which POSIX `subprocess` doesn't define — so it
-  lives in `core/procs.popen_kwargs()` (Windows: the flag; Linux/macOS: `{}`), tested per OS. A comment crawl starts one
-  child per link, so the missing flag is a black window flashing once per article.
-- **A piped Python child writes the ANSI code page.** The real-child test printed `{"标题": …}` and the parent read mojibake
-  then `UnicodeEncodeError: surrogates not allowed`. The bridge writes/reads **bytes** and decodes UTF-8 itself; parameters
-  travel as one UTF-8 stdin document, never argv (a code page rewrites a Chinese keyword; a long link list hits a command
-  length limit).
-- **Two backends, two logins, two answer keys.** The pre-run gate keys a verdict by `platform[@account]`; a CatBus `default`
-  and a cookie `default` are two accounts on two systems, so `entry_key` gains a `#catbus` suffix **only** for a
-  non-browser backend (every key this app ever produced still spells the same), and the adapter's verdict is deliberately
-  not cached. `login_wall` stays False (the executor's reading would print cookie/风控 advice about a session this crawl
-  doesn't have). **Not yet verified on a real site** — no CatBus account on this box, so the row mapping/`--raw` shapes/
-  partial accounting are tested against the adapter's documented contract and a stand-in process.
-- **A Cookie switch must not decide a login that is not a Cookie.** `cookie_preflight_before_run` is labelled and
-  documented as the *browser* check. Folding CatBus into it meant that after the setting defaulted to off, a CatBus canvas
-  showed “CatBus 未登录” once and then started runs that died at the adapter — measured live 2026-11-14 as
-  `exit=3`, because the adapter's refusal lives on `articles[].error` and the bridge only read the summary's top-level
-  `error`. So: `auth: required` cells are asked every run regardless of that switch (one short-lived Node process, no
-  Chrome), and `run()` reads `error`, `articles[].error`, then `warnings` — code, message and hint all travel into the
-  refusal line, and the warning is not printed a second time beside it (one failure, one line). Pinned:
-  `test_frontend_cookie_gate_js.py` (`catbus-asks-even-with-the-cookie-check-off`), `test_catbus_bridge.py`,
-  `test_catbus_crawler.py`.
-
-## 按主题的测量记录 / Topic measurements (appendix)
-
-> Undated per-topic measurement records, compressed to rule + number + pinning test. The crawl/analysis facts are here;
-> the **rules** are in AGENTS.md and the crawl **imperatives** in `docs/crawler_rules.md`.
-
-### 三维能力模型 / Platform × engine × function
-
-- **A computed label key is an audit blind spot, again.** CatBus's manifest can grow modes without a Python change, so
-  labels must be a literal table (`CATBUS_MODE_LABELS`) and a contract test must walk the *manifest's* key set (asking only
-  keys already in the table proves nothing) — the same mistake in three earlier places (node types, biblio columns, op
-  names). Pinned: `tests/unit/test_catbus_capability_dimension.py`.
-- **A function the engine cannot run is still shown, greyed and named.** Removing it paints a stored value as option #0 and
-  makes the panel lie; the payload carries `engines` per platform, `engines`+`cells` per function, and the adapter's
-  `reason` prose. The frontend holds no list.
-- **A seeded default is not a condition the user chose.** The canvas seeds field defaults onto a new node, so
-  `board=popular` exists on a posts node that never asked for a board — refusing an unconsumed parameter compares to the
-  declared default first, or every CatBus node dies on a field it never filled.
-- **Read the manifest, never a list compiled beside it.** The adapter derives read modes from the platform registry
-  (`write()`-declared commands carry `mutating` and are mechanically excluded); the one deliberate exception is `msg *`
-  (private messages), excluded as a resource with the reason in code.
-
-### 启动路径与 BERT 运行时 / Boot path and BERT runtimes
-
-- **Process start is a budget spent on libraries no request asked for.** `python -X importtime -c "import app"` = **9.2 s**,
-  **5.4 s** of it a single top-level `from sklearn.ensemble import IsolationForest` in `analyzers/anomaly.py`; moving the
-  heavy third-party imports into their using functions brought it to **2.07 s**. The `analyzers` barrel is deliberately
-  untouched (four seams read it at class level). Pinned: `tests/unit/foundation/test_boot_import_budget.py`.
-- **Pin a budget with a module census, never a stopwatch.** The test walks module bodies with `ast` and imports `app` in a
-  fresh subprocess to read `sys.modules` (catches transitive leakage); a wall-clock assertion would fail a slow runner and
-  pass a fast one while proving nothing.
-- **Two frontend-adjacent traps in the same move:** `services/biblio/cluster.py`'s return annotation
-  `tuple[TfidfVectorizer, …]` is evaluated at `def` time, so quote it AND keep it visible (`if TYPE_CHECKING:`); in
-  `services/charts/visualizer.py`, `matplotlib.use('Agg')` + the CJK `rcParams` block must travel **with** the import
-  (splitting them gives a window or a figure of tofu).
-- **A frozen app's ONNX export must be fed its mask, not let it build one.** Tracing transformers' `attention_mask`
-  handling froze the padding branch: the fp32 graph answered up to **1.0 logit** differently depending on how the batch was
-  padded (agreeing to 4e-07 unpadded). Fix: the graph takes `position_ids` + an additive `attention_mask_4d` as **inputs**;
-  then max abs logit difference is **3.1e-06** over a 243-pad-cell batch. `attn_implementation='eager'` (sdpa's
-  shape-dependent booleans bake) and `dynamo=False` are stated, not inherited.
-- **`torch.onnx.export` leaves the module in training mode.** A verification pass right after ran BERT's 10% dropout: the
-  "graph is wrong" number changed (0.14/0.35/0.99) while the graph was stable to 3e-07. Call `model.eval()` again first.
-- **Quantisation is judged on decisions, not distance.** int8 holds macro-F1 within noise but flips **6.7–14.2%** of
-  labelled rows (loss shows on near-ties, where the label is the answer); fp16 flipped none and costs 195 MB vs int8's
-  98 MB, so the pack ships fp16.
-- **A stub that invents an API ships an `AttributeError` in the packaged app.** The `tokenizers` crate exposes `type_ids`;
-  the fake said `token_type_ids` and every stubbed case stayed green until the real graph ran. Pinned:
-  `tests/unit/ml/test_bert_onnx_real_crate.py` (uses the installed crate, fakes only the inference session).
-
-### 文献导入与真实导出件 / Bibliographic imports and real exports
-
-- **A real export file is the only authority on what a source exports.** Everything below was measured by running the
-  product's own readers over files in `samples/`, after doc-derived answers proved wrong three times (PubMed has no XML in
-  the user's reach → the branch/slot/two keys deleted; the Lens file given was the **patent** collection, refused by name;
-  "Scopus/Dimensions" names coded were the English UI's while the user's CSV arrives as `文献标题/年份/来源出版物名称/施引文献/
-  参考文献`). A format nobody handed a file for is not a format the app may claim.
-- **Measured, then fixed:** CSSCI writes 【关 键 词】/【期    刊】 (alignment spaces), names authors 来源作者, merges
-  year+issue+pages into 【年代卷期】`2021,(2):146-155`, and numbers refs `1.` (not `[1]`, which the old gate assumed — so a
-  real CSSCI file wasn't detected and 291 refs would have glued into one citation). Scopus/Dimensions/WoS names are
-  per-field candidate lists via `header_has_groups`. WoS' Excel left `Cited References` empty for all 30 records — **name
-  the FIELD a vendor doesn't offer, not the whole format** (keywords/categories/funding/usage still work).
-- **A fixture may copy structure but never facts.** `samples/biblio/biblio_*_demo.*` reproduce tags/header/spacing/banner
-  with values from a synthetic pool; real vendor files are gitignored. `FORMAT_CASES` carries `has_refs` per case.
-- **Recognising a file ≠ reading it.** Detection answers "not mine" with a plain table, wrong for a file sharing column
-  names. `services/biblio/formats/unsupported.py` holds refusals outside `FORMAT_SPECS`.
-- **One vendor, two collections: the signature must require the differing columns.** Lens' patent download shares `Lens ID`
-  and `Title` with Scholarly, so `lens.py` requires `Citing Works Count` **or** `Fields of Study`; `unsupported.lens_patents`
-  still refuses the patent shape by name. Both directions tested.
-- **A column existing ≠ usable.** Lens writes `References` as opaque record ids (of 24331 ids, 1002 resolve within the
-  file), so `refs` is not declared; `Source Country` is where the *journal* sits, not the authors — filling 国家 with it
-  answers a different question.
-- **Vendors rename columns between versions: a measured file adds candidates, never replaces.** Scopus shipped the
-  times-cited column as both `Citation count` and `Cited by`, article number as `Article number`/`Art. No.`, funding as
-  `Funding Text 1`/`Funding Texts` — each rename silently zeroed one output column.
-- **A claim the readers were never shown cannot stay in the guide.** "WoS reads Tab-delimited" had no `.tsv` measured and
-  `accepted_extensions()` doesn't list one — removed. Re-measure after the user re-exports (`source.<id>.missing` sentences
-  go stale silently).
-- **A paper-ready graph label needs the browser's real rectangle, not a server-side guess.** `workflow.js` installs a
-  `labelLayout` collision resolver at render time; fast suite pins its presence, browser probe drove overlaps to zero.
-- **Avoiding other labels isn't the whole job — a label must stay out of the chrome.** The resolver now compares against a
-  reserved band (`left/top/right/bottom`; legend `#5` once printed over 风险沟通); two follow-ups: a **percentage** inset is
-  a length too (`'10%'`→NaN→0, clamp vanishes), and a **rotated** label can't be clamped (circular `rotateLabel:true` left
-  a vertical term on the title). Pinned: `tests/frontend/harness_label_layout.mjs`.
-- **A free graph is fitted into a SQUARE plot, and its labels follow the area.** ECharts fits `layout:'none'` into the
-  series rect with one scale per axis (`View.calculateTransform`), so a 330×257 board tile drew a 900×900 layout 28% wider
-  than tall — the "看板变形" the user reported. Measured 2026-10-30 on a real 3000-record AIGC run: preview 401×401, board
-  cell 359×359, fullscreen 500×500, resized panel 670×670 after the fix. Three parts belong together: the spring layout is
-  normalised with ONE scale (x/y separately stretched the picture at the data level), two invisible `_bbox_` anchors pin
-  the data box to 50..950, and the browser sizes the rect itself (title above, legend only when ≥620px wide). Labels: the
-  server solver's 1.5 px/unit assumption is wrong at any other size, so symbols/offsets scale with the square and a label
-  budget (`side²×0.35/1800`, highest frequency first) keeps a 330px tile from becoming a white mound. ECharts 5.4.4 reads a
-  `labelLayout` callback's x/y but **not** its `ignore`; returning `hideOverlap:true` + `priority` hands the losers to
-  ECharts' own pass. A panel settles one frame after `init` (fullscreen host measured 1202→1260), hence `settleChart`.
-  **The callback must return `dx`/`dy`, never absolute `x`/`y`:** an absolute label is pinned to the canvas and stayed
-  behind when the graph was zoomed or panned (measured 2026-10-30 in the dashboard cell: the nodes moved, the text did
-  not). An offset keeps the label attached to its node, so roam moves both. Pinned: `TestFreeGraphFitsTheSurface`, the
-  backend layout/anchor cases and `harness_label_layout.mjs`.
-- **A keyword chip belongs above its bubble, not beside it.** The cluster timeline's span line runs through the bubble
-  centre, so a right-hand chip printed straight across the line joining two bubbles; `position:'top'` on both the series
-  and each point's label (a point-level `position` overrides the series) clears it. Same-era points of one cluster are
-  labelled once per (year, cluster) — coincident chips printed on each other.
-- **A light label chip keeps dark ink in both themes.** The biblio builders paint `rgba(255,255,255,…)` chips in every
-  theme; `patchOptionForTheme` recoloured their text to the theme foreground, so the dark theme printed white on white and
-  the 关键词共现 graph read as blank boxes. The chip's own background decides the ink.
-- **`ECHARTS_ONLY_TYPES` was a statement about matplotlib misread as one about LaTeX, switching paper output off.**
-  `build_latex_outputs` skipped every type on it, so `emit_latex` was a no-op for word cloud/sankey/map/topic/network/all
-  nine biblio views (a skipped add-on isn't an error, so nothing complained). The skip now asks its own question
-  (`LATEX_UNBUILDABLE_TYPES`, exactly 模型一致率); `test_only_the_agreement_matrix_has_no_paper_twin` pins it.
-- **"It compiled" ≠ "it fits the page" — and a standalone source can't tell you which.** Every figure is `standalone`, so
-  TeX sizes paper to picture (a 46 cm ring became a 46 cm sheet, 22/22 PDFs "fine"); pasted into A4 it ran off the edge.
-  Evidence is `grep -c Overfull` on the log plus reading rendered pages (first paper build: a page holding only the heading
-  “图表”; a table 2.6 cm past the bottom — both "successfully"). Three attempts, three failures.
-- **A layout whose size grows with the data is sized against the page, not the unit.** The ring radius is `0.46 × nodes`
-  but the tikz unit stayed 1 cm; `GRAPH_BOX_CM` sets the coordinate scale after paying for labels (deliberately wide —
-  under-estimating overflows). What it drops is printed ("已省略 N 个会互相遮盖的节点标签") — silent thinning is a figure
-  that lies about the corpus.
-- **A `tabular` cannot break, so a document pasting whole tables must cut them.** A 50-row table is ~26.5 cm of
-  unbreakable box on a 24.6 cm block; `latex_report` re-cuts into page-sized blocks repeating the header, numbering only the
-  first (`\caption*` for continuations). It only cuts bodies whose shape it recognises; `_split_table` returning `None` is
-  the refusal.
-- **A dual-map table lists nodes as well as links.** `output_shape=dual_map` emits rows where an empty 终点 means "this is a
-  node"; both builders filtered those, so a journal reached by one overlay line wasn't drawn. Same-side edges are
-  undirected too.
-- **An axis label box wider than the preview panel is a name cut off, not wrapped.** Views reserve `axisLabel.width: 200`
-  (right on a 1650 px canvas) but at the preview's 400 px the label measured 46 px LEFT of the canvas. Overlay views use
-  96 px (≈10 CJK chars); browser tier measures both overlays at 400 px in zh and en.
-- **The guide has to name the click, not the capability.** Dimensions writes a full-record CSV, a VOSviewer/CiteSpace
-  network file and a BibTeX, and only the first is read; each source's steps say which to pick and avoid.
-- **An automated export must land on the same parser as the upload it replaces.** CNKI's “导出/参考文献” is the site's
-  own window (`manage/export.html`), and its on-screen list is only a 20-record preview — the full selection is the
-  `CNKI-…txt` behind “导出题录文件”. So the crawler 全选s each page (the site accumulates), downloads the file, strips
-  the blank line CNKI writes between every field, and hands the records to `services.biblio.importer.parse_cnki` — one
-  record shape, one `记录ID`, one set of "this format has no references" refusals. A second parser inside a crawler
-  would let a crawled table and an uploaded file disagree about the same paper. **The public ``/dm8/API/GetExport``
-  recipe is wrong for this version**: measured 2026-10-30 it answers `code=0 暂无数据` even logged in, while the menu →
-  `manage/export.html` → “导出题录文件” path returned all 40 selected records. The way in is the profile: a fresh
-  headless *and* a fresh visible Chrome both land on `/verify/home` (slider), so the cookie row is not optional
-  (`docs/crawler_notes.md` → 中国知网). A download that never appears is carried into the console as a named refusal,
-  never retried into a short table.
-
-### Canvas history, layout baselines and reusable nodes
-
-- **A file and a run are two serializations of the same canvas once a reusable node exists.** The file keeps the group
-  (template, ordered input slots, collapsed flag, external wires); a run receives the expanded child graph.
-  `canvas.toWorkflowJSON()` defaults to the RUN shape; save/autosave pass `{expandReusable:false}`.
-- **A reusable node is ONE entry in `canvas.nodes`; its inside is DOM.** Children render inside the group's box from the
-  stored template, never added to the model — one decision making undo snapshot one object and auto-layout frame the group,
-  not the children. Inside cards are read-only.
-- **Input order is the order wires enter the group; a count mismatch is refused** (`reusable.missingInputs`/`tooManyInputs`),
-  not a guess.
-- **A snapshot restore must be one undo step.** `canvas.batchHistory(fn)` suppresses per-change entries and records the net
-  state once; `workflow.loadFromJSON(data,{history:'single'})` is the only snapshot-restore door.
-- **A layout baseline is positions keyed by the saved workflow name; a missing baseline is a named refusal.** It runs the
-  algorithm first then overlays saved x/y for matching ids; lives in `layout_baselines`, cleared when its snapshot is
-  deleted. Falling back while the menu says “按历史基准” would make the menu lie.
-- **An expanded group's stage needs its own width budget; only a real browser proves it.** The node width from stage+padding
-  left the stage 2px wider than its border-box (SVG carried the stage's pixel width incl. 1px borders);
-  `.reusable-stage-lines{width:100%;height:100%}` fixed overflow. Occlusion-vs-clipping (card under the fixed palette at
-  x<190) is a rect comparison — neither the node stub nor a CSS-only read can tell them apart.
-- **The expand-time auto-layout preference is presentation, not canvas state** (`localStorage` with the Style menu's other
-  choices; never becomes an undo step or a file change).
-- **A read-only inside needs an unwrap door; unwrap is a model operation, not a delete.** `ReusableNodes.unwrap` restores
-  children at template positions/params, reconnects external wires by the same ordered slots, rewires outgoing from the
-  single output, recorded through `batchHistory` as one undo step. A disabled group unwraps into disabled children.
-
-### Project bundles / 项目包
-
-- **A workflow file is not portable; its dataset references are.** The JSON names datasets by content id in
-  `datasets.db`; copying only `workflows/` reopens every Upload node empty. The bundle carries the datasets/templates it can
-  prove are referenced; import remaps every `dataset_id`/`template_id`. A bundle without a referenced dataset is refused at
-  export.
-- **Content identity means the importer cannot promise a new dataset id.** `DatasetStore` hashes rows, so identical bytes
-  imported into a fresh store keep the same id; assert the pointer resolves, not "the id changed".
-- **Import must never overwrite authored names** — a collision becomes the next free ` (2)`/` (3)`; rows may dedupe, names
-  don't replace a file.
-- **The manifest is a security boundary** — accepts only `workflows|datasets|templates/<NNN>.json`, refuses traversal names,
-  checks per-file SHA-1, total size and entry count, validates all pieces before writing.
-- **Never package runtime state by accident** — cookies, keys, logs, run records, model weights, the dataset DB are absent.
-
-### Dataset merge / 数据集合并
-
-- **A union is not an outer join.** Different column sets are refused with the extra/missing names (`pd.concat` would fill
-  NaN and look complete until a chart reads the holes); reference order is the first selected dataset's.
-- **Provenance is additive, never overwritten.** No `来源` → merge inserts one carrying each source's name; an existing
-  `来源`'s per-row values are the user's and win. Source files untouched.
-- **The result is an ordinary dataset** — via `DatasetStore.put`, so content identity/dedupe/row caps/preview apply.
-
-### Vendored front-end assets and machine-level refusals
-
-- **A CDN dependency fails as a blank, not an error.** `index.html` pulled ECharts/echarts-gl/wordcloud/Literata from CDNs
-  and the China basemap from aliyun; with no network the figure area is simply empty — nothing throws. The assertion is
-  over `performance.getEntriesByType('resource')` (every resource from the app's own origin), pinned by
-  `tests/integration/test_ui_layout.py`.
-- **Redistributed bytes get a hash pin, not a fetch.** `tools/vendor_frontend_assets.py` stores the SHA-256 it reviewed and
-  refuses on mismatch; upgrading is one edit with a diff (URL and hash change together).
-- **Google's `css2` declares the same file once per weight.** Naming a font file per `@font-face` shipped 42 files / 2 MB
-  of what is 14 files / 556 KB — dedupe by URL. Sweep your own orphans (packaging copies all of `static/`): `referenced ==
-  on disk`.
-- **A basemap check asserts content, not parseability.** `china.json` still renders if a province disappears; losing
-  Taiwan or the nine-dash line is a factual defect in a paper figure — name which region ("lost 台湾省" beats "33 of 34"),
-  keep the file byte-for-byte as served.
-- **Two answers to one machine-level question is the defect.** The launcher kept its own Chrome list, its own MiKTeX scan,
-  and a hardcoded `127.0.0.1:11434`, so a user who set “设置→Ollama 地址” read "Ollama 未检测到" one line before the app
-  answered from that daemon. Both call `core/machine.py` / `services/charts/pdf.find_xelatex()`.
-- **A default pointing at a nonexistent file is a wrong default.** `Config.DRIVER_PATH` was
-  `C:\Program Files\Google\Chrome\Application\chromedriver.exe`; almost nothing installs there. Blank means "let Selenium
-  Manager fetch the driver matching the installed Chrome" (and why the driver isn't bundled: driver↔Chrome major pair 1:1).
-  Clearing the field used to restore that broken default (the loop in `save_settings`).
-- **`xelatex -interaction=batchmode` puts the reason in `main.log`, not stderr.** Reading only stderr gave "compilation
-  failed" with ~300 near-empty chars about a missing `ctex.sty` the log names in line 1. Read the log before `rmtree`, and
-  translate ``File `X.sty' not found``→name the package, `font "X" cannot be found`→name the font.
-- **Chinese glyphs are a machine fact; silence about it is a paper full of boxes.** Matplotlib falls back per glyph since
-  3.6, so what matters is whether *any* family carries Han; `visualizer.cjk_font()` asks `findfont(...,
-  fallback_to_default=False)` and warns once per wording (cached per message, not a boolean — console language is
-  thread-local). LaTeX asks `\setCJKmainfont{...}` by name, so a missing font is a compile error.
-- **A refusal is only real if the exported figure carries it.** A map whose basemap didn't register was drawn anyway
-  (ECharts paints an empty frame); `applyEchartsOption` now draws the refusal through the live instance, so the saved
-  PNG/SVG contains the reason.
-- **Tests may not inherit the machine's browser set.** `crawlers/core/browser.py::resolve_browser` refuses when Chrome is
-  missing, so `tests/conftest.py` pins one answer (`machine_has_a_browser`) and tests *about* that refusal override it —
-  don't patch `os.path.isfile` (process-wide). Existence questions get real files in `tmp_path` or paths simply absent.
-- **The DOM stub already defines `echarts` (`harness_dom.mjs`)**, so a "library missing" scenario must `delete
-  sandbox.echarts` (a first run recorded `hasLibrary: true` in a world built without one — measuring the stub). Same family
-  as "a wrapper installed in another file isn't the function you load".
-- **A docstring is input to other tests.** Adding ``from app import app`` to a `desktop_entry.py` comment broke a
-  source-*order* contract (a `str.index()` position comparison), because the comment sat earlier in the file — product order
-  was still right, so the comment was reworded rather than the test weakened.
-
-## Multi-account and data scopes
-
-The cloud host used to be one mutable owner. Multi-account hosting (2026-10-31) put every account's work in
-`data/users/<user_id>/` and left machine-level state at the root; the rules are in AGENTS.md "An account's tree…",
-the evidence here.
-
-- **`Config` paths are frozen at import.** The old tree worked because nothing ever moved; the per-account tree needs a
-  live answer, so `runtime/paths.py` reads `Config` on every `system()` call (the test harness repoints those attributes
-  mid-run) and `for_user()` is a pure join under a shape-checked server-minted id — a username never becomes a path.
-  The 87 `Config.<path>` call sites moved to `paths.active()`; import-time captures (settings, the cookie jar, the
-  history service) were turned into providers rather than factories, so every module that imported the single object
-  keeps holding the *same* one.
-- **A content-addressed dataset id is not a cache key for a person.** Two accounts uploading identical bytes get the
-  same `dataset_id`; the read-through cache keyed on the id alone answered one account with the other's frame.
-  `_dataset_cache` keys are `(scope, dataset_id)` and a delete evicts only the current scope.
-- **A worker thread inherits no identity.** `begin_run` records the claimant in `execution_state['user_id']` and passes
-  the account to `_run_worker`, which binds it before opening stores; the queue drain binds each entry's owner and the
-  scheduler reads each account's `schedules.json` inside that account's context. Without this the run's `runs.db`,
-  exports and cookies land in the local owner's tree while the panel says the account ran. **Every thread a run or a
-  request starts is part of this rule:** the parallel-workflow pool, `preflight.check()`'s probe pool and the two
-  cookie-job workers bind the caller's account explicitly — a fresh thread starts with no `ContextVar`, and the first
-  audit found all three opening the checkout-level `data/` tree.
-- **The console and the canvas identity belong to the account that owns the slot.** `execution_state['logs']` is
-  process-wide, so `_push_log` drops a line whose bound caller is not the run owner, and queue narration is printed
-  only for that owner. `workflow_name`/`fingerprint` moved to `state.set_ambient()`/`ambient()` (`_AMBIENT[user_id]`):
-  a second account loading a canvas used to re-key the first account's in-flight run, and a preview without a
-  `workflow_name` could read the other account's last canvas. Live `execution_state['results']` is likewise served
-  only when `run_is_foreign()` is false — `resolution`/Chart-Studio/report are the customers.
-- **A bare `WorkflowManager()` resolves the caller's folder.** The schedules picker, project bundles and the
-  provenance readers construct it without an argument; defaulting to `Config.WORKFLOW_DIR` sent every account to the
-  checkout-level canvas folder (one account could schedule, export, or quote another's saved workflow). Its default is
-  now `paths.active().workflow_dir`; the per-account stores still pass an explicit directory.
-- **A custom `browser_profile_dir` is a machine-level ROOT, not one shared device.** A Chrome profile holds the login,
-  so under a configured root each account lives in `<root>/<user_id>/`, while the login-free `_template` stays once at
-  `<root>/_template` (the cloud seeding path expects exactly that shared template).
-- **The queue mirror must not be one file for everyone.** Mirroring the whole in-memory queue through the active
-  account's store both leaked another account's workflow names and restored them under the wrong owner; the mirror is
-  now written per owner, and an entry whose account was deleted/disabled is dropped by name at drain time.
-- **Sessions are rows, not a signed claim.** The cookie carries a random token; the table stores only its sha256 plus a
-  CSRF token and an absolute/idle expiry. That is what makes logout/disable/reset/force-logout really revoke a replayed
-  cookie; restart no longer signs everyone out. A password reset keeps only the current session, and every mutating
-  request must echo `X-CSRF-Token` (the fetch patch adds it once). The login form has its own one-shot token.
-- **An account with a debt may only change the password.** `must_change_password` is enforced in the gate (403 +
-  `X-Password-Change-Required`) instead of relying on a dialog the page might not show.
-- **The test harness needs its own registry per test.** `accounts_mode()` treats an existing `accounts.db` as "this
-  installation has accounts", so one test's login would switch the mode on (and authenticate-fail) every later test;
-  `clean_globals` points `Config.ACCOUNTS_DB` at a fresh file and resets the service/throttle before yielding.
-- **A real browser found two login bugs that curl and `test_client` could not.** Chromium 148 sent `Origin: null` on
-  the form POST while the login response carried `Referrer-Policy: no-referrer` — the app's own foreign-origin guard
-  then refused every real login; the policy is now `same-origin`. It also fetches `GET /login?next=/favicon.ico`
-  immediately after the document, and the one-shot CSRF token used to be re-minted on every GET, so the favicon
-  request replaced the session token after the page had rendered the old one; `_login_csrf()` now reuses an existing
-  token and only the POST consumes it. Both bugs passed `curl` (no Origin, no favicon). Measure login flows in the
-  installed Chrome before calling them fixed.
-- **There is ONE dialog shell, so two boot dialogs replace each other.** On a cloud first entry the privacy notice and
-  the forced password-change form both called `showDialog`; the notice landed last, the change form vanished, and its
-  promise never resolved (the `_pwOpen` guard then blocked every retry) — every API stayed 403 with no visible way out.
-  The notice is now suppressed while `Auth.mustChange`, and a successful change reloads the page so the refused
-  panels fetch again.
-- **That accident was the shell's, not the boot sequence's, and it was still reachable.** Suppressing one dialog at boot
-  left every OTHER pair free to collide: an administrator resetting someone's password makes the next 403 reopen the
-  forced form — from inside the fetch interceptor, at any moment, while the user is naming a workflow or confirming a
-  delete. The replaced dialog's buttons were erased (its promise never settled, so `_pwOpen` stayed `true` and the debt
-  could not be paid on that page), and its Esc/backdrop listeners were never unbound, so a keypress dismissed whichever
-  dialog was on screen. `showDialog` now registers how to settle itself: a newcomer answers the pending dialog with ITS
-  `cancelValue` and unbinds it, and a `dismissable: false` dialog cannot be displaced at all (the newcomer resolves
-  immediately). Pinned in `harness_dialog_a11y.mjs`, because `harness_accounts.mjs` stubs `showDialog` — the panel's own
-  tests could never have seen this.
-
-A second audit (same day, whole-project) found the following, each pinned by a test that FAILS without its fix:
-
-- **A refused claim owns nothing.** `begin_run` stamps `run_id`, `user_id`, `username` and the ambient canvas BEFORE
-  its last payload refusals (missing model, transport unavailable), and the `finally` that gives the slot back reset
-  only `running`. Measured: account B, whose canvas needs a model it never configured, pressed 运行 next to account A's
-  finished run — B's `/api/workflow/status` then shipped **A's** console, workflow names and in-memory chart results,
-  while A was told its own run was `foreign_run`. The claim now snapshots what it writes and hands it back
-  (`_claim_stamp` / `_restore_claim_stamp`), including `forget_ambient` when the caller held no canvas before.
-- **No thread inherits a `ContextVar` — measured, not assumed.** `runtime/account_context.py` claimed a context
-  variable "is copied into the threads those helpers start". On this box's CPython 3.11 a `threading.Thread` body AND
-  a `ThreadPoolExecutor.submit` callable both read the default (`None`) while the parent reads the bound value. The
-  sentence was the licence for the bug class the layer exists to prevent, so it now says the opposite and names the
-  three places that re-bind. Same root cause, second symptom: `RunLogWriter._drain` resolved `get_run_store()` on
-  whichever thread happened to print the 200th console line (an OpenRouter retry warning, a Stop reaper) — an account's
-  console batch went into the checkout-level `data/runs.db` and left a hole in its own durable log. The writer now
-  captures the owner when the sink is ARMED (`arm(account)`, run by the bound claim) and writes inside that context.
-- **Authorize before you touch the target.** The delete route called `stores.release_user()` — closing the victim's
-  SQLite handles — *before* the service checked the caller was an administrator, and called it AGAIN in the
-  `except AccountError` branch, so a refusal “这个账号还有运行中的任务” arrived after the guard had destroyed the run
-  it was protecting, and a `user`-role session could do it to any id. The status route probed the same way and leaked
-  the target's run id to a non-admin in its 409. The routes now call `check_deletable` / `assert_admin` first.
-- **"No run is live" is proved against a state that must be pinned.** The guard reads `execution_state` without
-  `execute_lock`, while `begin_run` claims under it: a queue drain or a second tab could start a run between the
-  guard and the release/move. Disable and delete now hold `execute_lock` across guard → release → move, the same lock
-  the claim takes.
-- **One drained request must become one entry.** When the drained entry lost the race, `begin_run` had already
-  re-parked it (`enqueue_run` appends AND mirrors) and `drain_queue` then pushed the original back as well: the same
-  canvas crawled twice, paid for twice, and both entries survived the restart because the duplicate was mirrored.
-  `queued: true` now means "already parked — do nothing".
-- **Boot work creates nothing it did not need.** `load_pending_queue()` asked every active account for its queue
-  mirror, and the lazy store answers by `ensure()`-ing the tree and CONNECTING — so a first boot with 30 accounts that
-  never ran created 30 `runs.db` (+`-wal`/`-shm`), ran `promote_stale_runs` on each, and held 30 handles for the
-  process life, undoing the policy the function 14 lines above it in `app.py` states. It now reads only a tree that
-  already holds a `runs.db` and releases the slot in a `finally`. Related, and the honest half of the same promise: a
-  restored queue is now drained, because each of those users was told “已排队”.
-- **`hmac.compare_digest` refuses non-ASCII text, and a client-supplied token is text.** WSGI hands back a header
-  decoded latin-1 and a form field decoded UTF-8, so `X-CSRF-Token: café` raised `TypeError` inside `before_request` —
-  an unauthenticated, attacker-paced HTTP 500 on every write, plus a traceback line pushed into the shared console.
-  The comparison now happens on bytes (`security.token_matches`), which is what the two callers share.
-- **A newline is legal in a URL path and illegal in a response header.** `safe_next` filtered scheme/host/backslash but
-  not control characters, so `/login?next=/a%0Ab` reached `redirect()` raw and raised — on the SUCCESS path the session
-  was already created and audited, and the user got an Internal Server Error instead of the page. `safe_next` now
-  refuses anything below 0x20.
-- **A lockout refusal is a fact about the account, so it may not answer a wrong password.** The locked branch ran
-  BEFORE the verifier (and skipped the hashing), so five attempts with any password turned “登录失败次数过多” into a
-  username oracle — contradicting the sentence `docs/config.md` had published and the reason `burn_unknown_password`
-  exists. The password is verified first; only a correct one is told the account is locked.
-- **A per-address failure window behind a proxy is a per-server lockout.** Twenty mistyped passwords (by anyone, or by
-  one script) locked out every visitor for the window, because `remote_addr` is the proxy. The window is keyed
-  `address|username` now, which still costs a guesser per name and clears on a successful login.
-- **A thread list is a machine fact, so `run_is_foreign()` cannot be its only gate.** `/api/workflow/processes` named
-  every thread with its ident and the kill door accepted any of them: the account that last claimed the slot could
-  stop `crawler-scheduler` (silently ending EVERY account's 定时任务 until a restart) or inject `SystemExit` into
-  another account's cookie-capture window mid-login. Accounts mode lists and accepts only the caller's own run threads
-  and refuses the rest by name; the local install keeps the full panel.
-- **A storage failure answers in the envelope the panel parses.** `shutil.move` refuses a Chrome profile a browser
-  still holds on Windows, and the accounts routes caught only `AccountError` — an admin got an HTML 500 where the JS
-  expects `{ok, error}`. They catch `(OSError, sqlite3.Error)` and name the failure; deletion also moves the tree and
-  deletes the row as one guarded step, with a compensating move-back, so neither "account alive, data gone" nor a
-  phantom row survives it.
-- **The idle timeout must be measured with the touch that keeps it alive.** `last_seen_at` advanced only every 60 s,
-  so with `CRAWLER_SESSION_IDLE_MINUTES=1` an actively typing session was revoked: the touch and the expiry compared
-  against the same stale field. The touch interval is derived from the window (`min(60, idle/3)`).
-- **A boot refusal must watch the socket, not only the flags.** `startup_error` sees the DECLARED shape (`cloud`, a
-  bootstrap password, an existing `accounts.db`); `HOST=0.0.0.0` with none of those is an open server, because the gate
-  returns early when there is no registry. `public_bind_refusal` refuses a non-loopback bind with no accounts, by name.
-- **`reset_service()` alone does not isolate a test: per-account slots are process state.** The `client` fixture reset
-  the system store globals but left `_USER_STORES` — SQLite handles on the previous test's tmp files, which Windows
-  refuses to delete while open. It now releases every user slot in its teardown, and account-scope assertions compare
-  against the accounts that test owns.
-- **The failed-attempt counter was a lost update, so the lock never arrived.** `authenticate` read
-  `row['failed_attempts']`, added one in Python and wrote the total back. Five concurrent wrong passwords read the same
-  row and wrote the same 1: a scripted burst against one account left it at "1 failure" and
-  “连续 5 次锁 15 分钟” — the promise `docs/config.md` publishes — never armed. Measured directly against the store:
-  the old shape kept 1 of 5 guesses, `UPDATE … failed_attempts = failed_attempts + 1` keeps 5. `set_locked_until`
-  re-checks the count it was computed from, because a correct login can zero it between the two writes and arming
-  anyway would refuse the person who just proved the password.
-- **The change-password endpoint verified a secret with no window at all.** `accounts.currentPasswordWrong` was raised
-  and forgotten: no count, no delay, no refusal. Anyone holding a live session — a shared unlocked browser, any
-  same-origin script — could guess “当前密码” without limit while this server paid one scrypt run per guess. It shares
-  the login window now, keyed `address|change:<user_id>`, cleared on success.
-- **A failed-login window nobody revisits is a memory leak an attacker drives.** `_prune` only ever cleaned the key a
-  login just touched, so a stranger spraying random usernames left one permanent entry per try, and every later login
-  scanned a longer dictionary under one lock. The window is bounded by size; what it drops is the OLDEST abandoned
-  entry, and the real gate (the per-account lock) lives in the database untouched.
-- **A drained request still owes its caller the queue id it was given.** When the hand-off lost the slot, `begin_run`
-  re-parked the payload as a NEW entry at the TAIL: the panel kept the old `queue_id` in its 取消 button (so cancelling
-  answered `removed: false` for a request that was still there) and the longest-waiting canvas moved behind the newer
-  ones. The drain now hands the parked entry its caller's `id` and `queued_at` and puts it back at the front.
-- **A refusal the queue cannot fix must be discarded, not re-parked.** The drain re-tried *every* non-200 answer, but
-  `begin_run`'s permanent refusals (an un-walkable canvas, a corrupt reusable group, an unknown mode or provider, a
-  transport this host does not speak, a missing key/model) are all 400s — and `put_back` inserts at the FRONT and
-  returns, so one unstartable entry starved every request behind it, survived the restart in the mirror, and never
-  reached the browser that was told “已排队”. Those refusals carry `drop: true`, the same seam the purged-继续 refusal
-  already used.
-- **A second Stop could re-pin “正在停止” over a finished run.** The stop route proves liveness and writes its flags
-  under `execute_lock`; the worker cleared `stopping` at the TOP of its `finally` and then spent seconds settling, so a
-  press inside that window (a double click is enough) re-armed the flag with no owner left to clear it: the panel
-  polled forever, and `stop_requested()` handed that stale stop to every later crawl, which answered “用户停止了我”.
-  `stopping` now leaves with the thread handle, in one `execute_lock` section. Reproduced by parking the worker in its
-  own settlement — `test_a_stop_landing_during_the_settlement_does_not_repin_the_flag` is red without the fix.
-- **A rerun's erase belongs to the run that owns the slot.** `重跑节点` deleted the subtree's rows and released its
-  “已采集” claims BEFORE calling `begin_run`, so any claim that won the gap (a scheduled fire, the drain, another
-  account's press) answered with a refusal after the data was gone — and the second press was then refused by
-  “该节点没有可重跑的结果” forever, leaving 继续 (a re-crawl at the platform's price) as the only way back. The payload
-  carries the intent and the worker performs it after the claim; the request itself now touches nothing.
-- **A store default that names the system tree is a promise the next caller gets to make.** Four stores still defaulted
-  their database to `Config.RUNS_DB`/`DATASETS_DB`/`BIBLIO_DB`/`WORKFLOW_HISTORY_DB`. The scoped registry passes an
-  explicit path, so nothing leaked — but a bare construction inside another account's request would have opened the
-  checkout-level tree silently. They resolve `paths.active()` like `WorkflowManager` does, and
-  `tests/unit/gates/test_account_paths_resolve_at_call.py` fails any account-level `Config.*` read outside
-  `runtime/paths.py`.
-- **The registry must not archive itself into a lie.** `tools/backup.py` enumerated only `data/`'s top level, so after
-  the accounts landed it archived `settings.json`, `accounts.db` and `lexicon.db` and NOT one run, dataset, saved
-  canvas or cookie jar — while printing a file count that read like a successful restore point. It walks every account
-  tree now (skipping `users/.trash/`), and it checkpoints each SQLite file before copying it: a `.db` alone is not that
-  database while a `-wal` holds committed rows, which is why the newest rows of an old backup were the ones missing.
-- **Replacing the singleton leaked its connection.** `reset_service()` assigned a new service and dropped the old, whose
-  `AccountsStore` keeps one SQLite handle for its lifetime — one leaked handle (plus `-wal`/`-shm`) per login test, on a
-  platform where an open handle is also a directory nothing can delete. The replaced store is closed on the way out.
-- **Half a delete must say where the tree went.** `delete_user` moves the tree, drops the row, and on a refused drop
-  moves it back — under `contextlib.suppress(OSError)`. When the rename back fails (Windows, a profile a browser holds)
-  the response still promised “数据仍在原处”, sending the operator to the one directory the data is not in. The refusal
-  now checks the filesystem and names the location it found.
-- **Deleting an account left its sessions alive across the move.** The row outlives `release_user()` by the length of
-  `shutil.move`, and a request in that window still resolved — rebuilding the user's stores, whose `ensure()` mints a
-  fresh empty `data/users/<id>/` that the move never saw; the row is deleted right after, so that tree is never
-  trashed and its handles never closed. `force_logout` runs first now, inside the same `execute_lock` section.
-- **An admin's probe may not hand back a `users` row.** `check_deletable` returned the raw `SELECT *` result —
-  `password_hash` included — against the file's own first sentence. The route discards the value today, which is one
-  line of luck rather than a rule, so it answers `public()` like every other shape a route may serialise.
-
-A third audit (whole-project, 2026-11-11) — every item below is pinned by a test that fails without its fix.
-
-- **A security header that frames nothing is a feature nobody can reach.** `/zenviz.html` — the Chart Studio — is only
-  ever loaded inside `#studio-frame`, and the same `after_request` set `X-Frame-Options: DENY` on every response, so
-  the ONE entry point to the studio was refused by the browser. It now gets `SAMEORIGIN` + `frame-ancestors 'self'`
-  while every other page keeps `DENY`; `TestStudioFraming` discovers the pages from `static/*.html`, so a second
-  frameable page has to be argued for in the test.
-- **An update that trusts its feed is a remote code door.** `services/update.py` took `version` from the manifest and
-  joined it into a path (`data/updates/<version>`), so `".."` pointed `rmtree` at the whole `data/` tree; it followed
-  redirects onto plain `http`; and it verified nothing about the feed itself. Version is now shape-checked and
-  containment-checked, every hop must be HTTPS (`_HttpsRedirects`), a 4 GiB cap bounds one package, and an optional
-  Ed25519 signature over a canonical byte form is verified fail-closed when `CIXI_UPDATE_PUBKEY` is set — the same
-  canonical bytes are what `tools/sign_release_feed.py` signs, so the two sides cannot drift.
-- **`/api/update/check` let any signed-in user make the server act.** It dials the feed and can delete downloaded
-  packages; it is now an admin route.
-- **A rename loop that never terminates is a hung request.** `_unique_workflow_name` appended ` (2)`, ` (3)`… and
-  `clean_name` truncated the result back to the same 57-character tail, so a long name looped forever inside the
-  request. The suffix is budgeted before truncation, with a hard ceiling that refuses by name.
-- **`X-Forwarded-Prefix` is attacker text that becomes a `Location`.** `ProxyFix(x_prefix=1)` put it in `SCRIPT_NAME`
-  and `redirect()` built an absolute URL from it, so `//evil.example` turned every redirect into an open one. A
-  `before_request` that runs FIRST now refuses anything that is not a plain path prefix.
-- **500s answered with the interpreter's own words.** The export writer, the report saver, the workflow saver and the
-  thread-kill door each caught their exception and echoed `str(e)` — an errno, an absolute path, a ctypes detail, on
-  every platform in a different spelling. They answer one named sentence and log the traceback.
-- **A share cannot be computed from text.** `stack_pct` summed the raw column: on a text field `GroupBy.sum`
-  CONCATENATED the cells and the division raised a bare `TypeError`; blanks counted as 0 % of the total. Each field is
-  coerced first and summed with `min_count=1` (a category nobody measured stays empty), and a field that is entirely
-  text is refused by name while an entirely-missing one still serialises (pinned).
-- **One figure must not cost the report.** The whole chart section sat in a single `try`, so one column a renderer
-  refuses (a ratio holding `inf`) discarded every figure already built. The guard moved inside the per-chart loop;
-  each failure becomes one warn line naming the reason.
-- **A half-written export is not an export.** `save` stages `…part<ext>` beside the target, and the browser listed and
-  served that staged name — sortable, downloadable, indistinguishable from a finished file (a kill left it forever).
-  The listing and the download resolver skip it; the `a.part000.csv` SHARD naming still works, because that is
-  `.part<digits>.` and not the writer's `.part.` marker.
-- **A staged artifact name belongs to one run.** `compile-<node>.pdf` collided across canvases (every canvas names its
-  nodes `node-1`…) and across attempts, so run B silently replaced the file run A's ledger pointed at. The run id now
-  leads the name.
-- **An empty first batch is not a column contract.** The merge took "the first frame with any column" as the reference,
-  and the platform stamp gives even a zero-row parent a `platform` column — so an honestly-empty first parent made the
-  real table refuse as a mismatch. The reference comes from the first frame with ROWS.
-- **A padded header passed detection and then read zero rows.** PubMed's detector matches through `_norm` (case and
-  padding insensitive) while the reader used `cell()`, an exact lookup: an Excel re-save of the same CSV answered "no
-  records". Every column now reads through `frame_cell`, like the other five frame parsers already did.
-- **A setting the panel collects and the code ignores is a lie.** `g_index` was rendered, validated and stored, and the
-  selection always recomputed the g from the curve. It is now a CEILING on that g.
-- **`1 / (1 + JSD)` squashes every pair into [0.5, 1].** JSD is already in bits, so the panel's default 0.5 admitted
-  ALL pairs and 主题流向 drew a complete bipartite graph whatever the user asked below 0.5 — the hairball the
-  adjacency rule exists to prevent. `1 - d` keeps the scale the slider claims.
-- **A negative slice has to be refused by all three renderers or by none.** TikZ already refused it; ECharts drew it
-  and matplotlib raised a bare `ValueError`. One refusal, in the option builder both share.
-- **600 x 600 cells is a 46 MB TikZ source.** A cross table draws one mark per CELL in all three projections, so the
-  shape is now refused by name past `MATRIX_CELL_LIMIT`, naming both cardinalities.
-- **A group id that is not a number is not a cluster.** `cluster_label` coerced the group column to numeric, dropped
-  the misses silently, and answered a 0-row **0-column** frame when nothing was left — the node settled DONE and the
-  step that read its declared columns was blamed. The drop is counted aloud and an empty result is refused by name.
-- **A label map published outside the lock can pair new labels with an old model.** `ml_base.fit` assigned
-  `_label_map` before taking the lock and fitted inside it, so a concurrent `predict` could read the new map against
-  the still-unfitted pipeline. Both are published in one critical section.
-- **`fetch` does not throw on a 4xx, so a refused stop reset the buttons.** Stop disabled itself and Execute came back
-  while the run was still going, and `pollStatus` never writes the running state again — a live run with no way to stop
-  it. The answer now decides, and a refusal reaches the user as a toast.
-- **A selected console tab names a workflow, and a new run may not have it.** `_wfActiveTab` was only reset on the
-  "clear console first" path, so with that option off the poll fed every view but painted `feeds[staleId]` — the
-  console appended nothing for the whole run and no tab was highlighted.
-- **The shared `ResizeObserver` holds a strong reference to every target.** Clearing `#nodes-container` on open/new
-  left every box from the closed workflow alive with its listeners and closures; `forgetAllNodeEls()` releases them.
-- **`_historySaving` outside `try/finally` stops autosave for the page's life.** A throw inside `restoreState` left the
-  flag true, so every later `saveState` skipped the draft and a reload lost the work.
-- **A double click sent two runs and raced two state machines.** `execute()` is now guarded by one in-flight flag.
-- **Any window can post `{source:'zenviz-bridge'}`.** The studio drove a save from a `postMessage` that only checked a
-  string field; it now requires the same origin AND this studio's own frame.
-- **A quoted field containing the delimiter moved every column one place right.** The studio's paste parser used
-  `line.split(delim)`; it now follows RFC 4180 (doubled quote = one literal), lives in `js/zenviz-parse.js`, and is run
-  by `harness_zenviz_parse.mjs` — the 14k-line page IIFE is not reachable from a harness.
-- **GB18030 accepts almost any byte pair, so a Big5 file "decodes".** It became hundreds of rows of mojibake reported
-  as a successful import. A fallback decode dominated by rare CJK-extension/private-use code points is refused by name,
-  telling the user to re-save as UTF-8; clean Chinese exports are untouched (the check needs a double-digit count).
-- **A token in a URL is not an identity.** 小红书 re-signs `xsec_token` every visit, so keying the ledger on `链接` made
-  every re-crawl a fresh set of items and 继续 re-stored what it had already paid for. The site id (`笔记ID`) wins, and
-  a link is hashed without its known-volatile query parameters.
-- **`float('>500')` is 0, and 0 is a real rank.** A decorated citation count sorted a work with ">500" citations below
-  one with 1. The first number the cell states is the value.
-- **A time offset a site prints must be parseable or the row loses its 时间.** `个月前`/`年前` were missing, so every post
-  older than a week came back undated; 公众号's `_DATE_RE` admitted only 小时/分钟前, so `昨天` was skipped before the
-  resolver could see it.
-- **The per-account lock is a product rule AND an availability hole.** Anyone who knows a username could hold that
-  person out by spraying wrong passwords, and the only way back was 重置密码 — a new credential for someone who did
-  nothing wrong. `POST /api/accounts/<id>/unlock` lifts the lock, keeps the password, and is audited
-  (`account_unlock`, rendered in both languages).
-- **`cross` was advertised, offered, and unusable.** The key check ran before the branch, so 交叉连接 always refused
-  with “需要连接键” for the one join that by definition has no key.
-- **An `.xlsx` is a ZIP, and the upload cap measures COMPRESSED bytes.** A highly repetitive sheet compresses ~1000:1,
-  so a 1 MB upload inflates to gigabytes inside openpyxl before any row limit applies. The archive's own table of
-  contents is read first (the check the component zips already had).
-- **A failed app swap left the user with NO app.** The old tree is moved to `app.previous` and the new one renamed into
-  place; when that rename fails — Windows locks the running app's files, a full disk fails the same way — the only
-  cleanup was the staging directory, so nothing remained to launch. The previous build is put back.
-- **`popen_kwargs(detached=True)` answered half a promise.** Only one of its three callers passed the POSIX
-  `start_new_session`, so the updater/installer died with its parent on Linux and macOS; the helper now returns both
-  halves, and four installer spawn sites that passed nothing now pass it.
-- **`DETACHED_PROCESS` is the flag that makes a console child never run.** Measured on Windows 11: `powershell.exe`
-  started with `CREATE_NO_WINDOW | DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` exited before its first statement —
-  with or without the standard handles redirected to `os.devnull` — while the same child under `CREATE_NO_WINDOW`
-  alone ran and outlived a `TerminateProcess` of its parent. Every shipped self-updater had this flag, so *no* Windows
-  user could ever finish an update: the app killed itself 1.5 s after a spawn that was already dead. Two rules now:
-  the Windows "detached" answer is `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP` (never `DETACHED_PROCESS`), and a
-  helper the program then exits for must **prove it is running** (the swapper writes a receipt; the app waits ≤10 s
-  for it and refuses by name instead of dying silently). `tests/unit/foundation/test_detached_child.py` spawns the real
-  child and looks for its marker; flag-bit assertions could not see this.
-- **A download is not part of the window.** The job lived in an in-memory dict inside the server process, so closing
-  the window (which must exit the program) threw the user's consented update away, and the boot-time sweep deleted
-  `data/updates` anyway. The job is now a file (`services/update_job.py`) owned by a detached worker
-  (`--update-worker`, no window, no mutex, no Flask app); the swap script waits for BOTH pids because the worker is
-  the same executable that has to be replaced. Any state a surface must survive — a progress bar after F5, a reason
-  after a crash, the swap's own outcome after the server is gone — belongs on disk, not in a dict.
-- **A helper you cannot observe is a helper you cannot trust.** The swap script had no log, no receipt and no retry
-  loop; a locked file (antivirus, a slow close) failed 900 ms after the app died, and the user got "nothing happened".
-  It now logs every step to `data/updates/update.log`, retries file operations, verifies the relaunched build stays up
-  for 15 s and rolls back otherwise — so the failure mode is a sentence in a file, not silence.
-- **A backup directory named to the second is not unique.** A second run inside the same second answered a bare
-  `FileExistsError`, making a successful first backup look like a tool failure; the name gets `-2`, `-3`…
-- **A Dockerfile that pins one Debian suite onto an unknown base image is a mixed-system apt.** The codename is now
-  read from the image (`/etc/os-release`) instead of hardcoded `trixie`, which is what the `python:3.11-slim` tag
-  actually resolves to only sometimes.
-- **Lint coverage that named two trees but scanned neither.** `tools/ci_lint_tiers.py` listed `desktop`/`tools` without
-  recursion, so ~700 files were never linted; making them recursive also required excluding `.venv*`/`site-packages`/
-  `dist`/`build` (measured: without it the tier enumerated 9,803 files and died on `WinError 206`).
-- **A driver timeout is session state, so borrowing it has to be repaid.** `pagefetch.fetch`/`fetch_json`/`fetch_text`
-  and `popup.dismiss` each called `driver.set_script_timeout(short)` and never restored it: every later
-  `execute_script` on that session inherited the in-page fetch's value, so a scroll or a DOM probe three nodes later
-  timed out for a reason that belonged to a fetch, and nothing in the message said so. `popup` did it per ATTEMPT
-  inside its retry loop, so the last attempt's value stuck. One `_script_timeout` context manager brackets the call and
-  restores the session maximum (Selenium has no getter, so the restored value is its own 30 s default).
-  `test_pagefetch_timeout.py` records every `set_script_timeout` and asserts the last one is the session's.
-- **A dense eigendecomposition is O(n^3) and the clustering ran it twice.** `cluster_graph` embedded the Laplacian,
-  clustered, relabelled, then re-embedded at `len(members)` — a second full `eigh` that is only needed when `_relabel`
-  dropped an EMPTY cluster, which is the rare case. On a real graph the step now pays for one decomposition instead of
-  two; `test_the_dense_eigendecomposition_runs_once_when_no_cluster_empties` counts the calls.
-- **A counter is evidence, so it may not count an attempt.** `_copy_template_into` incremented its "entries landed"
-  count for a DIRECTORY unconditionally, after a walk whose per-file copies are individually suppressed: a profile
-  template whose every file was locked (Windows) or whose disk filled still reported a non-zero seed, so a caller that
-  reads the count (today the integration test; `profile_dir_for` ignores it) would be told a device exists with
-  nothing in it. The directory counts only when at least one file landed inside it.
-- **A BIBLIOGRAPHIC record's id is its content; a CRAWLED row's is its site identity** — the same distinction AGENTS
-  makes for the ledger, on the other side of the pipeline. `importer` has always hashed
-  ``title|first author|year|journal`` into ``记录ID``, and `metrics.records` relies on that: with no title it uses the
-  id AS the document name and disambiguates two same-titled works with ``[:6]``. `fuse` built a POSITIONAL id instead
-  (``{source}#{parent index}-{row index}``), so inserting or removing a parent renumbered every record and the same
-  paper appeared under a different name in the next run's figure. It now hashes title | first author | year | source,
-  which also keeps "the same work cited by two platforms stays two rows" — the property this node exists for. A
-  repeated identical row in ONE source carries its occurrence ordinal in that hash: those rows are still distinct
-  records (the fusion keeps every row its parent produced), and collapsing them to one id made them indistinguishable
-  downstream. The ordinal follows the parent's row order, so reordering or adding a PARENT does not touch it.
-- **"Read a switch, never compare it" has one exception-shaped hole: the SECOND layer.** `expand.expand_reusable_workflow`
-  (the server-side expansion a scheduled task runs) tested ``params.get('enabled') is False``, which only skips the
-  Python bool. A canvas that SAVED ``"false"``, ``0`` or ``"0"`` — every ordinary spelling of off — ran the group the
-  user disabled, while `engine.workflow.effective_workflow` read the SAME field through ``as_bool(..., True)`` and
-  dropped it: two layers, one switch, opposite answers. Both call `as_bool` now. A blank value still means "not set" =
-  on, which is why ``None`` is deliberately not in the test's parametrisation.
-- **A confirmation is not a switch.** ``data.get('confirm') is not True`` in the five destructive routes is correct and
-  must stay a strict identity test: a truthy ``"false"`` string, or ``1``, or ``"yes"``, must NOT authorise deleting a
-  dataset or a run. That is the one place where the as_bool rule would be the bug.
-- **A temp name scoped to the PROCESS is not scoped to the WRITER.** `WorkflowManager.save` staged under
-  ``<path>.tmp-{pid}`` and `reusable._write_payload` under a bare ``<target>.tmp``: distinct across processes, shared by
-  every thread inside one, so a save racing an autosave of the same canvas wrote ONE temp file — the second truncated
-  the first's bytes and the rename published whatever survived. A truncated JSON is exactly what `load` answers `None`
-  for, i.e. an empty canvas with no error shown. One ``uuid4`` suffix per write, which is what `charts/outputs` and the
-  bundle writer already did. Pinned by a four-thread writer/reader test that never sees a short document.
-- **On Windows a READER blocks the rename, and 28 call sites each re-learned it.** POSIX `os.replace` replaces the
-  target even while another handle has it open; Windows answers `PermissionError` (errno 13), so a save racing a load
-  of the same file was a valid write turned into an HTTP 500 — and the user's retry then worked, so it read as
-  flakiness. `core.atomic.replace` retries with a bounded backoff, re-raises a file that stays locked (a retry that
-  swallowed it would hide which file could not be written), and does NOT retry a real error like a full disk. Adopted
-  by the workflow manager, reusable templates, settings, the lock store, the lexicon, the ingest parts writer, the
-  cookie jar, the scheduler store, the ML model cache, the component manifest, the export writer, the chart outputs and
-  the PDF finalisation. `core/` is a foundation package enumerated on purpose by `test_foundation_layering`; adding a
-  fifth module was the deliberate contract change that test's own message asks for, because every layer may import it.
-  **The reader is the other half of that race:** while a staged file is being swapped in, `open()` on the target also
-  answers `PermissionError` on Windows. `WorkflowManager.load` retries the same short window and then re-raises, because
-  answering `None` would tell the UI the canvas is missing and make it forget a remembered file that is still on disk.
-- **macOS has no `/proc`, and that silently downgraded a tree kill to a single kill.** `child_pids` answered `[]` on
-  darwin, so `reap_process` killed the DRIVER and left Chrome running with `chrome_profile/<platform>/<account>` held
-  for the whole `PROFILE_LOCK_TIMEOUT` — every later run on that account then waited on a lock nobody was using, and
-  the module's own docstring called the downgrade "the truth reported". macOS publishes the same fact through
-  `ps -A -o pid=,ppid=` (base system, no `brew`), so the tree kill now works on all three systems; an unreadable `ps`
-  still kills the driver alone and says so rather than claiming a tree it did not kill. A darwin-only test starts a
-  real child and asks the real `ps` for its parent, so CI's macOS runner measures the command rather than only the
-  parser.
-- **A read that can be denied is not the same as a read that is absent.** `CookieManager.load` caught
-  `FileNotFoundError`, `JSONDecodeError` and `ValueError` but not `OSError` — so on Windows, where an antivirus or a
-  second reader holds the jar open for a moment, `open` raised `PermissionError` and it propagated: the management
-  panel counts rows through `entry_count` → `load`, i.e. a momentary lock turned "how many cookies does this account
-  have?" into an HTTP 500. A jar nobody can read is, for that question, indistinguishable from a jar that is not
-  there.
-- **A cache key must carry every dimension the probed answer depends on.** `preflight._cache_key` was
-  `(scope, platform, account)`, while `has_session_to_test`/`profile_dir_for` read `use_profile`: with browser profiles
-  ON the probe reads `chrome_profile/<platform>/<account>`, with them OFF it reads the cookie file. Those are two
-  different sessions, so a run with profiles enabled cached its verdict where a later run with profiles disabled also
-  looked — that run was then gated on (or cleared by) a session it never uses. `None` is resolved through
-  `profiles.is_enabled()` before it enters the key, so the key holds the answer rather than the caller's spelling — and
-  `probe` resolves it ONCE for the cache lookup, the browser, the verdict's slot and `record`. Re-reading the setting
-  at each step let a switch flipped mid-probe file the answer measured in one mode under the other; `record` takes the
-  mode its browser was actually opened in instead of asking again.
-- **A retried write must keep its batch AND its owner together.** `RunLogWriter._drain` publishes (empties) the buffer
-  and then opens SQLite, which is long enough for the NEXT run's first line to arrive; when the write failed, the old
-  code merged the failed rows back into that buffer with whatever `_buf_run_id` it now held. Whichever id it kept, one
-  run's viewer lied: A's console under B, or B's line under A. Kept batches are now a per-run queue
-  (`_pending: [(owner, run_id, rows)]`) flushed under their own ids, which also means `reset()` must not drop them —
-  those lines were printed by a run that is over, and losing them is the one thing this writer promises not to do.
-  The OWNER travels with the batch too: `disarm()` clears `_account` at run end, so a kept batch replayed after the
-  next account's run started would otherwise be written into that account's `runs.db` (or the system store). The
-  reproducing tests inject the push *during* the failing write, because without that window the bug is invisible.
-- **A two-table step decides its roles by connection ORDER, and says so in all three places.** `join_tables` always
-  read the second wire as its right table, but nothing told the reader which wire that was: a user who drew the basis
-  table first joined (or de-duplicated) against the wrong side and got a plausible table. The 内容去重 step and the
-  采集校验 node keep the convention and make it visible — the node CARD names the parents filling each role
-  (`canvas._tableParentsOf`, the same wire list `engine/run.py` reads), the PANEL prints them beside a `swap_tables`
-  switch, and the run CONSOLE prints a named line every time (`wf.anti_join_roles*`, `verify.roles`). The label is
-  resolved through `nodes.labels.parent_label`, which accepts the dict the run loop passes, the callable older callers
-  passed, or a bare id — three shapes for one name, so no executor keeps a private reading of them.
-- **A gap found by an audit is an ANSWER, not a node failure.** Settling 采集校验 FAILED on "3 links were short" would
-  throw away the report table — the exact artifact the user needs to re-crawl those links — and put a red node on a run
-  that did its job. It settles DONE and the report carries the verdict (`采集状态`/`缺失条数`), with the console naming
-  the gap and the re-crawl loop. The inverse would be equally wrong: reporting an unreadable 评论数 cell as "完整"
-  claims a check that never happened, so those rows are `无法核对` and stay OUT of the gap table (there is nothing extra
-  to crawl — only a number nobody wrote down).
-- **"Drop every pointer" has to include the one with state attached.** `DatasetStore.delete` removed the row from
-  `datasets` and `dataset_refs` and stopped there, leaving `dataset_lineage_versions`. The panel's lineage history
-  (`/api/data/…`) then listed a version whose dataset no longer existed, `dataset_lineage` still reported the id as a
-  lineage MEMBER (so the delete/purge guards went on believing it was in use), and `purge_unreferenced` could never
-  reclaim the file because a version row still claimed it. The version rows go too, and a lineage whose CURRENT version
-  was the deleted one is repaired — head moved to the newest survivor, or the lineage dropped when none survives (a
-  header with no versions renders as a version with nothing behind it).
-- **A path is not a file, and a flag named "imported" must mean imported.** The crawler factory computed
-  `planting = bool(saved)`, which tests whether a cookie DIRECTORY is configured, not whether the cookie file exists.
-  `_load_cookies` shrugs a missing file off (`except OSError: return`), but the marker did not: `mark_used(imported=True,
-  cookie_stamp='')` claimed the profile had been given a session, so the panel said 已导入 for an empty profile — and
-  `needs_refresh`, which needs a non-empty recorded stamp, then answered "no" forever, so the user who saved a Cookie
-  afterwards was never offered the re-plant that would put it into that profile. `cookie_path` still follows the path
-  (the factory builds the right name whether or not the file is there); `imported` now also requires `os.path.isfile`.
-  The second half is `needs_refresh` itself: for a used-but-never-imported profile a file written AFTER `used_at` is
-  the deferred plant the save path promised (compared in whole local seconds, the marker's own resolution), while one
-  older than that use is left alone so a hand-made login is not overwritten by an old snapshot.
-- **A panel state is the server's NEXT ACTION, not an inference from one field.** The settings table derived its
-  sentence from `has_saved_cookie`, so a used profile holding an older file was labelled “will import on first use” —
-  a promise the factory never carries out (it only plants a file newer than the session). `profiles.status` now states
-  `will_import` / `will_refresh` / `used_without_import` from the same rule `get_crawler` reads, and
-  `app-settings.js` renders those. A field named after the FILE cannot answer a question about the next RUN.
-- **A no-op `clearTimeout` makes a debounce untestable, and the leak lands in the next scenario.** The shared DOM stub
-  returned handle-like values from `setTimeout` but dropped every `clearTimeout`, so an autosave a scenario had
-  cancelled still fired while the next scenario had already deleted its draft — the load-dependent
-  `draftStored` flip. The stub now forwards the real Node handle; a test double for timers must cancel, not just fire.
-- **A cooldown table is the feature, not a cache; rotation is its downstream action.** A platform block lasts hours, so
-  the expensive act is trying again too soon. `data/pool.db` keeps `cool_until` per `(account|exit, platform, subject)`
-  — a login can be walled on weibo and fine on bilibili, and an exit can be banned by one site while serving another —
-  and the read compares against the clock instead of starting a sweeper (a second writer with its own chance to be
-  wrong). Manual 停用 is the one state a clock cannot lift. Why per pair and not per account: the same login on a
-  different IP is a different bet, and the same IP for a different login is too.
-- **Rotate only where the ledger has nothing to reconcile.** A source node switches login solely when THIS attempt
-  stored zero rows and the site answered a wall/risk page (`SessionBlockedError`). Once rows exist, the existing
-  PARTIAL-and-continue path owns the truth; rotating there would hand a second account a half-paid walk with a cursor
-  that describes the first one. A comment node is the opposite case and may rotate per link, because a blocked link
-  was never allowed into the "proven prefix" its cursor records.
-- **A failure cools only the side it accuses.** A login wall is the session's; a captcha is first the exit's; an
-  unreachable page is neither. Cooling an account for a dead line burns the resource the pool is short of — the same
-  distinction `preflight` already draws between `expired` and `unknown`. Unknown failures never cool anything.
-- **A pool is a pair, and the gate lane is the login.** Each attempt takes `gate.hold(account=<the real login>)`; a
-  sentinel lane such as `@pool` would serialize every pool crawl of one platform into one queue. `@pool` contains `@`,
-  which no account label may contain, so it can never collide with a typed name — and it must never be passed to
-  `CookieManager.path_for`. Its presence stays IN the node fingerprint (pool mode is a different crawl than a fixed
-  login), which is exactly why the sentinel, not a per-run chosen account, is what the canvas stores.
-- **An exit credential belongs in the relay, not in argv.** Chrome cannot take proxy credentials, and putting them in
-  a URL or an argument exposes them to every process listing. The loopback CONNECT relay adds `Proxy-Authorization`
-  upstream while Chrome sees only `127.0.0.1:<ephemeral>`; it dies with the driver, including the reaped-by-PID path.
-  Serving `--proxy-server` also requires `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`, or a page can
-  still learn the host's address over UDP. When every exit is benched the crawler refuses rather than connecting
-  direct: a silent direct connection exposes the address the exit was bought to hide.
-- **`release_user` closes handles; it does not make the id unopenable.** Deleting an account calls `release_user`
-  before `delete_user` drops the row, and the gap is the length of `shutil.move`. A thread already running could open
-  a store in that gap and `ensure()` a fresh `data/users/<deleted_id>/` while the tree was being moved. `_user_slot`
-  is the one door every reader uses, so the refusal lives there: it reads the registry on slot CREATION and refuses a
-  tombstoned id (`retire_user`, added under the same lock BEFORE the row goes). `unretire_user` lifts it when the
-  delete itself fails and the tree moved back.
-- **A bundle import is not a request-thread job.** Unpacking hundreds of MiB of datasets held the Flask worker (and
-  every panel queued behind it) for as long as the files took, and a reverse proxy could cut the reply while the import
-  kept writing. The upload is copied to a temp file, the POST starts a `services.reports.jobs` job and answers 202,
-  and the page polls the same `/api/jobs/<id>` door reports use; the worker deletes the temp file in `finally`.
-- **A Dockerfile no runner builds is a claim, not a deployment.** The image's apt and pip lines pointed at the
-  operator's China mirrors, so a GitHub runner could never build it. Both are build args now (defaults unchanged so
-  his builds are byte-for-byte the same), and CI builds with upstream hosts, boots the image with a bootstrap admin,
-  and waits for `/api/config` — a build-only check would pass on an image that exits at `setpriv`.
-- **An in-app update owes the installer's receipt an update.** The installer stamps `current-version` and
-  `versions/<v>/install.json` once; the self-updater replaced the program and left both naming the old release, so an
-  audit read the wrong version. The new build rewrites them on its first boot (`services/update_receipt.py`), with the
-  installer's own encoding rules (ASCII pointer, UTF-8-no-BOM receipt, staged+rename), receipt before pointer so a
-  crash leaves the old pair valid. The reader in `desktop/install_receipt.py` accepts the result unchanged — proven by
-  a test that writes through one and reads through the other.
+# 为什么这些规则存在
+
+`AGENTS.md` 只写裸规则，因为它每个会话都加载。本文件回答“为什么”——每条规则付过什么代价，以及删掉它会回来什么。
+这里不重复采集命令（在 `docs/crawler_rules.md`），也不复述测量过程（在 `docs/crawler_notes.md`）。
+
+## 变更与门禁
+
+- **跑多少由“改动能弄坏什么”决定，不由仪式决定。** 一次全档约 18 分钟，所以文档只跑路径门、移动只跑相关用例；
+  真行为改动必须全快档，碰 UI/引擎/LLM/采集再加设备档。
+- **“收尾门”不是一条 lane。** 任何“做完了”的声明都等于全档一次、无筛选、无跳过；此后任何编辑都重开循环。
+- **一次绿色但没人看它跑过的步骤是主张，不是门。** 包装命令的退出码必须就是检查器的退出码，证据是它自己的汇总行。
+- **只 lint 改动文件 = 没 lint。** 已提交的违规会躲在“两档 10.00/10”的部分目标后面，所以每次都是整棵产品树 + 整棵测试树。
+- **目标列表必须绝对路径、正斜杠、无 `\r`。** 相对路径让 `tests/` 助手互报 `E0401`，CRLF 让每个文件报 `F0001`。
+- **`pylint packaging` 从来不是我们的目录。** 它会解析到 site-packages 里的 PyPA 发行版；`desktop/` 这个名字就是为了避开这种同名。
+- **测试树只豁免三条消息。** 夹具按名请求、autouse 参数就是使用、半套测试在问公开面；这三条在产品码里仍是发现。
+- **产品码的 `global` 是缝，不是味。** 它只出现在调用方故意重绑的状态（单例、缓存、日志 sink、调度器），并写在 rcfile 里。
+- **检查器的假阳性通常是不精确的类型。** 写清元素类型或 `Callable` 注解，通常比加豁免更能消掉一串报错。
+- **`webdriver.Chrome` 对检查器不可见。** 导入完整类名能删掉唯一的 inline 禁用；副作用是测试打桩点也要跟着改。
+- **`W1203` 不能靠懒 `%` 修。** 未翻译的 `%s` 会被 i18n 门当成硬编码文字，答案是在两种语言里各加一个命名槽位。
+- **未用参数会抓真 bug。** 一个“跳过遍历”的布尔若从没被读过，就该被删，而不是留着装样子。
+- **格式化钩子会吃掉加早或加晚的 import。** 使用与导入要在同一次编辑里落地，删旧绑定要在加新名字之前。
+
+## 跨平台
+
+- **默认三套系统；“我们只用 Windows”不是设计理由。** 每个能力同一次改动里就要为 Windows、Linux、macOS 设计并测试；
+  桌面打包能力必须有 macOS 对应物，单系统分支只留给物理上不存在的能力，且要服务端按名拒绝、UI 入口消失。
+- **机器查找是每 OS 一张表。** Chrome、xelatex、Node/CatBus 各有一张表，按**目标**系统的分隔符拼接；内联
+  `Program Files`、`.exe` 或 `taskkill` 会让另一套系统读到一句它做不到的建议。
+- **CJK 字体栈与 ctex 是机器事实。** Matplotlib 在 Linux 上要有 Noto/WenQuanYi，TeX 在非 Windows 上用该系统的 fontset；
+  静默回退成 DejaVu 就是一篇全是方框的论文。
+- **补救句按 OS 不同。** 让 Linux 用户打开 MiKTeX 控制台是没人能执行的建议，所以 `deps.<family>.<platform>` 是计算出来的键。
+- **Windows-only 能力要四个答案。** 矩阵声明 `requires`、`/api/capabilities` 给本机判定、`validate` 运行前拒绝、执行器
+  再拒一次；面板列着并置灰、写明原因，判定缺失时保持可见——藏掉一个能用的功能是另一种 bug。
+- **文件名上限按 OS 计数的单位不同。** Windows 按字符，ext4/APFS 按 UTF-8 字节；100 个汉字约 300 字节。
+- **`taskkill` 在 `suppress` 里会吞掉“会话已死”那句。** POSIX 要用 `os.kill(SIGKILL)` 且先杀 driver 的直接子进程；
+  macOS 没有 `/proc`，要靠 `ps -A -o pid=,ppid=`，否则树杀会静默降级成只杀 driver。
+- **一个通用豁免不是对文件里那条规则的许可。** `hongguo/harvest.py` 在 Windows 表里是因为它真碰证书库，不是因为它可以手写
+  `taskkill` 或不传 `procs.popen_kwargs()`。
+- **拒绝句里点名 Windows 文件本身就是 Windows 事实。** 可执行名与 platform token 要从机器表读，不能写死。
+- **测试不得继承本机浏览器集合。** 一个存在性问题要有唯一答案，测试“关于拒绝”的用例去覆盖它，不要 patch `os.path.isfile`。
+- **本地装得上不代表 CI 跑得动。** 可选依赖进 `requirements-optional.txt`；桩测试必须声明自己假装的是哪个后端，
+  否则 CI 的 ONNX 会替掉你的 torch 桩。
+- **字节 pin 与 `* text=auto` 不能共存。** 行尾转换会让 git 里的 blob 与审阅过的文件不是同一个；读工作区证明不了存了什么。
+
+## 测试怎么写
+
+- **隔离发生在 conftest 导入时。** collection 先导入所有模块，而 `app.py` 在导入那刻就把路径冻进单例，晚一步的迁移无效。
+- **一个警告是“测试注意到了什么却还是通过”。** 要么修它注意到的东西，要么让测试说清这台机器为什么没有它；不要静音。
+- **有状态的规则需要无状态的套件。** 共享 Cookie 目录要快照/还原；爬取测试声明自己的登录前置。
+- **失败要大声的旗标必须为“要求了保证的那次运行”而响，不是为它恰好导入的目录。** 钩子要看被选用例的 marker。
+- **测试不得假设本机时区。** CI 是 UTC，这台机器是 UTC+8；期望要从 `astimezone()` 来，具名时区才可写字面量。
+- **`integration` UI 层不写服务器。** 没有数据目录切换，一次运行/上传会落进用户真实的 `data/` 与 `logs/`，所以 `fetch` 打桩。
+- **浏览器测出来的断言要报告它量了多少。** 按 id 审容器、给出每容器下限、从 `I18n` 取文案，并声明视口（Windows 会忽略窗口尺寸设置，
+  要用 `Emulation.setDeviceMetricsOverride` 并用 `100vh` 探针断言 CSS 尺寸）。
+- **关掉的面板必须消失，不只是移走；只有像素能证明。** 需要与同一个盒子 `display:none` 的截图逐字节比较，且先有闭合对闭合的对照。
+- **一个异步浏览器缝要在 DOM 上收敛，错误分支不能假装 `done()`。** 先 await、保留结果，再有界轮询元素；把拒绝吞成成功等于丢掉唯一原因。
+- **一个与成功共享前缀的就绪哨兵是伪装的容差臂。** 超时返回 `"ok | 没出现"` 加 `startswith('ok')` 是一种会撒谎的断言。
+- **测试功能矩阵要枚举分类它被测对象的每一个维度**，不是只枚举 bug 所在的那一维。
+- **live 用例的数字从站点算出来，绝不自己挑。** 断言两侧都要有依据；一个天上掉下来的阈值只是在测自己的常数。
+- **一次搬迁只安全于“拷贝被证明”，不是被承诺。** 先检查再写、缝随代码走；一次重命名要写成三条规则（导入行、属性点、实例拼写），
+  因为同一个字符串替换会把模块名和实例名一起改掉。
+- **`git mv` 只暂存重命名，不暂存其后的编辑。** 移动后每个新路径都要显式 `git add`，并读 `git diff --cached --stat`；
+  本地工作区绿不代表 runner 测的索引是绿的。
+- **按文件绑定的名字数引用，不按模块路径。** 调用方常常 `from x import y`，只 grep 完整路径会漏掉大多数调用点。
+- **“为外部调用方保留”是一句主张，调用方可能已经被删。** 相信它之前先数全仓出现次数。
+- **新建文件前先问它是否已存在，并跑整个家族。** 覆盖一个共享助手时，新测试本身不是爆炸半径。
+- **把一个 Python 函数搬走，就把它的打桩缝一起搬走；旧的缝是绿的，不是红的。** 打桩转发清单要与源码里的
+  `from runtime.state import add_log` 对齐（缝的普查 / seam census）；一个“什么都没打印”的断言会一路通过。
+- **把嵌套助手提到模块作用域要用 `ast` + `symtable` 证明，不用字节 diff。** 缩进会改变多行字符串的值；自由变量数为 0 才是契约。
+- **一个可选缝是不可测的缝。** `getattr(module, name, None)` 找不到时会静默跳过补丁，于是现场用例可能正用着用户的真会话。
+- **点号散文规则跑在 `.py` 上就是代码重写。** 路径/文字替换只属于 Markdown 与手写 docstring；代码只按导入/属性规则改。
+- **再导出需要 `__all__`，顺序钉只属于“顺序即数据”的地方。** 一个只为转手的导入会被 `--fix` 当未使用删掉。
+- **拆分对象只能 `Object.assign`，成员不能重新绑定。** 重复成员会被静默覆盖，所以证明是键面（名字、种类、参数个数）相等，不是字节拼回。
+- **读模块文件的 harness 是对拆分表的第二意见。** 文件要经 `sourcesWithCompanions` 一次读入；重复顶层 `const` 是重声明。
+- **UI 层的 driver 是 eager：`driver.get` 返回不等于脚本跑过。** 要按名字等绑定就绪，失败时打印文档的脚本清单与传输大小。
+- **超时是会话状态，借用要归还。** `set_script_timeout` 之后不恢复，会让后面无关的滚动/探测带着一个属于 fetch 的超时失败。
+
+## 前端
+
+- **前端对采集没有第二意见。** 字段需求问 `Capabilities`，未加载就拒绝；存储值不在选项里就显示它自己，绝不显示第 0 项。
+- **`if (window.X)` 看不见顶层 `const X`。** 这是“守卫看起来在、其实永远不成立”的第一来源。
+- **DOM stub 的匹配器是真的。** 伪造一个查询找不到的子节点，会把坏选择器藏起来。
+- **包装函数必须转发参数。** 空参数列表会让面板操作“上一次选中的”对象，`(...args)` 是契约。
+- **`onclick="fn('…')"` 跨两套语法。** 名字先按 JS 转义，再按 HTML 转义；只做一层会在引号处断掉。
+- **`await` 之前抓的节点，`await` 之后可能已经不在文档里。** 回来要按 id/属性重新找，找不到就什么都不写。
+- **另一个文件里装的包装不是 harness 加载的函数。** 两者都在浏览器层量一次，才不会只测到替身。
+- **画布快捷键只在用户没在打字时属于画布。** `_isTypingTarget()` 问元素**是什么**，标签列表会漏掉粘贴框。
+- **相机不是模型的一部分。** pan/zoom 进 `getState()` 会让每次平移都成为一步撤销；`addNode` 只对非有限坐标随机化，0 是位置。
+- **历史条目是快照，相同状态不是条目。** 参数要深拷贝；相等状态跳过；恢复要包在 `_historySaving` 里。
+- **一次页面启动不能是单点故障。** `DOMContentLoaded` 里一个抛错会跳过后面所有步骤，所以启动步骤走 `boot(name, fn)`。
+- **只有一个对话框壳，且只有一个待答：** 新对话框先用 `cancelValue` 结算旧的，否则旧 promise 永远悬着；`dismissable:false` 不可被顶掉。
+- **带输入的对话框由输入回答。** `showDialog` 输入框不要带 `value:`，确认按钮自己的值会把用户输入顶掉。
+- **失败报告者不能先失败。** 先写文件、弹框，再打印；受限代码页下第一个汉字就可能抛 `UnicodeEncodeError`。
+
+## 运行、续跑与记录
+
+- **一个数据根一个服务器，是设计。** 启动恢复会把同根另一个进程的活运行判为中断，所以第二个实例必须有自己的 `CRAWLER_DATA_ROOT`。
+- **一次只跑一个，忙的服务器排队而不是拒绝。** `begin_run()` 拥有整条启动路径，队列只能调用它；否则两条启动路径会对同一画布给两个答案。
+- **直接调执行器函数的测试必须把应用留安静。** 泄漏的 `execution_state['running']` 会让后面的测试看见一个不存在的运行。
+- **检查点是核心价值。** 行 sink 每行一个事务、下一槽位是 `MAX(seq)+1`、游标记位置不记内容；三条都是为了“续跑而不是重付”。
+- **标签不是输入。** 节点指纹喂子节点与去重作用域，一个名字进去就会让整条链在改名后重爬。
+- **结果是钉在一次运行上，不是各节点最新的行。** 否则一次预览能把昨晚的 node-1 和今早的 node-2 拼成一次从未发生的运行。
+- **被禁用的节点不在画布上。** 校验、命名、指纹、执行都跑在“删掉它”之后的图上；否则被禁用的上游仍会供数据。
+- **复用有四条规则。** `done` 与 `restored` 可复用、零行结果永不复用、源节点永不被领养、`dropped_stale` 取消复用——每条都曾被违反过。
+- **启动恢复与运行结束共用同一套结算。** 被杀跳过了 `finish_node`，所以恢复必须从行重算状态与行数。
+- **“完成”只有一个定义。** 停止的节点进自己的桶，绝不报成“1 个失败”；计数在结算之后、按尝试过的节点取。
+- **续跑要重新描述自己。** 并行/串行、无头/窗口的 chip 若留在首次尝试的值上，描述的就是一次没发生过的运行。
+- **一个原子节点的结果是一个事务。** 先删后插两个事务之间被杀，会让一张已经采到的表被报成空表。
+- **控制台的行表与总数是一对，换运行要一起换。** 在锁外逐键替换会让一次轮询拿到上一轮的尾巴配这一轮的总数 0。
+- **保留策略必须释放它销毁的东西。** `purge` 删行也要 `forget_run_items`，否则下一次采集会因为“已见过”而静默少采。
+- **`' + '` 是组合查询键，不是许可。** 只在精确匹配失败后拓宽，否则一个真叫“节奏”的画布会拿到“节奏 + BPM”的表。
+- **节点 id 是存储键，恢复时绝不重铸。** 它同时是框的 DOM id，所以工作流文件能寻址到它不该拥有的界面元素；要经 `_nodeEl`。
+- **记录行按工作流寻址，绝不按裸节点 id。** `node-2` 在每个画布都重名，猜一个就是拿别人的数据冒充你的。
+- **并行是一条记录，串行是每个开始的工作流各一条。** chip 描述发生了什么；续跑状态按工作流保存，B 的失败不能抹掉 A 的恢复点。
+- **游标记节点**证明**了什么，不是尝试了什么。** 先写游标再走查，会把尾部一次拒绝洗成“继续”。
+- **一行的台账键是站点身份，不是内容。** 评论用 (`平台`, `评论ID`)；整行哈希会被每次重编的 `楼层` 打散。
+
+## 分析、图表与数据
+
+- **阶段列的顺序不是数据，记录往返会抹掉它。** 节点边界重建表会丢掉 categorical，所以阶段表必须自己带位置列（数字或时间），
+  否则按阶段分组的一步只能拒绝。
+- **一个被引用的行数只对产生它的合并顺序为真。** 近重复去重保留先到的那行，所以量数要沿画布自己的上游顺序走。
+- **一致性扫描不是决定，只有画布自己的扫描可以引用。** argmax 随行序漂移；平坦处要在节点标题里写明 tie-break，而不是编一个没测过的下限。
+- **分数是它读到的那一列的函数。** `正文` 与 `cleaned_text` 给不同曲线，所以引用时必须报列名。
+- **没被用到的 LDA 主题是模型的答案，不是用户的错。** 从主题自己的词分布填行、`doc_n = 0`、打一条具名警告，绝不清空特征词。
+- **一个召回道具不能看起来像分类器。** 词表模式的漏检要说“不可测”，且不要把辟谣指控算成暴力；缺文本列要抛错，不是返回空白。
+- **分析节点唯一的非确定步骤借用处理节点的客户端。** 客户端进 `params` 会被写进账本；`llm`/`cancel` 只进 `LLM_OPS`。
+  Stop 留下的 `未处理` 让节点 PARTIAL，不是 DONE。
+- **图上的标签要避开别的标签，也要避开页面自己的框。** 标签位置按保留带比较；百分比 inset 也是长度，旋转标签无法夹取。
+- **自由图被塞进正方形，标签要跟着面积缩放。** 一个轴一个比例会把图拉变形；标签偏移要用 `dx`/`dy`，绝对 `x`/`y` 在缩放后会留在原地。
+- **浅色标签在所有主题里都保持深色墨。** 用主题前景色重涂浅底标签，会在深色主题里白字白底。
+- **`ECHARTS_ONLY_TYPES` 是“matplotlib 做不到”，不是“LaTeX 做不到”。** 用它跳过 LaTeX 会让九种文献图静默没有论文版。
+- **“编译通过”不等于“装得下页面”。** standalone 会把纸裁成图的大小；证据是日志里的 `Overfull` 与真正看过的页面。
+- **随数据增长的版式要按页面定尺寸。** 圆环半径按节点数长，坐标单位不能还是 1 cm；被省略的标签要打印出来。
+- **`tabular` 不能跨页，所以要自己切。** 一个 50 行表是不可断的盒子；续页要重复表头且只给第一块编号。
+- **双边图表也要列出节点。** 空终点表示“这是一行节点”，过滤掉它就少了一个只被一条线连到的期刊。
+- **轴标签盒比预览面板还宽就是名字被截断。** 叠图视图用更窄的宽度，并在浏览器层按中英两种语言量。
+- **指南要说明点哪一个，而不是“有这个能力”。** 一个源导出三种文件、只有一种被读时，步骤必须点名那一种。
+- **自动导出必须落到替代上传的同一个解析器。** 否则爬来的表与手工上传的文件会对同一篇论文给出两种记录。
+- **一个合集不是外连接。** 列集不同要按多名/缺名拒绝，`pd.concat` 会填 NaN 并看起来完整。
+- **来源是累加的，绝不覆盖。** 没有 `来源` 才插入，已有值属于用户。
+- **项目包的不变量是“引用得到证明”。** 只复制 `workflows/` 会让每个上传节点空着；清单只接受已知形状并逐文件校验。
+- **两表步骤的角色由连线顺序决定，且要在三处说出来。** 节点卡、面板与运行控制台都点名谁是基准表，否则用户会拿错表去连接。
+- **审计发现的缺口是答案，不是节点失败。** 采集校验 DONE 并把状态写进报告；无法读取的单元格是“无法核对”，不是“完整”。
+- **一个图不能毁掉整份报告。** 每张图的守卫在循环里面，一次失败是一行具名警告。
+- **半写的导出不是导出。** 暂存名不能被列出或下载；`a.part000.csv` 分片名是另一套标记。
+- **暂存产物名属于一次运行。** 每个画布都叫 `node-1`，没有 run id 领先的名字会被下一次运行静默替换。
+- **空的批不是列契约。** 合并的参照帧要取第一个**有行**的帧。
+- **补过空格的对齐表头能通过识别却读出 0 行。** 检测与读取要走同一套归一化列查找。
+- **面板收集而代码忽略的设置是谎言。** 一个被渲染、被校验、被保存却从不影响结果的旋钮必须真的接线，或者删掉。
+- **`1 / (1 + JSD)` 会把每对都压进 [0.5, 1]。** 尺度变了，滑块的默认值就会放过所有对。
+- **负的切片要么三个渲染器都拒绝，要么都不拒。** 一个拒绝、一个画、一个抛裸 `ValueError`，等于三个产品。
+- **60 万格的交叉表是 46 MB 的 TikZ。** 形状要在选项构造处按名拒绝，并报出两个基数。
+- **不是数字的组 id 不是簇。** 静默丢弃会让节点在空表上 DONE，然后把读它列的下一步当罪犯。
+- **标签映射不能在锁外发布。** 新标签配旧模型，是一次并发预测就能读到的错配。
+
+## AI 工作区
+
+- **一个 provider 目录，因为一次运行不能谎报它的传输。** 目录拥有端点、模型表、能力清单与云端/本地拒绝；浏览器只渲染
+  `/api/ai/providers` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
+- **能力是承诺。** 传输不支持 `thinking`/`web_search` 就得按名拒绝，不能发一个 provider 会静默忽略的字段。
+- **密钥在浏览器，转录在服务器。** 服务器只为那一次请求持有 key；重载后的回答行没有 key，所以 `ai.noKey`，不是重放旧密钥。
+- **一轮是好几行。** 每个 `tool_use` 都要有立即的工具结果；合并轮次会产生 provider 拒绝的非法历史。`ask_user_question` 的答案是
+  工具结果，不是新用户消息。
+- **只读工具，写入是产物。** 用户经应用自己的按钮应用/运行，所以权限只有一条路径，错误提案可撤销，模型不能靠幻觉删运行。
+- **上下文是生成的、计预算的、脱敏的。** 项目事实来自已有注册表，实时数据按账号重读，省略要在 `context_meta` 里报告，
+  不能把不完整的读数当成完整事实。
+- **插件数据优先。** 声明式技能/提供方/工具包可移植且云端安全；本地代码插件在进程内运行，所以只限本地/管理员，云端按名拒绝。
+- **监视器是订阅，不是第二个 agent。** 引擎发布它已经知道的生命周期事实，监视器匹配并持久投递；它自己不能花 token，
+  也不把爬到的文本塞进事件。
+- **Python 是扩展面，因为画布不能当沙箱。** 一份脚本库同时喂 AI 工具与画布节点；它故意只在本机跑，且明确说自己不是沙箱。
+- **先读最小证据。** `dataset_peek` 先于 `dataset_page`，`python_run` 返回样本，超过 12k 字符的结果截断并说明。
+
+## 定时任务
+
+- **时钟是一个线程，只从 `__main__` 启动。** Flask reloader 会导入两次，导入期启动会有两个时钟抢同一个 `schedules.json`。
+- **一次触发与手动运行走同一条启动路径。** `start_scheduled_run` → `begin_run`，所以忙的服务器**排队**这次触发，而不是另起一条更弱的路。
+- **“这个画布要不要模型”是一个规则问三次。** 面板的 `runnable`/`why_not`、保存与触发都走同一个函数；云端没有模型也没有人，
+  所以要在选择时就按名拒绝，而不是在没人看的历史行里。
+- **错过的一刻只记录，不重放。** 每次重启最多一条 missed 事件；记账进任务自己的 `last_run` 与历史，不进运行控制台。
+- **浏览器对时间与状态没有第二意见。** `next_run_local`/`last_run_local` 在**任务自己的时区**由服务端渲染，未知 token 显示它自己。
+- **cron 是手写的，`next_after()` 严格晚于给定时刻。** 不存在的春季小时整段跳过，歧义的秋季小时走第一遍，`0` 与 `7` 都是周日，
+  月份日与星期按 POSIX 的 OR 组合，永不触发的表达式在保存时按名拒绝。
+
+## 控制台与 i18n
+
+- **缺一个 `t()` 关键字是打印出来的 bug，不是崩溃。** `t()` 返回原模板，所以漏传的参数会印成 `阅读={reads}`；占位符门要用 `ast` 扫调用点。
+- **`{platform}` 槽位要用词回答，不是 key。** 矩阵/文件用 `zhihu`，i18n 本地化；两张表要一直相等。
+- **控制台消息用 `node_label`（→ `title #nid`）指节点，绝不裸 `nid`。** 存储键与续跑仍用裸 id；两条恢复路径都要在刷新显示前重贴标题。
+- **控制台按视图保留自己的历史，因为服务器只给最后 200 行。** 每个视图每轮都喂，切换标签页不移动游标。
+- **控制台也按运行持久化，但它只是副作用，绝不能移动活控制台。** 挂不挂 sink，重连的总数必须逐字节一致，否则重载后会跳过或重复。
+- **每个会打日志的线程都要钉自己的语言。** `set_lang` 是线程局部的，daemon 从空白开始；断言控制台文字要断言原因，不是抄一句句子。
+- **一次失败一行。** logger 进 buffer，所以 `logger.exception` 加一条对应 `add_log` 会打两遍；让 `wf.node_failed` 是唯一带归属的行。
+- **页面加载时自动跑的东西按构造就是噪声。** 清理 0 个文件不该说话；打开一次页面就是控制台的写者。
+- **一个页面自己发起的任务必须可 await。** 否则它和后面每个步骤竞争，测试读到的是服务器的历史。
+- **任何“选数据、选花费、选名字”的参数只能被读懂或被按名拒绝。** 布尔要读、不要比较（`as_bool`，空白=默认），因为文本 `'false'` 是真值。
+- **`_QUIET_NODE_TYPES` 是控制台噪声决定，不是过滤钩子。** 计数仍要数它们，事实仍要打印，否则一个失败的名字节点无法诊断。
+- **陌生客户端能写的行不是运行行。** 登录前的拒绝（来源/前缀守卫）只进文件日志，否则匿名请求能在已登录者的控制台里写一行。
+
+## 会话、Cookie 与账号池
+
+- **运行前设门只有一个问题，按需要会话的模式问。** 登录墙拒绝（没有“照样运行”），“无法核对”从不阻塞；`execute()` 自己不提第二个 Cookie 问题。
+- **一个账号 = 一个 Cookie 文件 + 一个 profile。** 名字进文件名与目录名，所以同平台两账号是两台可并行设备；空白在盒子里是
+  `default`，且只在 `CookieManager.key` 一处折叠。
+- **一个没有 Cookie 文件的 profile 仍可能有活会话。** 只导入一次且不再重种，所以“删除已存 Cookie”之后仍要探测。
+- **保存 Cookie 就是更新。** 粘贴是最新的会话，所以要当场种进 profile；“更新进 Profile”按钮删除是因为它承诺的事已经自动发生。
+- **绝不把浏览器活 jar 写回文件。** 一次已登录页面加载就会轮换凭据，写回一次就降级一次。
+- **新账号设备是生成的，不是复制的。** 云上没有登录窗口，用户日常 Chrome 也不能上传；模板要由行数证明干净，且只在首建时播种。
+- **冷却表是功能本身，轮换是它的下游动作。** 一个平台封锁持续数小时，昂贵的动作是太早重试；读取时和时钟比较，不要清扫线程。
+- **只在台账没有东西可对账时轮换。** 源节点只在本次零行且有墙/风控时换号；已有行就走 PARTIAL。评论可按链接轮换，因为被挡链接
+  从没进过“已证明的前缀”。
+- **一次失败只冷却它指控的那一侧。** 登录墙是会话的，验证码先是出口的，不可达两者都不是；未知失败从不冷却。
+- **池是一个对，lane 是登录。** 每次尝试按真实账号取 lane；`@pool` 是哨兵，永不进 Cookie 路径，但留在指纹里。
+- **出口凭据只进中继，不进 argv。** Chrome 只看到 `127.0.0.1:<临时端口>`；出口全坏时按名拒绝，绝不静默直连。
+
+## 登录门与账号
+
+- **错误密码只回答一句话。** 先验密码再查锁定/禁用，否则“登录失败次数过多”就是用户名探测器。
+- **失败计数要在行内做加法。** 读-改-写会让一阵并发猜解只记一次，“连续 5 次锁 15 分钟”永远不会到来。
+- **每一次猜秘密都共享同一个窗口**，包括改密的 `current_password`；窗口还要**按大小**设上限，否则每个被放弃的用户名都留一条永久记录。
+- **令牌比较在字节上做。** `hmac.compare_digest` 遇到非 ASCII `str` 会抛，文本比较就是攻击者定价的 500；`next` 里的控制字符也要拒。
+- **登录门只在注册表存在时存在。** 非回环 `HOST` 且没有账号时，服务器要按名拒绝启动。
+- **存储失败要回答面板能解析的信封。** `{ok, error}`，不是 HTML；删账号把移树与删行做成一个带补偿的步骤，失败要说数据到底在哪。
+- **替换单例要关掉被替换的 store。** 它一生握一个 SQLite 连接；在 Windows 上，活连接还会锁住目录。
+- **删除账号要在移树前撤销会话。** 否则移树期间的一次请求会重建 store，并铸出一个没人拥有的新目录。
+- **授权要先于触碰目标。** 管理员探针在 guard 之后才回目标 run id 或关它的 DB；“没有运行在跑”要在 `execute_lock` 里证明。
+- **拒绝了的 claim 不拥有任何东西。** 它在最后一次拒绝前就写了 run/user/ambient，所以必须原样交还。
+
+## 桌面打包
+
+- **双击的 exe 只能靠双击验收。** 用环境变量与显式数据根“验证”会正好藏起失败的那一行。
+- **Windows 在进程退出时销毁控制台。** 每条退出路径都要弹框、写 `startup_error.log`；`input()` 不是可见性。
+- **位置是探出来的，不是声明的。** 要真的写一个探针文件；一个受保护目录可以接受 `mkdir` 却拒绝第一个文件。
+- **隔离根不能回退。** `CRAWLER_DATA_ROOT` 被拒就是按名启动失败；悄悄回落到共享根会让一次 smoke 结算掉用户的活运行。
+- **互斥量按数据根。** “一个数据根一个服务器”是产品规则，根盲的名字会让安装版拒绝便携版。
+- **窗口就是程序。** 用户关闭要结束进程，否则无窗口进程仍占着根互斥量；程序化关闭不能在同一事件里终止。
+- **“安装器安装的”是安装器事实。** 只有 `install-manifest.json` 存在才成立；源码检出、便携包、离线安装、云端容器都没有安装器树。
+- **自更新替换程序，绝不替换用户数据。** 校验 feed 摘要、按 OS 交给退出后的脚本；源码运行按名拒绝，而不是替换开发者检出。
+- **清单优先于过期的导出。** 安装器记录先查，然后启动器变量（且必须在组件根内），最后才是配置路径。
+- **Mac 下载按 CPU，`.app` 要复制不能解压。** `zipfile` 会丢掉框架符号链接与可执行位；DMG 要挂载后用 `ditto`。
+- **UPX 要自己跑并验证。** `upx=True` 找不到工具时什么都不压，只在一行滚过去的日志里说；缺工具应按名让构建失败。
+- **打包器要按文件树收集，不按构建解释器看不见的静态导入图。** `collect_submodules` 在 `pathex` 生效前跑会回空列表，于是零插件随包。
+- **一个文件的扩展名是给某些读者的承诺。** 一个被改名成 `.ico` 的 PNG 能骗过浏览器，却会让安装器在十分钟后才拒绝编译。
+- **后台构建的退出码只和它的包装一样可信。** 结尾一个 `echo` 就能把失败报成 0；读日志自己的汇总行。
+- **重新打补丁（UPX/安装器）的警告是你以为开着的开关。** 工具忽略的选项是文档，不是配置。
+
+## 第二采集后端 / The second crawl backend (CatBus) — 为什么边界在那里
+
+- **为什么是子进程而不是端口。** 它已经说本应用的行形状（stdout 一行一条、stderr 最后一行摘要、退出码分类失败），
+  移植十一个客户端会是第二份要同步的实现。
+- **为什么读清单而不是抄表。** 抄一份“CatBus 支持什么”就是前端规则要防的第二意见；探测缓存后所有答案都出自那份文档。
+- **流式是上游先付的账。** 一行一个事务的存储遇到“跑完才打印”的适配器，停止会丢掉全部已买的行。
+- **`windowsHide` 不是 `Popen` 关键字。** Windows 的答案是 `creationflags=CREATE_NO_WINDOW`，POSIX 返回空 kwargs；
+  一个评论抓取每链接起一个子进程，缺它就是每篇闪一次黑窗。
+- **管道 Python 子进程写 ANSI 代码页。** 桥要按字节读写并自己解 UTF-8；参数走 stdin，绝不走 argv。
+- **两个后端、两套登录、两个答案键。** `entry_key` 只给非浏览器后端加后缀，历史键逐字节不变；适配器的判决不缓存。
+- **Cookie 开关不能决定一个不是 Cookie 的登录。** 清单声明 `auth: required` 的 cell 每次运行都要问，哪怕开关关着。
+- **一个假 API 会把 `AttributeError` 打进安装包。** 桩的接口名要由真 crate 的测试钉住。
+
+## Lint 与引号
+
+- **三种标准都要干净。** 产品、测试、探针各一个 rcfile；pylint 忽略嵌套配置，所以每档都是显式 `--rcfile` 的独立调用。
+- **门禁要能证明它 lint 了东西。** 目标为空要拒绝；PowerShell 里“两个数组的数组”会让 `pylint` 收到两个空参数并打印“没有文件”。
+- **“健康”的机器不等于 runner 的机器。** CI 缺可选依赖时要按名忽略模块，不是关掉 `E0401`；两个方向都要有测试。
+- **引号跟随句子的语言，不跟随被引内容的字母表。** 中文用“”，英文用 `" "`，角括号一律不用；两套并存时读者无法从标点判断在引用什么。
+- **批量替换按括号配对，不按行。** 否则跨行引用会被拆成两个半句；`strip('…')` 的字符集合与标题正则需要手工看。
+
+## 多账号与数据作用域
+
+- **`Config` 路径在导入时就被冻住，所以账号树要在调用时解析。** 一个用户名永远不能变成路径；唯一读者是 `runtime/paths.py`。
+- **内容寻址的 dataset id 不是某个人的缓存键。** 两个账号上传同一份字节会得到同一个 id，缓存键必须带 scope。
+- **worker 线程不继承身份。** 每个运行/请求起的线程（并行池、预检池、两个 Cookie worker）都要显式绑定账号，否则数据落进本地拥有者的树。
+- **控制台与画布身份属于拥有槽位的账号。** 全局 `execution_state` 要丢掉非拥有者的行；预览缺 `workflow_name` 不能读到别的账号的上一个画布。
+- **裸 `WorkflowManager()` 要解析调用者的目录。** 默认到检出级目录会让一个账号能调度、导出或引用另一个账号的画布。
+- **队列镜像不是所有人的一个文件。** 按拥有者写；账号被删/禁用的条目在 drain 时按名丢弃。
+- **会话是行，不是签名声明。** Cookie 里放随机 token，表里只存它的 sha256；这样注销/禁用/强制下线才能真正撤销一个被重放的 cookie。
+- **一个欠账账号只能改密码。** 在门里强制（403 + 头），不要依赖一个页面可能不显示的对话框。
+- **测试 harness 要每个测试自己的注册表。** 一个测试的登录若把账号模式打开，后面每个测试都会认证失败。
+- **一次 drain 的请求只能变成一个条目。** 已经重新停放的条目再被 push 一次，就是同一画布爬两遍、付两遍。
+- **队列修不了的拒绝要丢弃，不要重新停放。** 永久拒绝是 400；放回队首会让后面每个请求都饿死。
+- **一次重跑的擦除属于拥有槽位的那次运行。** 请求阶段删行/释放认领，任何赢下空隙的 claim 都会在数据没了之后才拒绝。
+- **store 的默认路径点名系统树，是下一个调用者会兑现的承诺。** 一个在别的账号请求里裸构造的 store 会静默打开检出级数据。
+- **备份不能把自己归档成一个谎。** 要遍历每个账号树，并在复制前对每个 SQLite 做 checkpoint；只有 `.db` 没有 `-wal` 不是那个数据库。
+- **导入项目包不是请求线程的活。** 几百 MB 会让 Flask worker 阻塞，反向代理还可能先切断回复；所以复制到临时文件、起 job、回 202。
+- **一个没人构建的 Dockerfile 是主张，不是部署。** 镜像的 apt/pip 若指向运营者的镜像站，GitHub runner 永远构建不出来。

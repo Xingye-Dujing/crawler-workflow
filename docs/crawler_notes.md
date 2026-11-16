@@ -1,2549 +1,385 @@
-# Crawler measurement record
-
-`AGENTS.md` carries only the red lines. This file carries the *evidence* behind them, so nobody
-re-pays for a measurement that already happened. **Read the section for the platform you are about
-to touch.** Every claim below was observed against the live site; the date it was established is in
-the text. When a measurement is overturned, replace the old paragraph rather than appending a
-second opinion beside it.
-
-**Names in the record are the names of the day it was written.** The comment walks were methods on
-`CommentSession` (`crawlers/commenting/session.py::crawl_weibo` and friends) until 2026-10-27, when
-each one moved to its own platform package (`crawlers/platforms/<id>/comments.py::walk`) and the
-dispatch became a registry (`crawlers/commenting/walks.py`). A paragraph that names `crawl_douyin`
-is describing the measurement, not asking you to find that method — the code it refers to is the
-`walk` in `platforms/douyin/comments.py`.
-
-**Every `backend/test_*.py` probe named below is an archived one-off measurement, not runnable code**
-（脚本已归档，数字即结论）. The recipe it documents is still live: to re-measure, write a throwaway
-`backend/test_<platform>_<thing>.py` and dump its payload to `scratchpad/` — but do not expect to run
-these named files. Where a number or verdict appears below, that number IS the conclusion.
-
-**The node dispatch is not in `app.py` (a thin 579-line file) any more.** Source dispatch is
-`nodes/executors/source.py::execute_source_node`, comment dispatch is `nodes/executors/comment.py::execute_comment_node`;
-a paragraph naming an old `_execute_*` / `app.py` anchor is describing the measurement, not that file.
-
-## Contents
-
-- [Weibo](#weibo) · [Zhihu](#zhihu) · [Douyin](#douyin) · [Bilibili](#bilibili)
-- [YouTube](#youtube) · [X (twitter)](#x-twitter) · [WeChat](#wechat) · [Xiaohongshu](#xiaohongshu)
-- [红果短剧（hongguo）](#红果短剧hongguo)
-- [Cookie capture vs crawling](#cookie-capture-vs-crawling)
-- [Browser options that were measured](#browser-options-that-were-measured)
-- [Crawl cost is a testable property](#crawl-cost-is-a-testable-property)
-- [微博的墙是间歇风控，不是发车太近](#微博的墙是间歇风控不是发车太近measured-2026-09-24)
-- [What each mode actually does on screen](#what-each-mode-actually-does-on-screen-measured-2026-09-24)
-- [网络分区：海外平台要走外网](#网络分区海外平台要走外网混采必缺一半已被实测否掉用户实测-2026-09-242026-09-26-修正)
-- [运行前 Cookie 预检](#运行前-cookie-预检measured-2026-09-24)
-- [A login page on the way through is not a wall](#a-login-page-on-the-way-through-is-not-a-wall-measured-2026-09-24)
-- [热榜：问过五个平台、上线四块、证无一块](#热榜问过五个平台上线四块证无一块measured-2026-09-25)
-- [“停止”为什么必须去杀进程](#停止为什么必须去杀进程quit--stoprequest--kill-三选实测measured-2026-09-25131)
-- [停止路径的真机时间戳](#停止路径的真机时间戳measured-2026-09-25133)
-- [页面没加载完不是被拦截](#页面没加载完不是被拦截measured-2026-09-25135)
-
-## Weibo
-
-**Weibo serves a fake login wall**: a search first flashes the passport QR page, then bounces the
-logged-in session back to the feed. Never judge the wall from the URL right after `get()` —
-`WeiboCrawler._await_search_page` waits for a terminal state (cards / no-result plate / persistent
-passport page). Keep that ordering in any refactor.
-
-**The wall that parallel crawls meet on page 2 is the account, not the window (user-observed
-2026-09-25).** A single crawl walks `page=2, 3, …` with no trouble; start two crawls of the same
-saved cookie and each window's *deeper* requests start getting bounced to passport. Every window
-holds its own copy of one `SUB`, so s.weibo.com sees one account firing several paging requests
-inside a second — the same shape `runtime/gate.py::hold` exists to space, but that switch spaces crawl
-*starts*, and paging rounds interleave long after any start gap. Nothing inside the crawler can
-talk the site out of it. **Shipped rule:** the matrix marks weibo `serial_only`, so its crawls take
-真排队 whatever the 排队/错峰 switch says, and a parallel canvas with 2+ weibo crawls is warned by a
-pre-run dialog before it pays for the collision. The only way back to true weibo parallelism is
-separate accounts, each with its own session (task #117).
-
-**The paging caps that used to live here were quitting below the user's target.** `MAX_PAGES_PER_WINDOW = 5`
-made a feed whose own pager said 共50页 stop at page 5 with the target unmet and no line saying why;
-`MAX_HOURLY_WINDOWS = 720` refused date ranges outright. Both deleted 2026-09-25 together with every
-other backend round/page ceiling (bilibili 40, douyin 12, youtube 20, xhs 40, zhihu 30, twitter 40):
-depth is the site's pager's answer, volume is the user's target, and a walk ends on target,
-site-exhaustion, or a wall — never on a constant.
-
-**Never write the browser's jar back to a saved cookie file.** Measured 2026-09: one logged-in page
-load re-issues the pair (`SUB` 90→94 bytes, `SUBP` 144→56, `XSRF-TOKEN` replaced), and planting that
-rotated jar into a fresh browser is bounced straight to `/newlogin` — a write-back would degrade the
-user's file one crawl at a time. A replayed save still *is* accepted (several browsers in a row land
-logged in), which is why the failure mode looks like a stale cookie and is not.
-
-**`/ajax/statuses/mymblog` is a per-session throttle, not an endpoint.** The same measurement says a
-weibo author/profile crawl must not be written against it: it answers `200` with real posts in one
-session and `<h2>403 Forbidden</h2>` (an edge/WAF body, not a weibo business code) in the next, with
-the same walk and the same logged-in nav. So that mode needs a loud refusal, never an empty table,
-and `backend/test_weibo_recipe.py` is the re-test gate.
-
-**Re-measured 2026-09-24 (visible Chrome, the saved weibo profile): the endpoint answers, and what it
-answers is the author's own timeline.** Recipe
-`https://weibo.com/ajax/statuses/mymblog?uid=<UID>&page=<N>&feature=0`, fetched *inside the loaded
-page* with `credentials: 'include'` — the same shape bilibili comments and YouTube innertube use
-(a page-context fetch, not a standalone request):
-
-* page 1 → **28 rows**; page 2 → 20 rows with **20 unseen ids**; page 3 → 20 rows with 20 unseen ids.
-  Plain `page=N` advances, so no cursor has to be followed. The page-1 surplus is a fact to pin
-  ("page 1 may return more than the rest"), not something to normalise to 20.
-* **how the author walk ends is now named (U1, 2026-10-01).** `_extract` never returns `next=None`, so a
-  real end surfaces as a page that came back EMPTY → `walk_pages` stops `'empty_page'` → that IS the
-  server saying "no more" (attested) → the short is licensed `site_end` (or `empty` at 0 rows) and
-  settles clean, exactly as before; the migration only adds the label + the scanned/kept/refused funnel.
-  Anything short that stopped WITHOUT an empty page — a cursor replaying already-seen ids (`'no_new'`) or
-  a mid-walk 403 that still left rows (`'fetch_failed'`) — is NOT proven out of supply → convicted
-  `UNDER_TARGET` (resumable). `PageWalk.drained` lumps `no_new` in; base doctrine forbids licensing a
-  self-summary, so the code keys on the explicit `('end','empty_page')` set instead. Live: target 5 on a
-  discovered author came back rows (not a silent empty), and the FakeMymblogDriver pins all four endings.
-* the first row's `user.id` equals the requested `uid`. That is the ONLY thing distinguishing a real
-  author crawl from a mirror of the home timeline, because both answer `200` with the same envelope
-  (`data.list`, `data.since_id`, `data.pageid`). An earlier reading of this probe printed the same
-  `since_id` three times and looked like the home feed — it was the same request body previewed
-  three times, not the endpoint ignoring `uid`. **Do not re-derive this from a truncated body:** the
-  probe sliced responses to 300 characters, so its contract step died on `json.JSONDecodeError` and
-  cost four runs to get here.
-* rows carry `id` `mid` `mblogid` `created_at` `text` `text_raw` `source` `region_name` `visible`
-  `isLongText` `pic_num` `pic_ids` `reposts_count` `comments_count` `attitudes_count`
-  `retweeted_status` `user`. `text_raw` sits next to the HTML `text`.
-* **Measured 2026-09-25 (same recipe, a long row found on page 1): `text_raw` is the COMPLETE body.**
-  An `isLongText=true` row carried `text_raw` of 43 chars and `statuses/show?id=<idstr>` answered 200
-  with the *same* 43 chars (`text` was the 354-char HTML) — so the author crawl reads 正文 from
-  `text_raw` and needs **no per-row detail fetch**. Truncation was the open question; it is closed:
-  this list does not truncate.
-* `topic_struct` is `[{topic_url, title}]` with `title` empty and the `#话题名#` inside
-  `topic_url`'s `q=%23…%23` — so 话题 is parsed from the URL, not the (empty) title, matching the
-  search mode's anchor-derived `#…#`.
-* rows have **`pic_num` + `pic_ids[]` but NO `pics[]`**: the image count is available, the image URLs
-  are not on the row, so 图片数 is filled and 图片链接 is left empty rather than built from a guessed
-  CDN pattern. `page_info` may be non-null (`type=11`), but video/album counts do not come from the
-  search mode's `.media-video-a` DOM here — 视频数 is not fabricated.
-* the row's `user.id == uid` anchor is confirmed on real author rows (`user.idstr` mirrors it); link the
-  row as the search mode does (`weibo.com/detail/<mid>`), the identity field is the numeric `mid`/`id`.
-  Reading counts from JSON is cheaper and steadier than the DOM walk the search mode uses, so a profile
-  crawl must not copy the card scraper.
-
-## 微博第 0 步：把页面模型重读一遍（measured 2026-09-28，五条一次性探针，数字即结论）
-
-`docs/live_test_plan.md` §11 的第 0 步（探针载荷在 `scratchpad/`）。用的都是用户自己那份
-`data/chrome_profile/weibo`（**副本=第二台设备**，见下文 06:14 分岔），全程 5 次导航 + 8 次同站 fetch。
-
-**列表靠 URL 翻页，不靠滚动，站点自己印分母。** 搜索页 `.page-info` =“共50页/500条”，本页 10 张
-`.card-wrap`；窗口滚动 4×1600px 后 10→10、`body.scrollHeight` 4750→4750（resource 59→68 只是图片懒加载）
-→ 滚动不带新行。转发卡这一轮没出现（`nested=0`、`.feed-forward-wrap`=0），"一张转发卡被数两次"仍是**未测**。
-
-**一个 timescope 小时窗自己也分页（U12 由代码事实升级为量化事实）。** 2026-09-26 20:00-21:00 那窗：第 1
-页 9 张、第 2 页 6 张、**mid 交集 0**、`.page-info` 空但 `ul.page-list a` 给 page=1..10。
-`WeiboCrawler._may_page` 认定"窗口已窄，深处请求白付风控"，于是实有 15 条只采 9 条——**静默丢 40%**，
-且 `_get_total_pages` 的 href 回退本就能读到第 2 页、只是走不到。（探针坑：站点给的**相对 href** 直接喂
-`driver.get` 会抛异常——相对 URL 不是导航目标。）
-
-**空窗会同时给你“未找到结果”和五条不相干的帖子。** 不存在的关键词配同一小时窗：页面既有
-`.card-no-result`（“抱歉，未找到相关结果”）又有 5 张**带作者**的卡（时间戳写“35分钟前”而非窗内小时）。
-祖先链量过，**不相干卡与结果卡同构**（`div.card-wrap > … > div#pl_feedlist_index.main-full`，plate 是
-`#pl_feedlist_index` 直接子节点，`mark`/`card-type` 两边都 None）→ **没有可用容器隔离**。
-而 `_await_search_page` 先查卡片再查 plate，这 5 条会被当关键词结果采走。修法只能是**判据顺序**（先看
-plate），不是换选择器。
-
-**正文不截断（否证了我自己的假设）。** 带“展开”的卡 DOM 里**已**有 `[node-type="feed_list_content_full"]`
-（10 张里 8 张；最长 153→759 字，另 150→5308 字），缺该节点的 2 张正文本就短（34/48 字）。旧锚点
-`[node-type="feed_list_extend"]` 整页 0 命中（而“展开”8 处）→ 探针 expander 计数作废。整页 `浏览` 0 处 →
-搜索卡没有浏览数（与 X 那条并列）。
-
-**时序：9 s 窗预算不是瓶颈，但那句超时日志是谎。** `driver.get` 0.42-0.85 s、首卡 0.42-0.85 s、卡片数
-稳定在 2.47-2.92 s（三种 URL 都一样）。U11 前提"慢网整窗丢"今天**没复现**；成立的是两半：
-`_await_search_page` 用裸 `driver.get` 绕开 `Crawler.open` → 不记 settled、renderer 超时直接抛；超时分支
-`crawl.weibo.page_timeout`“页面加载超时，可能无内容”把网络判断写成内容判断——AGENTS 说"只有拒绝才许
-被命名为拒绝"。
-
-**评论：`flow=0&fetch_level=0` 只给主楼，站点分母比表大。** 印“30”的微博（`comments_count=30`、
-buildComments `total_number=30` 三处一致），走完游标只有 **22 行**：页 1 `max_id=1446393191822`→20 行，
-页 2→2 行 + `max_id=0`。**缺席楼层正好 8 个 [13,16,18,20,22,23,25,29]**，而 `floor_number` 是**全楼层号**——
-那 8 条就是楼中楼。`count=100` 被服务端无视（仍 20/页）；`fetch_level=2` 返回同一批（+0）；`flow=1`
-（按时间）第 1 页只给 13 条、游标也不同。信封 `trendsText`“已加载全部评论”只给 22/30 → **文案不可信**，
-判据只能吃 `total_number`。
-
-**楼中楼在这条会话拿不到整批；能白拿的只有行内预览。** 试过的形状全记载荷：`id=<父>&is_mix=1&sub=1&
-import_id=<mid>`→0 行；`id=<父>`→0 行；`comment/hotFlowByIds?ids=…`→HTML（无此端点）；`uid=&config=`/
-`&rootid=` 直挂→**`<h2>400 Bad Request</h2>`**（edge 拒，同 mymblog 味道）；`&rootid=<父>` 挂 `id=<mid>`→
-**参数被忽略**（返回同一批 22 行）。父行 `max_id` **不是子游标**：数字游标 `142605857239039` 翻页会推进主楼
-（多 19 条 rootid 各异的新主楼），评论 id 形游标→1 条新主楼，`max_id_type=1`→空表。`m.weibo.cn/comments/
-hotflow?id=<mid>&mid=<父>`→`{"ok":0}`，`mid=<mid>`→与桌面同一批 20 行。**唯一已在手**的子是父行 `comments[]`
-预览（749 条那帖首页 22 行里 3 行带，各 1 条，字段 `is_sub_cmt`/`rootid=父id`/`floor_number=0`/`like_counts`），
-零额外请求即可捡回；其余只能**具名报差额**（“站点 30，主楼 22，另有 N 条子评论本站端点不给”）。
-小帖 22 行**每行 `total_number=0`** → 差额只对信封 `total_number` 报，不能对行报。
-
-**30 页硬预算对热帖真会撞（U19 微博格）。** 同一帖走 6 页→119 行、`max_floor=548`、分母 749→763（作者
-还在被回复），每页 ~19-22 条 ⇒ `page >= 30` 约 600 行封顶，而 `crawl_weibo` 撞到只 `break`，一声不响。
-
-**四列在造假（代码事实，探针确认键名）。** ① 赞数键载荷是 **`like_counts`**，`parse_weibo_comments` 读
-`like_count` → **点赞数恒 0**（讽刺：`m.weibo.cn` 那份用的正是 `like_count`）。② `楼层` 用
-`enumerate(payload,1)` 而 `crawl_weibo` 每页调一次 → **每页楼层从 1 重数**（站点自己印 `floor_number`）。
-③ `评论时间` 原样塞 `"Sun Jul 26 09:49:46 +0800 2026"`，作者路径有 `_normalise_weibo_time` 没用上 → 同列
-两形状。④ `评论者主页` 填 `user.profile_image_url`（**头像图片**），同对象里有 `profile_url='/u/5893846418'`
-（相对，需拼 `https://weibo.com`）。
-
-**热搜仍匿名可取，榜大小会变：** `ajax/side/hotSearch` `ok=1`、`realtime` **51** 条（本文更早写 52——榜自己的
-大小，非我们上限；`hotCapped` 报的就是它），信封另有 `hotgov`/`hotgovs` 未采。
-
-**但“匿名”有到场条件（measured 2026-09-28）。** 空 cookie 目录 + `use_profile=False` 的 4 秒红：控制台说
-“微博热搜接口没有给出榜单（返回 empty）”。分开量两件事：① 站点没见过的新设备请求 `weibo.com/` 被答
-`passport.weibo.com/visitor/visitor`（“Sina Visitor System”），**0.69 s 后**自跳 `weibo.com/newlogin`，此时
-`login_wall/risk/unreachable` 三旗都不立（只是没走完的引导）；② 从 `weibo.com/newlogin` 帧发同源
-`fetch(ajax/side/hotSearch)`→实测 52 条、0 cookie；同一刻从 passport 帧发同一请求→**`TypeError: Failed to fetch`**
-（跨源被浏览器拒，站点没见到请求）。结论：① **`needs_session=False` 是对的**（不需登录态、不需匿名 cookie），
-别为这格红去加登录要求；② **问的时机是产品码问题**，`hot()` 须等引导把浏览器送回 weibo.com 再发请求
-（`_await_home_frame`，本平台 9 s 预算、每 tick 问 停止），等不到报 `crawl.weibo.hotNoHost` 并打出那个帧。
-**推广**：凡是“在已加载页面里 fetch JSON”的模式（bilibili 评论、YouTube innertube、微博评论）都要问
-*发请求的那一帧是谁*——页面还在引导/跳转时同源策略会替站点拒绝你，而拒绝长得跟“站点不给数据”一模一样。
-
-### “这一页没有新增”不是“这一页没有内容”：续跑把被停那窗的深页永久丢掉（代码事实 2026-09-28）
-
-小时窗现最多 10 页（U12），**游标语义**从“一窗一行”变“一窗 N 页”，而页循环留着一条一窗一行时代的
-收工判据 `if self.collected() == before: logger.warning(t('crawl.weibo.page_empty', …)); break`——“没涨”被
-当成“没有了”。**继续 恰好必然踩中它**：游标把 `url_index` 留在被 停止 打断的那窗，但 `card_index/
-page_index` 每次进窗归零，重进后第 1 页每张卡都在台账 → `collected()` 不涨 → 第一次就 `break` → **比 停止
-所在页更深的页此后再没被请求**。控制台还打“第 2 页无有效卡片”（一句关于站点的话，说的是我们自己的
-去重台账），表、游标、`walk_done` 三方同意那张短表。**修法（全平台规矩）**：`_harvest` 交 `(kept,
-cards_seen)`，收工只看 `cards_seen == 0`，“整页旧行”照常报数（`page_done n=0`）继续翻；代价写 docstring：
-坏 pager 现在会走完 `total_pages`（锚点 1..10）而不是一复读就停——有界、可看。
-
-同段第二种不吭声收尾（微博评论）：`crawl_weibo` 三退出中游标耗尽有 `comment.weiboShort`、站点复读有
-`comment.weiboReplay`、用户上限**故意**不打字，唯 `buildComments` 取数失败 `break` 返回已有行**一字不打**
-→ 补 `comment.weiboFetchDied`（第几页失败/本次几条/站点几条/差额/游标停在失败页可继续）。**推广问法**：
-任何"多段循环 + 提前退出"的采集都要问“这几种退出各留下一句话了吗”——漏一种就是一个没人报警的短表。
-
-### 一条只发表情符号的评论，剥完标签就什么都不剩（measured 2026-09-28）
-
-`buildComments` 的 `text` 是 HTML：一条 `[可怜][鼓掌][黑线]` 装的是 `<img alt="[可怜]" … />`，旧适配器只做
-`_strip_tags(text)` → `评论内容` **空串**（id/作者/楼层/时间全在，只有分析节点拿到空白）。同对象有
-`text_raw='[可怜][鼓掌][黑线]'`。**数过**：本轮 `weibo_*.json` 里“剥完全空”的卡共 21 张，真评论 17 张
-**全带非空 `text_raw`**；另 4 张是 DOM 记录（`acts[]`，无 `created_at`/`user`）。故“先读 `text_raw`，没有再
-剥 HTML”对本端点完备（同平台帖子行 `_author_row` 一直这么读，评论侧此前没抄）。**另一处错位 U41**：
-差额句 `comment.weiboShort` 过去拿被 `comment_limit` 截过的表长比站点总数（3 条评论、上限 2，游标归零处
-收工 `ended='cursor'`，差额算成 1 并写“差额是楼中楼”——关于站点的话，原因是用户填的数）。现只对“游标
-收到的行数”判差额，收到==站点数则一字不说。判据在真机 `test_live_weibo_workflow.py` D5（要求**沉默**）。
-
-### 那张"数字在页上、读回来是 0"的卡：结构量完后是**否证**（measured 2026-09-28，第 7 条探针）
-
-一张怪卡 `mid=5347502954124386` 文本尾巴有 `714 / 1024 / 7274`，`_scrape_card` 从 `[action-type="feed_list_forward"]`/
-`feed_list_comment` 读回**裸词**“转发”“评论”（`parse_count`→0），偏偏点赞（`.woo-like-count`）拿到 7274，
-且 `actionLabels` 顺序不同（`feed_list_like` 排前）。据此有批评说"热卡用另一套 woo 版式、把转发数/评论数
-存成 0"。`backend/test_weibo_actionbar.py` 把动作条当结构读一遍（一次导航零 API）：整页 `.woo-count`/
-`.woo-forward-count`/`.woo-comment-count` = **0、0、0**，`.woo-like-count` = 10，10 张卡动作条 `className` 全是旧
-`menu s-fr`、有数的卡数长在按钮文本里（`fwd='16' cmt='30' like='3'`），无数的才是三词，`nameCount` 全 1，怪卡
-没再出现。故"读错选择器"**未被支持**（一张多赞/零转发/零评论的帖本就长那样，`714/1024` 更像视频号模块
-自己的数）。**但别当已排除**：pass 1 抓到过一次不同 `actionLabels` 顺序，说明带视频卡版式存在、只是没采到
-样本。登记判据 §6 **U35**：要必然出视频卡的供给（热榜词+最近窗）再量"动作条锚点文本 vs 卡内所有数字节点"，
-量到不一致才改选择器——**没有样本就不写选择器**（“读页面先于读代码”这条规矩存在的原因）。
-
-## Zhihu
-
-Zhihu throttles headless content pages day-by-day (risk code 40362); comment crawling always opens a
-visible browser for zhihu, and a headless zhihu search returning 0 rows is a legit risk-control
-outcome the message catalog already explains — don't "fix" it by loosening assertions.
-
-**作者分母来自 profile 页的 `<meta itemprop>` 元标签，不是 footer（measured 2026-10-01，B1 探针）**：
-知乎 profile tab **不渲染**“没有更多”footer——6 个 tab（3 账号 × answers+posts、最深 637 项）滚到
-顶全 `footer=False`。所以 walk_feed 的 'stuck' 在薄号（23 条真到底）与限速掐深号（661 条中途停）之间
-无法区分。但 profile 页 meta 里带 **`zhihu:answerCount` / `zhihu:articlesCount`**（zshu-83 实测 661/47）
-= 站点亲口的号主作品总数，与 weibo 的 `_published_count`（作品 145）同一角色。据此：
-collected < 总数 且 collected < target 且非墙/风控/停止 → `UNDER_TARGET`；collected ≥ 总数 → `site_end`；
-meta 读不到 → 分母 -1、跳过（宁缺毋滥：读不到 ≠ 0）。到达 target 的普通爬两条分支都不触发、`None` →
-判完成。live target=3 通过（不误判薄号）。B 站 `arc/search` 同会话 `code=-403`（与 weibo mymblog 同一
-WAF 味道）、space DOM 未命中“N 视频”——bilibili 分母**还没找到**，其 author 维持 `None`（现状安全），
-下一步用更宽的探针再试。
-
-**A search card holds an excerpt, not the answer — and only a 回答 card may be opened**
-(measured 2026-09-24, four probes in one logged-in session on `/search?q=三亚&type=content`).
-The crawler used to refuse every click inside a card, on the strength of a navigation incident
-that was never measured as a length question. It was wrong in both directions:
-
-* the excerpt is **not** a CSS clamp. `.RichContent-inner .RichText` is a plain inline span
-  (`display:inline`, `height:auto`, `overflow:visible`) whose `innerText` equalled its
-  `textContent` at 35–109 characters. A wider read could not recover what the payload never
-  carried, so every row this crawler stored was truncated, and the user's CSV said so.
-* an answer card's `button.ContentItem-more` (label 阅读全文, **no href**) re-renders that same
-  node in place: 74 → 308, 75 → 782, 69 → 1067, 71 → 2103 characters, and the answer's own page
-  agreed (307 vs 308). URL unchanged, 21 cards still present, a handle to a card two rows down
-  still alive, 8/8 clicks settled inside ~0.6 s. One node before, one node after — there is no
-  second copy to double-count.
-* a column card's control is the navigation the old rule remembered, so the gate is the row's own
-  link (`/answer/`), not its class. A card whose anchor never mounted has an unknown kind and is
-  not clicked either: refusing costs one excerpt, guessing costs the rest of the crawl.
-* **expansion changes two other fields, which is why the row is frozen at its first reading.**
-  The same click moves the date label off `.SearchItem-time` onto `.ContentItem-time`
-  (`08-27` → `编辑于2026-08-27 12:22`) and drops the `作者名：` prefix the preview opens with.
-  Re-scraping after the click would leave 发布时间 holding two formats across one column, decided
-  by an internal retry, and empty 作者 on exactly the rows the fix improves. Only 正文 is replaced.
-* the API route works and is not needed: `GET https://www.zhihu.com/api/v4/answers/<id>?include=content`
-  answered `200` in 424 ms with `content` (1316 HTML chars → 674 plain, matching the page) and keys
-  including `is_collapsed`, `content_need_truncated`, `force_login_when_click_read_more`. Two other
-  shapes failed: `api.zhihu.com/responses/<id>` is CORS-refused from the page, and
-  `api/v4/questions/<qid>/answers/<aid>` is `404`. A click is cheaper than a request and needs no
-  second vocabulary of ids.
-* cost and its bound: one settle wait per answer card (measured < 0.6 s, capped at 4 s). Three
-  clicks in a row that answer nothing stops the trying for the rest of the crawl
-  (`crawl.zhihu.expand_stopped`), because a site that stopped answering would otherwise be paid
-  four seconds per row for two hundred rows. Turning 展开全文 off is the user's call and says so
-  once on the console (`crawl.zhihu.excerpt_only`); rows that stayed excerpts while it was on are
-  counted (`crawl.zhihu.bodies_short`).
-
-## Douyin
-
-> **关键词搜索（posts）模式与右上角“筛选”排序菜单已于 2026-09-30 移除。** 实测搜索供给本身就浅（同一
-> 关键词两次复测只给 26 / 16 条，都没到站点自己的“暂时没有更多了”收尾，非账号被标记也非少读），用户判定
-> “只能爬一点，完全没有用”，故连 `search()`、`engine/menu.py`、`_SORT_FIELD`/`SORTS` 与相应真站用例一并删。
-> **抖音保留 作者 / 热榜 / 评论。** 下面凡是讲“搜索框 / `/search/<kw>` 路由 / 筛选排序 / 结果页卡片翻页”
-> 的段落都是**已移除功能的保留证据**（读法：这段量当时成立，功能没了），作者/热榜/详情/评论各条仍是现状。
-
-**DOM-only, entered through its URL, and has no play count.**
-
-**PRE-#148 HISTORY — the window force is GONE, do not re-add it.** A headless browser used to be answered
-by 验证码中间页 on *every* navigation, so the class set `never_headless = True` and the source executor
-downgraded to a visible window before buying the browser. **#148 retired all window-forcing**: there is no
-`never_headless` attribute on any class now (see `crawler_rules.md` "nothing forces a window"), and headless
-is honoured as asked (the minimal disguise makes it work — measured 2026-09-26 below). Its search endpoint
-was signed (`a_bogus`/`msToken`/`verifyFp`), so the DOM was the only path — and search itself is now deleted.
-
-**Re-measured 2026-09, and two long-standing facts died together:** the search box still accepts the
-text and its 搜索 button is still clickable, but *neither the click nor Enter routes any more* (the
-address sits on `/jingxuan`; the user watching the window reported exactly this), while the
-`/search/<kw>?type=video` deep link — documented for a year as an empty shell of three `<ul>`s — now
-serves the result list. So `SEARCH_ENTRY` is the route, the keyword is percent-encoded into the path,
-and there is no router left to interrogate about which search ran.（`type=general` 那条也被试过/提过：
-`/jingxuan/search/<kw>?type=general` 是页面自己在搜索框里跳转的形状，但**用户判定结果要按视频排，
-维持 `type=video`** —— 改回去之前先问他，别拿一次"看起来能用"当结论。）Cards are
-`[data-e2e="scroll-list"] a[href*="/video/"]` and the id comes out of the href — the old
-`div.discover-video-card-item[data-aweme-id]` matches **zero** nodes now and the class names beside it
-are build hashes.
-
-**Douyin punishes the session shape too — it is now flagged `profile_recommended`, like weibo**
-(measured 2026-09-26, one network, one account, keyword `IU`, the shape the only variable):
-
-| 会话形状 | 结果 |
-|---|---|
-| 一次性浏览器 + 种入保存的 Cookie | **8.8 秒被弹“验证码中间页”**（`verdict=blocked`，按规矩抛错点名而不是交空表） |
-| 该平台自己的 profile | **24.8 秒交出 5 行真数据**（标题/作者/粉丝/四个计数/发布时间齐） |
-
-载荷 `scratchpad/iu_search.json`（被拒那次）与 `iu_search_profile.json`（成功那次）。这条与微博
-"拷贝出去的登录态=第二台设备"是同一类问题，所以 `Capability.profile_recommended` 加上了 douyin：
-可见窗口是**必要不充分**，jar 得是站点自己一路滚下来的那份。**一个模式读到反方向**：热榜是
-profile 被弹验证码、一次性浏览器读得通（2026-09-25，见 `_hot_mode` 处的注释与 #141）——
-所以这个标记只能是建议与提醒，绝不许变成强制，而 #142 也把"按形状分布到底怎样"留成了待查项。
-
-### （已移除）结果页右上角那个“筛选”：hover 开的菜单，URL 一个字符都不变（measured 2026-09-26，#143）
-
-`backend/test_douyin_probe_sort.py`（一次性探针，载荷 `scratchpad/douyin_sort_probe.json`），
-一条会话一次导航，读到的菜单是 **13 项、4 组**：
-
-| 组 | 项 |
-|---|---|
-| 排序 | **综合排序 / 最新发布 / 最多点赞** |
-| 发布时间 | 不限 / 一天内 / 一周内 / 半年内 |
-| 视频时长 | 1分钟以下 / 1-5分钟 / 5分钟以上 |
-| 观看状态 | 关注的人 / 最近看过 / 还未看过 |
-
-四条决定实现方式的事实：
-1. **菜单是 hover 触发的**：`move_to_element(筛选)` 才出得来；**点一下 筛选 反而把它关掉**
-   （点完再读，菜单项 0 个）。所以爬虫不能"点一下再看"，必须悬停。
-2. **URL 到永远不变**：选完 最新发布 / 最多点赞 / 一周内 之后地址仍是
-   `https://www.douyin.com/search/IU?type=video`。这否掉了"像热榜那样用字面量拼 URL"的省事路线 ——
-   排序**只能靠点**，也因此必须把选中值写进节点指纹与游标（它选数据，不是标签；见 AGENTS
-   "A label is not an input"），否则续跑会把两种排法混成一张表。
-3. **点下去确实换血**：`一周内` 与默认集合的重叠是 **0/16**（完全另一批），`最新发布`/`最多点赞`
-   都报 `changed=True`；`不限` 报 `changed=False`（正确，它本来就是这个值）；`5分钟以上` 只剩 2 行；
-   `关注的人`/`最近看过` 交出 **0 行**（这个账号没关注发 IU 内容的人）—— 所以"零行"对这些项是
-   合法答案，断言不能一律要求非空。
-4. **一次点完菜单就重挂**：连着点 `一天内`/`半年内`/`1分钟以下` 时报 `picked=False`，因为上一项
-   点完菜单关闭、旧句柄失效。爬虫每次选都得重新悬停、重新取节点，不能拿一个 element 连着点两项。
-
-**用户口述与站点的差别要记下来**：说的是"最新和最热"，站点写的是 **最新发布** 与 **最多点赞**
-（没有"最热"这个词）。矩阵里的选项值用哪个词，等用户确认之后再写 —— 别拿我的猜测当它的标签。
-
-**The profile header is not there when the session is being refused** (measured 2026-09-24, visible
-window): `backend/test_douyin_profile_probe.py` was answered 验证码中间页 by the *search* itself, and
-the live author case had been dying one step later with a raw
-`NoSuchElementException: [data-e2e="user-info"]` — the tier's own helper read that node with a single
-unwaited `find_element`. The fix is on the test side (bounded wait, absent header is simply no
-anchor), and the identity claim no longer leans on the header at all: every row of the grid already
-carries the name read off the video page it was opened from, so "one profile, two authors" is caught
-from the rows, with the header nickname checked *against* that anchor when the page publishes one.
-That file is green again (3 passed, 2026-09-24) — and the same sweep showed the pattern the next tier
-change has to answer: **on both weibo and xiaohongshu it was the second case of the file — the
-visible-window variant — that came back empty**, weibo still parked on passport after the tier's own
-45-second back-off. A session that gets risk-scored stays scored for minutes, so the acceptance tier
-cannot treat "rows" as the only honest green; it has to distinguish a *reported* refusal from a
-silent empty table, and say per platform which one happened.
-
-**The list mounts as 16 skeleton rows (no anchor, no text) and fills in ~4–6 s**, so "some nodes
-exist" is not "results exist": `_wait_for_cards` polls for an *anchor* (`MOUNT_WAIT`), and a page that
-never fills is `NOT_MOUNTED` → zero rows, which is the honest answer for a keyword nobody posted. The
-**window** now does the paging (measured 16 → 26 → 36 → 46 → 56 cards per ~0.9-viewport scroll), so
-`_scroll_results` scrolls the window and stops the walk when a scroll yields nothing new — and the
-loop checks the row budget *before* scrolling, because scrolling first would wait out `SCROLL_WAIT`
-for rows nobody asked for. Counters still come only from the self-describing `data-e2e` keys **on the
-video page** (`video-player-digg`/`feed-comment-icon`/`video-player-collect`/`video-player-share`);
-`detail-video-info`'s second number **is the like count** — and the search card's single bare figure
-measures equal to it — so a 播放数 column would be a wrong figure with a plausible name: don't re-add
-it. The “是否保存登录信息超过5天” mask still mounts seconds after the page and is dismissed on arrival
-(取消 only — the user reports 保存 leads to a phone-verification step). Comments DO render
-(`[data-e2e="comment-item"]`) and grow only by scrolling the panel container; both the panel mount and
-each scroll settle by *polling inside the crawler*, never via the caller's `nap` — a stubbed nap once
-turned a 2000-comment video into an "exhausted" 5-row crawl.
-
-**Author mode is paged by a container the window cannot move.** Measured on `/user/<sec_uid>`:
-scrolling the window grows the **footer's** recommended-video links (8 → 29 anchors) while the 作品
-grid (`[data-e2e="user-post-list"]`) does not move — a count-based walk therefore stops at 57 on a
-page that publishes 85. Taking the grid's scrollable ancestor to `scrollTop = scrollHeight` pays out
-18 rows a round (21 → 39 → 57 → **85, which is what `[data-e2e="user-tab-count"]` says**) and is why
-`engine.feed.jump_to_bottom` exists (the comment panel scrolls the same way, so it shares it). A
-creator is addressed by the opaque `sec_uid` only — `/user/<numeric>` is not a route — and every video
-page carries `a[href*="/user/"]`, so a live run can discover one; a display name is refused.
-`DouyinCrawler._published_count()` returns **-1 for "the page said nothing"**, because the shared
-`parse_count('')` answers 0 and 0 is a *claim*: reading a missing number as zero would let a page
-that never rendered report an author who never posted. Rows still come from opening each video
-(`_detail_row`), so this mode carries the same columns as the search mode — including the absence of
-播放数.
-
-**A self-paging list is walked by `_open_each`, and "every id here is known" is not its end.** The
-loop used to `break` when the current screen held no unseen id — which is the *normal* first round of
-a resumed run, because the page reopens on exactly the ids the dead run opened. The symptom was a
-断点续跑 that returned the previous run's rows, never reached its target, and complained about
-nothing. Now an empty `todo` scrolls on and only a scroll that pays out nothing ends the walk; both
-douyin lists share the one loop.
-
-**A detail page that publishes only its counter bar is not a row (measured 2026-09-26, live).** One
-opened video answered 点赞 300 / 评论 11 and nothing else — no author, no 发布时间, no 文案, and
-`document.title` still empty. `_detail_row` filed it as valid data, so a 2-row target was met by two
-blank lines and the live tier caught it as "row without a title". It now refuses a page with
-**neither author nor publish time** (`crawl.dy.detailNoIdentity`, one line naming the id) and the walk
-moves on to the next card, so the budget buys rows that say something. **The gate is identity, not
-prose**: a caption-less clip keeps its author and its date, so it stays a row with an empty 正文 —
-refusing on an empty 标题 would drop real data over one column.
-
-### 抖音第 0 步重读（measured 2026-09-28，探针 `backend/test_dy_page_model.py` → `scratchpad/dy_page_model.json`）
-
-一次搜索（关键词 IU、`sort=most_liked`）+ 三次详情页 + 一次作者主页，逐条对着代码里的主张量：
-
-* **列表挂载比代码写的更快**：`t=2 s` 就有 **15 张** `/video/` 卡并且到 14 s 不再变（代码注释是
-  “16 张骨架 → 4-6 s 填实”；骨架期已经看不到了，但 `MOUNT_WAIT=45` 仍是无害的宽限）。
-  **窗口仍然就是分页器**：连滚三下 39 → 59 → 60（60 那一屏只多出 1 条，说明这一屏接近尾部）。
-* **图文/note 卡没找到**：结果列表里 `a[href]` 的 kind 直方图**只有 `video`**。所以
-  “`CARD_ANCHOR` 只认 `/video/` 会漏掉图文帖”这个假设**在这一天这个关键词下不成立**——按
-  “没有样本就不改选择器”记着，别凭想象放宽。第一张卡的文本带着 **“合集”** 前缀
-  （`合集 | 00:17 | 8.1万 | 心跳漏了一拍#iu… | @IU'ㅅ' | 1天前`），合集卡仍是 `/video/` 锚点，
-  所以它不会被漏掉，但**同一合集的多条会不会被算重**仍未测（要一个必然出多条同合集的关键词）。
-* **右上角筛选菜单**：入口找得到，词仍是 `综合排序 / 最新发布 / 最多点赞`（+ 组标题 `排序依据`），
-  点选不改地址 ✓。但面板里还出现了一个 **`发布时间` 标签**——抖音自己似乎还有第二条筛选轴
-  （时间范围），产品从未暴露它。**这是未测项**，不是“代码有 bug”：要量到那组可选项才能决定
-  要不要给矩阵加一个字段。
-* **详情页确实只在自己的 DOM 里给数**：`detail-video-info`（文案）+ `detail-video-publish-time`
-  （`发布时间：2026-09-26 18:53`）+ `video-share-icon-container`（一个数）。四个计数
-  （`video-player-digg` 等）在 `[data-e2e]` 遍历里**没有文本节点**，但 `_driver_facts` 的
-  `querySelector(...).innerText` 读得到值（存下来的行是 `点赞 81000 / 评论 281 / 收藏 2419 / 转发 12000`）
-  ——所以那四个选择器**没坏**，是我的探针遍历方式看不到它们；别据此“修”什么。
-  仍然成立的老事实：**没有播放数**（页面上没有任何自述为播放量的数）。
-* **作者主页那一屏没长大**（探针自己拖 `scrollTop`：20 → 20 → 20 → 20，而页面自报 `作品 145`）。
-  代码走的是 `feed.jump_to_bottom(PROFILE_GRID)` + 等新行。**用产品自己走一遍才算数**：
-  `backend/test_dy_funnel.py` 跑 `author(target=40)` → **40 行、40 个不同 视频ID、一次 `authorDone`**，
-  所以网格分页仍然工作，探针那次是**方法不对**（拖错盒子）。教训写进这里是为了下次别拿探针的
-  失败去改产品：产品路径的结论优先，探针只负责提出疑问。
-* **懒网格：第一次触底不fetch、第二次才翻页（U50，measured 2026-10-01 真机 live H1, pass 20261001-010707）**：
-  同一作者（自报 `作品 145`）遮罩改造后的 `author()` 在真机上一会儿到 50、一会儿**卡在第一屏 20 条**就收尾，
-  控制台只有 `第 1 屏：20 张卡片`、没有 `第 2 屏`，也没有 `暂时没有更多了` → 20/50 无具名收尾（正是本层要抓的
-  静默少采）。根因在 `_scroll_profile`：它**只触底一次**就等 `+1`（`SCROLL_WAIT` 内没长就返回 False），而抖音
-  这种懒网格**第一次触底常常不发请求、要再触一次才拉下一批**。修法=在预算内**重复触底直到真长**：
-  ```python
-  while not may_stop() and time.monotonic() < deadline:
-      feed.jump_to_bottom(driver, PROFILE_GRID)
-      if feed.wait_for(lambda: len(set(self._grid_ids())), before + 1, timeout=3.0, tick=0.5) > before:
-          return True   # 这一批到了
-  return False          # 整段预算都没长，才交给 _list_says_end 判站点收尾 vs 真少采
-  ```
-  返回值语义（bool=是否长大）**没动**，所以 `_harvest_pool` 的 `drained`/具名收尾逻辑不变，只是不再被“单次
-  触底的空档”骗停。离线用 `FakeDriver(grid_void_jumps=1)` 把“第一跳不吐、第二跳才吐”钉成确定用例
-  （`tests/integration/test_douyin_crawler.py::TestAuthorProfile::test_a_grid_that_pages_only_on_a_second_approach…`），
-  单触底的旧写法只落到 `[ID]`、新写法走到 `[ID, OTHER]`。真机复跑同一 H1：作者 50/50 全绿。
-  另记两条同轮真机发现（都改了判定、不改爬取）：① 评论 `comment_limit=50` 落在一条只有 23 评论的视频上，
-  采到全部 23 属**供给就这么多**（不是少采），但收尾句 `comment.done` 不在抖音评论的合法出口白名单里 →
-  被判静默；已把 `comment.done` 加进 `_vocabulary('comments')`（`crawl_douyin` 只有在整条楼采完时才在 cap 以下返
-  OK，真少采会另打 `comment.dyShort`，所以这句不会给静默少采背书）。② H1 的导出核对过去按**名字节点标签**匹配文件，
-  但导出文件是按**输出节点 filename** 命名的（抖音两者不同：`抖音评论爬取.csv` vs 标签 `测试：抖音评论爬取`）；
-  改成按输出 filename 词干匹配，并对**0 行的具名短收**（如热榜被验证码挡、`_execute_output_node` 空输入不写文件）
-  跳过文件核对。
-* **搜索的行预算≈1.5 倍导航**：目标 8 行实际开了 12 个详情页，其中 2 张“没有渲染出数据”、
-  2 张“只渲染出计数条”——**两种都有具名句**（`crawl.dy.detailEmpty` / `detailNoIdentity`），
-  所以这条路不欠“静默丢行”；但 `finished` 那句只报 `n/rounds/total`，不报“拒了几张详情页”，
-  对着 U2 的账（扫X留Y拒Z）还差这一格。
-
-* **`/video/` 锚点里藏着图文页，而这台设备读不到它（U45，measured 2026-09-28）**：真机 E2 那次“旅行攻略”
-  39 次进详情页，21 次报“没有渲染出数据”（同日 10:08 复跑同一格：18 行、13 次改成报“验证码中间页”——
-  每行在控制台与镜像里各出现一次，所以这里按**页数**计，别拿行数当页数）。探针（`backend/test_dy_note_card.py`
-  → `scratchpad/dy_note_card.json`）对着被拒的 id 连打三次：地址被站点重定向到 **`/note/<id>`**，标题就是
-  **“验证码中间页”**，整页一个 `[data-e2e]` 都没有（两个 id、六种问法，结果一致）。**这否掉了本文件
-  2026-09-26 那条“图文卡没找到”**——它只统计了卡片 `href` 的直方图（16/16 确实都是 `/video/`），而
-  重定向发生在**打开之后**：不逐条点开就永远看不见。教训不是“选择器要放宽到 `/note/`”，而是
-  **“锚点的形状不能代表内容的类型”**；同一关键词同一天，视频页照常出数，所以这是站点按内容类型划的墙。
-  产品侧因此只做一件事：把这句话**说对**（新增 `crawl.dy.detailWalled` 逐行报名是被验证码中间页挡，
-  而不是“页面没数据”），并且**不 latch `login_wall`** —— 一次会话级判定会把整个节点写成
-  “COOKIE 可能过期”，而同一轮下一条视频刚刚爬通（这正是 D2 那次的误责形状，见 U47）。
-* **不可能存在的 id 被站点换成另一条视频（U47，已修）**：`7000000000000000001` 三次访问分别落到
-  `/jingxuan?modal_id=76682783…` / `76779019…` / `76758380…`（每次不同），中途还有一瞬印
-  “你要观看的视频不存在”再跳走 —— 所以**那句 plate 不是稳定判据，地址才是**。旧读法把它算成 BLOCKED 并
-  念出“该视频计有 1214 条评论”，**1214 是替身视频的数**；BLOCKED 又让整个节点背上 cookie。现改：面板挂不
-  起来时比 `current_url` 的 id 与要的那个，不同就 `comment.dyGone`（报出替身 id）+ **DEAD**。
-* **评论面板曾带着 40 轮预算（U43，已修）**：探针 `backend/test_dy_comment_denominator.py` 在用户自己粘的那条
-  视频上量到：站点写 **3388** 条，走满 40 轮停在 **406 行**、状态 `ok`、差额一句不说。去掉预算后收工只看三件
-  事（这屏没有新行 / 滚动盒子不再长大 / 用户的 停止 或 评论条数）。**分母怎么算也要测**：`406 行 + Σ子回复数
-  1062 ≠ 3388`，所以 `comment.dyShort` 的欠额按 `declared - Σ子回复数` 判，而不是拿 `rows` 直接对上站点的数
-  （后者会把“子回复不整批返回”误报成欠采，微博 U33 量过的同一件事）。
-* **详情页没注水完就读，会存下行号都对得上的空行（U44，已修）**：见 §6。这里记探针那半边的事实：同一个
-  id 相隔几分钟两次读，一次是完整一行（`吻#邓恩熙 #董思成 #恰逢春` / `2026-09-19 16:51` / 作者
-  `白水鉴心`），一次是 `标题=正文=发布时间=''`、四个计数 0，而 `作者` 那格填的是**推荐栏里某个陌生账号**
-  （`青小鲜三门青蟹 海鲜礼包`）。作者块的稳定位置是 **`[data-e2e="user-info"] a[href*="/user/<sec_uid>"]`**
-  的链接文字；`related-video` 那块的**开头**就是同一个作者块（`白水鉴心 |  | 粉丝4399获赞341.9万 |  | 关注`），
-  所以它仍是粉丝/获赞的来源 —— **2026-09-28 早先那次“related-video 不再渲染”的读法是在没注水完的页面上
-  取的，本条把它改回来**。范围针在设备层：`tests/integration/test_douyin_detail_dom.py`（真 Chrome +
-  本地页，推荐锚点故意排在作者块之前）。
-
-* **排序之后的列表短到 14 张，是站点的供给，页面自己写了收尾句（U48，measured 2026-09-28）**：真机 H1 六个
-  组件里，`最新发布` 与 `最多点赞` 都只交 14 行（问 50），`综合排序` 交满 50。两条不同排序给出**同一个 14**
-  不可能是巧合，第一版判断因此指向“排序换了滚动盒子”——量下来正相反：`backend/test_dy_sorted_length.py`
-  里 `综合排序` 连滚 8 轮是 16→25→34→62→71→79→89→99→**107**，两个排序视图都**停在 14 张、八轮里连 id
-  集合都不换一个**（`test_dy_sorted_scroller.py` 逐轮比 before/after，`grew_within_s` 全 `None`）；而卡片
-  往上六层祖先没有一个可滚动（`ul[data-e2e="scroll-list"]` 的 `clientHeight==scrollHeight==1562`），
-  页面底部写着 **`暂时没有更多了`**（`final.more` 抓到两次）。**结论：分页器仍然是窗口，排序视图只是短。**
-  要修的不是滚动，是**这句话没人说**：以前最后一句 `搜索完成，共获取 14 条（目标 50 条，翻了 2 屏）` 只报
-  数字，“站点给这么多”和“我们少读一页”在控制台里长得一模一样 —— 而按 §5“自己给自己发满分的总结行不算
-  合法收尾”，那次就是 SILENT_SHORT。现在 `_harvest_pool` 只在**页面自己印了收尾句**时才打
-  `crawl.dy.noMore`（带屏数与最后一屏卡数）；没这句话就一句不说，让真机继续红。另记一件同日发生的事：
-  换 `宠物` 跑同一格时结果页五分钟一张卡都没挂载，最后 `crawl.dy.noCards` 具名收场（页面自报
-  `502 Bad Gateway`）——那条判断本来就是对的，这里只记下它出现过。
-
-* **作者列整列为空（U42，已修）**：见 §6。要点是**页面改版把数据搬了家**——`related-video` 那块
-  不再渲染，而作者一直在页面上，就在 `a[href*="/user/<sec_uid>"]` 的链接文字里（探针取到
-  `白水鉴心`、`IU'ㅅ'`）；粉丝数/获赞数则**页面不发布**（整页只有“粉丝”“获赞”两个导航词，旁边没有数），
-  所以那两列改成留空而不是 0。同一次探针还证伪了一件事：`_driver_facts` 的四个计数选择器
-  **没坏**（存下来的行是 `点赞 279000 / 评论 1473 / 收藏 13000 / 转发 40000`），
-  是 `[data-e2e]` 遍历看不到它们（数在兄弟节点上），别照着探针“修”读数。
-
-* **作者模式改走“站内遮罩”读取，省掉逐条 `/video` 整页导航（U49，measured 2026-09-30，探针
-  `backend/test_douyin_modal_probe*.py` / `test_douyin_phase0.py` → `scratchpad/dy_phase0.log`）**：
-  点网格卡片是在**同一文档**弹预览遮罩——URL 变 `…?modal_id=<id>`、`document navigated: False`，读完 `ESC`
-  关掉、再点下一张卡切到新 id（`switched by click, descChanged=True`，两条都实测）。过去逐条 `open('/video/<id>')`
-  是**风控诱因**：本次账号被验证码挡时，网格正常到位、但**每条详情页全回 `验证码中间页`** → 0 行。遮罩读取把
-  “N 行 = N 次整页加载”压成“1 次个人页 + N 次点击”。字段差异（都实测、别猜）：遮罩是 **slide 列表**、
-  邻条 `feed-item` 也在 DOM，**一切读取限定 `[data-e2e="feed-active-video"]` 子树**否则读到邻条；正文=`video-desc`；
-  作者=`feed-video-nickname`（去 `@`）；**发布时间只在 `video-info` 里、比旧页粗**（`2025年11月12日`，有时无年份、无时分），
-  **只认带年份的绝对日期，其余（相对词/标签/无年份）一律留空**（B1：把 `#2025年高考` 写进发布时间列是“列名对、值是假的”）；
-  **粉丝/获赞不在遮罩里**（`fans_like:{}`），改从个人页 `user-info-fans`/`user-info-like` 读一次套用（账号级）。
-  **卡片点不开时本轮跳过该 id、绝不回退去 `/video` 导航**（那正是本改动要消掉的 storm）；若整轮 0 行而卡片确曾存在，
-  具名判 `UNDER_TARGET`（欠采可续跑），不被“没有更多了”许可成完成；遮罩内若见验证码则 `risk_blocked`（退避）。
-
-* **抖音评论子回复能展开，但只有“原生点击真按钮”才行（U50，measured 2026-09-30，探针
-  `backend/test_douyin_subreply_probe.py` → `scratchpad/dy_subreply_probe*.log`）**：父评论 `[data-e2e="comment-item"]`
-  里的 `button.comment-reply-expand-btn`“展开N条回复”——**用 ActionChains 真实点击它，等约 1 秒**（签名回复请求）即可展开，
-  子回复**渲染在同一 comment-item 内的 `.replyContainer`**（不是嵌套的 `[data-e2e="comment-item"]`，故早先 `nested_comment_items` 一直读 0）。
-  **关键教训**：本探针一度误判“程序点不开”——根因是 `findBtn` 按 `innerText` 匹配、命中了**外层 div 包装**（父 div 的 innerText 也含子按钮的
-  “展开N条回复”），于是一切点击都打在没处理器的 div 上；改成**先按类 `button[class*="comment-reply-expand"]` 定位真按钮**后，ActionChains 一点即开
-  （`expander_gone=True / 收起 / 子树 57→107`）。合成 `.click()`/`dispatchEvent`/CDP `Input.dispatchMouseEvent` 对**错节点**都打不开，但对**真按钮**
-  ActionChains 能开——所以“点不开”是定位 bug 不是站点限制。展开后该槽变“收起”，故**按“展开N条回复”文字匹配 opener**既证明已开、又天然防再点合回去。
-  实现：`crawlers/commenting/session.py` 走每轮重读挂载项（抖音评论列表会**虚拟化**，滚过去即卸载，单次末读会丢）+ `(作者,正文,时间)` 去重；
-  `parse_douyin_threads` 给整栏连续编 **`楼层`**、子回复行带 **`父楼层`=父评论楼层**（对齐微博/知乎 U29），父评论 **`子回复数`=实际展开到的子行数**、
-  打不开退回站点自报 N。`comment.dyShort` 的差额随之按“未展开到的回复数”算，展开成功时自然归零。
-  **真机踩到的第二坑（live D1，2026-09-30）**：早期实现“每个 opener 串行等 1.2s + 每轮把所有还显示“展开N条回复”的都重点一次”——
-  签名回复请求慢于 1.2s 时，同一条会在下一轮被**再点一次**，可能把它**点回去（合并）**，反复 → 大主题 40 行迟迟走不完（真机跑到十几分钟未完、
-  已 55 分钟超时预算里空转，手动停）。修法：① 点过的 comment-item 打 `data-dy-tried`，**只试一次、绝不重点**；② 一轮**批量**点完后只 `nap(1.3)` 一次（不再逐个等）；
-  ③ 收工判据改用“还有没有**没试过**的 opener”(`_DY_UNTRIED_JS`)，而非“还有没有展开标签”——否则一条**永远打不开**的（评论已删除/前端不可见，点了只弹
-  “失败”窗）会把出口卡死。删除/不可见的线程 = 真采不到，**直接跳过、不重试**，父条仍记站点自报的 N；`_dismiss_douyin_popup` 顺手关掉那个 semi-ui 失败弹窗
-  （`.semi-modal`/`.semi-toast`，抖音用的就是 semi-ui 库，探针 DOM 里见过 `semi-avatar`），以免它挡住后续滚动/读取。
-
-* **抖音子回复也是 `[data-e2e="comment-item"]`，嵌在父项 `.replyContainer` 里——被当顶层读会重采 + 造出畸形行（U51，live 2026-09-30）**：
-  live 评论单元 `test_comments_scroll_past_the_first_screen` 先报 **40 行只有 35 个唯一身份（重采）**，修掉重采后又报 **`评论地区` 全空**。
-  根因同一个：抖音把**每条回复也渲染成一个 `[data-e2e="comment-item"]` 节点、嵌在父评论的 `.replyContainer` 内**。旧 `_DY_THREADS_JS` 把所有
-  comment-item 都当**顶层父项**读，于是：① 回复既作父项出现、又在其父的 `replies` 里出现 → **重采**；② 回复项自己的 `innerText` 行序是
-  **时间在前、作者在后**（顶层父项是作者在前），按 anchor 法解析出 `作者='1月前'`、`正文='3'`、`地区=''` 的畸形行——畸形行身份各不相同，
-  全局去重**抓不到**它们，于是 `评论地区` 全空。**正解在源头**：`_DY_THREADS_JS` 用 `it.closest('[class*="replyContainer"]')` **跳过**嵌在回复容器里的
-  comment-item，只把**真正的顶层评论**当父项，回复一律从其父的 `.replyContainer` 文本取。再叠一层**全局身份集** `seen_identity`（父+回复共用一套
-  (作者,正文,时间)，虚拟化下父项重挂会重新展开、可能二次附回同一回复）作兜底，杜绝重采。两个 live 失败随之消失（30+ 行、点赞/正文正常）。
-  注：修完后该视频本轮 `评论地区` 仍可能整列为空——若抖音**当前没发布 IP 属地**（`X天前` 后无 `·地区`），代码**留空是对的**（宁缺毋滥、不造假），
-  待确认是站点不再显示属地、还是本会话数据；若是前者，那条 live 断言 `any(评论地区)` 需改为双向/按站点实际，不该硬凑。
-
-* **`评论地区` 是“逐视频”的站点数据，不是爬虫保证（U52，measured 2026-10-01）**：上面那个疑问当场量死了——同一条 `crawl_douyin`、
-  同一真实 profile、间隔几分钟：视频 A（`7653009893066067242`）返回 50 行、50 行都带 `·属地`；视频 B（作者网格另挑的一条）0 行带属地、
-  但时间/点赞/正文全正常。所以“有视频不发布 IP 属地”是站点事实、留空即正确，`any(评论地区)` 作为硬断言会误红一条本被正确读取的视频。
-  D1（`test_comments_scroll_past_the_first_screen`）的属地断言据此改为**双向**：断言列在 schema 里、属地只在站点给了才出现（不造数），
-  而“能读到属地”这一能力由解析器/导出/预览的**单测** + 一条固定视频直采钉死（均非赌运气）。D1 重跑 **1 passed / 38s**（此前反复空转到超时）。
-  抖音评论采集这一路的三个真 bug（重采、回复节点畸形行、detached-clone 读空）+ 这条逐视频差异，全部收口。
-
+# 采集端平台契约（当前状态）
+
+改爬虫、它的列或真站断言前，先读本文件对应平台小节。这里只写**现在必须遵守的契约**：模式、会话需求、列表/评论入口、
+身份列、已知拒绝与节奏。要复测就用一次性 `backend/test_<平台>_<事>.py`，载荷进 `scratchpad/`；下文的数字就是结论，
+不复述测量过程。
+
+**已删除模块**：`engine/menu.py`（抖音筛选菜单的 hover 助手，随搜索模式一起删除，勿按旧文重加）。
+
+旧文按“测量步骤”命名的小节（如“微博第 0 步”“抖音热榜”）现分别对应本文件的平台小节，以及该小节里同名的加粗入口。
+
+## 平台总表
+
+| 平台 | 模式 | 会话 | 列表 / 评论入口 | 身份列 |
+|---|---|---|---|---|
+| 抖音 | 作者、热榜、评论 | 作者需 profile（建议），热榜需 Cookie | `/user/<sec_uid>` 网格；视频详情；评论面板 | `sec_uid` / 视频ID / 评论ID |
+| B 站 | 关键词、作者、热榜、评论 | 需 | 搜索 `&page=`；space 页；`x/v2/reply/main` | BV 号 / `rpid` |
+| 微博 | 搜索、作者、热榜、评论 | 搜索/作者/评论需；热榜匿名 | 搜索 URL 翻页；`mymblog`；`hotSearch` | `mid` / 评论ID |
+| 知乎 | 搜索、作者、热榜、评论 | 需 | 滚动信息流；profile meta；热榜 API；评论容器 | 回答/文章 id / 评论 |
+| YouTube | 搜索、作者、评论 | 需（匿名也可读部分） | innertube POST；`/@handle/videos` 文档 | videoId / 评论 id |
+| X | 搜索、作者、评论 | 需 | 虚拟化时间线 | status id |
+| 微信 | 正文 | 无 | 文章 URL | 文章 URL |
+| 小红书 | 搜索、评论 | 需平台 profile | 虚拟化网格；笔记评论面板 | 笔记ID / `评论ID` |
+| 红果短剧 | 热榜、评论 | 匿名 | loader 载荷；播放器 + mitmproxy | 剧/`分集ID` / `评论ID` |
+| 中国知网 | 检索导出 | 需 profile（滑块） | `kns8s/search`；`manage/export.html` | `记录ID` |
+
+## 抖音
+
+- **模式**：作者 / 热榜 / 评论。关键词搜索与右上角“筛选”排序已删除（站点供给太浅，同一关键词两次只给 26 / 16 条，
+  且 `search()`、`engine/menu.py`、`_SORT_FIELD`/`SORTS` 与真站用例一并删）；不要再按旧文重建搜索框、`/search/<kw>` 或
+  hover 菜单。无头可用，无头即按所选。
+- **会话**：`profile_recommended`——一次性浏览器 + 种入保存 Cookie 8.8 秒被弹验证码中间页；平台自己的 profile 24.8 秒交出
+  5 行。热榜读反方向：profile 被弹验证码、一次性浏览器能读，所以这个标记**只是建议与提醒，绝不强制**。热榜
+  `needs_session=True`，live 用例显式 `use_profile=False`。
+- **作者入口**：`/user/<sec_uid>`（数字 id 不是路由，显示名拒绝）。窗口滚动只长 footer 推荐链接；作品网格
+  `[data-e2e="user-post-list"]` 要把可滚祖先拖到 `scrollTop = scrollHeight`（`feed.jump_to_bottom`）。懒网格**第一次触底
+  常常不发请求**，预算内重复触底直到真长；`[data-e2e="user-tab-count"]` 是分母。`_published_count()` 读不到答 **-1**
+  （空串走 `parse_count` 会答 0，而 0 是一个主张）。
+- **作者行**：点网格卡片在**同一文档**弹预览遮罩（URL 变 `?modal_id=`），一切读取限定
+  `[data-e2e="feed-active-video"]` 子树，否则读到邻条；正文 `video-desc`，作者 `feed-video-nickname`（去 `@`）；发布时间只在
+  `video-info` 且更粗，**只认带年份的绝对日期**，相对词/标签/无年份一律留空；粉丝/获赞不在遮罩里，从个人页
+  `user-info-fans`/`user-info-like` 读一次套用。卡片点不开就跳过该 id，绝不回退去 `/video` 整页导航；整轮 0 行而卡片确曾
+  存在 → `UNDER_TARGET`；遮罩内见验证码 → `risk_blocked`。
+- **详情页**：每行来自打开视频。既无作者又无发布时间 → `crawl.dy.detailNoIdentity`（只有计数条不是行；无文案但有作者与日期
+  仍是行）；被站点重定向到 `/note/<id>` 的图文页常是验证码中间页 → 逐行 `crawl.dy.detailWalled`，**不 latch** `login_wall`；
+  id 被换成另一条视频（地址 id 与要的不一致）→ `comment.dyGone` + DEAD，绝不念替身视频的计数。四个计数选择器
+  （`video-player-digg`/`feed-comment-icon`/`video-player-collect`/`video-player-share`）有效；`detail-video-info` 的第二个数
+  就是赞数，所以**没有播放数**——加一列就是名字对、值错。粉丝/获赞页面不发布时留空。
+- **评论**：面板挂载与每次滚动都由爬虫内部轮询，绝不靠调用方 `nap`。列表**虚拟化**（滚过去即卸载），身份按
+  `(作者,正文,时间)` 全局去重；回复也是 `[data-e2e="comment-item"]` 但嵌在父项 `.replyContainer` 里，用
+  `closest('[class*="replyContainer"]')` 跳过顶层读取。`楼层` 整栏连续编号，`父楼层` 指向父评论楼层，`子回复数` = 实际展开
+  到的子行数（打不开退回站点自报 N）。展开只认真按钮 `button[class*="comment-reply-expand"]` + 原生 ActionChains；点过的项打
+  `data-dy-tried`、只试一次绝不重（重点会把线程合回去），一轮批量点完只 `nap(1.3)` 一次，收工看“还有没有**没试过**的
+  opener”；已删除/不可见的线程直接跳过；`_dismiss_douyin_popup` 关掉 `.semi-modal`/`.semi-toast`。“是否保存登录信息超过5天”
+  遮罩到货后按 取消 关掉。`评论地区` 是逐视频的站点数据，没印就留空（不要用 `any(评论地区)` 作硬断言）。
+  `comment.dyShort` 的欠额按 `declared − Σ子回复数` 判，不拿行数直接对站点数。
+- **热榜**：`HOT_API` 写 18 个公开参数，**不需要签名**（假 `webid` 不改结果，退到 6 个会丢整列 `view_count`）；一次回答就是
+  整块榜，不翻页、不逐条开话题页。`word` 既是标题也是话题，所以不设话题列；链接用榜自身的
+  `douyin.com/hot/<sentence_id>/<词>`；榜首站点没给数字就留空、不给 0（`_published()`）。判墙只能用抖音自己的判定：
+  `验证码中间页` 标题下通用 `check_intercept()` 说 `ok`，而 `_wait_for_page()` 说 captcha；读到墙时**一次请求都不发**。
+  作者网格没到这一处才 latch `risk_blocked` 并具名提示等待；**不在走查末尾复查**（逐详情页验证码会留下过期标题而误杀）。
 
 ## Bilibili
 
+- **模式**：关键词 / 作者 / 热榜（含排行榜）/ 评论。
+- **关键词**：搜索不无限滚动（8 轮 42 卡 / 34 视频不变），行预算靠 `&page=N`，**`page=1` 渲染 0 张卡**，第一页必须用裸
+  `all?keyword=` URL。卡片上的万标签只是取整标签，每个数来自 `x/web-interface/view?bvid=`（`code=0`、未签名、可从搜索页
+  跨源）。`cm.bilibili.com` 的广告卡由 `--ad/--cheese` 过滤，不是漏采。`code is None`（非 JSON/WAF 体）要
+  `crawl.bili.fetchEmpty`，`-404` 要 `crawl.bili.goneVideo`，否则一条请求既不出行也不出一字。
+- **评论**：评论区**没有 DOM**，只走 `x/v2/reply/main`；它的 `next` 是游标：`next=0` 报 `cursor.next=2`，`next=1` 逐字节重放
+  第 0 页——必须按服务端的值走，并在没有新 `rpid` 的页停。错误码按“怪谁”分：视频级 `-404`/`-400`/`62002` 是该链接自己的
+  DEAD；只有会话/IP 码 `-352`/`-412`/`-101` 是 BLOCKED（可 latch `cookieExpired`）。限流时 `is_end=True`/空页不能当线程结束：
+  用已读 `stat.reply` 当分母，未达上限且收到 < 分母 → `comment.biliShort`；收到 == 分母或达上限则一字不说。
+- **作者**：space **页面**，不是 API（`x/space/wbi/arc/search` 回 `-403 访问权限不足`，旧 un-wbi 路径 `-799` 限流）。投稿页靠
+  `下一页` 换屏：滚动与元素滚动都不加卡，点它整屏换成另外 40 张、交集 0、URL 不变，所以哨兵是**当前屏 BV 集合**而不是卡片数。
+  `use_profile=False` 只给 0/25 卡（生产托管 profile 首屏 40）。数字仍来自未签名的 `x/web-interface/view`，两种模式的行一致。
+  `bilibili_mid()` 只收数字或 space 链接，其余拒绝。
+- **热榜**：`x/web-interface/popular` 每页 20、第 2 页与第 1 页不相交；`x/web-interface/ranking/v2` 一次回整榜（实测 100 条），
+  条目自带 `owner`/`stat`/`pubdate`，所以 `hot()` 复用 `_row()`、不逐行请求。`target > 100` 打 `crawl.bili.rankingCapped`
+  点名榜单真实大小。排行榜跨浏览器稳定（两次 first-10 顺序一致、集合交集 10），是合法的去重供给。
+- **跨运行水位**：只允许“最新在前 + 稳定身份”的作者走查停在上一完整运行的最新 BV；边界条目不请求；只有干净结束推进；
+  与 重新采集 互斥；其它平台/模式按名拒绝。
 
+## 微博
 
-**Its two paging contracts are measured, not guessed — keep them exactly.**
+- **模式**：搜索 / 作者 / 热榜 / 评论。搜索、作者、评论需登录；热榜匿名可读（见下）。
+- **搜索**：列表靠 URL 翻页，不靠滚动（`.page-info` 印“共50页/500条”，窗口滚 4×1600px 后卡数不变）。一个 timescope 小时窗
+  自己也分页（`ul.page-list a` 给 page=1..10，页间 mid 交集 0），必须逐页走，不能因“窗口已窄”停。空窗会**同时**给
+  `.card-no-result`（“抱歉，未找到相关结果”）和 5 张带作者的推荐卡，祖先链与结果卡同构、没有容器可隔离：**判据顺序必须先看
+  plate 再看卡片**。正文不截断（`feed_list_content_full` 已在 DOM；`text_raw` 完整）；搜索卡没有浏览数。
+- **作者**：`https://weibo.com/ajax/statuses/mymblog?uid=<UID>&page=<N>&feature=0`，在已加载页内用 `credentials:'include'`
+  fetch（不是独立请求）。page 1 可回 28 行、其余 20；page 1 多于 20 是事实，不要归一化。结束形状是**空页** → `site_end`
+  （0 行则 `empty`）；`no_new`（游标重放）与 mid-walk 403 仍留下行 → `UNDER_TARGET`。首行 `user.id == uid` 是区分“真作者”
+  与“首页时间线镜像”的唯一锚（两者都 200、同信封）。`text_raw` 是完整正文，**不需要逐条详情**；话题在 `topic_struct` 的
+  `topic_url` 的 `q=%23…%23`（title 是空的）；行有 `pic_num`/`pic_ids` 但没有 `pics[]`，所以图片数有、图片链接留空；
+  视频数不伪造。身份是数字 `mid`/`id`，链接按搜索模式 `weibo.com/detail/<mid>`。作者走 JSON、不抄搜索卡的 DOM。
+  该端点会回 `<h2>403 Forbidden</h2>`（每会话 edge/WAF），必须**出声拒绝**，绝不空表。
+- **评论**：`flow=0&fetch_level=0` 只给主楼；`count=100` 被服务端无视（仍 20/页）；`total_number`（信封）是唯一可信分母，
+  `trendsText`“已加载全部评论”不可信。`楼层` 用站点 `floor_number`（全楼层号，不是每页从 1 数）；赞数是 `like_counts`；
+  `评论时间` 过 `_normalise_weibo_time`；`评论者主页` 用同对象的 `profile_url` 拼 `https://weibo.com`（不是头像 URL）；
+  `评论内容` 先读 `text_raw` 再剥 HTML（纯表情评论剥完是空串）。楼中楼只有父行 `comments[]` 的行内预览能白拿，其余端点形状
+  都拿不到整批 → 按名报差额。游标页耗尽打 `comment.weiboShort`，站点复读打 `comment.weiboReplay`，取数失败打
+  `comment.weiboFetchDied`（差额只对“游标收到的行数”判，收到==站点数则一字不说）。
+- **热榜**：`weibo.com/ajax/side/hotSearch` 在已加载的 `weibo.com` 文档里读（`pagefetch.fetch_json`）：`ok:1`，`data.realtime`
+  51–52 行，`num` 是精确整数（所以选 JSON 不选 DOM 表）。必须等引导把浏览器送回 `weibo.com` 再发请求
+  （`_await_home_frame`，每 tick 问 停止），等不到打 `crawl.weibo.hotNoHost` 并打出所在帧——从 passport 帧发同源 fetch
+  会被浏览器拒，长得跟“站点不给数据”一样。三种会话都答（含完全无 Cookie），所以 `needs_session=False`。一条热搜不一定是
+  `#话题#`（`word_scheme == word` 真存在），话题列存站点自己的串，按它去搜索。
+- **墙与节奏**：绝不在 `get()` 后立刻看 URL 判墙（passport 一闪再弹回，`_await_search_page` 等终态）。同账号并行深翻页会
+  互相撞 → 矩阵 `serial_only`，2+ 微博抓取的并行画布运行前警告；真正的并行只能靠分账号。墙是**间歇风控**（单次一到两成），
+  与发车间隔无关，`runtime/gate.py` 不加冷却；真机层撞墙重试 3 次，每次等 `Config.WALL_RETRY_BACKOFF`。
+  **绝不把浏览器活 jar 写回 Cookie 文件**（登录页会重发 `SUB`/`SUBP`，写回一次就降级一次）。
 
-The search list does *not* infinite-scroll (8 scroll rounds = 42 cards / 34 videos, unchanged); the
-row budget is `&page=N`, and **`page=1` renders zero cards**, so page one must be requested as the
-bare `all?keyword=` URL (a crawler that slept on `page=1` would report an exhausted search). Card
-numbers are a rounded 万-label only: every count comes from `x/web-interface/view?bvid=`, which
-answers `code=0` unsigned, cross-origin from the search page, for the cookie the panel saved.
-Comments have **no DOM at all** (`.reply-item` renders nothing), so `x/v2/reply/main` is the only path
-— and its `next` is a cursor, not a page counter: `next=0` reports `cursor.next=2` while `next=1`
-replays page 0 byte for byte. Walk by the server's value and stop on a page with no new `rpid`; an
-incrementing loop would store the same 19 comments forever. **A `view`/`reply` error code is judged by
-who it blames**: a video-level code (`-404` withdrawn, `-400` a bad/nonexistent BV, `62002` hidden) is
-that link's own answer → DEAD per-link; only the session/IP codes (`-352` 风控, `-412` 请求拦截, `-101`
-未登录) are BLOCKED (the node may then latch `cookieExpired` and offer 继续). See §6 U55 below — the old
-default sent every non-`-404` code to BLOCKED, which let one dead link convict the whole session.
+## 知乎
 
-**Author mode is the page, not the API**: `x/space/wbi/arc/search` answers `code=-403 访问权限不足` for
-our session (the older un-wbi path is rate-limited at `-799`), so `BilibiliCrawler.author()` opens
-`space.bilibili.com/<mid>/video` once and pages it by scrolling (measured 40 cards on one screen, 80
-anchors after three steps) while every number still comes from the unsigned `x/web-interface/view` —
-so a row is identical across the two modes. `bilibili_mid()` takes digits or a space link and refuses
-anything else: opening a mistyped space would report "this UP posted nothing" about a page that is not
-theirs.
-
-**Hot boards need no per-row request**: `x/web-interface/popular` (20 a page, page 2 disjoint) and
-`x/web-interface/ranking/v2` (the whole 100-item board in one reply, so it is walked as a single page)
-answer `code=0` unsigned for our session **with `owner`/`stat`/`pubdate` inside each item** — the same
-shape `view` returns for one video, which is why `hot()` reuses `_row()` and fetches nothing per row.
-Reaching for the search loop's one-request-per-row here would produce the same table at 50× the cost.
-
-### B站第 0 步：投稿页靠“下一页”换页，不靠滚动（measured 2026-09-29，三条一次性探针）
-
-探针：`backend/test_bili_step0.py`、`backend/test_bili_author_dom.py`、`backend/test_bili_author_pager.py`
-（产物 `scratchpad/bili_step0.json` / `bili_author_dom.json` / `bili_author_pager.json`）。关键词 `Python`。
-
-- **搜索契约复核为真**：`&page=1` 仍 **0 卡**（裸 URL 才有 7 屏，首屏 36→211 唯一）；分页非互斥
-  （第 3 屏 35 张里只 18 新），`search()` 靠 `seen` 过滤 + 只有“整屏全旧”才 `stuck` 的判据成立。
-  卡片容器 `.bili-video-card` 里 42 张有 7 张无 `/video/BV` 链接——`anchor_hosts` 显示它们是
-  `cm.bilibili.com` **广告卡**，`CARDS_JS` 的 `--ad/--cheese` 过滤是对的，**不是漏采**。
-- **U9 本轮未触发但确为潜伏**：20 张卡 `view?bvid=` 全 `code=0`（好会话、小批量）。但 `get_detail`
-  早就承认“一批 view 调用能把会话预算耗光、返回的不是 JSON”，而 `search()` 内层 `if code==0 /
-  elif code is not None` 两道闸把 `code is None`（非 JSON/WAF 体）与 `code==-404`（稿件不存在）
-  双双夹在中间——**一条请求既不出行也不出一字**。已补 `crawl.bili.fetchEmpty`（warning）与
-  `crawl.bili.goneVideo`（info），把“三方同意一张短表”变成有名字的一行。
-- **投稿页是“下一页”换页，不是无限滚动——这是本轮最大的一处静默漏采**：
-  `use_profile=False`（一次性设备）只给 0/25 卡，**换到生产同款托管 Profile** 后高产 UP（黑马程序员）
-  首屏 **40** 卡；但**窗口滚动与元素滚动都一个不加**（40→40→40），页面写着 `下一页`，点它之后
-  **整屏换成另外 40 张、交集为 0、URL 不变**。所以旧的 `author()` 用 `feed.walk_feed(scroll=window-scroll)`
-  且默认按**卡片数**判增长：滚动不加 → `stuck` → 收工，于是**把任何投稿过百的 UP 采到首屏就停，
-  还打印 `已到列表末尾` 替站点撒谎**。修法：`scroll=self._click_next_page`（点 `下一页`）、
-  `window=self._on_screen_key`（用**当前屏 BV 集合**当哨兵，因为换页后计数仍是 40）——与 X 虚拟化
-  时间线同一招。快层 `SpaceDriver` 重写成“只在点 `下一页` 脚本时换屏”，并新增
-  `test_a_second_page_that_keeps_the_card_count_is_not_read_as_the_end`（退回即红：把 `window=` 撤掉或
-  把 scroll 换回 `scroll_down`，这格当场只交第一屏就红）。
-- **排行榜大小由站点决定**：`ranking/v2` 本次**正好 100 条**、`code=0`；`popular` 每屏 20、第 2 屏与第 1 屏
-  全不相交（`hot()` 逐页走它对）。`target>100` 时旧代码只打 `hotDone 共 100 条（目标 N）`——§7 记的
-  “无 cap 行=修复项”，已补 `crawl.bili.rankingCapped` 点名榜单本次真实大小。
-
-### B站评论 U54/U55 归因（measured 2026-09-29，探针 `backend/test_bili_comment_cursor.py`，国内网络、账号已冷却）
-
-评论节点两枚疑点都用真机数据分了类，**没在热账号上瞎判**：
-
-- **U54 = 限流，不是游标 bug；但收尾上报有真缺陷（已修）。** 冷却后逐 cursor 页量 `x/v2/reply/main`（分母
-  `stat.reply=47268`）：每页 20/19/18、`next` 2→3→4→… 一路推进、累计 **494 条新行跨 26 页**、`is_end` 始终 False
-  → 游标本身对。先前“2194→9 行”是一次性设备深翻页被限流（站点行为）。但真机 H1 评论腿暴露另一半才是 bug：被限流
-  时 `reply/main` 回 `is_end=True`/空页，旧代码把 7 行按“线程结束”静默返 OK——表+汇总+完成三方同意一张短表、
-  无一字解释（§6“沉默欠采”本尊）。修：收尾处把已读到的 `stat.reply` 当分母，未达用户上限 **且** 收到<分母 →
-  打 `comment.biliShort`（rows/declared，仿 `comment.weiboShort`/`zhihuPanelShort`）具名差额；收到==分母 或达上限
-  则一字不说（两侧留活口，绝不误念用户填的小数）。中途 risk/unknown 页另走 BLOCKED+停跑（见 U55 分类）。快层两枚针
-  `test_a_clean_end_under_the_denominator_is_named_short`（2194→7 必须具名）、
-  `test_a_thread_that_holds_what_it_reports_says_nothing`（7→7 不说）。
-- **U55 = 死链被判成会话墙（已修）。** 探针喂一个形状合法但不存在的 BV（`BV00000000000`）：
-  `x/web-interface/view` 回 **`code=-400`**（不是 `-404`），而 `crawl_bilibili` 旧默认把“所有非 `CODE_GONE`
-  的非零码”一律归 `BLOCKED` → `execute_comment_node` latches `cookieExpired` → 整个运行被一条读不通的死链
-  判死，与抖音 U47 同形。修法：按“这个码在怪谁”分类——怪这条视频的（-400 坏 BV、-404 已删、62002 隐藏）
-  一律 **DEAD**（逐链具名，不怪会话）；只怪会话/IP 的 -352 风控、-412 请求拦截、-101 未登录才 **BLOCKED**。
-  真机 D2 复核：死链现在打“链接不可读”DEAD，`run.cookieExpired` 不再因此触发。快层针
-  `test_a_view_code_is_classified_by_who_it_blames`（六码三向矩阵，退回旧默认即红）。
-- **排行榜跨浏览器稳定（A5 的合法去重供给）。** 探针各起一个全新一次性浏览器读 `ranking/v2`：两次 first-10
-  **顺序完全一致、集合交集 10**（同浏览器连读两次更是逐字节相同）。所以周榜是 A5“重跑必须具名拒付”的合法
-  稳定供给——批次里那次 `kept==10` 是相邻单元把 B站 会话耗出抖动的**瞬态**（单跑 A5 两次都 `kept==0`、
-  且离线 `RunStore.append_rows` 已证同 scope 跨 run 去重正确）。A5 断言保持 `kept==0` + 具名，是对的契约。
+- **模式**：搜索 / 作者 / 热榜 / 评论。无头按天限流（risk 40362），无头搜索 0 行是**合法结局**，不要放松断言；它也**不是**
+  `never_headless` 平台。
+- **作者分母**：profile tab **不渲染**“没有更多”footer（6 个 tab、最深 637 项滚到顶全 `footer=False`），但 profile 页 meta 带
+  `zhihu:answerCount`/`zhihu:articlesCount`（站点亲口的作品总数）。`collected < 总数 且 < target 且非墙/风控/停止` →
+  `UNDER_TARGET`；`collected ≥ 总数` → `site_end`；meta 读不到 → 分母 -1、跳过（读不到 ≠ 0）；到达 target 的普通爬两条都不
+  触发，`None`，判完成。
+- **搜索卡是摘要，不是答案**：摘要不是 CSS 截断，是内联 span 的真实长度；回答卡的 `button.ContentItem-more`（阅读全文，
+  无 href）原地重渲染同一节点（74→308、75→782、69→1067、71→2103 字符），URL 不变、不产生第二份。**只有行自己链接是
+  `/answer/` 的卡可点**，列卡的控制是导航，不点；锚点没挂上的卡种类未知，也不点。展开同时把日期标签从 `.SearchItem-time`
+  移到 `.ContentItem-time`、去掉 `作者名：` 前缀，所以**行在首次读取时冻结，只替换 正文**。每张回答卡一次有界等待（上限 4 秒）；
+  连续三次点了不出内容就停（`crawl.zhihu.expand_stopped`）；用户关闭展开只打一次 `crawl.zhihu.excerpt_only`，仍留摘要的行计
+  `crawl.zhihu.bodies_short`。API 路线可用但不需要。
+- **评论**：面板是 position:fixed 覆盖层，首屏 10–12 条；**没有“更多”按钮**，分页靠**面板自己的滚动容器**懒加载（滚窗口无效）。
+  子回复在“展开其中 N 条回复”/“查看 N 条回复”后。作者只在“仍只包含这一个 `.CommentContent` 的最深祖先”里找，找不到打
+  `comment.zhihuNoAuthor`，绝不按固定深度取（会取到邻座名字）。`评论时间` 真读（近期相对词、远期绝对日期），`点赞数` 留空
+  （页面不发布；0 会被用户拿去排序画图）。滚动目标选“含 `.CommentContent` 最多的盒子”，不是第一个（子回复列表自己也合格）。
+  展开后**绝不能 `driver.back()`**（面板整个消失）。收工只有三件事：连续 3 轮零新增且无未点开回复、用户 停止、用户 评论上限；
+  **没有轮次预算**。不到页面自印数字打 `comment.zhihuPanelShort`（写着 N 条，取到 M 条），每轮打 `comment.zhihuRound`。
+- **热榜**：`www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50`，页内 fetch；恰好 30 行，`paging.is_end=true`。
+  `limit=100`/`offset=30`/`page=2`/猜的 cursor 都回同一批 30 个 id，所以**没有翻页循环**；`target > 30` 时日志明说榜单只有
+  这么多。无 Cookie 直接 `401` 且首页跳 `/signin`，所以 `login_wall` 在问接口前就成立（一次请求都不发）。有 Cookie 时无头与
+  窗口同答案。`target.author.name` 30/30 都是字面量“用户”、`target.comment_count` 30/30 都是 0 → **不成列**；`answer_count`/
+  `follower_count` 有值，保留。`target.url` 是 `api.zhihu.com/questions/<id>`，重写成 `www.zhihu.com/question/<id>`；热度在
+  `detail_text`（“398 万热度”），走 `parse_count`。
 
 ## YouTube
 
-**JSON-first, headless-safe, and its pagers are chosen by their list.** Measured 2026-09: the crawler
-opens **one page** to read `ytcfg` (`INNERTUBE_API_KEY` + `INNERTUBE_CONTEXT`, never hardcoded — they
-rotate) and then POSTs `youtubei/v1/{search,browse,next,player}` **from inside the page**
-(`crawlers/platforms/youtube/innertube.py`), which is same-origin, unsigned and cookie-carrying: search 0.68 s /
-10 rows, player 0.31 s / 11 KB, comments 0.32 s / 20 rows. Headless and visible returned identical
-rows and facts, so the class sets **no** `never_headless`, and `page_load_strategy='eager'` + blocked
-images stay on (nothing is read from pixels). Two rules that only measurement could establish, both in
-`innertube`:
-
-- **A channel's upload tab must be read off the loaded `/@handle/videos` document** —
-  `browse(browseId, params=videos)` answers the channel **HOME** (3.7 MB of shelves, other channels'
-  videos mixed in), so the author mode navigates once and pages from the document's own cursor.
-- **A continuation token is picked by which list it is an element of**, not by length or position — a
-  comment round carries two 78-char sort-menu tokens that each replay page one (the ledger swallows
-  the duplicates, the walk reports success, and a 3000-comment video yields 20) plus one per
-  reply-bearing thread, while the list's own pager is its trailing element. `next(videoId)` is worse:
-  six tokens, the comment one 78 chars on one video and 146 on another with 1412-char rail tokens
-  beside it, so the first round *tries* candidates until one answers with comments.
-
-`lockupViewModel` (the 2025+ view model) and `videoRenderer` coexist — search is the former's absence,
-channel tabs the latter's — and a reader for one is silently empty on the other.
-
-### YouTube 第 0 步 / run-level 复查 (2026-09-29, VPN live_os)
-
-The 11-cell run-level matrix `tests/live_site/test_live_youtube_workflow.py` is now green against the
-real site, and it cost three measurements worth keeping:
-
-- **A channel's `/@handle/videos` document ROTATES its batch between loads** — asking NASA twice gave two
-  different 10-row windows, seconds apart. This is §6 U26 (search rotates) **on the author tab too**, so
-  neither search nor author is a legal cross-run dedupe supply. The only stable supply YouTube offers is
-  one video's cursor-walked **comment thread**; the dedupe-repeat cell (C1) runs on that, and its assertion
-  is `kept < limit` (not `== 0`) because a brand-new comment can land in the top window between the two
-  runs — a couple of genuinely-fresh rows is the site's answer, while re-filing the whole thread is the bug.
-- **A live case may not assume a music video is playable.** The flagship's own comment leg
-  (`jGwWNGJdvx8`, Ed Sheeran / VEVO) loaded the watch page cleanly (innertube ready) but the body printed
-  “该视频无法再播放” and the comment walk honestly answered `comment.commentsClosed` → 0 rows. On a VEVO
-  licensing region the same URL is fine; on this exit it is not. So the comment cells point at
-  `jNQXAC9IVRw` (YouTube's own first video, ~20 y up, tens of millions of comments, no licensing story,
-  no region wall). A 0 from a *playable* thread is the cursor; a 0 from a geo-blocked one is the site.
-- **The comment node had the ledger but not its voice.** `execute_source_node` names a re-run whose whole
-  result was already collected (`run.dedupe_skipped` / `..._all_skipped`), but `execute_comment_node` —
-  which dedupes comments through the *same* `row_sink` — printed only “共 0 条评论”. Measured live 2026-09-29:
-  the second run of one video's comments filed nothing and named nothing, reading exactly like an empty
-  thread. Fixed in `nodes/executors/comment.py` (count `seen_total` against the stored total and emit the same two lines);
-  pinned in the fast tier by `test_a_repeated_comment_run_names_the_ledger_skip`. The narration is gated
-  off a **resume** (there the ledger *is* the resume machinery) and off a **wall** (the cookie-death raise
-  is that run's one true line), per §"one failure, one line".
-
-The `driver.get` vs `Crawler.open` question raised itself but does not bite here: YouTube registers **no**
-first-run `prompts`, and a cold throwaway browser reached a *playable* watch page's innertube identically
-by either navigation (probed 2026-09-29), so the comment engine keeps its bare `get` — §6 U5 (enter a
-slow/consent wall through `open`) is a real rule, it just is not this platform's failure.
+- **模式**：搜索 / 作者 / 评论；JSON 优先，无头本来就行，`page_load_strategy='eager'` + 拦图片（不读像素）。
+- **入口**：打开**一页**读 `ytcfg`（`INNERTUBE_API_KEY` + `INNERTUBE_CONTEXT`，**绝不硬编码**，会轮换），然后在页内 POST
+  `youtubei/v1/{search,browse,next,player}`（`crawlers/platforms/youtube/innertube.py`）：同源、未签名、带 Cookie。
+- **作者**：频道投稿标签必须读**已加载的 `/@handle/videos` 文档**（`browse(browseId, params=videos)` 回的是频道**首页**，
+  3.7 MB 货架、混着别家的视频），导航一次后从文档自己的游标翻页。
+- **continuation 按“它属于哪个列表”选**，不按长度或位置：一轮评论里有两条 78 字符的排序菜单 token，各会重放第一页（台账吞掉
+  重复、走查报成功、3000 条视频只出 20 条），另加每条有回复线程的 token；列表自己的翻页器是尾部元素。`next(videoId)` 更差：
+  六个 token，评论那个一条视频 78 字符、另一条 146 字符，旁边还有 1412 字符的轨道 token，所以第一轮会**试**候选直到有一个回
+  评论。
+- **两种 view model 并存**：`lockupViewModel`（2025+）与 `videoRenderer`——搜索用前者（后者缺席）、频道 tab 用后者；只认一种
+  的读取器在另一种上静默为空。
+- **去重供给**：搜索与频道投稿标签**每次加载都轮换批次**（同一 NASA 两次给两个 10 行窗口），不能当跨运行去重供给；唯一稳定的是
+  一条视频的**评论游标走查**。因此重复去重用例断言 `kept < limit`（两次之间可能有真新评论），不是 `== 0`。
+- **评论 0 行要具名**：无法播放/地区限制的视频走 `comment.commentsClosed`，不是空线程；可播放线程的 0 才是游标用尽。
+  评论节点与源节点共用台账，所以整轮都被去重时要打 `run.dedupe_skipped`/`..._all_skipped`（resume 与墙时不打），绝不只印
+  “共 0 条评论”。
 
 ## X (twitter)
 
-**Virtualized and slow to paint (measured facts, each one a line of code).** A headless browser used to get
-the sign-up sheet on `/search` and a flat "Access to x.com was denied … HTTP ERROR 403" on a profile, so the
-class once set `never_headless = True` (like douyin, for the opposite reason: douyin blocks the *mode*, X blocks
-the *window type*). **PRE-#148 HISTORY — #148 retired all window-forcing; no `never_headless` attribute exists
-now** (see `crawler_rules.md` "nothing forces a window"), and headless is honoured as asked.
+- **模式**：搜索 / 作者 / 评论；无头可用（曾因登录墙/403 被强制窗口，已退役）。
+- **时间线虚拟化且慢**：`article[data-testid="tweet"]` 滚多远都只有 13–21 个节点，而 8 次滚动过了 139 条不同推文，所以进度按
+  保留行数 + **status-id 集合**（`feed.walk_feed(window=…)` 看 `window_key()`），不是卡片数或索引。首屏实测 9.9 秒 0 卡、
+  11.9 秒 11 卡，挂载轮询给 22 秒；短等待会把一次本该成功的搜索报成“没找到”。
+- **计数**：五个数来自**一个** `[role="group"]` aria-label 句子（“1887 replies, …, 1.1M views”），走共享万/K/M 解析器；逐按钮
+  标签只是回退，**浏览数只在这里存在**。`f=live` 的真实流几乎每条都读成“0 Likes. Like”，所以不要断言互动数，断言浏览数。
+- **读法**：每卡**一次** `execute_script`，不是逐字段 `find_element`（`tests/integration/test_twitter_crawler.py` 两边都数）。
+  卡节点可能在列举与读取之间脱离（`StaleElementReferenceException`），读到就保护、该推文留给下一轮。
 
-`article[data-testid="tweet"]` holds **13-21 nodes however far the page is scrolled** while 139
-distinct tweets passed through eight scrolls, so progress is measured by rows kept and the settle wait
-watches `window_key()` — the set of status ids on screen — through `feed.walk_feed(window=…)`; a
-card-count watcher declares an exhausted timeline after one screen. Resume identity is the
-**status-id set**, never a list index.
+## 微信
 
-The first screen measured **0 cards at 9.9 s and 11 at 11.9 s**, so the mount poll is `MOUNT_WAIT`
-(22 s) — an 8-second wait reported "this keyword found nothing" on a search that was about to succeed.
-All five counters come from one `[role="group"]` aria-label sentence ("1887 replies, …, 1.1M views")
-through the shared 万/K/M parser, the per-button labels are only the fallback, and **浏览数 exists in
-no other place**; a live keyword stream really does read "0 Likes. Like" on almost every row, so do
-not assert engagement on `f=live` — assert 浏览数. A card node can be detached between listing and
-reading it (`StaleElementReferenceException`, observed), so the read is guarded and the tweet stays
-unseen for a later round. One `execute_script` per card, never per-field `find_element` —
-`tests/integration/test_twitter_crawler.py` counts both.
+- **只有正文，按测量**：真实浏览器得到 `show_comment=0`、3.4 MB 文章 HTML 里 0 字节 `elected_comment`、`mp/appmsg_comment` 回
+  HTML 验证页（“请在微信客户端打开链接”）；`MicroMessenger`/`XWEB` UA、客户端形状的 URL 参数、重放客户端解密 Cookie 都无效，
+  因为门槛是服务端只为真实客户端会话签发的凭据。**不加客户端冒充或会话重放，也不加回评论/点赞/转发列**——浏览器里“没有评论”
+  与“不被允许看”不可分，空表就是看着像真的假数据。所以数据源节点没有评论模式，`explainWechatLimits()` 与
+  `settings.wechatLimits*` 说明原因。
+- **没有任何 Cookie 行**：公众号后台关键词搜索是这套会话唯一解锁的东西，且实测 `appmsg?action=list_ex` 对三个账号、
+  三种端点拼法、15 分钟冷却后的每次重试都回 `ret=200013 freq control`，字段形状一次都没观测到，所以删除而不上线。
+  不要加回 `mp_logged_in`、`WechatCrawler.diagnose`、`WechatCrawler.login_url`、`cookie.wechat.*` 或 `MULTI_PURPOSE`，
+  也不要按猜的字段名重写关键词搜索。因此没有任何东西可以“表现得像有登录”：`live_site` 微信文件只访问文章 URL（不访问
+  公众平台、不等/跳 Cookie），cookie 面板 harness 取样真实登录平台（B 站/知乎），绝不用微信。
+- **文章字段**：标题 `#activity-name`、公众号 `#js_name`、时间 `#publish_time`/`.rich_media_meta_text`、地区
+  `#js_ip_wording`、正文 `#js_content`，每条各命中一次；正文完整保留（`WECHAT_BODY_MAX_CHARS=0`），设上限时以 `…` 收尾。
+- **游标只记位置**：`url_index`/`url_total`/`done`，URL 由节点 textarea 重建；绝不把链接列表写进游标。已知低优先缺口：
+  `get_detail` 用裸 `self.driver.get` 而非 `Crawler.open`，没记 settled，所以“页面没到”与“到了但某列为空”在此平台不可分。
 
-## WeChat
+## 小红书
 
-**Intentionally body-only.** No comments, likes, forwards (and usually no read counts) — measured, not
-assumed: a real browser gets `show_comment=0`, zero `elected_comment` bytes in ~3.4 MB of article
-HTML, and an HTML 验证 page ("请在微信客户端打开链接") from `mp/appmsg_comment`; a `MicroMessenger`/`XWEB`
-UA, client-shaped URL params and replaying the client's own decrypted `mp.weixin.qq.com` cookies
-(`pass_ticket`, `appmsg_token`) change nothing, because the gate is a per-session credential the
-server mints only for a real client session. **Do not add client impersonation or session replay to
-get around it, and do not re-add those columns** — in a browser "no comments" and "not allowed to
-look" are indistinguishable, so an empty table would be plausible-looking false data. WeChat's 数据源
-node therefore offers no comments mode, and `explainWechatLimits()` (workflow.js) +
-`settings.wechatLimits*` (app.js) state why.
-
-**WeChat has no cookie row at all.** Keyword search via the 公众号后台 was measured to be the only thing
-its session unlocked, and it was deleted rather than shipped unverifiable: `appmsg?action=list_ex`
-answered `ret=200013 freq control` for three accounts, three endpoint spellings and every retry after
-a 15-minute cooldown, so the article-item field shape was never observed once. Article *bodies* need
-no login. Do not re-add `mp_logged_in`, a `WechatCrawler.diagnose` override, `WechatCrawler.login_url`,
-`cookie.wechat.*` text or `MULTI_PURPOSE` — and do not implement keyword search again by guessing
-field names. Because there is no login, nothing may *behave* as if there were one: the `live_site`
-WeChat file crawls article URLs only (no 公众平台 visit, no cookie wait/skip), and the cookie-panel node
-harness samples real login platforms (bilibili/zhihu), never `wechat`.
-
-### 微信第 0 步：三条文章页的字段与正文复核（measured 2026-09-29，一次性探针）
-
-探针 `backend/test_wechat_step0.py` → `scratchpad/wechat_step0.json`。三条 D7 验收链接全活，五个字段选择器
-（标题 `#activity-name`、公众号 `#js_name`、时间 `#publish_time`/`.rich_media_meta_text`、地区 `#js_ip_wording`、
-正文容器 `#js_content`）每条**各命中一次**，正文长度 2903/2332/93 字都**完整**（原始与存储正文差 ≤1 字符，仅空白
-归一化），均低于旧 `WECHAT_BODY_MAX_CHARS=5000` 上限（现默认 0=完整保留）故**无 `…` 截断标记**（正确——短正文不该被截）。页面模型复核为真，
-无 stale 选择器、无静默空列。真机运行级矩阵（`test_live_wechat_workflow.py` A1/A2/A4/C1/H1 全绿）另证：
-- **A2 用 monkeypatch 把上限设 200** 验截断标记在场（不依赖找一篇 5000+ 字的文章）——正文 201 字符且以 `…` 收尾。
-- **C1 抓到并修掉一处 §6 U5 同形**：`wechat.py:80` 曾 `mark_position(urls=urls,…)` 把整条粘贴 URL 写进续跑游标。
-  续跑只读 `url_index`（位置）、URL 由节点 textarea 重建，那行既冗余又是 AGENTS 明禁的“游标记内容”形状
-  （游标里的链接列表是“一条失败就每次续跑永久静默跳过”的成因，正是 xiaohongshu U5 的代价）。改为
-  位置-only（`url_index/url_total/done`），设备层 `test_the_cursor_records_position_not_the_link_list` 钉住
-  （装回 `urls=urls` 即在 `isinstance(value, list)` 处红）。
-- **§6 U56（观察，未改）**：`get_detail` 用 `self.driver.get` 而非 `Crawler.open`（后者是唯一导航入口，记 settled、
-  清弹窗、复读后再判墙）。微信正文匿名可读、墙判据用得上不上无所谓，但 settled 记录被丢了，于是“页面没到”与
-  “到了但某列空”在此平台不可分。低优先，一行改动（`self.open(url, judge=False)`）找回事后不改行为，下次真机触碰一并做。
-
-## Xiaohongshu
-
-Xiaohongshu walls a *replayed* session within minutes while the user's own browser keeps working —
-that is why the crawl runs in the platform's own profile (see `AGENTS.md`). Its author mode was
-dropped unmeasured: the route needs a per-note `xsec_token`, which a session that is being risk-scored
-cannot be relied on to yield, and the account here is behind 风控 after a few attempts. Don't rebuild
-it by guessing token plumbing.
-
-**Its search page answers late, and that used to be a crash rather than a state** (measured
-2026-09-24, twice in one hour on `live_quick`, in two different variants): the crawl came back red
-with `TimeoutException: Timed out receiving message from renderer: -0.001` thrown out of a bare
-`self.driver.get(url)` — the *first* navigation of the search, and separately of a note page. Two
-consequences, both pinned by `tests/unit/crawlers/test_xhs_crawler.py`:
-
-* the platform already had the honest answer for this state (`crawl.xhs.page_timeout` → keep
-  polling, zero cards is a legitimate outcome) and never got to use it, because the exception came
-  from the call before its own poll;
-* the request really was issued, so dropping it from `Crawler.requests` on the way out would make
-  the mode look cheaper than it is.
-
-Fixed by entering both pages through `Crawler.open`, which also means **a slow page must not be
-judged as a wall** — see the next section; the two changes only work together.
-
-**The search grid is a virtualised feed, so progress is 笔记IDs, never card count** (measured
-2026-09-29, step-0 probe `scratchpad/xhs_step0.json`). First read mounted **22** cards; four window
-scrolls gave `12, 8, 8, 8` — the mounted COUNT holds flat while scrolling swaps which notes are in
-the DOM (new 笔记ID enter, old ones leave). Two things were wrong because of this: the walk paged on
-`_card_count` growth (a flat count was read as "reached the bottom"), and `_harvest_cards` skipped to
-`position['scanned']` as a **DOM index** — once `scanned` climbed past `len(cards)` (~8) the slice went
-empty and every later round harvested nothing while the loop insisted it had grown. That is §6 U3's
-silent under-collect, and it is a *different* lesson than the douyin "wrong scroll box" one: the scroll
-target is fine, the **progress signal was wrong**. The walk now advances on the distinct-`笔记ID` set
-(`len(seen)`) growing, re-scans the whole mounted batch each round (the `seen` dedupe skips a
-recycled card *before* its detail navigation, so no re-pay), and keeps a timed render beat after each
-scroll rather than waiting on a count that will never move.
-
-**It now runs on `feed.walk_feed` via the `window` hook (was a hand-rolled second copy).** walk_feed
-once assumed a card-count signal, but it learned the `window=` parameter for exactly this shape (X's
-timeline): pass the identity of the on-screen notes and it waits for *that* to turn over rather than the
-flat count. So xiaohongshu's search folds onto the shared engine like zhihu/bilibili/X, and `read_cards`
-/`scrape`/`emit` split replaces `_harvest_cards`. Confirmed live (headless, target 26 > one screen):
-collects past the first batch, each 笔记ID once.
-
-**A shortfall is now convicted `UNDER_TARGET`, not settled clean.** xiaohongshu's grid publishes no
-total and no “没有更多” sentence the code can read, so a walk that stopped growing below the ask NEVER
-proves supply ran out (a soft throttle mimics it) — the search files `note_end(UNDER_TARGET)` and the
-executor refuses it by name (“采得不足”, resumable). It used to leave `end_reason=None`, which the gate
-treated as "not-yet-migrated → settle clean"; that silent-clean was the §6 whitewash, now closed. 停止 /
-a wall / a 风控 bounce are NOT filed here (settled upstream, their own buckets). The old
-`crawl.xhs.exhausted` console line — which could not tell a real bottom from a late-answering page — was
-deleted, and the live H1 grader now judges posts on `SHARED_EXITS` alone (no whitelist may excuse an
-un-attested xhs shortfall).
-
-**An expired/absent `xsec_token` is one dead link, not the session refused** (same probe). Opening a
-note with its token stripped answers 安全验证 — and the old detail path scraped that wall page as a
-row (正文 0, and the 标题 literally became 安全验证), while `open(judge=True)` latched `risk_blocked`
-and aborted the whole harvest. Same shape as bilibili's U55 (a per-link code blamed on the session).
-The note is now entered with `judge=False` and read with the non-latching `verdict`: a walled detail is
-a **named** dead note (`crawl.xhs.deadNote`), the grid card's real fields are kept, and one stale token
-no longer stops the run. The session wall is still checked where it belongs — on the search page, each round.
+- **模式**：搜索 / 评论。回放的会话几分钟内被墙（必须跑平台自己的 profile）；作者模式已放弃（需逐笔记 `xsec_token`，正在被
+  风控的会话不能可靠拿到），不要靠猜 token 管线重建。
+- **搜索**：网格是虚拟化信息流，首屏挂 22 卡，4 次滚动挂载数一直是 12/8/8/8——**进度按不同 `笔记ID` 集合**，不是卡片数。
+  每轮重扫整个挂载批（`seen` 在详情导航前挡掉复用卡，不重付），滚动后给一个有界渲染节拍。走 `feed.walk_feed(window=…)`
+  （共享引擎，不是第二份滚动循环）。网格不发布总数、也没有可读的“没有更多”，所以短表**绝不**被许可为完成：
+  搜索 `note_end(UNDER_TARGET)`，执行器按名“采得不足”并允许继续；停/墙/风控在更上游结算。`crawl.xhs.exhausted` 已删除
+  （它分不清真到底与慢页面），live 评分只看 `SHARED_EXITS`。
+- **笔记入口**：链接按站点“复制链接”的写法补 `xsec_source=pc_feed`（`rows.with_feed_source`：缺就补，**非空原样保留**，
+  `pc_search`/`pc_user` 是站点为那个入口签发的）；只改导航 URL，行里的 `笔记链接`/`文章URL` 保持用户给的身份。只处理
+  `xiaohongshu.com` 主域，`xhslink.com` 短链原样交给站点跳转，`xsec_token` 逐字符透传。`xsec_token` 过期/被剥掉会被送回
+  feed：落地没有笔记 id → `comment.xhsRedirected`（带实际落点）+ `DEAD`，不滚首页、不读不存在的面板；落地在别的主机（短链）
+  仍可重试。单篇详情同样用 `judge=False` + 非上锁的 `verdict`：被墙的详情是具名死笔记 `crawl.xhs.deadNote`，保留网格卡真实
+  字段，一个过期 token 不拖死整轮；会话墙仍在搜索页每轮检查。
+- **评论结构**：一条顶层评论是 `.parent-comment` 包装层（内含自己的 `.comment-item` + `.reply-container`），子回复是
+  `.reply-container` 里的 `.comment-item.comment-item-sub`——父子是**兄弟不是包含**，按 `.comment-item` 平铺读会收进子回复却说不出
+  它属于谁。每个父默认只挂 1 条回复，其余在 `div.show-more`（“展开 N 条回复”）后面。`.comments-container .total`（“共 N 条
+  评论”）**含楼中楼**，是唯一诚实的完成分母。两级都有 `id="comment-<24hex>"` → `评论ID`；作者链接 token 每次访问都变，列里
+  只留路径；`.date` + `.location`，日期走 `times.absolute`，地区单列；点赞可能是 `1千+`/`3,204`/`赞`，走 `parse_count`。
+- **走法与列**：一屏一次页内 `PANEL_JS` 读回整屏分组；`楼层` **只给顶层评论**编号 1..N，回复位置由 `父楼层` 表达；`父楼层`
+  顶层空、回复指向父楼层；`子回复数` = 实际落库子行数，展开失败退回站点数；去重键 `评论ID`，退路
+  `(作者,正文,时间,地区)`（旧的 `(作者,正文)` 会吞同一作者连发的两条“谢谢”）。展开器认元素 `.show-more`（登录后文案会变成
+  “展开更多回复”，不能认句子），原生 ActionChains **点到该线程不再长为止**（站点分批给）；被拒弹 `.login-modal` → 关掉、
+  停手、`comment.xhsLoginGate`。滚动**含评论最多**的可滚容器（实测 `.note-container`；`.note-scroller` 只推动正文栏，
+  旧写法因此停在前 30 条）。收工 = 连续 3 屏无新行 + 展开器不再长 + 滚动没换出新卡；站点印 `- THE END -` 时记为已到末尾。
+  对账 `共 N 条` vs 本表 + 未展开数 → `comment.xhsShort`；数字对得上但仍有回复未展开 → `comment.xhsNested`。地址里的笔记 ID
+  变了 → `DEAD` + `comment.xhsGone`。点击前用**站点自己的关闭控件**关掉 `.comments-login`/首访 `.login-modal`（`ESC` 会关掉
+  整篇笔记）。
+- **`ok + 0 行` 不是完成**：评论区的墙可能不出现在页面正文里，所以走查返回 `ok` 0 行也会越过游标。现在：URL 跳 passport/
+  `chrome://`/错误页 → BLOCKED 并 latch 对应墙旗；面板 `.comments-login` → BLOCKED + `login_wall`（保留已读父评论）；展开被
+  `.login-modal` 拒 → 收尾 BLOCKED、游标钉住；面板没渲染/走到一半被停/差额对不上且站点没印 THE END → `mark_unproven(url)`
+  （节点 partial，继续从这条重走）；印了 `- THE END -` 的差额照旧点名但**算采完**；用户 评论上限 命中不报也不算未证明。
 
 ## 红果短剧（hongguo）
 
-**四个榜都在文档自带的 loader 载荷里，且是延迟到货的**（measured 2026-10，一次性探针
-`backend/test_hongguo_step0*.py` → `scratchpad/hongguo_*.json`）。页面是 React Router 应用，
-榜单在 `window._ROUTER_DATA.loaderData['rank_<slug>/page'].content._data` 里，形如
-`{isSuccess, rankList[20], pagination:{pageNum,totalPages,nextUrl}}`——**读它，不读渲染出来的列**：
-一行 20 条自带 title/cover/href/playHref/heatText/statusTags/scoreText/favoriteText/likeText/tags/
-description/episodeVids/seriesId，任何字段都不需要再点一次。**到货有两个时刻**：`driver.get` 刚回来时
-loader 键已在但 `content` 还没有 `_data`（约 2 s 后才填），所以用 `wait_for_first_content` 轮询
-（`has_content` = `state=='ready'`），**不要固定 sleep**。四个榜（`/rank/hot-drama`、`hot-real-drama`、
-`hot-ai-drama`、`hot-comic-drama`）第 1/2/5 页实测都是 20 条、`totalPages=5`、排名跨页连续（第 5 页从 81 起），
-第 5 页 `nextUrl=None`；`?page=1` 与裸 URL 是同一页（所以第 1 页不带参数）。
-
-**2026-11-15 站点把载荷从 `content._data` 挪到了 `content` 本身**（measured 真站层
-`test_the_hot_board_answers_one_page_load_with_its_own_numbers`）：`loaderData['rank_hot-drama/page']`
-仍有 `req/rankKey/canonicalUrl/updatedText/pageNum/isCrawler/content`，但 `content` 直接就是
-`{isSuccess, rankList, pagination}`，`content._data` 已不存在。旧的读法把 `state` 永远停在
-`missing`（`page_key` 却在），于是整轮等满 5 分钟再以 `crawl.hg.noBoard` 拒绝——而页面上明明有 40 张卡。
-两个 JS 探针现在都接受两种形状：`content._data !== undefined ? content._data : content`，
-thenable 仍然按“还没到货”处理。
-
-**一条探针返回字符串而不是对象，是这里第一次就踩到的坑**：`execute_script` 里
-`return JSON.stringify(...)` 回来后是 `str`，`content.get` 直接 `'str' object has no attribute 'get'`；
-改成 `return board`（对象）即可，别在爬虫里 `json.loads`（probe #11）。
-
-**`?page=6` 是“这一页不存在”，不是“这个榜是空的”**：站点只渲染 `rank_layout`
-（`loader_keys: ['rank_layout']`、0 张卡），而且**导航已经 settled、当下就是这样**。因此
-`wait_for_first_content` 的 `stalled` 判据写成“loader 里没有 `/page` 键 **且** 导航已 settled”，
-否则耐心预算会白白坐等 300 s；等到它触发就是 `PageNotArrivedError` **具名拒绝**
-（消息带 URL 与页面实际带的键），既不读成空表、也不当成循环自述。
-
-**收尾许可只有站点自己的两种话**：`pagination.nextUrl` 为空 → `site_end`；
-`isSuccess is True` 但 `rankList` 为空 → `empty`。翻页游标指回当前地址、或连续两页都没有新条目
-（`stuck >= 2`；续跑时已存页允许一次不出新）→ 留 `UNDER_TARGET`（“我们的循环停了”不等于
-“站点没有了”）。`if nxt == url: 停` 这条是必须的：站点给的下一页就是当前页时再问一次只是白付一次。
-
-**集数 = `episodeVids` 的条数**，不是屏上的链接数：实测同一部剧详情页自己印 222 集与载荷 222 一致
-（第二条 69 与 69 一致），而 DOM 播放窗只挂 25 个 `episode_links`——按屏上数会整整少一个数量级。
-分类里会出现站点自己没解析出来的数字标签（`205`，hot-ai-drama/hot-comic-drama 各 21 行），
-**按原样保留**：它是站点给的数据，不是解析失败。
-
-**四个榜都是匿名的**：一次性浏览器、无 Cookie 都直接给（所以矩阵里 `needs_session=False`，
-面板没有它的 Cookie 行、节点没有账号字段，真站层 `live_crawler` 与微信同列免 cookie 豁免）。
-热度/收藏/点赞是站点四舍五入后的“万”标签（`8134万热度`/`53.7万收藏`/`141.8万点赞`），
-用共享的 `parse_count` 展开；站点没印数字的格子留**空**，不填 0。
-
-### 启动页、组件缓存与渲染进程健康检查（measured 2026-11-03，云端 Linux）
-
-**“读不到自己的 User-Agent”是启动页的账，不是伪装脚本的账。** 默认启动页是
-`chrome://newtab/`，它要去拉 Google 的安全名单/建议服务；在受限网络（阿里云上的这台）这次导航
-永远不完成，chromedriver 就停在 `WaitForPendingNavigations` 里——verbose 日志每 0.5 s 只重复
-`Runtime.evaluate {"expression":"1"}`，而我们的 `execute_script` 根本没到 Chrome。表现就是启动后
-读 UA 卡满驱动的 120 s 超时，并且**跟着网络时有时无**。把启动页钉成 `about:blank`
-（`crawlers/core/browser.py::STARTUP_PREFS`，Chrome 偏好 `session.restore_on_startup=4` +
-`startup_urls`）后，同一台机器上脚本与 UA 都是毫秒级返回；对照是同一台机器、同一份驱动，唯一变量
-就是启动页。**这台 Windows 开发机无法复现该停顿**（没有那种网络），所以这条只在云端验证过，
-Linux 之外的行为靠“about:blank 本身没有远端导航可等”这一结构性理由保证。
-
-**组件缓存把持久 profile 拖死，红果因此不再要 profile。** Chrome 的组件更新器会把 TTS 引擎、
-安全名单、端侧模型等 CRX 下载进 user-data-dir：实测红果的 `chrome_profile/hongguo` 里
-`component_crx_cache` 约 40 MB、`WasmTtsEngine` 约 25 MB，合计约 86 MB，随后每次启动渲染进程都
-不应答，形成“丢弃 → 回退一次性 profile”的循环。四榜本来就匿名（见上），这个目录一次也没换来
-会话，所以：`--disable-component-update` 全局关掉下载，红果声明 `needs_profile = False`，
-`get_crawler` 直接给它一次性浏览器——目录不再创建、也不再需要 profile 锁。**已经长起来的旧目录
-不会自动删除**（代码不替用户删数据），在设置里删掉该平台 profile 即可。
-
-**渲染进程不应答就具名拒绝，不再“裸无头继续”。** 无头启动后先用一次有上限（15 s）的 UA 读取做
-健康检查：活着的渲染进程毫秒级应答，卡死的永远不会答，继续跑只会让 cookie 植入和第一次导航各挂满
-一次超时。因此读取失败（超时或驱动报错）按名拒绝（`crawl.rendererUnresponsive` /
-`crawl.rendererProbeFailed`，句子里给出下一步：删掉该平台 profile，或本次改用一次性 profile），
-浏览器则以 10 s 宽限 `quit()`，仍不就按 PID 收掉这个会话的进程树。**未验证的一半**：chromedriver
-写入的 `session` 偏好是否会覆盖一个**已存在** profile 自己的启动设置——设备层要分别测“新目录”与
-“已有目录”，只有前者能证明写入生效。
-
-### 评论只活在 App 协议里：播放器当签名预言机（measured 2026-10-19）
-
-红果的**网页端没有评论区**（四榜是网页的极限）；评论挂在单集上：
-`POST https://api5-normal-lq.fqnovel.com/novel/commentapi/comment/list/{group_id}/v1/?<设备公共参数>`，
-子回复是同一信封的 `reply/list`。请求头带 `x-medusa`/`x-helios`/`x-khronos`/`x-reading-request`
-全套字节系签名。**复刻签名这条路已实测封死**：把第三方桌面播放器（hongguo-player，Wails/Go，
-`红果短剧.exe`）的完整请求原样重放、换新鲜 `_rticket`/`x-khronos` 重放、换目标剧集重放，
-三种组合全部 `Code 110001 未知异常`——签名覆盖请求体且绑时间戳，不是能抄的模板。
-
-于是本平台的评论采集**不说话，只旁听**（采集与走路在 `crawlers/platforms/hongguo/harvest.py`，
-驱动窗口的那一半在 `player_ui.py`，"这个名字算不算这部剧"的纯规则在 `naming.py`）：
-第三方播放器已把整套协议逆向完（二进制里能读出 `hg-go/pkg/hgapi` 的端点常量、
-`hg-go/pkg/sign` 的 XGorgon/Medusa 实现、伪造的小米14 设备注册池），让它当签名预言机，
-我们只收割它合法拿到的明文 JSON。三条实测支撑这条通道成立：
-
-1. **播放器的 Go HTTP 客户端认 `HTTPS_PROXY` 环境变量**（PowerShell 注入 → 全部 API 流量
-   经 mitmproxy；`NO_PROXY=localhost,127.0.0.1` 保住它的本地播放服务 `GET /nd/{token}`）。
-2. **它不做证书 pinning**：mitmproxy CA 进“当前用户-受信任的根”后 TLS 全通解
-   （`certutil -addstore -user Root` 在 Win11 会弹确认框，PowerShell `Import-Certificate`
-   静默成功——安装与探测都走后者）。
-3. **信息流每切一个视频、且每 60 s 自动拉一次当前集的 `comment/list`**（`count=90`、
-   `comment_source=601`、时间窗游标 `{"start_offset_time":…,"end_offset_time":…}`）——
-   所以“打开剧 + 逐集切换”就能白拿每集第一页；90 条以后的深页需要评论抽屉滚动，
-   抽屉控件**尚未测量**，失手只降深度、不谎报采完（`has_more=true` 收不了尾 → `UNDER_TARGET`）。
-
-**payload 的坑**：`data_list` 里混着**弹幕引导行**（`comment_id` 是 `11114` 这种小数字、
-`create_timestamp==0`、带 `expand.danmaku_activity_info`）——它们不是评论，解析器丢弃并计数
-（`danmakuSkipped`）。真评论 `comment_id` 是大 id（`7697905336342594366`），身份就用它。
-登录态影响 `user_info`：未登录只有 `user_id`（评论者留空，不编名字），登录后名字在
-**`base_info.user_name`**（不是 screen_name/nickname）。`expand.book_id` = 剧集的 series_id，
-用它核对“这页属于这部剧”——错剧的行**具名丢弃**（`groupMismatch`），表里进错剧比缺一集更糟。
-
-**UIA 层实测（同日多轮，最终收紧）**：找剧页**没有搜索框**（它是 关注/漫剧/真人剧/推荐 的浏览流），
-导航走**排行榜页**——它的“总榜 ▾”切换器实测列出 总榜/必看榜/推荐榜/新剧榜/热搜榜/收藏榜/追更榜/
-预约榜/AI剧/热播榜/臻果榜，每张剧名卡自带 `▶ 播放` 按钮，点它即从该剧第 1 集起播（web 热榜第 1 剧
-实测在“必看榜”）。树“冷启动”的真相：**整树完整遍历本身就是唤醒**——命中即停的部分遍历只会
-读到未建好的标题栏（当天所有“唤不热”都源于此），`PlayerUI.collect` 因此永远全量收集再筛，
-`wait_content` 60 s 不热仍**具名拒绝** `treeCold`。信息流的 60 s 自动评论刷新死于当天接口更新
-（15:3x 有、17:4x 起无）——评论的确定性触发是点动作栏 `💬 <数量>`（按钮名自带站点打印的评论数，
-与侧栏 `💬 反馈` 用数字尾缀区分）开抽屉。另外三条当天踩过并修死的坑：真评论的 `expand.book_id`
-可能就是 `"0"`（错剧守卫只认非 0 差异）；本页 mitmproxy 11 的 `Response` 没有 `get_json()`
-（AttributeError 被裸 except 吞成空捕获文件，改 `json.loads(response.content)`，content 已透明解压）；
-置顶窗口会把合成点击整个截走（Chromium 也识别注入输入不触发 hover——真人遮挡与合成事件都测过）。
-
-**`_click` 加“窗口边界守卫”（2026-10-20，用户现场反馈触发；Invoke 主路径已实测否决）**：过去每次点击
-都是 `auto.Click(中心坐标)`——真实移动系统光标到**绝对屏幕像素**。控件的 rect 一旦失效（读树后页面又导航）
-或被 WebView2 钳成窗口角/越界值，那一枪就打在那些像素上当前的东西上，实测打到了任务栏右下角的**时钟/托盘**，
-把用户的托盘点开、点在他的桌面上。守卫：点击点必须被证明**严格落在播放器窗口矩形内**（`_click` 里
-`left<cx<right and top<cy<bottom`），越界即拒绝，塌成 (0,0) 的冷 rect 一并挡住。**我先把 UIA `Invoke`/
-`DoDefaultAction`（不碰鼠标、理论上不可能点歪）设为主路径——盯屏真机把它否了**：这是 Wails + WebView2 的 SPA，
-`Invoke` 打在 排行榜 按钮上不抛异常地返回、页面却纹丝不动，走查永远卡在 找剧。所以能驱动这个播放器的**就是坐标
-点击**，安全靠的是**窗口边界守卫**，不是控件模式。未来若某版本 `Invoke` 被证实真能触发 SPA 导航，才可作快速路径加回。
-
-**“软件更新后像卡死”的真机诊断（同日，用户更新播放器后反馈点到新剧不动）**：用带代理的 harness（只有
-它启动的播放器才对 UIA 暴露可访问性树；手动开的播放器全树 0 控件）把走查见到的每一棵树转储分析——结论是
-**更新没坏**：`找剧/排行榜/新剧/推荐` 等锚点、卡片标题、“共N集 / X.Y 分”元信息、`▶ 播放` 按钮全都正常渲染可读。
-真相有二：① 用户喂的那部剧在客户端**所有榜出现 0 次**（这台构建根本没有它），② 找不到剧时 `open_drama` 会把
-“每榜 × 3 滚动”空跑一遍（~100+ 秒、上百次 collect）却**一声不吭**，于是看着像冻住。修：每进一个榜播一行
-`scanningBoard`“在《X榜》查找《剧名》…”，找不到仍按具名跳过收尾。另注：harness 启动的播放器若停在登录前
-/或被弹窗挡，会表现为“进入某已知存在的剧成功、但等不到评论页”——那是登录态问题，不是选择器问题。
-
-**“点了主页面才滚动、滚几下又停”的第三因＝前台焦点（同日实测）**：合成输入（`WheelDown`/`SendKeys`/坐标点击）
-只作用于**前台窗口**；Wails 播放器新开时未必抢到前台，而 `win.SetFocus()`（UIA 顶层控件）**并不会**把 OS 窗口
-置前——于是滚轮/方向键被静默丢弃，直到用户手点一下窗口才恢复滚动，随后再失焦又停。修：新增 `PlayerUI._activate`
-（`BringWindowToTop`+`SetForegroundWindow`，尽力而为、被焦点窃取保护拒绝时退回真实点击），并在每次合成输入前调用：
-`open_drama` 首个点击前、每次榜滚动前、`scroll_drawer` 滚轮/翻页前、`next_episode` 方向键前。单测锁“输入前必先 activate”
-的接线（桩掉 _activate/窗口/库，断言调用发生）。
-
-**第二轮真机（同日晚，热榜→评论 10 部 × 5 集）+ 代码审计查出的坑（规则见 `crawler_rules.md` 红果块，此处只留测得的数）**：
-- **误点 `回复`** 开的是输入框（抢走键盘焦点，滚轮不再翻页）：站点 698 条的一集只收 20 就走。判据 `is_expand_control`
-  须名字**同时**含“回复”与“展开/查看/更多”（裸 `回复`/`回复 3` 永不点），每集点完屏幕所有展开项（**不设点击数上限**：
-  按 (类型,名字) 记住已点过的，页面没有新的可点项、或播放器拒绝这次点击就收工——旧写的 40 次是"我们自己数的数"，
-  一部剧超过 40 个线程就会静默丢掉后面的），点完 `SendKeys {Esc}` 还焦。
-- **一次静默 ≠ 采完**：翻页分级滚轮 ×2 → Esc+滚轮 ×5 → `{PageDown}`×2（`_page_wait` 随 stall 增），连吃
-  `_MAX_STALLS=3` 才判不完整并**具名** `已收 have / 站点 site_total`（`episodeShort`/`groupShort`）；`site_end` 仍要
-  `kept >= total`，不足即 `UNDER_TARGET`。
-- **网页热榜与客户端榜单两套排序**，故评论节点可直接喂剧名（`Field.accepts_names=True` 唯一声明，面板 `workflow.js`/
-  `engine/workflow`/`execute_comment_node` 三处共读）；`文章URL` 留空，无名可核时错剧守卫用本页 first-seen 非 0 `book_id`
-  作参照；榜名不硬编码：`_board_labels` 开“▾”读实际列出的榜（`_FALLBACK_BOARDS` 兜底），`_pick_board` 先看是否已在屏上。
-- **冷树中途复发**（第 2 部曾抛死整节点、9 部零采却 749 行顶“正常”走下游）：唤醒失败抛专用 `TreeCold`（≠“客户端没这部剧”，
-  别比消息文案），先 `wait_content(120)` 再试，仍冷按名跳过、记 `skipped_targets`、置 `UNDER_TARGET`，收尾按**属性**读
-  `skipped_targets` 具名拒（`run.commentsSkipped`）、已采行保留（用户选定：保留+报错，“继续”回到第一部未收全输入）。
-- **审计的七洞**（同一份代码仍会“短表却判完成”）：① `execute_comment_node` 过去在处理第 i 个输入**前**写 `url_index=i-1`，
-  两处结尾拒绝都在循环之后抛，“继续”只重走最后一条 → 游标现只承认**已收全的输入**、遇第一个洞就不前进；② 评论行台账键曾落
-  “整行 JSON 哈希”而 JSON 含 `楼层`（每个新 harness 从 1 重编 → 重走再存一遍），现按 (`平台`,`评论ID`) 认（键轮转一次是
-  把不成立去重修好的一次性代价，见 `crawlers/commenting/session.py`）；③ `_harvest_replies` 曾丢掉 `total/has_more`
-  （一楼站点 200 收 20、`shortfall` 仍 0、`site_end` 照获准），现进 `_reply_progress`、缺口打印 `子回复不完整`（**分母口径尚未
-  真机核对**，偏严时报错行照留、别退回丢弃）；④ 首集 `noTraffic`/`titleMissing` 曾返回 `([], DEAD)` 不进两道门（5 部收 4 照样
-  “正常”、只喂 1 部零流量时空表判 DONE），现都过 `_mark_short()`+`skipped_targets`，裸 `series_id` 被当 URL 的形态也修好；
-  ⑤ 迟到的子回复页曾盖上下部剧名（进 `_reply_inbox` 不带身份，展开最多 40 请求每集只等 1.5 s），现页面自带 `_stamp`、每部收尾再宽限排空；
-  ⑥ `_same_drama` 允许 4 字前缀 + `_play_for_title` 取第一个命中（“斗罗大陆 第二季”打开“斗罗大陆”，名喂入时参照 `book_id`
-  来自错剧救不了），现先找**规范化后完全相等**的卡片才退前缀；⑦ `_open_drama` `wait_content(120)`×重试 + `open_drama` 60 s 预算
-  几分钟不可打断，`except Exception: return False` 把 Stop 吞成“搜不到这部剧”——`PlayerUI` 现持 harness abort、原样抛 `CrawlerStopped`。
-
-**第三轮真机（2026-10-20，1 部剧不封顶 × 3–5 集，捕获留存）**：`reply/list` 是**另一套信封**——`data.comment_list_info`
-{cursor,has_more,total} + `data.reply_list[]`，元素体**大写 `Common`**、自己 id `reply_id`、父评论 `reply_to_comment_id`、
-父正文在 `data.comment`，**根本没有 `data_list`**；旧 `hg_comment_rows` 只读 `data_list` → 每次“展开 N 条回复”返回 0 行
-（一次点了 **53** 处展开、收 0 子回复，而面板“包含子回复”一直勾着）。现按形状分支、归一化回 `comment/list` 让**同一个**行
-构造器服务两页；`comment_list_info.total` 即这楼子回复数（实测 total=4 / `stat.reply_count`=4 / 4 元素）。“是哪部剧”**只问请求体**
-`req_body.business_param.book_id`，不问响应体（别剧的页 `expand.book_id` 打 `0`；旧守卫读后者，一次走查把 **30** 行他人剧按我们的
-`剧名` 收进、标成 `集序号 1`），守卫现读请求体（响应体兜底）且**同样管 `reply/list`**。web `series_id` **≠** client `book_id`
-（同剧 `series_id=7696437705822981182` / `book_id=7697823071830297624`，两个 id 空间），参照只能是本页之外第一页自己的 book。
-
-**屏幕上写着“我在播哪部、播到第几集”（比对 10-19 两份 UIA dump `hg_uia_search.txt`/`hg_uia_drawer.txt`）**：WebView2 树稳定
-印三样——标题区 `[TextControl] '@穿成傀儡皇帝…'`（`@` 前缀、一次 dump 恰好一个）；角标 `'1 / 13+'`/`'1 / 10+'`（当前集 /
-总集数，**`+` 表示“至少这么多”**，应用不肯说真长度）；一行 `'滚轮 / ↑↓ 切换'`。同屏动作栏 `[ButtonControl] '💬 1585'`
-（评论门，`_RAIL_COMMENT_RE` 认的那个）与 `[TextControl] '第1集'`。另一份 `hg_tree_now.txt` 是**冷树**（所有 rect 0x0、所有名字空）
-——屏上事实读不到时**不许当成确认**。故走查改成**先问屏、再收行**（`PlayerUI.screen_drama_title` → `_confirm_position`）：进剧后
-确认 `@剧名` 头部、每次 `↓` 后再确认；稳定报出另一剧按名跳过/停走（`screenMismatch`），`next_episode()` 返回假也**计入未完成**
-（`_count_unfinished`，没走到的集数站点报不出总数）。**唯一能读到的事实是剧名**：`N / M` 只在视频页存在、抽屉一开就从树里消失
-（暖树转储实测无），故拿 `第N集` 当闸门会误杀正常剧。问屏两处都偏向“继续”：单次读到陌生剧名会**再问一次**（点卡片后浏览页有一瞬
-还在报上一部），剧名按**双向前缀、不限长度**匹配（头部基名、请求可能带季名）。
-
-**仍未解决的根本缺陷（已被屏上守卫拦成“诚实的少量”，原因未消）**：进入剧集后播放器**几乎立刻**把流量切回账户原来在看的那部剧——
-一次 3 集走查 15 页中只有 1 页是所请求剧（该集站点报 **1058** 条、收到 20），其余 **14** 页（含唯一 reply 页）都是另一部剧。
-现行为是**诚实的**（陌生剧行不进表、切集没落地/换剧当场具名、发现流已切走立刻停），但**收成薄本身没修好**。两个未知：① 抽屉第二页
-从未出现（`WheelDown` 后无同 group 新页，滚轮是否真作用抽屉列表未证实）；② `next_episode()` 用 ↓，而 ↓ 走本剧下一集还是账户自己的
-播放队列未知（屏上读不到集号计数器，只能靠 `@剧名` 判“还在不在本剧”，换剧被问屏拦下按名报 `screenMismatch`/`feedDrifted`）。下次
-真机据此判断改用剧集选择器还是每集重点卡片——**修它需人眼盯播放器迭代，不能靠猜**。
-
-**评论表列名**：红果独有的语义是“一部剧的第几集”，故输出补 `剧名` / `集序号` / `分集ID`
-（原名 `剧集ID` 装的是单集 `group_id`，名不副实已改）。`文章URL` **保留不动**：它是 8 个平台评论表
-共同的 join 键（爬虫、测试、下游分析 66 处引用），改名会让已采数据集的分析列全部找不到——
-剧集语义靠新增列表达，跨平台键不搬家。剧名与集序号都不在 payload 里，由 walker 注入
-（`hg_comment_rows(..., drama_title=, episode_index=)`），子回复页按 `group_id` 继承所属集；
-`reply/list` 路径里那一段 id 到底是分集还是父评论**没有可复现证据**（捕获文件按运行即删，本机已无残留），
-所以查不到分组时退回“点开展开时所站的那一集”——点击确实发生在这一集的抽屉里，不是猜的。
-`_visible_boards` **不截断**：实测切换器列出 11 个榜，若砍到 8 个就会静默跳过某部剧真正所在的那张榜
-（正是本走查不许有的失败）；成本控制放在“每榜最多三次滚动、命中即停”。
-
-**剧名从网页拿，vid 列表不从网页拿，导航走排行榜**：详情页 `<title>` 是“剧名_红果短剧…”
-（纯 HTTP 可读，取第一个 `_` 前段，用作排行榜卡片匹配名）；详情页主体载荷是客户端 XHR，
-SSR HTML 里没有（实测 `videoList` 只有推荐位 16 条，目标剧不在其中）——所以目标集由
-**播放器自己的流量**给出（每页响应自带 `group_id`），网页只负责剧名与 series_id。
-热榜页的数据倒是以 `mergeLoaderData` 补丁的形式流式嵌在 HTML 里（live 层选目标用它，免开浏览器；
-CDN 会轮换有/无补丁的两种文档变体，读它要带少量重试）。
-
-**播放器窗口属于用户**：节点发现已有一个不带本代理的播放器窗口在跑 → `playerBusy` **具名拒绝**
-并让用户关闭，绝不杀用户开的窗口；自己 Popen 的才在 `finally`/停止里 `taskkill /F /T`。
-UIA 侧（窗口类 `wailsWindow`）：导航按钮有名字（`🔍 找剧`…）、集计数器印 `1 / 9+`、
-方向键切集——已测；WebView2 的 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` 被 Wails 的代码级参数
-覆盖，**CDP 注入这条路是死的**（别再试）。`Mode.collects='external_app'`：这个模式不开任何
-Selenium 窗口，评论引擎按 `crawler_class(kind).browserless_comment_harness` 声明式分叉，
-harness 同时扮演 session（`crawl_hongguo`）与 crawler（`close`/墙标志恒 False）。
-U1 在评论引擎里按**属性**（`end_reason`）问，浏览器适配器恒 None、门对它们休眠。
-
-## A login page on the way through is not a wall (measured 2026-09-24)
-
-`Crawler.open()` judged the wall on the *first* reading after `driver.get`, which is the moment a
-single-page site is still mid-redirect. Weibo is the measured case (its own section documents the
-passport flash and the bounce back), and believing the flash cost more than a wrong word: latching
-`login_wall` stops the harvest loop, makes the run a 继续 candidate and tells the user to re-save a
-cookie that is fine — while the crawl underneath it was working.
-
-Now `open` → `_judge_arrival` re-reads the page and latches only a refusal that is **still there**.
-The cost is deliberately asymmetric: a clean landing is answered on the first reading
-(`test_a_healthy_landing_costs_one_reading` asserts exactly one, because a per-row detail crawl pays
-this once per row), and only a suspected wall pays the ~1.2 s window. `verdict()` is the judgement
-without the write, and `_record()` the write without the judgement — split because a re-read must be
-possible before the one-way flag exists.
-
-## A navigation that never committed is not a wall either (measured 2026-09-29)
-
-The same false-wall family, one layer earlier. Watching an xiaohongshu window on a cold launch, the
-user reported: the tab opened with an **empty address bar that kept spinning**, and a manual click into
-the address bar + Enter took him straight to the results — but left alone it spun forever. `driver.get`
-had not committed a document; `current_url` stayed on the browser's own `chrome://new-tab-page`, and
-`wall.classify` maps an internal page to `blocked`. So the search gate saw a 风控 that the site never
-issued and filed an empty grid behind a false refusal line — the mirror of the "found nothing" bug, this
-time blaming the site for a launch that did not fire.
-
-`Crawler.open` now re-issues the same `get` while the browser is still on one of its own pages
-(`wall.never_arrived`), up to `Crawler.NAV_RETRY` times, *before* judging anything: that is exactly what
-the manual Enter does. It is bounded and shape-specific — a committed page, a real wall, and the
-browser's own `chrome-error://` document are each judged once, so a session the site genuinely refuses
-is still named after the retries. The transient case gets a second chance; the real refusal keeps its
-word. Pinned by `test_the_parked_page_is_redriven_before_it_is_called_a_wall` (a first `get` parked on
-`chrome://`, a re-drive commits → no `risk_blocked`) and, on the other side, the existing
-`test_a_browser_that_never_left_its_own_page_is_a_named_refusal` (a browser that *stays* parked is still
-named) — the pair is what makes the retry a second chance rather than a wall-eraser.
-
-**The re-drive lives in one helper, `_drive_off_internal_page`, and the session seed uses it too.**
-An audit of the change caught that `_load_cookies` opens each host with a bare `driver.get` — and on a
-cold throwaway/fresh-profile launch that is the *first* navigation, the one that carries the login. A
-parked first `get` there made `_plant` offer every cookie to the `chrome://new-tab-page` document, whose
-origin matches nothing: all `add_cookie` raise, `applied=0`, and the crawl starts **anonymous** into a
-login wall — the same root cause, one layer earlier. It now reaches the host through the same helper, and
-if the browser is *still* parked after the retry it skips that host rather than plant into the void
-(pinned by `test_a_first_navigation_that_parks_is_redriven_so_the_cookies_land`). `NAV_RETRY` is measured
-to **1**, not 2: the user's own fix was a single Enter, and one re-drive keeps the pre-flight probe's
-page loads inside `COOKIE_PREFLIGHT_TIMEOUT` (the budget comments are re-derived from `NAV_RETRY + 1`).
-
-**Two things must NOT be re-driven, and both are guarded by the shape alone.** A *committed* page — even
-a slow one like douyin's `视频页` — is on an `http` address, so `never_arrived` is false and the loop
-breaks before it ever fires; the healthy path pays no extra address-bar read because the retry is gated on
-the navigation not settling *and* the page being internal. And the template warmer `warm_profile_dir`
-navigates to `about:blank` **on purpose** — that internal page is the goal, not a failed navigation — so it
-stays a bare `driver.get`; routing it through the re-drive would spin a deliberate parked tab and then
-classify it as a wall. The count that separates them is pinned by `BARE_NAVIGATIONS` (base.py drops to 2:
-the shared `_navigate`, and the warmer).
-
-A re-drive that fires logs one `crawl.redrive` line (the parked address it is leaving) and stops there; a
-machine whose every cold launch parks-and-recovers is a broken launch the console can now name, rather
-than a silent reload the user watches with no explanation.
+- **模式**：热榜（一个模式 + 一个榜选择，值是存储标识，`crawlers/platforms/hongguo/crawler.py::BOARDS` 是唯一名单）/
+  评论。`search`/`get_detail` 是按名拒绝（没有测量过这种模式）。四个榜匿名（一次性浏览器、无 Cookie 都给），所以
+  `needs_session=False`、面板没有 Cookie 行、节点没有账号字段；`live_crawler` 与微信同列免 Cookie 豁免。
+- **榜单在文档自带 loader 载荷里，且延迟到货**：`window._ROUTER_DATA.loaderData['rank_<slug>/page']`。站点当前把数据放在 `content`
+  本身（旧的 `content._data` 仍接受），读取器接受两种形状（`content._data !== undefined ? content._data : content`），thenable 仍
+  按“没到货”处理；用 `wait_for_first_content`（`state=='ready'`）轮询，**不固定 sleep**。一行 20 条自带
+  title/cover/href/playHref/heatText/statusTags/scoreText/favoriteText/likeText/tags/description/episodeVids/seriesId，任何字段都不
+  需要再点一次。`?page=1` 与裸 URL 同页，所以第一页不带参数。
+- **翻页与收尾**：跟站点自己的 `pagination.nextUrl`（那个 URL 就是游标）：为空 → `site_end`；`isSuccess is True` 但 `rankList`
+  为空 → `empty`；`nextUrl` 指回本页、或连续两页无新条目（续跑允许首屏一次不出新）→ `UNDER_TARGET`。`?page=6` 是“这一页
+  不存在”：只渲染 `rank_layout`、0 卡、导航已 settled，`wait_for_first_content` 的 `stalled` 判据是“loader 里没有 `/page` 键
+  **且** 导航已 settled”，触发即 `PageNotArrivedError` 具名拒绝（带 URL 与实际键），既不读成空表也不当成循环自述。
+- **列**：集数 = `episodeVids` 的条数（实测 222/69 与播放窗 25 个链接对不上，按屏数少一个数量级）；热度/收藏/点赞是站点四舍五入
+  的万标签，走 `parse_count`，没印数字的格子留空不填 0；分类保留站点原样数字标签（`205`），不是解析失败。
+- **评论只活在 App 协议里，本工具只旁听**：网页端没有评论区；签名覆盖请求体且绑时间戳（原样/换新鲜 ticket/换剧集三种重放都回
+  `Code 110001`），所以驱动第三方桌面播放器（Wails/Go）走我们自己的 mitmproxy，收割它合法取到的明文 JSON
+  （捕捉 `harvest.py`、驱动 `player_ui.py`、纯命名规则 `naming.py`）。播放器的 Go HTTP 客户端认 `HTTPS_PROXY`、不做证书
+  pinning；信息流每切一集且每 60 秒拉一次 `comment/list`（`count=90`、`comment_source=601`）。**用户自己开的播放器窗口**
+  `playerBusy` 按名拒绝，绝不杀；只有本节点的 Popen 子进程在 `finally`/停止时收掉。导航走**排行榜页**每张卡的 `▶ 播放`
+  （找剧页没有搜索框，是浏览流）；评论的确定性触发是动作栏 `💬 <数量>` 点击开抽屉（信息流的静默预取死于接口更新）。
+- **解析与守卫**：`data_list` 混着弹幕引导行（`comment_id` 小数字、`create_timestamp==0`、带 `expand.danmaku_activity_info`）——
+  丢弃并计数（`danmakuSkipped`），真评论 `comment_id` 是大 id 且是身份。未登录只有 `user_id`（评论者留空），登录后名字在
+  `base_info.user_name`。`expand.book_id` 是剧的 series_id；“这页属于哪部剧”**只问请求体**
+  `req_body.business_param.book_id`（响应体兜底），`book_id` 非 0 且不同 → 按名丢弃（`groupMismatch`/`feedDrifted` 并停该剧），
+  真行打 `"0"` 表示“未命名”不是“错剧”。web `series_id` ≠ client `book_id`（同剧两个 id 空间），参照只能是本页之外第一页自己的
+  book。`reply/list` 是**另一套信封**：`data.comment_list_info` + `data.reply_list[]`，元素体大写 `Common`、自有 `reply_id`、
+  父评论 `reply_to_comment_id`、父正文在 `data.comment`、**没有 `data_list`**——归一化回 `comment/list` 形状，两边共用一个行构造器。
+- **走查纪律**：展开按钮名字必须**同时**含 回复 与 展开/查看/更多（`is_expand_control`；裸 `回复` 打开输入框会抢走键盘，一集 698 条
+  只回家 20 行），每集点完所有可见展开项（不设点击数上限：按 (类型,名字) 记住已点，页面没有新项或播放器拒绝才收工），点完
+  `SendKeys {Esc}` 还焦点。一次静默不算完：分级重试（滚轮 ×2 → `Esc`+硬滚 ×5 → `{PageDown}` ×2，`_page_wait` 随 stall 增），
+  吃满 `_MAX_STALLS=3` 才判不完整并具名 `kept` 对 `total`；`site_end` 还要 `kept >= total`，不足即 `UNDER_TARGET`；harness 另报
+  `shortfall`（本轮站点计数了但没留下的行），因为回复行不在任何一集印的总数里。UIA 树不醒是 `TreeCold`（≠“搜不到剧”），
+  先 `wait_content(120)` 再试，仍冷按名跳过、记 `skipped_targets`，已采行保留。树冷中途复发同样 `TreeCold`，绝不比消息文案。
+  `_click` 只在**严格落在播放器窗口矩形内**时点（防打到任务栏/用户桌面）；合成输入前先 `_activate`
+  （`BringWindowToTop`+`SetForegroundWindow`），因为滚轮/键盘只作用于前台窗口。`Invoke`/`DoDefaultAction` 实测打不动这个
+  Wails+WebView2 SPA，所以驱动方式是坐标点击，安全靠窗口边界守卫。**WebView2 CDP 是死路**（启动参数被 Wails 覆盖），
+  别再试。`_visible_boards` 不截断（切换器列 11 个榜，砍到 8 个会静默跳过目标所在榜），成本控制在“每榜最多三次滚动、命中即停”。
+- **屏幕先问再收行**：`PlayerUI.screen_drama_title` 读头部 `@剧名`（`@` 前缀、一次 dump 恰好一个），进剧后与每次 `↓` 后确认
+  （`_confirm_position`）；`N / M` 集计数器只在视频页存在、抽屉一开就消失，拿 `第N集` 当闸门会误杀正常剧；`+` 表示“至少这么多”。
+  两次 PROCEED 偏置规则：单次读到陌生剧名再问一次；剧名按**双向前缀、不限长度**匹配。读不到=没确认，下面的流量门照旧。
+  `next_episode()` 没落地要计入未完成（`_count_unfinished`），因为没走到的集数站点不报总数。
+- **列名**：`剧名` / `集序号` / `分集ID`（原名 `剧集ID` 装的是单集 `group_id`，名不副实已改）；`文章URL` **保留不动**——它是
+  8 张评论表共同的 join 键（66 处引用），改名会让已采数据集的分析列全部找不到。剧名与集序号不在 payload 里，由 walker 注入。
+- **两套榜单排序**：网页榜与客户端榜不同，所以评论模式也接受纯剧名（`Field.accepts_names` 唯一声明，面板检查、`engine/workflow`
+  校验与评论路由共读）；名喂的行 `文章URL` **留空**（没开页面、没编链接），错剧守卫用本页 first-seen 非 0 `book_id` 作参照；
+  榜名不硬编码：`_board_labels` 开“▾”读实际列出的榜（`_FALLBACK_BOARDS` 兜底），`_pick_board` 先看是否已在屏上。
 
 ## 中国知网（CNKI）
 
-**新设备先撞滑块，不是检索结果（measured 2026-10-30）。** 用本项目自己的 `browser.launch` 分别以无头与可见窗口打开
-`https://kns.cnki.net/kns8s/search`，两次都落到 `https://kns.cnki.net/verify/home?captchaType=blockPuzzle&ident=…`，
-标题与正文都是“安全验证”，DOM 里没有搜索框/结果表。`wall.classify` 已把“安全验证”判为 `blocked`（风控），所以爬虫
-按名拒绝而不是交空表。结论：**这条路必须走 Profile/Cookie**——在 Cookie 面板的登录窗口里完成一次滑块并保存，之后同一设备
-才有结果页。**复测（同日）**：用完滑块并登录的那个持久化 profile 再开一次，检索页直接可用（`captcha=False`、`search=True`）；
-导出菜单的处理器确实先查 `islogin()`，未登录不导出，登录后的同一 profile 导出成功——所以“保存一次即可”这一点成立，
-但 Profile 被删/换设备仍会重新触发滑块。
+- **入口是 profile/Cookie，不是搜索**：新设备用本项目浏览器打开 `kns.cnki.net/kns8s/search` 会落到
+  `verify/home?captchaType=blockPuzzle`（“安全验证”），`wall.classify` 判 `blocked`，爬虫按名拒绝而不交空表。在 Cookie 面板登录窗口
+  完成一次滑块并保存后，同一持久 profile 检索页直接可用（导出菜单先查 `islogin()`）。
+- **检索与选择**：搜索页 `input.search-input` + `input.search-btn`（`type=button`，需 JS `.click()`）；结果表
+  `.result-table-list tbody tr`，复选框 `input.cbItem`（`value` 是加密导出键），总数 `.pagerTitleCell`，页码 `.countPageMark`，
+  下一页是 `.pages a` 里文字为 `下一页` 的那个。页首“全选”`#selectCheckAll1` **只勾当页**，站点把跨页选择累积在 localStorage
+  （`#selectCount` 显示累计）；单次上限 500（第 501 条被拒），所以**每页都点全选、最后导出一次**，到 500 前分批。
+- **导出链路**：`导出与分析 → 导出文献 → Refworks`（`a[exporttype="Refworks"]` 的父 `li`）打开
+  `dm8/manage/export.html`；屏幕列表只是**预览**（勾 40 条只渲染 20 个 `li`），要点 `a[title="导出题录文件"]` 下载
+  `CNKI-…txt`（CDP `Page.setDownloadBehavior` 落临时目录），不读预览。文件每字段之间夹一个空行，先去掉、按 `RT ` 切记录，再交给
+  `services.biblio.importer.parse_cnki`（与上传件同一个解析器）。**`POST /dm8/API/GetExport` 即使登录也回 `code=0 暂无数据`，
+  不要用。** Refworks 是项目支持格式里字段最全的（150 行 / 16 列，含摘要/关键词/DOI/文献类型/语言；NoteExpress/EndNote 15 列无
+  语言；BibTex 连摘要关键词都没有），且**三份都不含参考文献列表与被引次数**，所以共被引/文献耦合/引文突现仍拒绝。
+- **窗口与游标**：**必须用可见窗口**——同一登录 profile 无头跑检索正常，但导出页是“您无权查看此网页 / HTTP ERROR 403”，
+  爬虫按名报 `exportForbidden`，不等满 20 秒找按钮。游标**只记页码**（结果按站点默认相关度排，页内行号是猜的，猜错会静默跳行），
+  重复行靠台账按 `记录ID` 去重。**只有站点自己不再给 `下一页` 才算 `site_end`**；某批导出不足、解析为空、某页没画出行都是
+  `refused`/`UNDER_TARGET`，有洞时游标不前进。逐页选择/翻页暂停 1.2 s / 1.5 s。
 
-**检索页与结果页（真机 DOM，2026-10-30，用户完成滑块后实测）：**
+## Instagram / 只采 Cookie
 
-* 搜索页 `https://kns.cnki.net/kns8s/search`；输入框 `input.search-input`；按钮 `input.search-btn`（`type=button`，
-  需 JS `.click()`）。提交后 URL 带 `captchaId=…`，结果表 20 行。
-* 结果表 `.result-table-list tbody tr`；每行复选框 `input.cbItem`（`name=CookieName`），其 `value` 是加密导出键，
-  可能以 `!` 结尾；标题 `td.name a.fz14`；总数 `.pagerTitleCell`（“共找到 1,512 条结果”）；页码 `.countPageMark`
-  （“1/76”）；下一页是 `.pages a` 里文字为 `下一页` 的那个（实测 `#PageNext`，`data-curpage=2`）。
-* 页首“全选”是 `#selectCheckAll1`（`input name=selectCheckbox`），**只勾选当页**；站点把跨页选择累积在
-  localStorage（`FileNameSNZKPT` 逗号列表、`SEARCHINFONZKPT`、`filenameIndexNZKPT`），`#selectCount` 显示累计数。
-  站点自身的 `filenameClick` 在 `filenameCount()>=500` 时拒绝第 501 条并提示“最多选择 500 篇”——**单次选择上限 500**，
-  超过要分批（我们的爬虫在加页前就 flush，绝不让站点静默丢掉尾部）。
+- Instagram 是唯一的**只采 Cookie** 平台（`supports_crawl = False`；测量用的账号被封，真爬从未可能）。执行器按节点标签拒绝
+  (`run.notCrawlable`)，校验更早拒绝（它不在矩阵里，`engine.source_unknown_platform`）。它仍要 `domain` + `login_url`，
+  不进 `capabilities.registry.CAPABILITIES`，并要过 `TestCookiePanelParity` + `TestPlatformOrder`。
 
-**导出链路（两次真机实测，纠正了公开配方）：**
+## 跨平台契约
 
-* 公开配方（GitHub `cookjohn/cnki-skills`，2026-10）说“结果页复选框 value 直接 POST
-  `/dm8/API/GetExport`，`displaymode=RefWorks`”。实测**这个接口返回 `{"code":0,"msg":"暂无数据","data":null}`**：
-  未登录与登录后都一样，换 `Refworks`/`RefWorks`、加 `searchinfo`/`mapIndex` 也一样。**不要走这个接口。**
-* 站点自己的链路：点“导出与分析 → 导出文献 → Refworks”（`li.export ul.secondUl li` 中
-  `a[exporttype="Refworks"]` 的父 `li`）→ 打开新窗口
-  `https://kns.cnki.net/dm8/manage/export.html?language=CHS&uniplatform=NZKPT`。菜单处理器先查
-  `islogin()`，未登录直接弹登录框，所以 Profile/Cookie 是硬前提。
-* **导出页的屏幕列表只是预览**：实测勾选 40 条，`#result ul.literature-list li` 只渲染 20 条；
-  同一页的“导出题录文件”按钮（`a[title="导出题录文件"]`）下载的 `CNKI-<时间>.txt` 才是全量 40 条。
-  爬虫因此用 CDP `Page.setDownloadBehavior` 把下载落到临时目录、点该按钮、读文件，**不读预览列表**。
-* 下载文件的字段之间**每行一个空行**（`RT Journal Article\n\nSR 1\n\nA1 …`）。共享的
-  `services.biblio.importer.parse_cnki` 会把空行当记录边界，直接喂会只剩题名/作者；爬虫先去掉空行、按 `RT ` 切记录，
-  再交给同一个导入器（与上传 `samples/vendor/CNKI-20261025153417286-RefWorks.txt` 同一解析器）。
-* 实测（2026-10-30，目标 25）：第 1 页全选 20、第 2 页全选 20（累计 40）→ 一次导出下载 40 条 → 解析 40、
-  按目标写入 25；25 个 `记录ID` 互异，其中 23 条同时有年份/期刊/摘要（另 2 条是站点未给这些字段的记录）。
-* **为什么用 Refworks（同批 150 条三份真实导出件对比，measured 2026-10-30）：** RefWorks 150 行 / 16 列，
-  含摘要、关键词、DOI、文献类型、**语言**；NoteExpress 与 EndNote 各 150 行 / 15 列，摘要/关键词/DOI 有、
-  **语言无**；真机再导一份 BibTex（AIGC 前 20 条）只有 DOI/文献类型，**摘要与关键词都没有**。所以 RefWorks 是
-  项目支持的格式里字段最全的一个，也是爬虫固定使用的格式（`exporttype=Refworks`，下载后交给 `parse_cnki`）。
-  **三份都不含参考文献列表与被引次数**，所以共被引/文献耦合/引文突现无论选哪个格式都做不了；关键词/作者/机构
-  共现、聚类、突现、时区图不受影响。
-* 逐页选择/翻页的暂停取 1.2 s / 1.5 s；公开配方也警告太快会触发验证码。
-* **无头会在导出页被 403 拒绝（measured 2026-10-30）。** 同一个已登录 profile 用 `headless=True` 跑：检索页正常出 20 行，
-  但打开的 `manage/export.html` 是知网自己的错误页——“kns.cnki.net 拒绝了我们的连接请求 / 您无权查看此网页 /
-  HTTP ERROR 403”，页面里没有“导出题录文件”。可见窗口的同一 profile 正常下载 40 条。**所以 CNKI 采集要用窗口模式**
-  （工作流 `headless: false`）；爬虫把这种页面按名报成 `exportForbidden`，不再等满 20 秒才说找不到按钮。
+- **Cookie 采集 ≠ 爬取能力**：`CookieManager.PLATFORMS`（8）是能登录谁，`crawlers.is_crawlable()`（8：知乎、微博、小红书、
+  微信、B 站、抖音、YouTube、X）是谁有爬虫。采到的 Cookie 按平台过滤（`cookie_flow.retain_for_platform`），因为登录绕经
+  Google/Facebook；绝不把 YouTube 放宽到 `.google.com`（那是 Gmail 和 Drive）。植入只在有 Cookie 需要的主机停一次（多一个
+  主机就是一次真实页面加载）。
+- **运行前 Cookie 预检**：开一次平台自己的 `login_url`，回答“这份会话还认不认”。必须与 验证 Cookie 用同一套选择
+  （`headless=False`、`for_login=True`），否则面板按钮与运行前门会对同一平台给出不同答案。成本约 4–5 s/平台，所以
+  `COOKIE_PREFLIGHT_TTL=300`、`MAX_PARALLEL=4`、外层 `TIMEOUT=45`。被占用的 profile 不等待（`is_busy()` 在门口答“无法核对”）。
+  **“没有 Cookie 文件”不等于“没有会话”**：profile 只导入一次且不再重种，所以任一来源存在就探测，只有都不存在才答阻塞的
+  `nocookie`。
+- **浏览器选项**：`page_load_strategy='eager'`，默认拦图片，只有类声明 `needs_images` 才开（爬虫读文本与属性，不读像素）。
+  页面可见的自动化面在每个浏览器上都遮：`crawlers/core/browser.py::apply_stealth` 只删 chromedriver 注入的 `cdc_` 全局，
+  不重定义 webdriver/languages，也不伪造 `window.chrome.runtime`（正常页本来就是 undefined）。无头伪装
+  （`disguise_headless`：去 Headless 的 UA + 用运行时读到的可见窗口真实值回填 screen/outer/inner/dpr）与可见窗口在 20 项指纹上
+  逐项相等。三道上限不可越：CDP 附加本身可被感知；`addScriptToEvaluateOnNewDocument` 只到本 driver 打开的 tab（站点弹窗里的
+  Google/Apple SSO 到不了）；全新未受信 profile 与 Apple 设备证明做不到。所以可靠登录路线仍是 X 原生邮箱/密码或 Cookie 导入。
+- **profile 会记住会话偏好**：一次抓取后 `Preferences` 可能留着 `images=2`，于是登录窗口没有二维码可扫；`content_prefs` 每次
+  会话都写 1（允许）或 2（封锁），从不什么都不写。任何请人读的窗口（取 Cookie、验证 Cookie）都是面向人的窗口。
+- **空 profile 首跑就写像登录的文件**（`Cookies`/`Login Data`/`History`/`Preferences` 全是空 store），所以“干净”由
+  `sessions/profiles.py::_SESSION_TABLES` 的行数回答，且要走进 `Default/Network/Cookies`；读不开的非空 store 按“有材料”处理。
+  同目录同时开两次是崩溃，所以播种只在 `os.makedirs(exist_ok=False)` 成功的那一支。
+- **不拦抖音图片**（拦与不拦截图一致，早先“拦图毁网格”是遮罩的账）；**不拦视频**——`Page.setBlockedURLs` 在 Chrome 148 不存在，
+  `Network.setBlockedURLs` 有效但没有收益（七个平台 A/B 里拦截组等或更慢，六个平台抓取路径根本不下载媒体），唯一诚实的理由是
+  计费流量（抖音每视频约 0.6 MB）。
+- **采集成本是可测属性**：`Crawler.requests` 按顺序记每一次导航与页内 fetch，`open()` 在问 driver **之前**记 URL（超时的导航
+  也算到过站点）。承诺“每页一次请求”的模式要在台账上钉住，不能只看表。
 
-**游标只记页码**：结果顺序按站点默认相关度排，续跑从存储的页码重开，该页从头重走，重复行靠台账按 `记录ID` 去重——页内行号是"我们自己的猜测"，
-猜错会静默跳过一行，所以不记。**只有站点自己不再给 `下一页` 才算 `site_end`**；某批导出返回不足、解析为空、或某页没画出行，
-都记为 `refused`/`UNDER_TARGET`，绝不把短表许可成“站点只有这么多”；有洞时游标不前进，让“继续”重取该批。
+## 各模式在屏幕上的行为
 
-## Cookie capture vs crawling
+数据路径：**(a)** 导航并读 DOM · **(d)** 滚动该页 · **(b)** 载入一页后页内 `fetch` · **(c)** 纯 HTTP。
 
-`CookieManager.PLATFORMS` (8) is who the panel can log in; `crawlers.is_crawlable()` (8: zhihu, weibo,
-xiaohongshu, wechat, bilibili, douyin, youtube, twitter) is who has a crawler. **Instagram is the one
-capture-only platform** (`instagram.py` registers it with `supports_crawl = False`; the account used for
-the measurement was banned, so no real crawl was ever possible), so `execute_source_node` refuses it
-by node label (`run.notCrawlable`) and validation refuses it earlier still
-(`engine.source_unknown_platform`, because it is not in the matrix at all) — never let a not-yet-built
-platform fall through to an empty table, which reads as "this keyword found nothing". A capture-only
-platform must still carry `domain` + `login_url` (the panel needs both), stay OUT of
-`capabilities.registry.CAPABILITIES` (that tuple *is* the Data Source's platform list now — the browser
-renders the select from `/api/capabilities`, so there is no JS list to keep in step), and clear the
-parity guards in `test_frontend_contract.py::TestCookiePanelParity` plus
-`test_crawl_capabilities.py::TestPlatformOrder`.
-
-**Captured cookies are filtered to their own platform** (`cookie_flow.retain_for_platform`), because a
-login detours through an identity provider (Google behind YouTube, Facebook behind Instagram) and
-`driver.get_cookies()` reads only the *current* page: the worker therefore pulls the browser back to
-the platform's own `login_url` before capturing, and anything still foreign when a paste comes in is
-dropped. Never widen this to `.google.com` for YouTube — those cookies open Gmail and Drive.
-
-**Cookie planting visits a host only when a cookie needs it** (`base.Crawler._load_cookies` keeps the
-entries the current host rejected and stops when nothing is left): every extra host is a real page
-load, measured at ~2.3 s on douyin — and one of the three was a pure redirect.
-
-## Browser options that were measured
-
-The driver runs with `page_load_strategy='eager'` and image loading blocked unless a class sets
-`needs_images = True`, because a crawler reads text and attributes, never pixels.
-
-**The page-visible automation surface is masked on every browser (measured 2026-09-29, #18).** The launch
-long ago made `navigator.webdriver` false (`--disable-blink-features=AutomationControlled`) and dropped the
-`--enable-automation` banner — the banner is proven against `chrome://version` in `test_driver_surface.py`,
-webdriver against a real loaded page there. But X's cookie-capture window still hit “意外错误” on **both**
-Sign in with Google and Sign in with Apple, while the user's everyday Chrome passed. A modern detector
-(Google BotGuard) reads more than webdriver: the chromedriver-injected bare `window.cdc_…` globals — present
-on a *driven visible* window too, which is why #148's headless-vs-desktop comparison never caught them. The
-repo had *enumerated* them in the throwaway probe `backend/test_automation_surface.py` but never *masked*
-them or tested them. `crawlers/core/browser.py::apply_stealth` now registers a new-document script
-(`_AUTOMATION_STEALTH_JS`) that
-**deletes those globals only**, on every browser. It deliberately does NOT redefine webdriver or languages,
-and does NOT fabricate `window.chrome.runtime`: measured (`scratchpad/automation_surface.json`,
-`headless_fingerprint.json`) a normal driven page's `chrome.runtime` is already `undefined` (it exists only
-in extension contexts), so inventing `{}` is a NEW mismatch and could make a page that gates an extension
-bridge on `chrome.runtime` enter that branch and throw. The device test
-`test_the_page_visible_automation_surface_is_masked` reads the surface on real Chrome (webdriver false, no
-`cdc_` globals, languages clean, no `;q`) with a **positive control**
-(`crawlers/core/browser.py::apply_stealth` disabled →
-the globals are visible, so the empty list is the mask's doing, not a vacuous page) and a blink-flag control
-(webdriver reads `true`) — measured, not assumed.
-
-Three ceilings this masking **cannot** cross, so the next reader does not re-assume stealth is a guaranteed
-unlock: (1) the **CDP-attached debugger** — Selenium drives Chrome over CDP and a detector can sense the
-`Runtime.enable` handshake; JS masking does not remove that, only `undetected-chromedriver` (deferred
-follow-up) meaningfully reduces it. (2) **per-target scope** — `addScriptToEvaluateOnNewDocument` reaches the
-tab this driver launched, NOT a popup a site opens on click; Google/Apple SSO opens in exactly such a popup,
-so this mask does not reach the page that actually errors. (3) a **brand-new untrusted profile** and
-**Apple's device attestation** — the login browser opens a freshly-cloned pristine profile (no history, no
-prior Google trust), and Sign in with Apple needs attestation desktop Chrome cannot provide. So the mask is
-anti-bot hygiene for the launched page (and helps a driven browser look less automated to any site's page
-bot-check), **not** a promised X-login fix; the reliable routes stay **X-native email/password login** (no
-IdP hop) or a **cookie import** (log in in the user's own Chrome, bring cookies over). This supersedes the
-earlier standing note ("no UA forgery, no cdc_ clearing") — the cdc_ deletion is now the one thing that IS
-done; see below.
-
-**A session preference written into a persistent profile stays there (measured 2026-09-24).** After one
-weibo crawl, `data/chrome_profile/weibo/Default/Preferences` held
-`profile.managed_default_content_settings = {"images": 2}` — and 4 of the 7 platform directories on this
-machine carried it. That is what made 登录窗口 unusable: the Cookie panel's login browser runs on the
-*same* profile a crawl used (`use_profile` follows the setting), and the fix that shipped first only
-*omitted* the blocker for that window — omission is not an answer when the device already remembers a
-"no", so the page opened with no QR code to scan and the user could not refresh a dead cookie. Two
-consequences to keep: `crawlers/core/browser.py::content_prefs` writes 1 (允许) or 2 (封锁) for **every** session, never nothing;
-and any window a human is asked to read is a human-facing window — 取 Cookie and 验证 Cookie both, since
-an expired cookie sends the probe to the login page and the panel then tells the user to sign in there.
-`tests/integration/test_browser_profile_launch.py` measures the whole round trip, including the claim
-above about the file on disk, so if Chrome ever stops persisting it the test says so by name.
-
-**A blank first run of Chrome already writes the files that look like a login (measured 2026-09-28,
-`tests/integration/test_profile_template.py`).** An account directory that has never opened a page still
-gets `Cookies`, `Login Data`, `History`, `Web Data`, `Favicons` and `Preferences` — every one of them an
-empty store. The template check therefore reads **row counts, not file names** (`sessions/profiles.py::
-_SESSION_TABLES` + `_store_row_count`), which is the only question that separates Chrome's own scaffolding
-from somebody's session; a name-based verdict would have called every template this program can build
-dirty and seeded nothing. Two further measured consequences: the walk has to go *into* the tree (the cookie
-store is `Default/Network/Cookies`, not a top-level entry), and an unreadable non-empty store is reported as
-material rather than passed, because "I could not open it" is not evidence of an empty profile. The device
-case also asserts **how many stores it looked at**, so a clean answer that came from an empty directory
-cannot be mistaken for a checked one.
-
-**Opening a profile directory twice at once is the crash, so seeding is a first-creation-only act.**
-`profile_dir_for` calls `os.makedirs(exist_ok=False)` and seeds only the branch that just created the
-directory: `exist_ok=True` cannot tell "I made this" from "someone else's browser is already writing here",
-and re-copying into a live device would overwrite the session that device earned.
-
-**Do not block image loading on douyin** (measured the wrong way first): the class sets no
-`needs_images`, the base default blocks images for speed, and that is fine for every other platform —
-but re-tested with the dialog handled, images-on vs images-off produced identical screens (22-24 vs
-23-24 cards), so the earlier "blocking images breaks the grid" reading was the mask all along.
-`Crawler.needs_images` exists for the case where a site really does need it; record the measurement
-next to the flag.
-
-**Blocking video was measured and rejected — do not add it.** Images are blocked by default
-(`profile.managed_default_content_settings.images=2`), which is a real saving. Video has no such
-preference, and the CDP entry point people reach for, `Page.setBlockedURLs`, **does not exist on
-Chrome 148** (`unknown command`); the working one is `Network.setBlockedURLs`, verified to bite (a
-player's `readyState` falls 4 → 0). It still buys nothing: our crawls never wait for a player
-(`page_load_strategy='eager'`, we read DOM/JSON), so across all seven crawlable platforms A/B'd side by
-side the blocked arm was equal-or-slower (douyin 22.7 s → 26.5 s, YouTube 9.5 → 11.9, X 19.3 → 20.5;
-zhihu/weibo/bilibili/xiaohongshu flat) and **six of the seven download no media on the crawl path at
-all** (`mediaBytes = 0`). Only douyin's per-video page touches a player, and there the page weighs
-25.6 MB of which ~2% is media — the top resources are the site's own JS bundles (`player-4.js`,
-`client-entry`), which a crawl needs. The one honest reason to ask again is metered traffic rather
-than time: blocking saved ~0.6 MB per douyin video row and 0 bytes elsewhere. Probe:
-`backend/test_media_ab.py` (payload `scratchpad/media_ab.json`).
-
-## Crawl cost is a testable property
-
-`Crawler.requests` counts every navigation and every in-page fetch **in order**. `open()` records the
-URL *before* asking the driver, so a navigation that timed out still counts — it reached the site. Any
-mode that promises "one request per page" must be pinned by asserting on that ledger
-(`tests/live_site/test_live_bilibili_hot.py` asserts no `web-interface/view` call at all), because a
-table alone cannot tell a batched walk from a per-row one.
-
-## 微博的墙是间歇风控，不是发车太近（measured 2026-09-24）
-
-`live_quick` 国内组两次把微博搜索判红（0 行 + `登录墙`），而**同一条用例单独跑 5.7 秒就绿**。排查依次否掉：
-**不是 Cookie**（`cookie_preflight.probe(fresh=True)` 对 weibo/zhihu 都回 `valid`，但这只回答"会话能不能打开内容页"，
-答不了搜索端点会不会被拒）；**不是无头**（带时间窗的搜索 URL 无头有头**第一帧**就有卡：微博 9 张 `.card-wrap`、
-知乎 t=1 有 20 张 `.SearchResult-Card`）；**第一个归因（"排队只去重叠加、没去掉连发"）是错的**——据此真给
-`runtime/gate.py` 加过一段“释放时上冷却”，随后被证伪并整体回退。证伪实验各 4~6 次、真实 profile/账号：同一浏览器
-连发两次 + 关掉立刻再开 + 等 `WALL_RETRY_BACKOFF`(45 s) 开第三个 → **6/6 返回数据**；时间窗 URL 与普通 URL 交替 4 轮
-→ **8/8 返回**（tier 用的 `2026-09-17-00→01` 窗给了 6 张，第 4 轮只 1 张也是数据）。当天累计 14 次采集，无一被拒。
-
-**结论**：那堵墙与发车间隔无关，是站点间歇风控（单次拒绝率一到两成），所以 `runtime/gate.py` **不加冷却**——为一条
-测不存在的规律让串行画布多等是给成本找假理由。（2026-09-25 的并行深翻页观察同向：撞的仍是"账号短时连发"，只是
-触发点在各自 crawl 的**翻页请求互相重叠**、不在**起步**上——起步间隔正是本节证明没用的那个变量。）真机层应对只
-两条、都不降断言：撞墙重试 2 次→**3 次**，每次等产品的 `Config.WALL_RETRY_BACKOFF`（以前测试层自己发明的 5 秒在产品
-路径里根本不存在）；单次 ~15% 拒绝率下两次都拒约 2%、三次都拒才说明采集器真坏。知乎那次 0 行是另一件事（页面外壳
-空着落到滚动循环，代码写明是无头风控的合法结局；重跑即过 20 张卡 → 当日节流，非解析器坏）。
-
-**把 `runtime/gate.py::hold` 搬进 `live_crawler` fixture 的同一批改动，也让真机层自己撞死过一次**（measured 2026-09-24）。
-三条用例在同一条测试里向同一平台要**第二个**浏览器（`test_live_zhihu_author.py` 先搜取作者 token 再开作者页、
-`test_live_bilibili_hot.py` 两张榜各一 crawler、`test_live_cookie_expiry.py` 第一次到墙换新 crawler 续跑），而第一把锁要
-等 fixture 结束才释放；锁不可重入，第二次 `hold` 原地等 `Config.PLATFORM_GATE_TIMEOUT` = **900 秒**（没浏览器、没输出、
-没一行字说明在等谁，看着就是"这条用例特别慢"）。判据：单跑 `test_live_zhihu_author.py` 15 分钟无输出且 chromedriver
-不在进程表里（卡在拿锁不是卡在页面）。修法：fixture 向同一平台要第二个 crawler 前先把上一个关掉并交还这一轮（一次
-只可能有一个，正是产品自己的规则），由 `tests/unit/gates/test_test_tiers.py::TestLiveCrawlerFixture` 用"重复持锁即抛"
-的假锁钉住——不需浏览器，测的是脚手架自己。
-
-## What each mode actually does on screen (measured 2026-09-24)
-
-Why this section exists: the user ran `哔哩哔哩.json` in parallel + 窗口 mode with “本次不用 Profile”
-and saw **two** windows appear together (correct), but with “用 Profile” only **one** window at a time
-(also correct, but never explained). Separately, the 热榜 window opens the homepage and then does
-nothing visible while data arrives — the window demonstrates nothing at all. Both facts belong to the
-mode, not to the platform, so they are recorded per mode here and the rule lives in AGENTS.md
-("A visible window must be doing something visible").
-
-Data path classes: **(a)** navigates and reads the DOM · **(d)** scrolls that page · **(b)** loads one
-page then issues in-page `fetch` calls · **(c)** plain HTTP.
-
-| platform × mode | path | what the user sees |
-| --- | --- | --- |
-| bilibili 关键词 | (a)(b) | search page re-loaded per `page=`, then numbers arrive silently (one `view` fetch per row) |
-| bilibili **热榜/排行榜** | **(b)** | **the homepage, then nothing** — one navigation, `popular`/`ranking` fetched |
-| bilibili 作者 | (a)(d)(b) | a real scrolling space page |
-| bilibili 评论 | (b) | video page open and static (`/x/v2/reply/main` by cursor; there is no comment DOM) |
-| zhihu 搜索 / 作者 / 评论 | (a)(d) | scrolling feed / profile; comments click 展开 |
-| weibo 搜索 | (a)(d) | one search page per hourly window |
-| weibo 评论 | **(b)** | the homepage only |
-| xiaohongshu 搜索 / 评论 | (a)(d) | scrolling grid / scrolling comment panel |
-| douyin 搜索 / 作者 | (a)(d) | a page per row (never headless: 验证码 on every headless navigation) |
-| douyin 评论 | (a)(d) | scrolling route container |
-| youtube 搜索 / 作者 / 评论 | **(b)** | one page load, then innertube POSTs — nothing visible moves |
-| twitter/X 搜索 / 作者 / 评论 | (a)(d) | scrolling virtualized timeline (never headless) |
-| wechat 正文 | (a)(d) | each article page, scrolled |
-
-Consequences to honour when adding a mode:
-
-* A **(b)** mode has no human behaviour to show. Running it in 窗口 mode is a pure cost: a window the
-  user watches do nothing. The pre-run dialog must say so and offer headless — and the mode must
-  declare which class it is, because the frontend may not hold a second opinion about a crawl.
-* A mode where **both** paths exist (bilibili 关键词 reads DOM cards *and* fetches `view` per row) is
-  the only kind that can honestly offer "simulate a human" vs "just take the JSON". Where only one
-  implementation exists (bilibili 热榜 = API only), the choice must not be offered.
-* **(b) still needs the page.** The fetch runs inside the loaded document for same-origin, cookie and
-  risk-control reasons, so "headless" cannot mean "no browser" — it means "no window on your screen".
-
-Parallel + the same platform is serialized by the profile lock, not by the pool: the second worker
-blocks in `Crawler.__init__` → `acquire_profile()`, i.e. **before Chrome exists**, so only one window
-is ever visible at a time; `crawl.profile_wait` states the wait, and “本次不用 Profile” lifts the lock
-and gives one window per workflow (verified by the user).
-
-## 网络分区：海外平台要走外网；"混采必缺一半"已被实测否掉（用户实测 2026-09-24，2026-09-26 修正）
-
-**不挂 VPN 时 x.com / YouTube 根本打不开。** 这条仍然成立，也是界面上唯一值得问的一句：画布里出现
-海外平台，运行前问“外网开了吗”（`ask_overseas_network`，默认开；答"还没开"那次就不启动，因为空表
-会被读成"这个关键词什么都没搜到"）。这一问排在 Cookie 预检之前 —— 预检要按平台开浏览器，一次注定
-被取消的运行不该付那份钱。
-
-**被否掉的那半：“挂 VPN 时抖音回 502，所以一张画布不能同时含国内与海外”。** 2026-09-24 只观察过一次就被
-写成平台规律、还据此做了一个"列两边、建议拆两次"的弹窗；2026-09-26 用 `backend/test_douyin_region_probe.py`
-（只记 IP/行数/判定，绝不记 Cookie 值）拿同一份**国内签发的会话**从国内出口与一个海外出口（`134.195.101.194`）
-各跑，**3/3 全 `rows≥2 verdict=ok`、零登录墙零风控**。三条结论：**"会话绑 IP"不成立**（国内签发会话从海外
-出口照样交真行）；**"抖音只在国服应答"不成立**（至少该海外节点完全正常），故 502 降级为**特定出口/节点或
-时段的现象**、不再作任何分区依据（再见 502 先用探针读出口再猜）；于是**混采弹窗整个删掉**：`regionGroupsOf`
-→ `overseasPlatformsOf`（只回答"哪些平台要外网"），设置键 `warn_mixed_region` → `ask_overseas_network`，两套语言
-的三条解释文字一并删，`Capability.region` 注释改成真含义：**标的是内容与账号属于哪一边，不是哪条路能不能通**。
-
-留在代码里的两件事没变：分区仍是**数据**（`capabilities.registry.Capability.region` `cn`/`overseas` 由矩阵一处
-声明、随 `/api/capabilities` 发浏览器；`live_cn`/`live_os` 分组读它，`tests/unit/gates/test_test_tiers.py` 拿矩阵
-region 核对每条 live 用例的 marker，矩阵没说的平台按"不知道"处理：既不提醒也不拦）；提醒是**建议且可关**
-（真做分流路由的机器两边都通，页面分不出那种机器和"只是开着 VPN"）。顺带量到（与网络无关）：一次性浏览器
-里 **10 个视频页只渲染出计数条**（作者/发布时间都没出），被 identity 门槛丢掉不计行 —— throwaway 会话的
-hydration 明显比 profile 会话慢，另案处理。
-
-
-## 运行前 Cookie 预检（measured 2026-09-24）
-
-`cookie_preflight` answers “这份会话还认不认” before a run starts, by loading the platform's own
-`login_url` once. What was measured while building it:
-
-* **The first smoke check ran headless and it over-claimed.** With the zhihu profile reset that
-  morning, a *headless* probe of `www.zhihu.com` came back “被重定向到登录页” — which is a true fact
-  about that anonymous session but not necessarily about the user's. This file already records the
-  same trap for 验证 Cookie (this machine answers a headless content page differently, Zhihu in
-  particular), so the probe now uses the same two choices that worker does: `headless=False` and
-  `for_login=True`. Consequence: the panel's 验证 button and the pre-run gate can never disagree
-  about one platform, and a visible window per uncached platform is the price of the guarantee.
-* **Cost, measured:** one probe ≈ 4–5 s of real Chrome (the `live_site` tier runs three of them in
-  ~14 s). Hence `COOKIE_PREFLIGHT_TTL=300` (a parallel canvas and the 继续 behind it pay once),
-  `COOKIE_PREFLIGHT_MAX_PARALLEL=4` and the outer `COOKIE_PREFLIGHT_TIMEOUT=45` budget.
-* **A busy profile is not waited on.** The probe would otherwise block inside `Crawler.__init__` →
-  `acquire_profile()`, whose own timeout (`PROFILE_LOCK_TIMEOUT=900`) outlasts most crawls, so
-  `sessions/profiles.py::is_busy()` answers “无法核对” at the door instead.
-* **"No cookie file" is not "no session".** A profile imports the file **once** and is never
-  re-planted, so a used profile can hold a live login with no snapshot beside it — which is exactly
-  the state the new 删除已存 Cookie button leaves behind. The gate therefore probes whenever either
-  source exists, and only answers the blocking `nocookie` when neither does.
-
-## 真站层 2026-09-25：拒绝必须被命名，静默空表才是红（measured）
-
-删掉全部采集上限（ab0bb04）与错峰语义（ed007f0）后的第一轮 `live_site AND live_cn` 全量：
-8 红 / 33 绿（9 分 28 秒）。逐条单独复跑后定性如下——**没有一条是这两个提交弄坏的**：深翻页走到了
-pager 自报页底，排队交棒无恙。红条分三类：
-
-1. **同账号连发的间歇风控（只在批量出现，隔离即绿）**：bilibili 详情与 douyin 作者两条在批量里红、
-   单独跑绿。微博侧同一会话第 1 次搜索（windowed，交付 8 行）成功、第 2、3 次（expiry attempt-1、
-   visible）被弹回 passport——与 2026-09-24 那节“微博的墙是间歇风控”同形，也与 `weibo_windowed`
-   记录过的“第二次爆发拿到 passport 页”逐字吻合。
-2. **测试口径落后于产品契约（确定性红）**：`cookie_preflight` 渲染句的断言查的是裸 key `bilibili`
-   或“平台”二字，而 Phase C 之后产品按红线把 `{platform}` 槽答成**词**（“哔哩哔哩 的 Cookie 可用”）。
-   断言改为经 `i18n.platform_label` 解析期望值——不再是贴进来的副本。
-3. **真产品缺陷两枚（都在 xhs 的“静默空表”上）**：`backend/test_xhs_visible_gate.py` 一次可见
-   探针量到底——被风控的小红书有两种形态都会**不点名地**交回空表：(a) 风控页把搜索 URL 原地留着、
-   只渲染“安全验证”，`classify` 答 `blocked`，但 `xiaohongshu.py` 的收口闸只测
-   `check_login_wall`（即 `verdict == 'login'`），`risk_blocked` 已置、循环却继续滚 0 卡网格；
-   (b) 更糟：被限流的可见窗口 `driver.get` 根本没换文档，地址栏停在 `chrome://new-tab-page/`
-   （body 是“新标签页/应用商店/自定义 Chrome”），分类器看不到任何墙词判 `ok`。站点无法重定向进
-   内部协议页——停在这里**本身就是导航失败**。已修两处：搜索闸改判 `check_intercept(url) != 'ok'`
-   （与 zhihu/douyin 的 `login_wall or risk_blocked` 同规则）；`engine/wall.classify` 最先回答
-   `never_arrived`（`chrome://`/`about:` 等自家协议页 = blocked）。fast 层三个反向测试钉住
-   （风控页早退且不写 page_timeout；stuck 窗口点名拒绝；空 URL 仍按死会话规则答 ok，不误伤）。
-
-由此固化的层契约（AGENTS.md“live_site 重试”条的展开）：**被点名（login 或 blocked）的空是站点的
-诚实答案，用例断言点名本身即绿；没点名的空是伪成功，永远红**。`live_search` 现在通过 `_Rows`
-（list 子类）把 `login_wall`/`risk_blocked` 两面旗随结果带回，调用方才有资格做这个区分。微博可见
-窗口用例额外要求“同会话的 headless 采集确实交付过行”才允许接受拒绝——两头都空是死会话，该红，
-并直接告诉用户去重存 Cookie。
-
-配套口径修正（同轮）：被墙拦住的采集把 `done:0` 写进游标是合法记账（游标记位置不记内容），expiry
-用例的拒绝分支只许断言“行表为空且 done==0”，不得断言游标缺席；bilibili 详情与 weibo expiry 各获得
-一次“换新浏览器、隔 `WALL_RETRY_BACKOFF` 再问”的层内容忍，与 `live_search` 的既有政策同构。
-
-## 窗口模式的真实语义：评论可按平台无头、chip 说真话（measured 2026-09-25，#102）
-
-`execute_comment_node` 过去对**所有**平台写死 `headless=False`，声称“评论一律开可见窗口”。
-`backend/test_headless_comments.py`（一次性探针，国内网络，真实 Cookie）量出这不是事实：
-
-* **微博评论**：无头浏览器先搜到 5 行、取一条 评论数>5 的推文，`CommentSession.crawl_weibo(limit=15)`
-  → `status=ok`、15 行、15 个 (作者,内容) 全不同；爬虫两面旗都没立（会话是活的）。
-* **B 站评论**：对分层测试用的那条已知视频 `crawl_bilibili(limit=40)` → `status=ok`、40 行、40 个去重键，
-  地址栏停在视频页（`?vd_source=` 说明页面真加载了，不是被弹走）。
-
-也就是说这两家的评论区是**页内 fetch**（AGENTS 分类表的 (b) 类），开着的窗口只会停在首页什么都不动。
-据此把“怎么采集”从散文变成代码：
-
-* `Mode.collects ∈ {fetch, dom_read, dom_scroll, page_per_row}`，每个模式的值按 `docs` 分类表 + 上面实测
-  逐条标注；`capabilities.shows_nothing(platform, mode)` 是唯一答复“可见窗口有没有东西可看”。
-* 评论建浏览器改判 `_comment_headless(run_headless, kind)` = 用户选择 ∧ `shows_nothing` ∧ ¬`never_headless`；
-  于是微博/B站/YouTube 评论尊重无头，知乎/小红书（真滚动）与抖音/X（`never_headless`）仍强制可见窗口。
-* 被强制开窗口时置 `runs.forced_visible=1`（`start_run` 的 ON CONFLICT 会把它复位，续跑不背旧值），
-  面板 chip 于是能读真话：请求无头却开过窗口 → “无头→窗口”，不再顶着“无头”骗人。
-* 面板文案按 `collects` 分流：fetch 评论模式用新键 `settings.commentFetchHint`（不再声称开窗口），
-  滚动/验证码平台仍用 `settings.commentHint`；fetch 源模式（B 站热榜、YouTube 搜索/作者）用
-  `settings.fetchQuietNote`。`tests/unit/crawlers/test_crawl_capabilities.py` 钉住“note 只说它真会做的事”。
-
-## 那条“受自动测试软件的控制”横幅：excludeSwitches 认的是开关名（measured 2026-09-25，#129）
-
-用户问：驱动开出来的 Chrome 都写着"正受到自动测试软件的控制"，平台会不会识别，我们要不要伪装。
-
-量过的答案分三层：
-
-* **横幅本身页面读不到**——它是浏览器自己的外壳（窗口标题条上那一条），不在 DOM 里；
-  页面能读到的自动化痕迹是 `navigator.webdriver`、`cdc_adoQpoasnfa76pfcZLmcfl_*` 全局键、
-  以及 HeadlessChrome 的 UA。本项目 `navigator.webdriver` 已经是 False（`--disable-blink-features=
-  AutomationControlled` 的效果）。
-* **横幅的直接原因是 chromedriver 自己往 Chrome 命令行加的 `--enable-automation`**，去掉它的
-  正规手段是 `excludeSwitches`——但它匹配的是**生成的开关名**，写错名字不会报错、只是什么都不排除。
-  本项目从写下那天起就是 `'automation'`（真名 `enable-automation`），所以每个可见窗口都带着横幅。
-* **伪装不是决定性的**：同一晚、同一台机器、同一套 `cdc_*` 表面上，一个会话被挡回登录墙而
-  另一个把 51 条数据交了回来；抖音那条风控滑块也在用户手工通过后立刻可爬。因此这次只修拼写，
-  不做 UA 伪造、不清 `cdc_*`、不碰验证码——那是把"我们可能被识别"换成"我们确定在违反条款"。
-  **（2026-09-29 修正，#18：本条仍坚持不做 UA 伪造、不碰验证码；但“不清 `cdc_*`”已被推翻——现在删掉
-  chromedriver 注入的 `cdc_` 全局（见上“自动化遮罩”节）。删注入的全局属去自动化痕迹、与既有的
-  webdriver 掩码同类，不是伪造身份、不违反条款；且“伪装不是决定性的”这句照旧成立——见下三道上限。）**
-
-浏览器侧的自证在 `tests/integration/test_driver_surface.py`：读 `chrome://version` 的命令行
-（标签是本地化的，开关串不是），一次断言 `--enable-automation` **不在**，另一次把
-`excludeSwitches` 摘掉重开、断言它**在**——没有后者，前一句只是"这页什么都没读到"。
-
-## 热榜：问过五个平台、上线四块、证无一块（measured 2026-09-25）
-
-#83 的四个平台逐个问过真站，没有一个是照着"看起来合理的 URL"写的。探针都在
-`backend/test_*_hot*.py`（一次性脚本，gitignore），载荷在 `scratchpad/*_hot*.json`。
-
-### 微博热搜：已上线，且是唯一不需要登录态的采集
-
-`https://weibo.com/ajax/side/hotSearch`，在已加载的 `weibo.com` 文档里用
-`credentials:'include'` 读（`pagefetch.fetch_json`）。实测：
-
-* `ok:1`，榜单在 `data.realtime`，**51–52 行**，每行带 `word` / `word_scheme` / `note` /
-  `num` / `realpos` / `rank` / `topic_flag` / `label_name` / `emoticon`；
-* `num` 是**精确整数**（1003085），不是 DOM 表上的 万 标签 —— 这是选 JSON 而不选
-  `s.weibo.com/top/summary` 的第二个理由；
-* 连打两次计数一致，所以"一次回答就是整块榜"不是猜的；
-* **三种会话都答**：插 Cookie 的一次性浏览器、平台 profile、**完全无 Cookie**（匿名会话
-  同样 `ok:1`）。这条决定了矩阵新增的 `Mode.needs_session`：Cookie 预检是按**平台**问的，
-  如果只看平台，一个只挂“微博热搜”节点的画布会因为没 Cookie 被拒 —— 而站点本来就把榜单
-  给了匿名浏览器。所以 `('weibo','hot')` 是 `needs_session=False`（2026-09-28 之后另一个是
-  `('wechat','posts')`，理由**不同**：热搜是“有登录态但站点也答匿名”，微信是“根本没有会话可要”——
-  它从来不在 `CookieManager.PLATFORMS` 里、也没有 `login_url`，把它算成需要 Cookie 会让一个
-  永远不可能有 Cookie 的采集被闸门挡死），
-  `test_only_the_measured_board_answers_an_anonymous_browser` 钉住"恰好这两个"，
-  多一个就是需要重新测量的主张；
-* 备用路径（已实测、未使用）：`https://s.weibo.com/top/summary` 的 DOM 表在三种会话下也
-  都出表（每行 3 格：序号 / 关键词 / 热度，行链是 `/weibo?q=<词>&t=31&band_rank=N`）。
-  没用它是因为它把热度写成 万 标签，并且要先判"路过型 passport 闪现"。
-* **一条热搜不一定是 #话题#**：真站跑出来 `word_scheme == word`（例：`让家更有AI`）的行
-  确实存在。所以 话题 列存的是站点自己的串，链接按那一串去搜索 ——
-  把它统一改写成 `#…#` 会搜出一个榜单上并不存在的话题。
-  （这条是**真站测试替我抓到的**：断言"必须以 # 开头"在第一轮 live_cn 就红了。）
-
-### 知乎评论区：分页靠**面板自己的滚动容器**，且存在“评论的评论”（measured 2026-09-28，live 测试抓到）
-
-两条探针各跑一次（`backend/test_zhihu_comment_dom.py`、`backend/test_zhihu_comment_structure.py`，
-产物在 `scratchpad/zhihu_comment_structure.json`）。起因是真机 D 组自己的流水：
-`scratchpad/live_audit/20260927-223207/D1.console.txt` 写着面板按钮 **261 条评论**、节点只交回 **12 条**
-（另一篇 44 → 10），也就是说评论模式长期只拿首屏。
-
-| 观测（一条 261 条的面板 / 一条 193 条的面板） | A | B |
+| 平台 × 模式 | 路径 | 用户看到 |
 |---|---|---|
-| 点开面板后 DOM 里的 `.CommentContent` | 12 | 10 |
-| 找含“更多”的按钮 | **不存在**（0 个） | 不存在 |
-| 滚**窗口** | 12 → 12（无效） | 10 → 10 |
-| 滚**面板自己的容器**（`css-34podr`，scrollHeight 1475→4076 / 1302→12733） | → 36 | → **109** |
-| 再点“展开其中 N 条回复”（子评论在这后面） | → 41（2 个开合器） | → **138**（5 个） |
-
-结论，按可信度排：
-
-1. **分页不是按钮**：知乎评论面板没有“更多”控件，列表由**容器内滚动**懒加载。旧代码每轮去找
-   文本含“更多”的按钮，找不到就收工 → 永远只拿首屏 10-12 条。这是八平台里最干净的静默欠采。
-2. **子评论是另一层供给**：`展开其中 N 条回复` / `查看 N 条回复` 不点就不在 DOM 里。A 面板 +5、
-   B 面板 +29 条。所以行上现在记 `父楼层`（本条回复的那条顶层评论的楼层，顶层为空），
-   线程关系在导出里可读。
-3. **作者不能按固定深度取**：`ancestor::div[3]` 那种爬法，A 面板 12 条里有 **2 条**要在第 4 层才
-   找到 `/people/` 链接——那一层已经横跨邻条，取到的是**邻座的名字**。现在按结构定界：只在
-   “仍然只包含这一个 `.CommentContent` 的最深祖先”里找作者；找不到就是找不到，打
-   `comment.zhihuNoAuthor`（本轮 {n}/{total}）而不是悄悄留空。
-4. **两列此前是写死的**：`评论时间` 存 `''`（实测每条都有，近期相对“14 小时前”、远期绝对
-   “2019-08-15”），`点赞数` 存 `0`（22 条里没有任何按钮/aria-label/裸数字带赞数）。时间现在真读；
-   赞数改留空——**空是“没读到”，0 是一个用户会拿去排序画图的事实**。
-5. 面板资源里只看到 `api/v4/questions/<id>/feeds`（回答流），没看到独立评论接口被调用 → 说明面板
-   走站内 SPA 请求；本次修复**不依赖**接口地址，按 DOM 滚动取，避免把结论押在没测到的 URL 形状上。
-6. **评论区确实是独立小容器**（`backend/test_zhihu_reply_overlay.py`，2026-09-28 实测）：面板是
-   position:fixed 的覆盖层（12 条全在里面），自带“关闭”控件——但**展开子评论不换页面也不换容器**：
-   同一个 `css-34podr` 里 bodies 36 → 38、开合器 5 → 4，所以**不需要、也绝不能**加返回动作：
-   实测点完展开后调 `driver.back()` 会把面板整个弄没（36 → 0），后面的读取全在空白页上跑。
-7. **滚动目标取“含评论最多的那个盒子”，不是第一个**：上一条探针里看到点完 5 个开合器后
-   被滚的那个盒子 scrollHeight 从 12733 掉到 1961，说明满足“能滚 + 里面有 .CommentContent”的盒子
-   **不止一个**（子回复的列表自己也算）。按 `boxes[0]` 滚，可能一辈子在滚某一条回复的小列表，
-   面板却再也不前进——这就会把短表当成走完。`_ZHIHU_PUMP_JS` 现按 inside 数量选最大者。
-6. 每轮滚动都打 `comment.zhihuRound`（第 {r} 轮新增 {n} 条，累计 {total}），走完仍不到页面自己写的
-   数字就打 `comment.zhihuPanelShort`（写着 {declared} 条，取到 {rows} 条）。**没有轮次预算**：
-   原有的 `PANEL_ROUNDS=60` + `comment.zhihuPanelCapped` 已在 2026-11-10 删除（和抖音、小红书同一条规则：
-   "能采多少"由站点供给与用户的 评论上限 决定，不由常数决定）。收工只有三件事：连续 3 轮零新增且无未点开回复、
-   用户 停止、用户 评论上限。**不点名 = 没人知道自己少了**，那由 `zhihuPanelShort` 负责。
-
-被否掉的替代：**把“更多”按钮的文案改个正则继续找**（站点根本没有这个控件，找到的是别的东西）；
-**用 `limit` 默认小值掩盖**（D 组以前按 limit×链接数判满，12/261 在内部对账上是"自洽"的——
-自洽不等于采全，故 D4 现在拿页面自己的数字当分母）。
-
-### 知乎热榜：已上线，一块只有 30 行、且所有游标都被无视的榜
-
-
-`https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50`，同样页内 fetch。实测：
-
-* 恰好 **30 行**，`paging.is_end=true`、`next=""`、`totals=0`；
-* `limit=100` / `offset=30` / `page=2` / 猜的 cursor **都返回同一批 30 个 id**（重叠 30/30）
-  —— 所以这里没有翻页循环，写了就是拿风控的钱重放同一张表；`target_count` 大于 30 时
-  日志明说"榜单只有这么多"，不填充也不空转；
-* **无 Cookie 直接被拒**：`401 AuthenticationError`，而且首页本身就跳 `/signin`，
-  所以 `login_wall` 在问接口之前就已经成立 —— 那时一次请求都不该发出去（有单测钉住）；
-* 有 Cookie 时**无头与窗口给出同一个答案**（今天两种都 200/30 行）；
-* 行的形状里有**两个字段不能成为列**：`target.author.name` 在 30/30 行都是字面量“用户”，
-  `target.comment_count` 在 30/30 行都是 0。把它们写进表就是造两列假数据（同抖音没有
-  播放数列的理由）。`answer_count` / `follower_count` 30/30 有值，所以留下；
-* `target.url` 给的是 `https://api.zhihu.com/questions/<id>` —— 那不是能打开的页面，
-  必须重写成 `https://www.zhihu.com/question/<id>`；
-* 热度在 `detail_text`，形如 `398 万热度`，走 `engine.counters.parse_count` 展开成整数。
-
-### 抖音热榜：**已上线**，因为那两个没答完的问题今天答完了
-
-2026-09-25 重探（探针 `backend/test_douyin_hot_probe.py` / `test_douyin_hot_signed2.py` /
-`test_douyin_hot_static.py`，载荷 `scratchpad/douyin_hot_*.json`）。当初拦住的正是当年列出的
-那两条，如今各有各的实测：
-
-1. **自拼 URL 到底答不答**：答。钩子这次存完整 URL（不再截断到 300 字符），拿到页面自己那一条
-   之后，用**只由公开字面量拼出的** URL 在同一个已加载文档里问四组参数：
-
-   | 参数集 | 行数 | 带 hot_value | 带 view_count |
-   |---|---|---|---|
-   | 21 个公开参数（无 webid） | 51 | 51 | 51 |
-   | 再去掉 downlink/effective_type/round_trip_time（18 个） | 51 | 51 | 51 |
-   | 上面 21 个 + 一个**假** `webid` | 51 | 51 | 51 |
-   | 只留 6 个（device_platform/aid/channel/detail_list/source） | 47~48 | 48 | **0** |
-
-   同一个 URL 连打四次，计数次次一致。结论两头都清楚：**签名一个都不需要**（假 `webid` 不改结果，
-   所以爬虫不必去抄页面的请求，也不必新增"抓页内请求 URL"这套机制）；而那批公开参数是**承重的**，
-   退到 6 个就丢掉整列 `view_count` 并少掉几行。`HOT_API` 里写下的就是中间那 18 个。
-2. **会话**：本工具自己的抖音 profile 仍被答 `验证码中间页`，插 Cookie 的一次性浏览器能读到榜
-   （用户手工过的滑块在他的 Chrome 里，那是第三个 profile 目录）。所以矩阵里 `needs_session=True`，
-   live 用例显式 `use_profile=False`。
-
-一次回答就是整块榜：不翻页（`len(fetched) == 1` 被离线用例钉住）、不逐条打开话题页 —— 榜自己就带着
-`hot_value` / `view_count` / `video_count` / `discuss_video_count` / `event_time`。
-
-行的取值也有据：`word` 在这张榜上**既是标题也是话题**（抖音不像微博另发一个 `#…#` 串），所以**不做**
-`话题` 列 —— 一列重复另一列的文字是用户会当成数据的噪声；`position` 是站点自己的名次；链接用榜单
-DOM 锚点自己那形状 `https://www.douyin.com/hot/<sentence_id>/<词>`（四条真实 href 与同一次回答里的
-`sentence_id` 一一对上，所以这不是猜的）。
-
-**榜首那一行是 0 还是没数**：两种都在同一天出现过 —— 一次是 `position: null, hot_value: 0,
-view_count: 0`，另一次同样位置是 `null`。所以这一列的规则是"站点没给的留空"，不给 0：0 在这张榜上
-是一个真实的读数，填出来的 0 与读到的 0 分不开。`_published()` 就是为此存在，
-`test_a_figure_the_site_did_not_publish_stays_blank_rather_than_becoming_zero` 钉住它。
-
-判墙那一条仍然成立，而且现在被离线用例直接钉住：`验证码中间页` 这种标题下
-**通用的 `check_intercept()` 说 `ok`**，而抖音自己的 `_wait_for_page()` 说 `captcha`、
-`_is_walled()` 说 `True`。抖音的墙只能由抖音的判定来读；而读到墙时**一次请求都不该发出去**
-（`test_the_captcha_interstitial_refuses_before_the_endpoint_is_asked`）。
-
-### 小红书热榜：**证无**，不是"暂时没测到"
-
-三条独立的墙，任何一条都足以不做：
-
-* 没有榜单页面：`https://www.xiaohongshu.com/hot` 重定向回 `/explore?source=4`，就是普通
-  信息流；
-* 页面上唯一和"热"有关的请求是 `edith.xiaohongshu.com/api/sns/web/v1/search/trending/query`
-  —— 那是搜索框的**提示词**接口，不是榜；而且它在页内重放时返回 **406**（同域也拒），
-  连提示词都拿不出来；
-* 更根本的：从**同一张页面现取**的 `xsec_token` 拼出的笔记链接，打开仍落到
-  `/404?source=/404/sec_...`。这与 #82 放弃作者模式是同一堵墙，因此"榜单行打不开"不是
-  实现细节，而是这个平台对网页端的整体态度。
-
-`'hot' not in mode_keys_for('xiaohongshu')` 被 `test_each_platform_names_its_modes` 钉住 ——
-想加必须先重新测量，不能让它在没人注意时"顺手补上"。同一条测试今天也收了抖音的 `hot`：
-它当初的断言写的就是"抖音的榜还没 settle"，等测量把两个问题答完（上面那两条）才换成
-`('posts','author','hot','comments')`。少一块榜是红，凭空多一块榜也是红。
-
-## “停止”为什么必须去杀进程：quit / stopRequest / kill 三选实测（measured 2026-09-25，#131）
-
-用户的说法是："中止之后运行记录刷新慢得不如重开服务"。这句里有两个不同的问题，必须分开量：
-**记录什么时候不再说“运行中”**，以及**上一个任务什么时候真的停了**。
-
-探针 `backend/test_stop_latency.py`（一次性脚本，载荷 `scratchpad/stop_latency.json`）用真
-Chrome 148 各测两种"卡在页面里"：一个 40 秒才答复的导航（正好是 `page_load_timeout` 的默认值），
-以及一个永远不调用回调的 `execute_async_script`（页内 fetch 的形状，30 秒脚本超时）。 worker
-线程卡在里面，主线程按三种方式去"停止"它：
-
-| 停止方式 | 卡在导航 | 卡在页内 fetch | worker 最后怎么死的 |
-|---|---|---|---|
-| 侧线程 `driver.quit()` | **40.02 s** | **30.02 s** | 自己的超时，不是被停 |
-| 第二条连接 POST `…/chromium/stopRequest` | 40.01 s | — | 同上，而且端点 **404 unknown command** |
-| `taskkill /F /T` 该会话的 chromedriver | **2.25 s** | **2.25 s** | `ConnectionResetError`（socket 被断） |
-
-结论三条，都已写进代码：
-
-* **跨线程 `driver.quit()` 对"正在跑的命令"完全无效**——它是会话内的有序请求，排在 worker 那条
-  之后；旧实现把 3 秒宽限给完，就以为自己在关浏览器，实际只是在等 worker 自己超时。
-* **`stopRequest` 这个"温柔中断"在 chromedriver 148 上已经不存在**（Selenium 4.45 也没有包装），
-  所以别指望它：唯一可靠的打断是让驱动进程消失。
-* 因此 `STOP_QUIT_GRACE = 0.8`：给一个本来空闲的浏览器体面退出的机会（顺带把 Cookie 落盘），
-  到点就按 PID 杀树；多个浏览器各一条线程并行收，否则并行运行的最后一条抓取要排在前面所有
-  清理之后，而记录必须等它们全结束。
-
-至于"抓取自己该不该继续"，以前**没有任何一处**问过：`crawlers/**` 里 `stop`/`cancel` 出现 0 次，
-`feed.walk_feed(stopped=…)` / `pager.walk_pages(alive=…)` 这两个钩子只接了 `login_wall`。现在
-问题问在 `Crawler.emit`（全站唯一过行口）以及那两处共享走查的谓词里，`CrawlerStopped` 故意继承
-`BaseException`——`crawlers/` 里约 60 处 `except Exception` 是"读不到就接着走"的容错，一次停止
-被它们咽下就等于悄悄少采，而没人看得见少了什么。
-
-## 停止路径的真机时间戳（measured 2026-09-25，#133）
-
-#131 的三个结论来自"假爬虫 + 单元断言"，以及一段卡在页面里的**手工**测量。这一轮换成真的：
-真服务（`backend/test_stop_real.py`，隔离到 `scratchpad/stop_real_data`，端口从 5058 往上找
-真正没人答复的那个）、真 B 站搜索、真 Ollama，并且**由页面自己的“执行”“停止”按钮**发起——
-这样被测的就是出厂代码，而不是替它写好的替身。载荷 `scratchpad/stop_real.json`。
-
-按停止的**那一刻**为零。首屏那一档跑了三次，中途那一档两次（**这张表是修复前的**；
-"被杀后仍向死驱动发命令"那一条已由 #134 修掉，修复后同一探针的重测就在下面几段）：
-
-| 场景 | 记录不再说“运行中” | 界面那一行自己换字 | worker 定档 | 界面读到定档 |
-|---|---|---|---|---|
-| 卡在首屏导航（0 行，3 次） | 0.009 / 0.007 / 0.006 s | 0.38 / 0.42 / 0.50 s | 5.77 / 4.80 / 5.28 s | 6.15 / 5.12 / 5.63 s |
-| 走查中途（已收 38 条，2 次） | 0.006 / 0.005 s | 0.45 / 0.19 s | 29.64 / 28.66 s | 30.09 / 29.03 s |
-
-三列各自的读法：记录那一列是**服务端事实**（停止请求自己写下 `stopping`），界面那一列是**用户真正在看的**
-——面板没人点，`pollStatus → autoRefresh` 自己把“运行中”换成“正在停止”，最后换成“已中断”；
-定档那一列才是 worker 的退出。两次中途运行的换字差一倍（0.45 / 0.19 秒），量的其实是**上一次
-`pollStatus` 落在哪**（每 2 秒一拍），不是换字本身有多快——上限就是一拍，这一列别当成毫秒级承诺。
-
-**中途那 29.6 s 是新的、#131 没量到的**。当时的猜测是"驱动进程被杀之后 worker 还在往它发命令，
-每条约 4 秒"，并把它记为后续；#134 用 `backend/test_dead_driver.py`（真 Chrome + `file://`，
-四个变体，载荷 `scratchpad/dead_driver.json`）把猜测量开，四条数字把做法直接定了下来：
-
-| 一条命令花多久 | 秒 | 为什么 |
-|---|---|---|
-| 被杀那一刻**正在执行**的那条 | 1.72（其中 1.5 s 是探针自己按下去前的等待） | 驱动进程没了 → 连接被 RST；**已经写出去的请求不再重发** |
-| 之后每一条（老 driver 对象） | 16.3 | 全新一次 connect 打在没人监听的端口上；Selenium 建池时不传 `retries`，于是拿到 urllib3 默认 `Retry(total=3)`——4 次 × ~4.07 s，connect 失败永远允许重试 |
-| 之后每一条（把已建好的 `pool.retries` 归零） | 4.07 | 只剩一次尝试，但每条仍要 4 秒 |
-| 之后每一条（换成死驱动桩） | 0.00 | 根本不打开 socket |
-
-三条推论，都改变了做法：**(1)** in-flight 那条不用管，杀进程本身就解了它；被拖长的全是**后面的**
-命令——所以"强杀成功后把 `crawler.driver` 换成一个立即抛 `CrawlerStopped` 的桩"就够了。
-**(2)** 归零重试严格更差（4.07 s/条 vs 0.00 s/条），于是 urllib3 一处都不动，`requirements.txt`
-也因此不加包。**(3)** 关掉/清空连接池（`command_executor.close()`）是唯一"看着该做而实测不该做"
-的选项：它不仅不救 in-flight（那条本来就 1.7 s），还让之后的命令回到 16.3 s——`clear()` 之后
-新池带着默认 `Retry(3)` 重建。
-
-桩有两处形状是必需的，不是风格：`quit()`/`close()` 必须**静默**（worker 自己的 `finally` 会调
-`Crawler.close()`，从收尾里抛 `BaseException` 会把这次抓取的结论换成一段栈回溯）；而 `close()`
-清 `self.driver` 必须**比较之后再清**——worker 回来的路正好是被杀的那一秒，`quit()` 恰恰是因为
-进程没了才返回，此时若无条件写 `None`，下一条命令拿到的是 `None.<cmd>` 的 `AttributeError`：
-一个普通 `Exception`，会被 60 处容错折成"这一页没有更多了"，正是 `CrawlerStopped` 存在要防的那句话。
-另有一条反作用力：`_close_login_browser` 会再被 worker 的 `finally` 问第二次，而从死桩上读
-`driver.service.process.pid` 抛的是 `CrawlerStopped`，`contextlib.suppress(Exception)` 拦不住它，
-那个线程会死在去**下一个**浏览器的路上——所以重入必须在入口就返回，且返回时**不**替它放 profile 锁。
-
-**端到端重测（Cookie 恢复之后，`backend/test_stop_real.py --skip-llm`，载荷
-`scratchpad/stop_real.json`；修复前那一版留在 `scratchpad/stop_real_pre134.json`）**：
-仍以按停止那一刻为零，首屏与中途各一次——
-
-| 场景 | 记录离开“运行中” | 界面自己换字 | worker 定档 | 同一档修复前 |
-|---|---|---|---|---|
-| 卡在首屏导航 | 0.009 s | 0.512 s | **5.30 s** | 4.80~5.77 s |
-| 走查中途 | 0.007 s | 0.19 s | **4.35 s** | 28.66~29.64 s |
-
-首屏那一档没动，正是机制预测的样子：那里 in-flight 只有一条命令，本来就被杀解掉了。
-被 16.3 s/条拖长的是**走查**这种"一条之后还有好几条"的位置，从约 29 秒落到 4.35 秒；
-剩下的 4.35 秒大头仍是那条 in-flight（1.7 s）加上 worker 自己收尾的账（游标、结论、行统计）。
-（这一档中间曾经量不了：`workflow.js` 的 `execute()` 界面校验对 `needs_session` 的平台没有 Cookie 就直接
-拒绝，与 `cookie_preflight_before_run` 无关，而那晚 Cookie 文件被测试套件删掉了——见下一节。）
-
-
-模型那一头量到两件事：
-
-* 停止时 worker 正卡在一次**真的**模型请求里，记录定档花了 **14.6 s / 15.2 s**（两次独立）。
-  这就是"停止打断不了 in-flight 读"的实测代价，行循环在下一行边界才听见停止。
-* 把守护进程换成"接了连接但不答复"（`HangingDaemon`）后，测出 **本轮真正修掉的 bug**：
-  `app.py` 给 ollama 传 `timeout=300`，而这条传输走的是 `ollama.Client(host=...)`——
-  ollama-python 把这个参数原样交给 httpx，`None` 在 httpx 里是**永不做超时**，不是"用它的默认"。
-  直接量：配 20 秒的客户端，70 秒后仍卡在同一个连接上。修法是 `Client(host=base, timeout=self.timeout)`，
-  离线复现见 `TestSilentDaemon`（1 秒超时 → 1 秒返回；回退修复 → 20 秒仍在阻塞）。
-  修完之后的天花板变成可算的：`300 s × 2 次尝试 = 600 s`（实测 600.27 s，记录定档为
-  `interrupted`、节点 `partial`）。**没有**改成"停止后不再重试"，因为
-  `test_one_blip_still_retries_and_answers` 明确钉着"一次抖动该被重试"，那是#131 有意的决定。
-* 面板追看记录默认 240×500 ms = 120 s，比上面这个 600 s 短——所以它会在记录早已定档之后
-  把“正在停止”留在屏幕上。现在 `tries` 由 `SETTLE_WATCH_MS`（660 s）除以**实际**步长导出，
-  `harness_runsmgr.mjs` 用一个"400 次都不定档"的答复钉住它。
-
-还有两条只在真机上才会撞到的：
-
-* 探针第一次跑挂了，因为页面自己的校验拒绝了一个**没有下游**的数据源节点（“必须连接到下游节点”
-  + “至少需要一个输出（保存）或可视化节点”），而 `execute()` 的每个提前退出都只变成一句 toast
-  或一个对话框——服务端日志里什么都没有。第二次的错来自 `position: fixed`：`#toast` 就算显示着，
-  `offsetParent` 也是 `null`，可见性要问 class（`show` / `open`）。
-* 被外力杀掉的探针进程会把**抓取用的 Chrome 留在活着的进程表里**（9 个进程还占着 profile），
-  并且它继承了监听套接字：端口显示 LISTENING、谁连都不答复，新服务用 `allow_reuse_address`
-  照样 bind 成功——于是"端口空闲"这个检查必须用一次真请求来问。
-
-## 页面没加载完 ≠ 被拦截：慢网络曾被写成站点的错（measured 2026-09-25，#135）
-
-真站层 `test_visible_search_resolves_each_video` 红过一次，用户盯着窗口看到的原因是
-**视频页迟迟没加载出来（网络差）**，而不是抖音拒了他。代码里这件事一直没被分开：
-`Crawler.open()` 本来就知道答案——`driver.get` 抛异常时它记 `timed_out` 并作为返回值交出去
-（X 的 `crawl.x.loadSlow` 就是这么用的）——但抖音两个调用点**把这个返回值丢掉了**：
-`search()` 走 `_open_results()` 拿不到它，于是落到 `crawl.dy.noCards`，那句写的是
-“只可能是被拦截、页面出错”并让用户去重存 Cookie；`get_detail()` 同理只会说
-"详情页没有渲染出数据"。也就是说一次网络抖动被报告成站点级拒绝，方向完全相反。
-
-本轮先做的半措施：`Crawler.navigation_settled` 记下最近一次导航是否走完（抖音的详情路径
-仍取返回值，因为它中间的 `check_login_wall` 会再导航一次，存下来的事实会变质），
-`crawl.dy.noCardsSlow` / `crawl.dy.detailSlow` 只在**没有检测到任何墙**时出现，
-旧句子收窄到"导航确实完成了却还是零卡片"这一种（那才是实测过的 502 / 验证码页）。
-测试用 `load_timeout` 的假驱动分别钉住两条句子的分界：慢加载那一句**不许**再出现
-“只可能是”这种排他断言。
-
-#135 要把口径做全：可证的"肯定拿不到"只有 链接/区域不通、没登录、被风控 三类，检测不到这三类
-就**不许因加载慢而报错退出**——继续等，并在控制台说明"没有依据判断拿不到"，是否中止交给用户。
-区域不通（国内 ↔ 海外）能否判出来、怎么测，由调查工作流给结论后再动代码。
-
-### 2026-09-26 落地：四件事，以及被数字否掉的两件事
-
-**先量的是什么形状。** `backend/test_arrival_evidence.py`（Chrome 148，本地 HTTP 服务 +
-几个必失败的地址）今天重跑一遍，三种"浏览器自己拒绝"的形状给出的**是同一份文档**：
-
-| 失败形状 | `current_url` | `documentURI` = `location.href` | `readyState` | 导航 `responseStatus` | title | body 里的机器码 |
-|---|---|---|---|---|---|---|
-| 域名解析不了 | 被请求的 http 地址 | `chrome-error://chromewebdata` | complete | 0 | 裸主机名 | `ERR_NAME_NOT_RESOLVED` |
-| 端口被拒（:1） | 同上 | 同上 | complete | 0 | `127.0.0.1` | `ERR_UNSAFE_PORT` |
-| 黑洞地址（超时） | 同上 | 同上 | complete | 0 | 裸 IP | `ERR_CONNECTION_TIMED_OUT` |
-
-三条都重要，且都不是"想当然"的那一版：
-
-1. **`driver.current_url` 报的是被请求的地址，不是屏幕上的文档**——所以 `unreachable`
-   只能从 `document.documentURI` 读出来，`Crawler._document_uri()` 就是为这一条存在的；
-2. **机器码在页面正文里没有 `net::` 前缀**（前缀只出现在 chromedriver 抛出的异常消息里）。
-   一开始按 `net::([A-Z]…)` 写，三个真形状一个都没抓到——测试红过一次才改成都量到的 `ERR_…`；
-3. **渲染超时留下的是上一份文档**（`documentURI` 仍是刚才那个好页面、`readyState` complete、
-   title 也是旧的）。所以"文档地址对不上"不能当"没到达"的证据，`navigation_settled` 才是；
-   反过来，一份 `chrome-error` 文档**不会**由超时制造出来，两者不会互相冒充。
-
-**被数字否掉的两件事**（都量了才放弃）：
-
-* 原计划把 `unreachable` 也送进 5×0.3 s 的"墙要再看一眼"窗口。量下来没必要：那 4 次重读
-  每次三条命令，而一份已提交的错误文档不会自己变好。`_judge_arrival` 现在对
-  `ok` 与 `unreachable` 都在第一次读到时收尾（测试用假驱动的读页次数钉住：`< WALL_PROOFS`）。
-* 原计划"每拍都重新判墙"。改成每 5 拍一次 + **第 0 拍就判**（因为 `open()` 已经判过一次，
-  一份拒绝在等待开始时就看得见）；实测代价是每次等待多 1 条命令，换来"可证的死掉"不再
-  需要 5 拍才被发现。
-
-**分层超时的边界今天定死了**：`Config.PAGE_WAIT_TIMEOUT = 300` 只管**一页的首屏内容**
-（`Crawler.wait_for_first_content`），滚动/翻页"还有没有新行"的 14/12/3 s 一律不动。
-理由不是怕慢，是**语义**：把进度判据拉长，"这一页采完了"就会被读成"还在加载"，抓取会永远滚下去。
-抖音作者模式是个现成的对照：页面自己报了 作品数 = 0 时，首屏显然已经到了，
-等待只剩"网格会不会补上"——那一档继续用原来的 45 s（`douyin.py` 里 `timeout=` 传下去）。
-
-**熔断放在哪里**：计数器挂在 crawler 实例上（`pending_waits`），并且**只在真的看过页面一次之后**
-才拒绝第三次。原因是一次实测反驳了最初的写法：如果在进入循环前就查计数，一条恰好连着两次失败的
-走查会把**后面每一行**都判死——哪怕下一个页面完全正常。现在的顺序是"先看一眼 → 没内容 →
-才问这是不是第三次"。
-
-**被拒绝的捷径**：`_is_collision`（撞车后退避重试一次）**没有**把 `unreachable` 算进去。
-那个函数的证据是"我们自己的两条走查同时到门口"，退避 45 s 能解；而 DNS 解析不了、区域不通
-都不是撞车，退避只会把一条诚实的拒绝线推迟 45 秒。要救它的是换网/停止，不是再等。
-
-**文案**：一次拒绝只剩一行。爬虫负责它看得见的（等了多久、哪一页、浏览器自己写的话），
-执行器负责它看不见的（对照主机 + 一次 2 s 测速 + 下一步），节点名由 `wf.node_failed` 加。
-`net.slow` 这一句被要求**不许**指出原因——两侧都通却什么都没拿到，能说的只有"没有依据"。
-
-## 参数只有"被读懂"和"被点名拒绝"两种下场：静默降级实测清单（audited 2026-09-25，#132）
-
-
-这一轮把"用户选了 A、系统做了 B"的整类问题一次查清。方法：把每个 select/开关参数从**面板写入**
-一路读到**真正改变行为的那一句比较**，再问"如果一个不在列表上的值走到这里，会发生什么"。
-答案是绝大多数情况**什么都不发生**——因为每个读它的地方只特判自己认识的那一个值：
-
-| 位置 | 比较 | 未知值的下场 | 用户看到什么 |
-|---|---|---|---|
-| `crawlers/platforms/bilibili/crawler.py`（B 站热榜） | `== 'ranking'` | 走热门榜 | 选了排行榜、拿回热门榜，记录里写着用户"选"的那个 |
-| `app.py` 三处 + `part_writer.py` | `== 'json'` | 写 CSV（扩展名也 CSV） | 要 JSON 拿到 CSV |
-| `analyzers/keyword.py` | `== 'tfidf'` else textrank | 跑 TextRank，并把 `method` 列写成用户请求的名字 | 表里声称 TF-IDF，实际是共现图 |
-| `analyzers/emotion.py` / `tendency.py` | `== 'ml'` else LLM | **走 LLM 逐行** | 拼错 `ML` 就白付一整轮模型调用 |
-| `analyzers/ner.py` | `== 'llm'` else regex | 走规则 | 节点写着大模型，实体是正则抽的 |
-| `services/analysis/pipeline.py` `convert_type` | else 分支 | `astype(str)` | 要 int 拿到文本，节点照 done |
-| `services/analysis/pipeline.py` `fill_null` | 字典查不到 | 用字面值填充 | `method='mean'` 把单词 mean 写进每个空格 |
-| `data_analysis` 各处 `if column not in df.columns: return df` | — | 整步跳过 | **过滤没生效却绿色**，导出的是没过滤的表 |
-| `drop_null`/`fill_null`/`drop_duplicates` 的列清单 | `[c for c in columns if c in df.columns] or None` | 名单全落空 → 子集为空 → **当成所有列** | 打错一个列名，`任一为空` 删掉远超目标的行 |
-
-布尔的两种写法同样会翻车，而且方向相反：
-
-* `params.get('ascending', 'true') == 'true'`：JSON 里的真布尔 `True != 'true'` → **升序变降序**；
-* `bool(raw)`（`Field.value_from` 的 bool 分支）与 `bool(params.get(key))`：面板的复选框历史上写的是
-  文本 `'false'`，而 `bool('false')` 是 **True** → 不勾选＝勾选。落到 `recrawl` 上就是"没点重新采集
-  却释放了台账"，把已经付过钱的条目再爬一遍；落到 `full_body`/`with_facts`/`keep_parts` 上就是白等
-  或白留文件。
-
-因此规则收敛成一句话：**选数据、选花费、选名字的参数，只能"被读懂"或"被点名拒绝"**。落点是四个，
-不是四十个 `if`：
-
-1. `capabilities.unoffered_selections(mode, params)` + `engine.source_bad_option` —— 矩阵里声明过的
-   `select`（现在只有 `board` 与 `format`）值不在 options 内就拒绝；**空值不是错误**（"没选过"，
-   按声明默认跑），这一点与 `requested_mode_key` 对未知 mode 的处理完全一致；面板不会写坏值，所以
-   这条路只挡手写/外部生成的 JSON 与被下架的旧选项。平台"这个模式根本没这个字段"不算错（切平台
-   不会删掉旧 key，拒绝它等于砸用户保存过的工作流）。
-2. `data_analysis.normalize_step_params` → `validate_step`，装在 `run_pipeline` 里——分析节点与
-   `/api/analysis/run` **两道门都只经过这一处**，所以两条门现在读同一份参数（以前 steps 门把
-   `'名称, 城市'` 当成 7 个字符的列名迭代，整步静默无效）。
-3. `app.enum_param(op, params, key)` + `PROCESS_ENUMS`（`参数 → (默认值, 允许写法)`）—— 处理节点的
-   `mode`/`method`/`cluster_method`/`corr_method`；关键是**被检查的那串字符就是递给分析器的那串**，
-   所以测试直接断言分析器收到的值（`test_the_value_the_gate_judges_is_the_value_the_analyzer_is_handed`）。
-4. `core.refs.as_bool(value, default)` —— 开关一律"读"，不比较。空白／听不懂的写法回答**默认值**
-   （面板在那一格显示的数字），因为它不是"另一个答案"。`services/data_analysis._to_bool` 是另一件事：
-   它读**抓来的单元格**，那里"不是假即真"是对的，用在参数上就会把清空的一格读成"关"。
-
-`keyword.py` 的 `method` 列现在写 `wanted`（解析后真跑的那个名字），不再写用户送进来的拼写——账本
-上"哪种算法产出了这行"必须是事实。
-
-两处**故意保留**的宽松：词云配色（`WORDCLOUD_STYLES.get(name, vibrant)`）与 `merge_frames` 的
-`mode`（它把自己的 `used_mode` 回给调用者）。前者是装饰参数，为一个配色丢掉整张图更糟；后者已经
-诚实报告了自己用了哪种。两者都不是"选数据/选花费"的参数。
-
-界面这一侧同步改了三处，都是"同一件事只说一次"的反面：
-
-* **画出来的值和存下来的值不是一回事**：`renderParamSelect`/`sourceSelectHtml` 过去用
-  `(p[key] || def) === o.v` 判选中——值不在列表里时**没有一个 option 被选中**，浏览器于是显示
-  第 0 项（热门榜 / TF-IDF / ECharts），而参数里写的还是那个要被拒绝的值。现在
-  `selectOptionTags` 把节点真正持有的值作为一个"不是可选项"的 option 显示出来（原文经
-  escapeHtml，因为它是用户自己写进文件的文字）。
-* **复选框显示读的是 truthy**：`p.x ? 'checked' : ''` 对文本 `'false'` 为真，于是用户取消勾选、
-  重新打开面板却看到勾上，而运行按"关"执行（或相反）。统一成 `boolParam(value, 默认)`，与后端
-  `as_bool` 同一套词表；`renderParamCheckbox` 也改成像其它复选框一样写 `this.checked`。
-* **await 之前抓的 DOM，await 之后可能已经不在页面上**：`runsManager.detail`、
-  `renderResumeSettings`、`dashboard._renderCell` 三处都是"先拿到行/容器，再 `await fetch`，
-  然后往里写"。运行中的时候控制台每 2 秒刷一次运行列表，`openSettings` 在任何一次参数改动时
-  重写整个表单，`dashboard.open()` 清空重建网格——所以那三次写入经常落进一个已经脱离文档的子树：
-  屏幕上什么都没出现，而 `_detail` / `_instances` 这类记账照样被写下（`_detail` 一写，面板就
-  以为用户在读明细，自动刷新停了；`echarts.init` 在离页元素上建出的实例每次 resize 都被重画、
-  永不 dispose）。现在都是"等回来再按 id/属性重新找一次，找不到就什么都不写"。
-
-顺带记录几条被从 AGENTS.md 移出来的旧事实（那边有 32 KB 硬预算，规则留在那儿，事故留在这儿）：
-`_pushState` 曾经让自动保存吃掉 50 步历史栈、把真实编辑挤出去；`DOMContentLoaded` 里一个裸调用
-曾经因为 ECharts CDN 拿不到而连带跳过能力拉取、自动保存和续跑横幅——这就是 `boot(name, fn)` 与
-"`_pushState` 跳过相等状态"两条规则的来历；`canvas._isTypingTarget()` 存在，是因为旧的按键守卫
-只认 `INPUT`/`SELECT`、漏了 `TEXTAREA`，于是粘贴长链接后按退格删掉的是**选中的节点**。
-同样搬过来的还有 `_push_log` 那一条：一次多行载荷（驱动报错的 `Message:` 块）曾被当成"一条日志"
-存下，于是浏览器按行做的增量游标要么跳过、要么重复真实的控制台内容——现在按**物理行**存，运行
-总数也按行走，而不是按 `add_log` 的调用数。参数别名那一条也记在这儿：节点参数曾经被历史快照
-直接引用活对象，结果任何参数改动都撤销不掉，后续修改还会改写历史里已经存下的旧条目。
-
-AGENTS.md 压缩（2026-09-25）时又搬来几条事故，规则本身留在原处：数据集重命名那次，对话框的
-确认按钮带着自己的 `value: 'ok'`，于是用户输入的文件名被按钮记号顶掉、存成了字面量 `ok`；
-app.js 为了拖拽把 `openCookieDialog` 又包了一层，包装函数的空参数列表让面板开在**上一次选中的**
-平台上，而不是刚刚拒绝你的那一个；`tests/integration/test_ui_layout.py` 里 `.panel` 这个选择器
-在本项目**一个元素都匹配不到**（面板各有 id），所以它按 id 逐容器审、绝不回落 `<body>`；
-"改工作流名"那次事故是——名字进了节点指纹，而父指纹喂子指纹，于是重命名一次，续跑就重爬重付
-整条链上已经采到的条目；节点 id 同时是框的 **DOM id**，一个 `id: "status-zoom"` 的工作流文件
-让 `deleteNode` 与撤销路径把**状态栏本身**删掉了；profile 侧的机制是 chromedriver 会预写
-`<user-data-dir>/Default/Preferences`，同一目录同一瞬间起来的两个会话不可能都起来，而"配置文件
-只在第一次使用时导入一次"这件事由目录里的 `.crawler-profile.json` 标记；`MAX(seq)+1` 那条的
-代价是曾经的 `COUNT(*)` 按**每一行**跑一次，于是一次长抓取在自己的表上平方级地慢下去。
-
-## 测试套件两次写进用户目录：第二次之后，把它改成做不到的事（measured 2026-09-25 与 09-26，#134）
-
-**这是同类事故的第二次。** 第一次的记录是 AGENTS 里那条"UI 层不许写服务器，把 `fetch` 打桩"——
-那次是自启的服务把运行与上传落进了真 `data/`、`logs/`。第二次就是本节这一行：
-
-新加的 `tests/integration/test_stop_reaper.py` 在文件顶部写了 `from app import _close_login_browser`。
-就这一行，让那次 `pytest -q` 把**假 Cookie 写进了用户真正的 `data/cookies/`**，并且把里面原有的
-条目删掉了。机制是一串各自合理、合起来致命的规定：
-
-* `pytest.ini` 的 `addopts` 用 marker 过滤掉的只是**执行**，collection 仍然 `import` 了 `tests/` 下
-  每一个 `.py`；被 deselect 的文件照样在导入时跑顶层代码；
-* `tests/conftest.py::data_root` 是 session + autouse 的**fixture**，它在第一个测试体之前跑，
-  但 fixtures 一律晚于 collection；
-* `app.py` 顶层就有 `cookie_manager = CookieManager(Config.COOKIE_DIR)`——**导入那一刻**把目录字符串
-  存进单例，之后 `setattr(Config, 'COOKIE_DIR', tmp)` 改不到它；
-* 于是 `tests/api/test_config_api.py`（它自己顶层没有任何危险 import，靠 fixture 拿 `app_module`）
-  在 `app` 已被我的文件提前导入的那次运行里，往真目录存了 `weibo_cookies.json` /
-  `zhihu_cookies.json`（内容 `[{'name':'SUB','value':'x'}]`），而 `test_cookie_delete` 那类用例的
-  delete 也打在真目录上。
-
-症状不是崩溃，是**45 个断言在别的时间点也过、只有整轮跑才红**（各模块单跑全绿，因为它们没有提前
-导入 `app`）。第一层修法是把新文件改成用 `app_module` fixture（`import app` 因此发生在隔离之后），
-再在 `tests/unit/gates/test_test_tiers.py` 里用 AST 静态拒绝任何测试文件的**模块级** `app` 导入。
-
-但这层修法把安全性寄托在"每个人都记得用 fixture"上，而这条规矩本轮已经被违反两次（第一次是
-`integration` UI 层往真 `data/`、`logs/` 里落运行痕迹，那次写进 AGENTS 的是"本层不许写服务器，
-把 `fetch` 打桩"）。所以真正的修法是**把时序问题解决掉**：
-
-* `tests/conftest.py::_isolate_paths()` 现在在 **conftest 被导入的那一刻**执行，先于 collection
-  导入任何测试文件；`data_root` 只负责把那个根目录报给用例，不再负责搬路径——于是"隔离根"与
-  单例冻结的路径**不可能不一致**，无论谁在什么时候 import 什么；
-* 它同时写下环境变量 `CRAWLER_DATA_ROOT`（`backend/core/config.py`），所以**子进程**里自启的那台服务
-  也用自己的状态目录。这一条不是猜想：新加的看门狗第一次跑设备层就抓到 `logs/app.log`、
-  `logs/_ui_layout_server.log` 与 `data/{runs,datasets}.db-wal/-shm` 在动——UI 层自己拉起的服务
-  用的正是真 `data/`，而它一旦启动还会把用户正在跑的那次运行判为已中断；
-* `tests/isolation_guard.py` 在 conftest 导入时给 `data/`+`logs/` 拍一张指纹（路径、大小、mtime），
-  会话结束时比一遍：**只要有一个字节变了就把这轮判红**，并点名是哪些文件。判定逻辑放在这个模块里
-  而不是放在 conftest 里，是因为 pytest 会导入本树四个 `conftest.py`，`sys.modules['conftest']`
-  属于最后被收集的那一个——写在 conftest 里的判据，测试根本导不到（实测：单独跑绿、整轮跑红）。
-  Chrome profile 的子树不逐文件走（每个目录几万文件），但目录本身与其顶层的标记文件在比较之列，
-  因为那正是"爬虫没接到重定向"会留下痕迹的地方；只读不动 mtime，所以真站层读你的 Cookie 不会误报。
-
-留在这里的原因：这条不违反就会毁掉用户数据的规矩，长得完全不像错误。写它的反面教材是
-`tests/api/test_config_api.py::test_save_persists_into_the_isolated_cookie_dir`——它断言的是
-"保存到隔离根"，而它自己那次失败的方式，是**保存成功、日志也说了 saved、文件落在用户目录里**。
-看门狗自己也被真机证明过一次：一个临时用例往 `data/_guard_probe.json` 写四个字节，那轮
-`1 passed` 仍然以非零码退出并点名了那个文件。
-
-## 停止剩下的三条尾巴：返回的抓取、快照里的 driver、没有 pid 的卡死（#136 / #138 / #139，2026-09-26）
-
-三条都在 #134 的审计里被记下来，今天一起收。**先说被量掉的那半条**：#136 的原始描述里写着
-"`engine/feed.py` 卡片读取失败被吞 → 卡片恒空 → `_wait_for_change` 每轮只睡 1.5 秒 → 死循环"。
-逐行读下来不是死循环：`read_cards()` 抛异常会被吞成 `[]`，而 `walk_feed` 在**每一轮开头**就对
-空卡片 break（`stopped_reason='no_cards'`），所以最坏是 `stuck_rounds × settle_wait`（默认 3 × 1.5
-≈ 4.5 秒，X 用 4.0 时约 12 秒）。据此**没有**给走查加"连续 N 轮读不到卡片"的上限——那条会误伤
-骨架屏（抖音 16 张空壳正是"有卡片容器、零张卡"的形状），买到的只是一个已经被 break 覆盖的场景。
-
-**这些结局词进控制台时是本地化的**（#148 续，measured 2026-09-26）：`engine/feed.py` 与 `engine/pager.py`
-仍返回机器 token（`target`/`end`/`no_new`/`stuck`/`no_cards`/`empty_page`/`fetch_failed`/`stopped`，单测按
-原词断言），但作者/搜索那条 `…authorDone`/`finished` 日志过 `i18n.stop_reason_label()` 把它们译成中文句子
-（`stuck` → "连续滚动没有新内容出现"），用户读不懂 `stuck` 这种代码词。未知 token 原样透传、不编造，
-所以引擎将来新增一个原因会在控制台露出原词、不会被静默吞掉；`test_i18n::TestStopReasonLabel` 扫两个引擎源码，
-凡有 token 没配 label 即红。
-
-真剩下的是**结局词**：抓取 honor 停止的方式是**返回**它已经采到的行，不是抛异常。而
-`execute_source_node` 只在**进入节点前**查一次 `stop_requested()`（`execute_node` 里那条
-`if stop_requested(): raise CrawlerStopped`），返回之后没人再问；`run_node_durable` 的两条
-`except` 都要求**有人抛出**。于是一次被停止的走查会：节点 settle `done` → 运行记录写“运行完成”
-→ 续跑横幅不给“继续”。回退验证拿到的就是这个字面断言：
-
-```
->       assert _node_row(record, 'node-1')['status'] == NODE_PARTIAL
-E       AssertionError: assert 'done' == 'partial'
-```
-
-评论节点同样：它的 URL 循环在顶上 `if not execution_state['running']: break`，跳出之后照样
-`return rows_out`。两处各补一次"回来了也要问一句"，走既有 `settle_node_as_stopped`
-（保留行、记 被停止、不计入 failed）。评论那处刻意放在 `writer.finish()` **之后**，
-`comment.done` 那行随之不再打印——被停止的运行由 `run.nodeStopped` 一个人说。
-
-**#138**：`CommentSession` 存的是 `crawler.driver` 的**对象快照**，`app.py` 传进去就切断了
-和 crawler 属性的联系；强杀时换成 `DeadDriver` 的是 crawler 身上的名字，评论引擎手里那个
-老对象还活着，于是每条命令继续付 16.3 秒（#134 实测）。改法是把 crawler 交给 session
-（`owner=`），`driver` 变成**每次现读**的属性——30 处 `self.driver.<cmd>` 一行没动，但都变活了。
-没有 owner 的老构造方式（live 层直接从浏览器建 session）行为不变，这条由一条反向用例钉住。
-
-**#139**：强杀分支的条件是 `waiter.is_alive() and pid`，而 `pid` 那次读被 `suppress(Exception)`
-包着——读不到 pid 的卡死会话因此**既没被杀也没人再问**（`/api/workflow/stop` 取完快照就
-`clear()`），而释放 profile 锁的正是那个永不返回的 `close()`，本平台目录被占到
-`PROFILE_LOCK_TIMEOUT`。没有加"留在注册表里下次再试"的机制：那需要一个第二持有者和一个能
-展示它的界面位置，而这里能确定说的只有一句——**它可能还开着**。于是 `run.browserStuck`
-进控制台（说占多久、为什么），`_stuck_where()` 把卡住那一帧进 `logs/`。用 `logger.debug`
-而不是 `warning`：`LogBufferHandler` 会把 INFO 及以上的 logger 调用转发进控制台，英文帧地址
-走 `t()` 没有意义，而 `tests/unit/i18n/test_i18n.py::TestNoHardcodedConsoleText` 正是靠"debug 只进
-文件"这条豁免的——第一次写成 warning 时它就是被这个用例挡下来的。
-
-**顺带量到的一个平台事实**（写下来是因为它会骗测试）：这台机器上 `time.monotonic()` 的
-步进约 16 毫秒——`time.sleep(0.005)` 之后再读，返回值**一模一样**。任何"用真实时钟测一个
-小于 16 毫秒的量"的断言都是掷硬币，`services/ingest/net.throughput` 的算术就因此需要注入
-时钟（`tests/unit/foundation/test_net_probe.py::_clock`）才能钉住 kB/s 的算法本身。
-
-## 种进 profile 的 Cookie，只有带有效期的那部分留得住（measured 2026-09-26，#108）
-
-“重取的 Cookie 进不了正在用的 profile”这个洞补上之后，真机量了一次**它到底能补多少**：
-在本地 HTTP 服务上（Cookie 的 domain 必须和文档主机对得上，`127.0.0.1` 是唯一能自己服务的选项），
-用 `Crawler._plant()` 种一个 Cookie → 关掉浏览器 → 用**同一个 profile 目录**再开一个 → 读回来。
-
-| 种进去的 Cookie | 同一个浏览器里看得见 | 关掉再开还看得见 |
-|---|---|---|
-| 没有 `expiry`（会话 Cookie） | 看得见 | **看不见**（jar 是空的） |
-| 带 `expiry`（持久 Cookie） | 看得见 | 看得见 |
-
-Chrome 只把**持久 Cookie** 写进 profile 的 Cookie 库，会话 Cookie 只在内存里。这条决定三件事：
-
-1. “把 Cookie 更新进 Profile”的答案必须**同时报两个数**：种进去几条、其中几条关掉窗口就没了
-   （`cookie.refresh.sessionOnly`）。只说“已更新”就是许了一个下次重启会破的承诺；
-2. “profile 拥有自己的会话”的准确形式是 **profile 拥有它那份持久 Cookie 与其它站点状态**，
-   不是"站点认为我登录了的那一切"。站点若只发会话 Cookie，profile 也留不住；
-3. 本机已存的几份文件里，绝大多数条目是带 `expiry` 的（各平台从 7/8 到 57/63 不等），
-   所以这个按钮对真实登录态有效，不是只对测试有效——但"绝大多数"不等于全部，提醒照旧要出。
-
-`expiry` 有两种拼法：driver 报回来的是 `expiry`（epoch 秒），浏览器自己导出的是
-`expirationDate`。`CookieManager._has_expiry` 两种都认；只认一种会把持久 Cookie 误报成要丢的那种。
-`Crawler._cookie_payload` 早就做了同样的兼容（它把 float 的 expiry 取整，否则 `add_cookie` 整条拒绝）。
-
-测量脚本已经变成测试：`tests/integration/test_profile_cookie_plant.py`（真 Chrome，4 条，27 秒），
-其中一条**专门钉住那个坏消息**（会话 Cookie 不留在 profile 里）——哪天有人以为"种下去当然会留着"，
-那条会红，面板那句提醒也就同时失去依据。
-
-**为什么种 Cookie 只能让浏览器自己干**：Chrome 的 Cookie 库在 Windows 上是应用绑定加密的
-（本轮试图从用户日常 Chrome 直接读 Cookie 时实测：66 条目标 Cookie 全是 `v20`，用户态进程解不开，
-复制出来的库交给 Chrome 自己也解不开），所以"外部写那个 sqlite"这条路不存在——唯一能写进去的
-途径是开着浏览器用 `add_cookie`。这也是这个功能必须开一次浏览器的原因。
-
-## 微博作者模式的“发现”步骤，付的是第三次 burst（measured 2026-09-26，收口第 1 轮）
-
-收口第 1 轮（`-m "not live_os"`，1027.22 秒，4213 passed）唯一的红是
-`tests/live_site/test_live_weibo_author.py` 的 `_discover_uid`：它自己起一个浏览器去搜
-`人工智能`，被答了 `登录墙：weibo.com … 重定向到登录页`，取回 0 条，然后那句
-`assert rows` 把它读成"搜索坏了"。**同一次运行里** `test_live_weibo.py` 的两条都是绿的
-（共享的 7 天窗口搜索交出 8 行、可见窗口那条按契约过了），所以会话是活的——这是本文更早那一节
-量的同一个形状：**这个账号的下一条 burst 被答 passport 页**，不是死登录态。
-
-于是发现步骤改成读**这一轮已经付过的那一次搜索**（`weibo_windowed`，session 作用域，
-`tests/live_site/conftest.py` 里就是为"一个账号被 burst 拒"而存在的），不再另起第三次 burst。
-断言的强度一点没降：行必须存在（不存在就是死会话，红），必须有一条带数字 uid 的 `用户链接`
-（没有就 `pytest.fail` 把看到的链接全打出来，红）。`live_search` 那条"撞墙就退避后再问一次"的
-路子在这里解决不了问题：**重试只是把同一个被拒的端点再问一遍**，多花的正是账号的额度。
-
-顺带量到 today 的另一半：单跑那条用例时日志停在 `开始采集作者 <uid> 的作品，目标 5 条`，
-既没有 WARNING 也没有 `authorDone` → 走的是 `crawl.weibo.authorRefused`（mymblog 那一格
-`fetch_failed`）分支。用例按自己的契约把"被点名的拒绝"当作站点的诚实回答放它过，这与
-`weibo: /ajax/statuses/mymblog is a per-session edge 403 → refuse loudly` 那条红线一致。
-作者模式真取到行的证据由离线用例（`_author_row` 的列集合、翻页游标、mirror 拒绝）与
-2026-09-23 那轮全量绿提供；真站这一格"能不能取到行"取决于该 session 当日的心情，
-所以这条用例才故意在 `live_quick` 之外。
-
-## 真站层每轮都在新浏览器里重放同一份 Cookie（measured 2026-09-26，#140）
-
-微博那条"发现步骤付第三次 burst"只是表面。**结构原因**在这里：`tests/conftest.py`（导入时的 `_isolate_paths`）为了隔离，
-在导入时把 data/、logs/、settings.json 指向 `<tmp>/cixi_pytest/isolated-<pid>`，而且**开头先
-rmtree 再新建**。pid 每轮不同 ⇒ 每一轮真站层都从一个**全新空 profile** 起步 ⇒
-`crawlers/__init__.py`（`get_crawler` 里的 `planting` 判断）的条件每轮成立 ⇒ **每轮都把同一份保存的 Cookie 重放进一个新浏览器**。
-日志原文可查：`Cookie 预置：weibo.com 接受 8/8 条`。
-
-对照用户自己的抓取：`data/chrome_profile/weibo/.crawler-profile.json` 写着
-`used_at 2026-09-26 00:29 / imported_at 2026-09-24` —— profile 已被用过 ⇒ **他的抓取根本不种 Cookie**，
-用的是站点自己发给它的那份 jar。这解释了一个原本说不通的现象：**测试反复被弹登录页，而用户
-一次都没见过**。而微博的风控记在**账号**上，不是记在浏览器上，所以测试的重放最终把用户自己的
-抓取也弹下了登录页（2026-09-26 05:2x 实测发生；他重新登录 + 重存 Cookie 后恢复）。
-`runtime/gate.py::hold` 对此无能为力：它只管顺序，release 之后没有任何冷却
-（`runtime/gate.py::hold` 只给"到门口确实等过"的调用补那一段抖动间隔）。
-
-落地四件：
-1. 真站层改用**跨运行保留**的 profile 根 `scratchpad/live_profiles/<platform>`（gitignored，
-   且显式拒绝落在 `data/` 里——那是用户自己的目录），首轮种一次、之后与用户同形；
-2. 只在**面板那道问句**为真时再种：`refresh_for_planting(platform)` 直接问
-   `sessions/profiles.py::needs_refresh(platform, 该平台的 Cookie 文件)`，也就是"种过、之后文件又被保存过"。
-   于是用户重存 Cookie 之后测试会话会跟上一次，别的任何时候都不动它；
-3. **微博每轮只问一次**：`live_attempts('weibo') == 1`（`live_search` 与 `weibo_windowed` 都读它）。
-   重试对微博不是"再试一次"，是拿同一份被拒凭据再敲一次同一扇门；拒绝被当作拒绝来断言
-   （`test_visible_window_search_works_too`），严格度一点没降；
-4. 真站层的 `pytest.skip` 变成**必须被列举**（`_LIVE_SKIP_ALLOWANCE`，正反两方向都有测试），
-   防止"跑不过就跳过"悄悄吃掉闸门。
-
-被数字或事实否掉的三个选项：**给 hold 加冷却**——产品路径从来没有这个承诺，测试自己加会把
-真问题（会话形状）盖住，而且每轮多睡几十秒；**把微博降级成只测匿名热搜**——丢掉的是登录态抓取
-这一整块覆盖；**每轮删掉测试 profile**——等于回到原点。
-
-**真机复验做到了一半**：结构那一半已证到（第二轮日志**不再出现 `Cookie 预置：weibo.com 接受 8/8 条`**——持久根
-`scratchpad/live_profiles/weibo/.crawler-profile.json` 有 `imported_at` + `cookie_stamp`，`is_used` 真、
-`needs_refresh` 假，于是没重放）；被拒那一半没轮到（两次搜索仍 `登录墙 → passport`，原因是**账号被前面几轮刷出
-标记**，非形状——复验只能在标记过期后，每敲一次都在花账号额度）。顺带把三处**误诊**断言文字改为"死会话/限流/
-账号刚被连刷"三种并列，并写清"重放救不了它"。
-
-### 分岔：不是形状问题了，是"副本 = 第二台设备"（measured 2026-09-26）
-
-用户自己点执行**微博能搜出结果**，同一时刻测试的同一份用例仍被答 passport：用户抓取不种 Cookie（用 09-24 导入
-后一直滚的那份 jar），真站层种的是 05:23 重存的那份拷贝。所以"每轮重放"只是第一层，**只要测试用的是副本它就已经
-是第二台设备**——微博接受它那一路一路滚下来的 jar，不接受拷贝（其红线就是"已登录页面会重发 SUB/SUBP"）。
-
-结论与做法：给真站层加**显式同意开关** `CIXI_LIVE_USE_USER_PROFILE=1`（`isolation_guard.uses_user_profile()`
-是唯一读点，`tests/live_site/conftest.py:resolve_profile_root()` 用它决定根）。开的时候真站层就落在
-`data/chrome_profile/<平台>`，与用户同一条会话；隔离看门狗**只**放行这一棵子树，`data/cookies`、
-`data/workflows`、两个 .db 与 `logs/` 一个都不放。默认关（保隔离），因为开着它就是在花用户的真实会话。
-
-被否掉的替代：**继续用副本并接受微博测不动**——那等于把"已登录抓取"这一整块自动化覆盖丢掉；
-**每轮重登一次测试 profile**——需要用户每次扫码，比开关更贵；**给 hold 加冷却**——治不到"第二台设备"。
-
-### 开关的真机判决（`CIXI_LIVE_USE_USER_PROFILE=1`）
-
-同一台机器、同一份 Cookie、同一批用例，只把 profile 根换成用户自己那份：**6 passed / 30.42 s**，全程零
-`登录墙`、零 `Cookie 预置`（marker 仍 `imported_at 2026-09-24`，用的是它自己那份 jar）。行数：时间窗搜索 8、
-可见窗口搜索 3、**作者模式 5（`作者作品采集结束：5 条（target）`，今晚第一次真取到 mymblog 行——之前是
-403/passport/空表）**，评论用例也过。三说法因此有了次序：**"每轮重放"是第一层病因（#140 已修），"副本 =
-第二台设备"是第二层（这个开关修）**；微博的已登录路径要自动化必须跑在用户自己那份 jar 上。
-
-## 知乎“某作者的作品”：无头给的是静默空表，不是拒绝（measured 2026-09-26，#144）
-
-`backend/test_zhihu_author_headless.py`：同一个作者主页、同一份会话，无头与可见各跑两遍，
-把每遍的**行数 + `wall`/`risk`/`settled` 三个判据**都记下来。
-
-- `headless=True` round 1：rows=0 verdict=ok wall=False risk=False settled=True
-- `headless=True` round 2：rows=0 verdict=ok wall=False risk=False settled=True
-- `headless=False` round 1：rows=5 verdict=ok
-- `headless=False` round 2：rows=5 verdict=ok
-
-要点：无头这一侧**导航是完成的**（`settled=True`），既没弹登录墙也没打风控标记，`_wait_for_page()`
-判成 `ok`——它是本项目已知最坏的一种形状：**一张看起来"这个人没发过作品"的空页**。可见窗口两次
-都稳定交出行，所以差别只在窗口本身，不与会话形状、Cookie 新旧或站点限流混淆。
-
-这不是抖音那种"每次导航都被答验证码"的 `never_headless`：知乎的关键词搜索在无头下是**合法**的
-（它的 0 是真 0，见上面的知乎红线），所以整平台 `never_headless` 是过头的——它会把一个有界的
-单模式发现，写成本会话内每次抓取都开一个窗口。做法是把事实放回它所属的那一层：**矩阵按模式**
-声明 `needs_window`，执行器在建浏览器之前读到它、改用可见窗口，并在控制台说明；运行记录置
-`forced_visible=1`，于是 无头/窗口 chip 描述的是**发生了什么**而不是被请求了什么。
-
-被否掉的替代：**把知乎整个标成 `never_headless`**——过头，把知乎合法的无头空搜索也吞进开窗口那条路；
-**只在知乎 author 处理器里塞一句 `self.driver = ...visible`**——丢掉了让这件事可读的通用钩子（面板
-`note_key` 与那个 chip）；**把"要窗口"只留在 README**——AGENTS 说这类红线**必须**是代码事实，
-因为每个读到它的处理器都会重新发明一遍降级。`note_key='settings.zhihuAuthorWindowNote'` 是面板里
-运行**之前**说的那句，因为降级之后再说就太晚了。
-
-## 抖音每次搜索都只交第一屏：逐条进详情把列表页导航掉了（measured 2026-09-26，#146）
-
-证据是用户一次真机运行（关键词 `IU`、目标 50、选“最多点赞”）：只交 26、**没有任何一句拒绝**。数字对不上
-站点解释——`_scroll_results` 文档里实测 16→26→36→46→56，列表本来会继续长。根因 `DouyinCrawler._open_each`
-把"读列表"和"进详情"写在同一轮：`_detail_row` = `self.open('https://www.douyin.com/video/<id>')` 是**一次整页
-导航**，第一条详情开出去搜索结果那张文档就没了；26 条开完后 `scroll()` 滚的是最后一个视频页，
-`_card_ids()`（`[data-e2e="scroll-list"] a[href*="/video/"]`）数不到卡，`before==after==0` → 收尾。`第 1 屏：0 张`
-是同一处的另一症状（刚点完排序列表正换血，旧写法当成一轮、新写法当"还没收够"继续要下一屏）。判据：
-**一张列表是一份文档，不是一个书签**——"逐条进详情"必须在离开文档前把它要用的东西收完。
-
-为什么测试一直没抓到（比 bug 更值得记）：`tests/integration/test_douyin_crawler.py` 的 `FakeDriver` 无论
-`current_url` 都照旧交回搜索卡、`scrollBy` 照旧从 `scroll_batches` 吐下一批——**免费提供了真浏览器做不到的一件事**
-（"导航去详情之后列表还在"）。修法两半缺一不可：① 假驱动补真站点性质（搜索卡只在 `/search/` 应答、视频页滚动
-不长列表、**重新导航=一份新文档**回到第一屏）；② 走法改两趟（`_harvest_pool` + 逐条开详情），给 `_open_each`
-一个 `reopen`：详情页吃掉的预算由"回列表再滚一段"补，而排序不在地址里（`_apply_sort` 实测 URL 一字符不变），
-所以**重开必须把排序再点一遍**，否则“最多点赞”的表会在续用那趟悄悄爬成“综合排序”。回退验证：`git stash`
-只退产品码留新假驱动，三条新用例全红（26 条那条正复现用户日志），换回两趟即全绿。待决留 #142：两趟减少了
-结果页导航次数但逐条详情一条没少，若 502 真凶是"单位时间导航次数"这会改变其出现频率——**须同机重测，别当作
-已解释 502**。
-
-## 无头到底在哪些指纹上露馅（measured 2026-09-26，#148“尝试伪装”）
-
-`backend/test_headless_fingerprint.py` 在 `about:blank` 上把**无头**与**可见窗口**同一批信号各读
-一遍（不访问任何站点、不花账号），逐字段比。结论是：**我们已有的三条 flag 已经把大部分破绽抹平了**
-——`navigator.webdriver` 两边都是 `false`（`--disable-blink-features=AutomationControlled` 生效）、
-`--headless=new`、`excludeSwitches` 去横幅；`window.chrome`、`plugins`(5)、`mimeTypes`(2)、
-`languages`、`Notification.permission`、**WebGL vendor/renderer** 两边**完全一致**（因为 `--disable-gpu`
-对两种形状都开着，软件渲染器不是知乎的判据）。真正两边不一致的只有两项：
-
-1. **UA 里带 `HeadlessChrome/148`**：`--headless=new` 也照样保留这个词——这是最强的一条露馅，
-   且 `--headless` 系列自身改不掉，必须 `Network.setUserAgentOverride` 或 `--user-agent` 重写；
-2. **虚拟显示尺寸**：无头 `screen.width=800 / outerWidth=780 / dpr=1`，可见 `1707 / 1050 / 1.5`。
-   （`window-size` 设置只给了 viewport，没给 screen 度量。）
-
-`backend/test_headless_masked.py` 造了只针对这两项的最小伪装（CDP 改 UA + 用
-`addScriptToEvaluateOnNewDocument` 把 screen/outerWidth/dpr 改回桌面值），对**同一个作者 token**
-跑三臂：无头裸 / 无头伪装 / 可见。**伪装本身验证生效**（masked 臂 `headless_ua=False`、
-`screen_w=1707`），但这次**判不了成败**：三臂（含作为阳性对照的可见窗口）全部 `rows=0 risk=True`。
-#144 测过同一个可见窗口是 5 行无标记——所以此刻这个 profile 被知乎**整体会话风控**了，
-拿"对照也撞墙"的结果去论伪装成败，正是本仓库反复吃亏的"单次观察下结论"。
-
-教训两条，都写进探针了：其一，**对照必须先行且为绿**——`test_headless_masked.py` 现在先只跑可见
-对照，0 行或带标记就直接中止、不发其余臂（宁可不测，也不要烧着账号产出一个无意义的对比）；
-其二，**探针自己的连发就是风控来源**——token 发现 + 每臂两轮共七八次作者页导航挤在几分钟里，
-很可能就是它把会话打成 scored 的（见 #132 那条"会话被打分后会持续几分钟"）。重测要**隔到分数冷却**
-（约 10–20 分钟）再跑，且一次一臂。
-
-**没有据此改任何产品旗标**：伪装能不能替掉知乎的 `needs_window`，要等一个"可见对照稳定交行、
-伪装无头也交行、裸无头 0 行"的完整三态齐活才说；现在只知道"两项露馅已可机械抹平"。
-
-### 追加（measured 2026-09-26）：伪装能做到"指纹与可见窗口逐项相等"，但知乎那关仍未过
-
-`backend/test_headless_mask_full.py` 在 `about:blank` 上（**不联网、不碰账号**）把三种形状
-（无头裸 / 无头全伪装 / 可见）用同一段脚本读回 20 项自动化信号并逐字段比。两个确定结论：
-
-1. **裸无头只露 5 项**：`ua_headless`、`screen_w`(800 vs 1707)、`outer_w`、`inner_w`、`dpr`(1 vs 1.5)。
-   其余 15 项——`navigator.webdriver`(已 false)、plugins(5)、mimeTypes(2)、languages、`window.chrome`、
-   `maxTouchPoints`、hardwareConcurrency、deviceMemory、WebGL vendor+renderer、Notification 权限、
-   Client-Hints——**本来就和可见窗口一模一样**。所以 `--disable-gpu` 不用动（两种形状都给软件渲染器，
-   不是判别项），`navigator.userAgentData` 在 about:blank 上两边都 undefined，也没得伪。
-2. **把 UA 去 Headless + 用运行时读到的可见窗口真实像素回填 screen/outer/inner/dpr/languages 之后，
-   伪装无头与可见窗口在这 20 项上逐项相等。** 这一条是确定性的、与站点心情无关的。
-
-踩到并已改的两个"越伪越露馅"：
-- 把 `navigator.webdriver` 用 `defineProperty` 强改成 `undefined`——可见窗口是真 `false`，于是伪成了
-  **新的**不等项。正解是**信任已有的 blink flag 给 false**，别再动它；
-- 用 `Network.setUserAgentOverride` 传 `acceptLanguage='zh-CN,zh;q=0.9'` 会渗进
-  `navigator.languages`（变成 `zh-CN,zh;q=0.9`）；且第一版把窗口尺寸**写死成猜的 1707/1687**，
-  反而和可见窗口对不上——正解是**先读可见窗口的真实值再回填**。
-
-**仍未证明的**：伪装能否让知乎作者页在无头下交出数据。三臂活体测试
-(`test_headless_masked.py`) 这次**被它自己的绿灯闸挡住了**——作为阳性对照的**可见窗口**本身回了
-`rows=0 risk=True`（账号还在被早先连发打出的风控窗口里，"打分持续几分钟"），于是探针按设计**中止、
-不发其余两臂**，不拿"对照也撞墙"的 void 结果下任何结论。要出结论，得等冷却（≥30 分钟，期间**不要**
-再用作者页访问去续这个风控）后单跑一次 `test_headless_masked.py`，由它先验对照是否转绿。
-
-### 落地（measured 2026-09-26，#148 收尾）：伪装进了产品，三平台的窗口强制全删
-
-把上面那套最小伪装（去 Headless 的 UA + 用 `window_size` 回填 screen/outer/inner，**不**碰
-`navigator.webdriver`）做进了 `crawlers/core/browser.py::disguise_headless`——**只要选无头就常开**，
-不加设置项、不给 `get_crawler` 加参数。真机复测两遍（用户授权、真实 profile）：
-
-- 知乎作者页（`test_headless_disguise_domcount.py`）：**伪装无头渲染 20→40 张卡，与可见窗口一致；裸无头 0 张**。
-- 抖音搜索、X 搜索（`test_disguise_live.py`）：**伪装无头各交 5 行、无墙无风控**，两遍都可复现。
-
-据此删除三处"必须可见窗口"：知乎 author 的 `Mode.needs_window`（矩阵字段 + helper + API `needsWindow` +
-面板 note 一并撤）、抖音与 X 类上的 `never_headless`、执行器里"源节点把无头偷偷换成窗口"的那段降级与
-`run.forcedVisible` 文案。仍**保留**评论引擎"滚动面板开窗口"的规则（`collects` + `run.forcedVisibleComment`
-+ `forced_visible` chip）——那是"窗口在为滚动服务"，与"平台拒绝无头"是两回事，且没在伪装无头下重测过，
-不顺手拆。测试口径翻转：`test_source_dispatch_matrix` 现在断言**每个非评论组合都按所选以无头建**，
-`test_workflow_api` 新增一条评论节点用例钉住"被强制开的窗口仍写进记录"。`test_a_headless_*`（抖音/X 真机）
-本就写成"要么出数、要么点名拒绝、绝不安静交 0"，所以伪装成功时它自然转绿、站点哪天变脸也不假绿。
-
-**分类器假阳性留而未改**（诚实记录）：知乎作者页连**可见窗口**都偶发 `risk_blocked=True`，
-查因到 `engine.wall.looks_blocked` 对 head[:400] 里任一短语即判 blocked、表内含 `登录后查看`/`扫码登录`。
-但直接把它们从表里删会**弄坏** `test_login_wall_page_is_blocked`——小红书空评论面板的"登录后查看更多内容
-扫码登录"确实要靠 `扫码登录` 单独判 blocked。两者只差"页面有没有内容"，而 `classify` 只看 body 文本、
-看不到内容密度，删词=拆东墙补西墙。且知乎那次假阳性我始终没采到确切短语（post-hydration 采样恒空、
-伪装无头 author() 实跑 5 行 risk=False）。故 `wall.py` 原样保留，已 `git checkout` 回退我的删词尝试——
-这是"没取证就不动共享内核"的正当收手，不是遗漏。要修得引入"空内容 + 登录词"的佐证信号，独立调查。
-
-### 再落地（measured 2026-09-26，#148 续）：评论区强制窗口也拆了，并修好无头下的 hover 菜单
-
-上一节"不顺手拆"的评论强制窗口，这次在**用户真机 profile** 上重测过了，结论翻转：
-
-- **知乎评论区伪装无头 == 可见窗口**：`backend/test_disguise_parity.py` 先可见后伪装无头、各跑一遍，
-  两形状都是 `rows=5 status=ok`（抖音“最多点赞”搜索亦两形状各 3 行，见下）。所以"滚动面板必须开窗口"
-  不再成立。据此删掉评论执行器的强制降级：`_comment_headless` 整个删除、`execute_comment_node` 把运行的
-  无头**原样透传**、`run.forcedVisibleComment` 文案删除、`mark_forced_visible` 无调用者即删，
-  `runs.forced_visible` 列保留（SQLite 去列=重建表，旧行仍有意义）但恒 0；前端 `无头→窗口` chip 与
-  `runsMgr.tagHeadlessMixed` 下线，chip 恒如实读请求的 `无头 / 窗口`。矩阵里 `collects` 不再是执行开关，
-  只决定面板 note 说"若选了窗口，这一屏会滚 / 只会停在加载好的页"。
-
-- **无头下的 hover 菜单是个几何坑，不是伪装坑**：`test_douyin_sort_probe.py` / `test_douyin_hover_probe.py`
-  （一次性诊断探针，已删）量到：可见窗口里 `筛选` 悬停秒开、伪装无头里**渲染更多卡（20 vs 16）却永远不开菜单**
-  （轮询 12 秒 `option_nodes=0`）——`hover` 返回 True，面板却不挂载。逐法试验只有 **JS 直接派发 enter 事件**
-  与 **CDP `Input.dispatchMouseEvent` 打到元素自身中心** 能开，`ActionChains.move_to_element`（打到元素几何中心，
-  无头布局下那个中心被吸顶搜索栏盖住）与"点一下"都不行。正解落进 `engine/menu.py::hover`：在移动指针之后，
-  额外把 `pointerover/pointerenter/mouseover/mouseenter/mousemove` 直接派发到节点（`_ENTER_JS`，几何无关），
-  两形状都开。设备层新增反证 `TestAHoverMenuWhoseWordIsCovered`：一个被 sticky 覆盖层压住的 `筛选` 上，
-  裸 `move_to_element` 断言开不了、`menu.hover` 断言能开——把派发回退掉后者即红。
-
-产品行为：无头工作流（源节点或评论节点）全程无窗、数据照常入库；运行记录不再出现"已自动改用可见窗口"，
-也不再打 `无头→窗口`。知乎作者/搜索、抖音搜索+排序、评论，与 X 搜索，均已两形状覆盖。
-
-## 上游列喂送：喂进来的列表必须**可原样重建**，否则游标就是错的（design 2026-09-27，#162）
-
-- **喂送=替换，不合并**。评论/微信文章表单的链接可以来自上游表格某一列（`Field.fed_by` → `input_column`）。
-  列值直接**顶替**手填框（面板里框随即变灰、内容不参与）：续跑游标 `url_index` 按**位置**记，
-  只有"行序取值 → 跳空格（计数点名）→ 逐格 `split_urls` → 保序去重"这一条**纯函数**路径，
-  才能保证中断前后两次构建出逐条同序的同一列表。合并手填与列值会同时毁掉这两件事：
-  两处都有的文章双倍付费，游标位置对不上号。
-- **执行器零新循环**：注入点在 `execute_source_node` 解析出 mode 之后、路由之前，把列值写进 params 的
-  **副本**（节点存的仍是用户手填原值，绝不回写）；评论引擎与微信 reader 本就按 `params['urls']`
-  逐条爬、逐条存游标，喂送对它们是透明的。
-- **连线不许是哑的**（四处同一判决）：非可喂表单接了数据表、接了表没填列、填了列没接线，
-  全部**点名**拒绝（后端 `engine/workflow.validate` 与前端 `sourceNodeErrors` 共读载荷 `fedBy`）；
-  列名打错在运行时按名让节点失败（对齐 `validate_step` 的缺列判决），绝不交空表装绿。
-  “名称”标注线**不算**数据输入（父类型 `name` 产 0 行）——画布最老的用法不能被误伤。
-- **`input_column` 选数据，进指纹**：它不在 `_VOLATILE_PARAMS`——换一列喂就是换一批输入，
-  去重台账与游标身份随之改判；`_NOT_ARGS` 让它只被执行器读，爬虫方法永远见不到列名本身。
-
-
-
-
-
-
-
-
-
-## 时间窗进文件名，与 SnowNLP 的偏置（measured 2026-10-02）
-
-- **微博的分时间窗只有帖子 mode 声明**：`start_time`/`end_time` 挂在 `_TIMES`
-  （`capabilities/registry.py`），只接进 weibo 的 `posts` mode，`tests/unit/crawlers/test_crawl_capabilities.py`
-  钉住"没有第二个平台拿到它"。真正的校验在爬虫里（`crawlers/platforms/weibo/crawler.py:_build_urls`：要么都给、
-  要么都不给，`end <= start` 直接拒），设计期不看，所以一个坏日期是在运行时点名失败的。
-- **文件名里的窗口是"用户声明的那一段"，不是"走到的那一段"**：stem 在爬虫跑之前就定了
-  （`nodes/executors/source.py` 的 `execute_source_node`）。走到哪只有游标与 `end_reason` 知道，而窗口本身不会
-  因为中途 停止 而改变含义，所以进名字的是请求的区间。分隔符用 `_to_` + `%Y%m%d` 而不用 `~`：
-  NTFS 把 `~` 当 8.3 短名标记，`sanitize_filename` 又不会替我把它去掉；紧凑日期是为了不吃满
-  `MAX_FILENAME_LENGTH = 100`（工作流名长的时候，窗口不能被截掉）。
-- **SnowNLP 在客观陈述上明显偏负**：本机实测 `SnowNLP('会议定于周三举行').sentiments == 0.2378`，
-  而 `'今天玩得非常开心，风景太美了'` 是 0.9464、`'这服务太差了令人失望'` 是 0.0279。它是购物评论
-  上训出来的模型，把"没有好评色彩"读成了负面。因此 0.5 不是可写的常数：正/负两档阈值是节点参数
-  （默认 0.6 / 0.4），`score` 列永远保留原始概率，用户在报告里重划档位即可，不必重跑分析。
-- **`bert` 这一路在本机不可测**：`transformers 5.13` 在，`torch` 不在，`find_spec` 就答得出缺哪个。
-  所以 `bert` mode 只有拒绝路径被测试覆盖（`tests/unit/analysis/test_sentiment_analyzer.py::TestBertMode` 里
-  推理管线是 stub 进 `sys.modules` 的），**真模型从未在这台机器上跑过**，README 也照这句话写。
-
-### B站作者投稿的跨运行水位（2026-10-26，实现；尚未真机验收）
-
-作者模式本来就是“下一页替换整屏、按 BV 号去重”，因此可以安全地用一个**内容边界**而不是页码做跨运行水位：
-上一次完整完成时记录最新 BV，下一次从第一页开始，遇到该 BV 就停止（不请求它和更旧的视频）。页码不能作为边界——
-投稿列表会插入新内容；BV 是站点的稳定身份，且作者页的顺序是新→旧。
-
-实现边界：只在哔哩哔哩 + 作者模式开放，其他平台/模式在运行前按名拒绝；水位按节点指纹持久化，改关键词/账号/模式
-会另起一份；只有完整结束的运行才推进水位，墙、风控、停止、欠采都不写；与“重新采集”互斥（否则去重账本被释放，
-水位仍会挡住旧条目）。这一步**没有跑 live tier**（会消耗账号），所以真站是否按预期在第一页命中边界仍需一次
-`live_quick`/人工验收；离线用 fake 首页验证了“边界 BV 不被请求、之后的卡片不再处理”。
-
-### 小红书评论区：楼中楼在 DOM 里、但一半藏在“展开”后面（measured 2026-11-10）
-
-**实测的现状（改前）**：一条 359 条评论的帖子，旧走查交出 **30 父 + 30 子**（每父默认那 1 条），
-站点自己的 `共 359 条评论` 一个字都没进控制台 —— 这是"静默短表"，不是"这条帖子就这么多"。
-
-用户问“小红书的评论能不能爬楼中楼”，并给了两条真站链接。探针
-`scratchpad/probes/test_xiaohongshu_thread_probe.py`（一次性脚本、gitignore，载荷 `scratchpad/xhs_thread_probe.json`）
-用**本机自己的小红书 profile**（不拿 Cookie 文件往新 profile 重种——那在站点眼里是第二台设备）跑了三遍，
-每条链接一次页面加载。答案分三层：
-
-**一、结构：父子是兄弟，不是包含。** 一条顶层评论是 `.parent-comment` 包装层，里面是它自己的
-`.comment-item` **加上**一个 `.reply-container`；子回复是 `.reply-container` 里的
-`.comment-item.comment-item-sub`。所以旧写法按 `.comment-item` 平铺读，会把子回复**收进表**却
-**无法说出它是谁的**（`.comment-item-sub` 与父卡片同级）。第二条链接实测：10 个 `.parent-comment`、
-10 个 `.reply-container`、10 条子回复 —— **每个父评论默认只挂 1 条回复**。
-
-**二、供给：其余回复在 `div.show-more` 后面。** 同一屏量到 **9 个** `div.show-more`，文案统一是
-`展开 N 条回复`（N = 1/3/4/6/7/8/9，与父卡片的 `.reply .count` 不是同一个数——后者是这条评论的回复总数，
-可能是 `10+`）。旧走查从不点它，于是“楼中楼”永远只有每父 1 条。
-
-**三、分母与身份：**
-- `.comments-container .total` 是 `共 4 条评论` / `共 359 条评论`，**含楼中楼**（第一条：2 父 + 2 子 = 4），
-  因此它是“到底采完没有”的唯一诚实分母；
-- 两级都有 `id="comment-<24hex>"`，这是评论的站点身份（台账按 `(平台, 评论ID)` 认一条，
-  旧行没有它 → 退化成整行 hash，而整行含会重排的 `楼层`，续跑就重复入库）；
-- 作者链接 `/user/profile/<id>?…&xsec_token=…` 的 token **每次访问都变**，列里只能留路径；
-- `.date` 是日期 + `.location`（`09-06` + `山东`），日期可走 `times.absolute`，地区单列；
-- 点赞格可能是 `1千+`/`3,204`/`赞`，走共享的 `parse_count`。
-
-**四、点击的实测答案（重要且不理想）：** 合成 `element.click()` 被 `.reds-mask` / `.inner` 挡掉
-（`element click intercepted`）；原生 `ActionChains` 点击**落到元素上但什么都不发生** ——
-同一批三种方式（原生 / 页内 `el.click()` / 完整 mousedown-mouseup-click 事件序列）结果一致：
-`.login-modal` 弹出、子回复一条没挂上。也就是说**这个 profile 的小红书会话已不被站点接受**，
-“展开楼中楼”需要登录态；站点用登录框回答，而不是静默失败。
-
-**五、顺带量到的两件事：**
-- `/search_result/<笔记ID>?xsec_token=…`（站内“复制链接”给的那种）会被站点 302 到
-  `/explore/<同一个 ID>`，所以两种写法都能收，`rows.note_id` 一个正则认四种路径；
-- 页面底部的 `.comments-login`（“登录查看全部评论内容”）、首访的 `.login-modal` 都会盖住面板：
-  点击前必须用**站点自己的关闭控件**关掉它（`ESC` 不行——在浮层形态的笔记页上，ESC 关掉的是整篇笔记，
-  第二次探针就是这样读到“没有 `.comments-container`”）。
-
-据此定下的走法与列（`crawlers/platforms/xiaohongshu/comments.py`）：
-
-| 项 | 决定 | 理由 |
-|---|---|---|
-| 一屏一读 | 一次页内 `PANEL_JS` 读回整屏分组 | 357 条的面板按元素读要上千次 WebDriver 往返 |
-| `楼层` | **只给顶层评论编号** 1..N | 站点自己的“楼层”就是这个意思；回复的位置由 `父楼层` 表达，所以任何两行不会共用同一个号 |
-| `父楼层` | 顶层空、回复指向父评论楼层 | `reply_graph` 的父表只认“有楼层且无父楼层”的行，回复只提供边 |
-| `评论ID` | `#comment-<hex>` 去掉前缀 | 台账身份；续跑不再重复入库 |
-| `子回复数` | 实际落库的子行数，展开失败时退回站点数 | 与抖音同口径，不虚报也不隐藏 |
-| 去重键 | `评论ID`，退路 `(作者,正文,时间,地区)` | 旧 `(作者,正文)` 会吞掉同一作者连发的两条“谢谢” |
-| 展开器 | 原生 `ActionChains`，**点到该线程不再长为止**（站点分批放，点一次只给一批，随后文案变 `展开更多回复`） | 合成点击不动 React 这件事抖音已量过；而"每线程只点一次"会让 10+ 条回复的线程停在第一批 |
-| 展开被拒 | 弹 `.login-modal` → 关掉、停手、`comment.xhsLoginGate` 点名 | 实测的拒绝形状，不能重试成死循环 |
-| 收工 | 连续三屏没新行 + 展开器不再长 + 滚动没换出任何卡片（站点印了 `- THE END -` 时记为"已到列表末尾"） | 固定的 12 轮预算会让"采不满"读成"就这么多"；一屏安静只说明这一屏慢 |
-| 滚动 | 滚**含评论最多**的那个可滚容器（实测 `.note-container`），退路才是 `.note-scroller` | 旧写法滚 `.note-scroller` 只推动了笔记正文栏，评论面板停在前 30 条 |
-| 对账 | `共 N 条` vs 本表 + 未展开数，`comment.xhsShort`；数字能对上但仍有回复没展开时用 `comment.xhsNested` | 分母含楼中楼，差额可归因 |
-| 换篇 | 地址里的笔记 ID 变了 → `DEAD` + `comment.xhsGone` | 死链不许把别人的评论记在你贴的链接名下 |
-
-**登录之后补量到的（2026-11-10，同一个 profile、同一批链接）：**
-
-| 观测 | 结果 |
-|---|---|
-| 原生 `ActionChains` 点 10 个 `展开 N 条回复` | `.comment-item` 20 → **60**（挂出 40 条），登录框**没弹** |
-| 点完的展开器文案 | 变成 **`展开更多回复`**（不是 `展开 N 条回复`）——所以匹配必须认元素 `.show-more`，不能认"展开 N 条"这句话 |
-| 同一次点击之后 | 顶层评论 10 → **20**：展开的同时评论区又挂出了下一屏 |
-| 第一条帖子（4 条评论） | 登录后**一个展开器都没有**：2 父 + 2 子本来就全在 DOM 里 |
-| 滚动容器 | 能滚且含评论的有两个：`.note-container`（评论 164、scrollHeight 23159，每滚 ~10 条）与 `.interaction-container`（`top` 恒 0）；`.note-scroller` 不在其中 |
-
-**改前/改后，同一条 357 条评论的帖子（真机、同一账号、同一天）：**
-
-| | 行数 | 父 / 子 | 站点自己的数 | 收尾 |
-|---|---|---|---|---|
-| 旧走查（`.comment-item` 平铺、不点展开、滚 `.note-scroller`） | 30 父 + 30 子 | 30 / 30 | 357 | 无（静默短表） |
-| 新走查（分组读 + 分批展开 + 滚 `.note-container`） | **338** | **200 / 138** | 357 | `- THE END -`，差额 18 被点名 |
-
-单条父评论最多收到 **19 条**回复，338 条 `评论ID` 全不重复。**剩下 18 条是站点自己不给的**：面板滚到底后
-`.note-container` 停在 33359/34181 px、站点自己印着 `- THE END -`，再滚 3 屏一张新卡片都不挂；另有一条回复的
-"展开"点了两次也不出内容（`comment.xhsNested` 会点名它）。所以"一条不落"的天花板是**站点渲染出来的那 338 条**，
-不是我们的循环停下——控制台报的 `站点写着 357 / 本表 338 + 未展开 1 / 还差 18` 就是这句话的证据。
-
-**为拿满做的三条修正（都是实测逼出来的）：**
-
-1. **重试比"只点一次"值 41 条回复**：一批回复会在点击后 1.8 s 之外才挂上，旧的"点一次就退休"把 42 条回复锁死；
-   现在面板还在长的时候**不退休**（每轮重试），只有面板静下来之后连续两次点不动才退休。
-2. **收工耐心 2→3 屏**：最后一屏实测会在面板"看起来完了"之后第 3 轮才挂上，少等一屏就少 2 个父评论 + 1 条回复。
-3. **`- THE END -` 是站点自己的结束标记**：和"这一屏没新行 + 没有可点的展开器 + 滚动没换出卡片"一起才算收工；
-   它只决定"怎么收"，不再让任何常数替站点说"就这么多"。
-
-**登录之后补量到的（2026-11-10，同一个 profile、同一批链接）：**
-
-```
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --login-check   # 这个 profile 还登录着吗
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --login         # 扫码窗口（人工）
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --walk <url>    # 跑产品自己的 walk
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --scroll-check <url>    # 哪个盒子在喂列表
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --complete-check <url>  # 一直展开+滚动到平台停住，报天花板
-.venv/Scripts/python.exe scratchpad/probes/test_xiaohongshu_thread_probe.py --tail-check <url>      # 面板底部：THE END 还是还有控件
-```
-
-**教训（工程侧）**：真机探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，**不能和 fast suite 同时跑** ——
-`tests/unit/gates/test_test_tiers.py` 的"用户目录只读"探针正好在 Chrome 淘汰缓存文件时走目录，
-会抛 `FileNotFoundError`（实测撞过一次）。跑真机前先确认 5000 端口空闲、suite 已停。
-
-### 小红书评论：`ok + 0 行` 曾经把风控/过期 Cookie 记成“采完了”（measured 2026-11-11）
-
-用户问的是“风控或 Cookie 过期时控制台还说新增 0，续跑会不会把这些帖子重采”。答案是**不会**：走查只在
-`looks_blocked(session.body_head())` 命中时返回 `BLOCKED`，而注释区被风控/登录墙挡住时，笔记页本身可能仍
-是一张正常页面（正文 600 字里没有墙的话术），于是走查返回 `ok` 0 行，游标越过，`继续` 跳过；全部链接都这样
-时 run 还是 `completed`，连“继续”都不出现。
-
-现在改成的形状（同一轮提交，全部有单测）：
-
-| 形状 | 以前 | 现在 |
-|---|---|---|
-| 笔记页 URL 跳到 passport / `chrome://` / 浏览器错误页 | 正常页面？→ 没面板 → `ok` 0 行 | `wall.classify` 判 `login`/`blocked`/`unreachable` → `BLOCKED`，并 latch `login_wall`（登录墙）或 `risk_blocked`（退避） |
-| 面板里有站点自己的 `.comments-login`（“登录查看全部评论内容”） | 当成“这条没评论” | `BLOCKED` + `login_wall`，已读父评论保留 |
-| 点“展开”被 `.login-modal` 拒绝 | 只记 `xhsLoginGate`，仍 `ok` | 收尾 `BLOCKED`（保留已读行），游标钉在这一条 |
-| 面板没渲染 / 走到一半被停止 / 差额对不上且站点没印 THE END | `ok` | `mark_unproven(url)`：节点 partial/failed，`继续` 从这条重走 |
-| 站点印了 `- THE END -`（那 357 条的笔记拿到 338 行 = 200 父 + 138 子，站点 3 屏不再长） | 只报差额 | 差额照旧点名，但**算采完**（不 mark_unproven），否则每次续跑都会为站点不给的 18 条变红 |
-| 用户自己的 `评论上限` 命中 | 不报 | 不报、也不算未证明（和微博同一条规则） |
-
-旧 run 的游标已经越过洞口，续跑救不回来：要么“重跑节点”（会删 rows + cursor 并释放本次去重认领），
-要么勾“重新采集”再跑——提交信息里点名了这一点。
-
-真机方法照旧（全新临时 profile 等价于未登录，不碰用户登录 profile）：`scratchpad/probes/test_xiaohongshu_thread_probe.py`
-的 `--login-check/--login/--walk/--complete-check/--tail-check`。**探针会写 `data/users/<id>/chrome_profile/xiaohongshu`，
-不要和 fast suite 并行**（`tests/unit/gates/test_test_tiers.py` 的只读会话断言会撞上）。
-
-#### “一直停在主页，连第一条笔记都没打开”＝链接被送回 feed（2026-11-13）
-
-用户报的是开着慢速采集后采小红书评论，浏览器停在 `xiaohongshu.com` 首页不动。走查本身只做
-`session.driver.get(笔记URL)` 一次，所以“停在首页”只有一种来源：**站点把这条笔记 URL 重定向回了 feed**
-（`/explore`，实测 `?source=web_explore_feed`）——笔记 URL 只认活的 `xsec_token`，token 过期/被剥掉就送回首页。
-旧代码在 `note_id(current)` 为空时**直接跳过**“打开的是另一篇”的判断，接着读面板、读到 0 个卡片、按
-`comment.xhsNoPanel` 记一条 `ok` 并 `mark_unproven`，浏览器就一直留在首页上——控制台既不说是链接失效，也不说
-为什么没有评论；慢速采集把每次 `nap` 拉长，主页上停留的时间成倍放大，就是用户看到的“一直停着”。
-
-现在有单独一支：链接没有打开成笔记页（`note_id` 为空）→ 控制台点名 `comment.xhsRedirected`（带实际落点 URL）→
-返回 `DEAD`（是这条链接的事实，不冤枉会话、不 latch 登录墙/风控），不再滚首页、不再读不存在的面板。判重定向之前
-仍按到达节奏等一次（`arrival_nap`，慢速预设 ×1.6 而不是原来的礼貌停顿 ×4），因为客户端的跳转要等它跳完。
-
-**同一症状的另一半：`xsec_source`。** 站点自己的“复制链接”给的是
-`…?xsec_token=…&xsec_source=pc_feed`；一条**没有** `xsec_source`（或值为空）的链接对站点不是同一个请求，可能被送回
-feed。所以两处导航（数据源节点的笔记详情 `_scrape_note`、评论走查的 `session.driver.get`）现在都经过
-`rows.with_feed_source`：缺就补 `pc_feed`，**原来非空就原样保留**（`pc_search`/`pc_user` 是站点为那个入口签发的）；
-只改请求，不改行里的 `笔记链接`/`文章URL`，身份与校验口径不动。只处理 `xiaohongshu.com` 主域，`xhslink.com` 短链
-原样交给站点跳转；签过名的 `xsec_token` 逐字符透传，不重新编码。
-
-### 采集校验拿什么和“评论数”比（口径，2026-11-11）
-
-采集校验节点（`nodes/executors/verify.py`）的条数校验比较的是**结果表里同一链接的行数**与**清单行上站点自己印的
-`评论数`**。三条口径必须说清，否则“缺了”会变成假警报：
-
-- **站点的数字不等于顶层评论数**：微博评论页的 `total_number` 统计整条 thread，实测 30 条的帖子只返回 22 条顶层行，
-  差的 8 条正是它的楼中楼，而本项目的评论走查会把可拿到的子回复也写成行。所以两边的分母都可能包含回复，
-  比较的是“站点说这条有多少条评论 / 我们存了多少行”，不是“顶层评论”。
-  - **live 案例挑帖要避开“只有 1 条”的帖**（measured 2026-11-15）：搜索行印着 `评论数=1` 的帖子，那唯一一条
-    往往是楼中楼（或已删除、仍被计数），顶层列表合法地为空；`test_live_comments.py` 却断言“印了评论就必须有行”，
-    于是把站点的正常答案记成红。`_fresh_post_with_comments` 现在只取 `评论数 >= 2` 且**最大**的那条——
-    输入要让断言有意义，而不是把阈值调低。
-- **万/千/亿与 K/M/B 是取整过的标签**：爬虫落库时已经用 `crawlers.engine.counters.parse_count` 折成整数，但标签本身
-  可能四舍五入（“1.2万”可能是 11,800 也可能是 12,300）。因此节点给了“每篇允许少的条数”和“每篇上限”两个旋钮，
-  默认都是 0/不设；站点取整明显时把容差调大，而**不要**把它当成漏采。
-- **采集时设了每篇上限就必须在节点里填同一个数**：评论采集的“每篇最多 N 条”会让每一篇都短于站点的数字。校验节点
-  的“每篇上限”就是用来把期望值压到 `min(评论数, N)` 的；面板会把结果上游检测到的 `comment_limit` 直接显示出来，
-  照着填即可。匹配方式默认 `url`（协议/主机大小写、尾斜杠、`utm_*`/`spm` 等分享参数归一），评论表按 `文章URL` 对上
-  帖子表的 `链接`；站点把同一篇文章的分享链接与原始链接混用时，这是唯一不会把已采过的文章当成缺失的口径。
-
-## 账号池：冷却台账放在哪，为什么不是后台线程（2026-11-11）
-
-`data/pool.db` 里的 `health` 表同时装两种主体：`(account, 平台, 账号)` 与 `(exit, 平台, 出口 id)`。
-一个登录可以在微博被墙而在 B 站正常，一个出口可以被知乎风控而给 YouTube 用——所以健康不是全局布尔值。
-冷却写成 `cool_until`（epoch），读取时和当前时间比较；**没有清扫线程**：服务器停一晚再开，所有过期冷却
-自然就已经不在了，而清扫器会变成第二个写者。`disabled` 是人工停用，时钟永远解不了它。
-
-出口解析只有一个入口（`get_crawler`），因为采集、登录窗口、验证、预检四个浏览器读的是同一份会话：
-在 A 出口登录、在 B 出口采集本身就是风控诱因。带认证的 HTTP 出口走本地 CONNECT 中继（`crawlers/core/proxy.py`），
-Chrome 只看到 `127.0.0.1:<临时端口>`，凭据不进 argv；中继随 driver 关闭，被 PID 强杀的 driver 也一样会关。
-无认证出口直接给 `--proxy-server`，并加 `--force-webrtc-ip-handling-policy=disable_non_proxied_udp`
-堵住 WebRTC 的 UDP 绕行。带认证的 SOCKS5 明确拒绝——不做半截 SOCKS5 握手。
-
+| B 站 关键词 | (a)(b) | 每个 `page=` 重载搜索页，数字再静默到达（每行一次 `view`） |
+| B 站 热榜 | (b) | 首页，然后什么都不动 |
+| B 站 作者 | (a)(d)(b) | 真实滚动的 space 页（点 下一页 换屏） |
+| B 站 评论 | (b) | 视频页打开后静止（游标走 `reply/main`，没有评论 DOM） |
+| 知乎 搜索/作者/评论 | (a)(d) | 滚动信息流/profile；评论点 展开 |
+| 微博 搜索 | (a)(d) | 每个小时窗一页搜索 |
+| 微博 评论 | (b) | 只有首页 |
+| 小红书 搜索/评论 | (a)(d) | 滚动网格 / 滚动评论面板 |
+| 抖音 作者/评论 | (a)(d) | 每行一页（作者是遮罩）；滚动路由容器 |
+| YouTube 全部 | (b) | 一次页面加载后 innertube POST，屏幕不动 |
+| X 搜索/作者/评论 | (a)(d) | 滚动虚拟化时间线 |
+| 微信 正文 | (a)(d) | 每篇文章页滚动 |
+| 红果 评论 | 外部播放器 | 播放器窗口 + 抽屉滚动 |
+
+**(b) 模式没有人的行为可演**：窗口模式是纯成本，运行前对话框必须说明并提供无头；模式必须声明自己属于哪类，前端不得持有
+第二个意见。**只有两条路径都存在的模式**（B 站关键词既读 DOM 卡又逐行取 `view`）才可诚实提供“模拟人”与“直接取 JSON”；
+只有一种实现的（B 站热榜＝纯 API）不提供选择。**(b) 仍然需要页面**：fetch 在已加载文档里跑，“无头”不是“没有浏览器”。
+
+## 停止路径
+
+- **停止必须杀进程**：跨线程 `driver.quit()` 排在 worker 当前命令之后（40 s 导航、30 s 页内 fetch 都只是等它自己超时）；
+  chromedriver 148 的 `chromium/stopRequest` 已不存在（404 unknown command）。唯一可靠的打断是让驱动进程消失：
+  `STOP_QUIT_GRACE=0.8` 给空闲浏览器体面退出，到点按 PID 收树，多浏览器各一线程并行收。
+- **杀完立刻换成死驱动桩**：被杀的 in-flight 命令自己会以 socket RST 结束，但**之后**每条命令会在没人监听的端口上付 16.3 s
+  （urllib3 默认重试 4 次 × ~4 s）；换成立即抛 `CrawlerStopped` 的桩是 0.00 s。不要归零 `pool.retries`（4.07 s/条，更差），
+  也不要 `close()` 连接池（之后又回 16.3 s）。桩的 `quit()`/`close()` 必须静默（worker 的 `finally` 会再调），`close()` 清
+  `driver` 必须比较后再清；`_close_login_browser` 重入要在入口返回且不替它放 profile 锁。
+- **面板追看要比真实尾巴长**：一次真模型请求卡住时，记录定档可花 14.6/15.2 s；Ollama 传输的天花板是
+  `300 s × 2 次尝试 = 600 s`，所以看门狗的 `tries` 由 `SETTLE_WATCH_MS`（660 s）除以实际步长导出，不是 240×0.5 s。
+
+## 网络分区与海外平台
+
+- **不挂 VPN 时 x.com / YouTube 打不开**：画布里出现海外平台，运行前问“外网开了吗”（`ask_overseas_network`，默认开；答没开就
+  不启动，空表会被读成“这个关键词什么都没搜到”）。这一问排在 Cookie 预检之前（一次注定取消的运行不该付浏览器的钱）。
+- **分区是数据不是路由**：`capabilities.registry.Capability.region`（`cn`/`overseas`）由矩阵一处声明、随 `/api/capabilities` 下发；
+  `live_cn`/`live_os` 分组读它，`tests/unit/gates/test_test_tiers.py` 用矩阵 region 核对每条 live 用例的 marker；矩阵没说的平台按
+  “不知道”处理（不提醒也不拦）。提醒是建议且可关。“挂 VPN 时抖音 502 所以一张画布不能混采”已被否掉（同一国内会话从海外出口
+  3/3 正常），混采弹窗已删除；再遇 502 先用探针读出口，不当平台规律。
+
+## 采集校验口径
+
+- 采集校验节点比较**结果表里同一链接的行数**与**清单行上站点自己印的 `评论数`**。站点的数字统计整条 thread（微博 30 条的帖只回
+  22 条顶层，差的是楼中楼，而走查会把能拿到的子回复也写成行），所以比较的不是“顶层评论”。匹配默认 `url`（协议/主机大小写、
+  尾斜杠、`utm_*`/`spm` 等分享参数归一），评论表按 `文章URL` 对上帖子表的 `链接`。
+- **万/千/亿与 K/M/B 是取整标签**，所以节点给“每篇允许少的条数”和“每篇上限”两个旋钮（默认 0/不设）；采集设了每篇上限就必须在校验
+  节点填同一个数（期望值压到 `min(评论数, N)`）。**站点印 `评论数=1` 的帖不要拿来当 live 输入**（那一条常是楼中楼/已删除却仍计数，
+  顶层合法为空），挑 `>= 2` 且最大的那条。
+- **一个被审计发现的缺口是答案，不是节点失败**：采集校验 settle DONE，报告表带 `采集状态`/`缺失条数`，控制台点出缺口与重采
+  清单；无法读取的 `评论数` 记 `无法核对`，不进缺口表（没有可重采的东西）。
+
+## 账号池冷却（只记事实）
+
+`data/pool.db` 的 `health` 同时装 `(account, 平台, 账号)` 与 `(exit, 平台, 出口 id)`：一个登录可以在微博被墙而在 B 站正常，一个出口
+可以被知乎风控而给 YouTube 用。冷却写 `cool_until`（epoch），读取时和当前时间比较，**没有清扫线程**（服务器停一晚再开，过期自然
+不在；清扫器会变成第二个写者）。`disabled` 是人工停用，时钟永远解不了。失败只冷却它指控的那一侧：登录墙冷却会话，验证码先冷却
+出口，不可达两者都不冷却；未知失败从不冷却。

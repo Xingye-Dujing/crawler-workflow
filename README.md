@@ -1,202 +1,118 @@
 # 采析绘
 
-**把“采集 → 清洗 → 分析 → 可视化”画成一条能跑的工作流。** Flask + Selenium + 本地/在线大模型 +
-scikit-learn，拖节点、连线条、点执行；中断了能从断点接着跑，已经花掉的采集与模型费用不用再付一遍。
+**把“采集 → 清洗 → 分析 → 可视化 → 成稿”画成一条能跑的工作流。** Flask + Selenium + CatBus + 本地/在线大模型 +
+scikit-learn；拖节点、连线条、点执行，中断后从断点续跑，已花掉的采集与模型费用不再付第二遍。
 
-> 这里只讲怎么用起来。分平台细节、分析方法、引擎与 API 都在 [`docs/`](docs/)（见文末索引），
-> 给 AI agent 的改动规则在 [`AGENTS.md`](AGENTS.md)。
-
-**在线体验**：<http://47.116.114.77/crawler>（云端模式，登录后使用）　·　**不想装 Python**：
-[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 有 Windows 安装包 `CaiXiHui-Setup.exe`
-和手册 PDF。
+**在线体验**：<http://47.116.114.77/crawler>（云端模式，需登录）　·　**不装 Python**：
+[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 提供 Windows 安装包、macOS DMG 与手册 PDF。
 
 <img src="docs/manual/img/hg-canvas.png" alt="采析绘画布：一条跑过的红果短剧工作流" width="100%">
 
-一条跑过的红果短剧工作流：左边是节点库，中间是画布，右边是大纲；节点左端的色条是类型，右上角的绿勾是上次运行的
-结论。界面六块区域各自管什么、每块怎么用，见[图文手册](docs/manual/)。
+使用说明见[图文手册](docs/manual/)，工程细节见[文档索引](#文档)，AI agent 的改动规则见 [`AGENTS.md`](AGENTS.md)。
 
 ## 快速开始
 
-源码版 Windows / Linux / macOS 都能跑（云端部署目标是 Linux）。`desktop/` 是唯一的系统打包目录，同一份代码出
-Windows 安装包与 macOS `.app`/DMG（macOS 构建在 GitHub 的 macOS runner 上跑）。唯一只能 Windows 做的是红果短剧的
-评论收割（要驱动本机播放器并装系统证书）——它在其他系统上按名拒绝，面板也不给这个选项。
+源码版 Windows / Linux / macOS 均可运行（云端部署目标是 Linux）。
 
-**你需要什么**
-
-- Python 3.11（代码用了 `zip(..., strict=True)`），依赖装在项目自己的 `.venv/` 里，不要用系统 Python。
-- Chrome 和**与它大版本匹配的 chromedriver**。源码/便携版按当前系统自己找，也认 `CHROME_PATH`/`CHROME_BIN`
-  与 `CIXI_DRIVER_PATH`（设置面板里也能填）；源码运行版只有“本机已安装的”这一种来源，安装器相关选项不会出现。
-  在线安装版默认只用安装器装的那一份，缺了按名报“安装器未安装”，只有切到“本机已安装的”才查本机。
-  版本不匹配会按名拒绝，不会偷偷下载一个驱动顶上。
-- 模型二选一：[Ollama](https://ollama.ai/) 本地跑，或 OpenRouter 的 API Key。只做清洗/统计不动模型也能用。
-- 可选：`xelatex` 只给“编译 PDF / 论文成稿”，中文字体（Linux 装 `fonts-noto-cjk`）只给中文图表；
-  缺了会告诉你缺什么，不会画一屏方框。
-
-**AI 工作区**
-
-- 顶栏 **AI 工作区** 打开右侧常驻面板：会话、对话、智能体轨迹与上下文检查器都在一处；顶栏原来的
-  **AI** 子菜单继续负责逐行分析的模型/密钥/测试。
-- 供应商：DeepSeek 直连（深度思考、联网搜索、读链接、安全审核、会话标题）、OpenCode Go、
-  OpenRouter、本地 Ollama。API Key 只在本浏览器 `localStorage`；服务端只在一次请求内持有，绝不写入
-  `data/` 或日志。云端模式按名字拒绝本地 Ollama。
-- 助手先读项目再回答：项目事实由节点/平台/分析/图表注册表生成，实时读取当前画布、数据集与运行；
-  发送前可在“上下文检查器”里看到将发送的内容与 token 预算。写入永远只是提案（工作流/分析/图表/报告），
-  由你点应用。
-- 不确定时它会用 `ask_user_question` 停下来给出选项，等你选完再从原处继续；内置技能包括项目向导、
-  采集顾问、故障诊断、数据分析、画布架构、图表、报告、联网研究、开发助手（仅本地）与技能作者。
-- **技能与插件**：内置技能只读，可 Fork 成自己的技能；用户技能是数据（提示词 + 上下文来源 + 只读工具），
-  不能再写代码。插件支持声明式技能包、Provider 包、HTTP 工具包，以及仅本地/管理员的代码插件；云端按名
-  拒绝代码插件。架构、权限和扩展方式见 [`docs/ai_workspace.md`](docs/ai_workspace.md)。
-
-**设置与慢速采集**
-
-- 顶栏“设置”里保留机器路径等快捷项；“完整设置”打开设置页，按分组调整采集节奏、等待、重试、并发、保留与新节点默认值。
-- 设置页由服务端 schema 动态生成，所有键都有默认值、范围和中文/英文说明；**保存后立刻生效**，不需要重启
-  （标记“重启生效”的少数键除外），新节点默认值、CatBus 引擎列表也会当场刷新，不会留一个页面旧值。
-- 顶栏的 **并行 / 无头** 开关按浏览器记住：下次打开还是你上次的选择（打开某个已保存的工作流时，仍按该文件
-  里记的模式）。
-- **采集速度是分开的九个旋钮**：礼貌停顿、滚动间隔、展开间隔、点击后稳定、元素等待、页面到达、页面间隔、像人抖动、耐心重试各一个
-  倍数，可以只把“滚动”调慢而让“展开”保持原速；1 = 各平台实测基线。每个倍数右边直接显示它实际值多少钱：
-  “生效约 3.6 秒（基线 1.2 秒 × 3）”，不用再拿倍数心算。**像人抖动**让每次滚动/展开/点击的停顿在基线上
-  随机浮动 ±N%（0 = 节拍器，30~50 更像人）。
-- 预设有三档：**标准**（全部回到实测基线）、**慢速采集**（停顿 ×4、滚动/展开/点击/页面间隔 ×3、等待 ×2、到达 ×1.6、
-  抖动 30%、耐心 ×2，外加同平台排队、跑前验证 Cookie、并发收紧）、**夜间**（再慢一倍、抖动 50%、一次只开一个浏览器）。
-  每档都写入具体值并记住启用前的值，一键恢复；设置页的卡片会先列出“将改动哪几项、从多少到多少”。
-- 被风控时点顶栏“慢速采集”一键切换；设置页里“显示高级项”之外的项才是日常要调的，高级项默认收起来。
-- 设置页底部可导出/导入配置。导出默认不含本机路径；导入会先预演、**逐项列出“现在 → 导入后”**，确认后才写入。
-  源码运行版不显示“包含本机路径”这个只属于安装版的选项。
-- 设置页的其他手感：没保存就关闭/刷新会先问“保存、放弃、继续编辑”；每组标题旁有“本组默认”，底部有“全部恢复默认”
-  （都只是暂存，按保存才生效）；越界数字当场标红并说明范围，不再由服务端悄悄夹到边界；机器内部的时序项收在
-  “显示高级项”之后。
-- **控制台顶部有“启动 / 阶段耗时”**：浏览器启动、搜索/列表、每条评论走查各花了多久，以及这一步收在什么状态
-  （行数、正常/被拦/失效、未证明、登录墙/风控）。窗口打开却迟迟没动静时，先看这一条。
-- 顶栏和底部状态栏在窄窗口按整组换行，画布侧栏、看板、全屏预览、节点设置、执行历史、设置子菜单与弹窗都跟随两条栏的
-  **实测高度**换算出同一个可用区，上下各留 12px；手机/平板上设置页改为横向分组条，环境检查的行改为纵向堆叠。
-- 报告、论文成稿、图表 PDF 与“AI 连接测试”的模型调用/`xelatex` 编译都在后台任务里执行，页面轮询任务状态；
-  生成期间可以继续工作，失败按服务端给出的原因提示，不会再占住一个请求线程几分钟。
-
-**账号池与出口池（IP）**
-
-- 一个平台可以保存多份登录。节点账号选“账号池（自动轮换）”后，一组账号/出口被登录墙或风控拦下就会冷却
-  （默认 2 小时；网络问题只冷却出口 5 分钟），下一次运行直接跳过它，换下一组继续——这正是账号被管控时
-  不该重复撞墙的那部分。冷却记录持久化在 `data/pool.db`，重启不丢；面板可解冻、停用、手动绑定出口。
-- 出口是 Chrome 代理（HTTP / HTTPS / SOCKS5，可选账号密码；带认证的出口由本地回环中继加凭据，密码不进命令行）。
-  账号与出口**粘性绑定**：出口坏了才换 IP，登录不变。
-- 规则、归因表与边界见 [docs/account_pool.md](docs/account_pool.md)。
-
-**跑起来**
+| 需要 | 说明 |
+|---|---|
+| Python 3.11 | 依赖装在项目自己的 `.venv/`，不要用系统 Python |
+| Chrome + 匹配的 chromedriver | 按当前系统自动查找，也认 `CHROME_PATH`/`CHROME_BIN`、`CIXI_DRIVER_PATH`；版本不匹配按名拒绝，不偷偷下载驱动 |
+| 模型（可选） | 本地 [Ollama](https://ollama.ai/) 或 OpenRouter API Key；只做清洗/统计可不用模型 |
+| 可选组件 | `xelatex` 仅用于“编译 PDF / 论文成稿”，中文字体（Linux `fonts-noto-cjk`）仅用于中文图表；缺了会报缺什么 |
 
 ```bash
-cd crawler_workflow
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-ollama pull qwen3.5:9b             # 可选，用 OpenRouter 可跳过
-
-cd backend && python app.py        # http://127.0.0.1:5000
+ollama pull qwen3.5:9b                            # 可选
+cd backend && python app.py                       # http://127.0.0.1:5000
 ```
 
-`backend/` 是 `sys.path` 根，必须从那里启动。端口用 `PORT`、监听地址用 `HOST`；开发时
-`FLASK_DEBUG=1` 开热重载。
+`backend/` 是 `sys.path` 根，必须从那里启动。端口用 `PORT`，监听地址用 `HOST`，开发时 `FLASK_DEBUG=1` 开热重载。
 
-不想在本机装：直接开 <http://47.116.114.77/crawler> 用线上实例（云端模式，需要账号），或者下
-[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) 里的 `CaiXiHui-Setup.exe`；
-只想要一个下载器就用 `CaiXiHui-Online-Setup.exe`，默认走国内镜像（Gitee / npmmirror），不需要翻墙。
-macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积的
-`CaiXiHui-Online-Setup-macOS-<arch>.dmg` 在线安装。两个在线安装器都**在安装时读 `version.json`**
-决定装哪一版，所以同一个安装器放久了，装出来的仍是最新主程序。
+## 采集
 
-**三件值得先知道的事**
+| 平台（9 个社交平台 + 知网） | 玩法 |
+|---|---|
+| 知乎、微博、小红书、微信公众号、哔哩哔哩、抖音、YouTube、X | 关键词、作者作品、热榜、评论 |
+| 红果短剧 | 关键词与评论；评论需驱动本机播放器，仅 Windows，其他系统按名拒绝并隐藏该选项 |
+| 中国知网 | 文献导出件识别（上传后自动解析） |
+| Instagram | 仅 Cookie 保存，不采集 |
 
-- **一个数据根只开一个服务。** 状态都在同一份 `data/`（运行、数据集、Cookie、导出），第二个实例会把正在
-  写的那次判成中断。确实需要（跑验证脚本、开测试服务）时给它一份自己的目录：
-  `CRAWLER_DATA_ROOT=<目录>`，两份互不干扰。
-- **给别人用就开云端模式**：`python app.py cloud`（或 `CRAWLER_CLOUD=1`）。关掉本地模型、强制无头、
-  强制多账号登录——首次启动必须给 `CRAWLER_ADMIN_PASSWORD` 和 `SECRET_KEY`，否则拒绝启动。每个账号的
-  工作流、数据集、运行、Cookie、导出都在 `data/users/<账号 id>/` 下，互相看不见。旧数据用
-  `tools/migrate_accounts.py` 迁到管理员名下（默认 dry-run，先备份）。
-- **不想装 Python 就用桌面版（Windows / macOS）**：[Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases)
-  里有现成的 `CaiXiHui-Setup.exe`；只想要小体积下载器就用 `CaiXiHui-Online-Setup.exe`，默认从 Gitee /
-  npmmirror 下载主程序、Chrome、chromedriver、Node 和 CatBus，国内不需要翻墙（见
-  [`docs/installer.md`](docs/installer.md)；以后的功能更新与发版步骤见
-  [`docs/release.md`](docs/release.md)）。安装器和主程序都是**原生窗口**（Windows 自带的
-  Microsoft Edge WebView2；macOS 用系统 WebKit），没有控制台、也不开浏览器；**主程序首次启动默认浅色**
-  （设置里仍可切自动/深色），**启动即最大化**；安装器是一屏窗口。**关闭主窗口即退出整个程序**，
-  **最小化则继续在后台采集/跑定时任务**。
-  程序和用户数据都能选在 C 盘以外（“数据文件夹”写进 `app\data-root.txt`）。`desktop/` 负责打出
-  `CaiXiHui.exe`，双击启动本地服务并在窗口里显示界面，数据默认在 `%APPDATA%\CaiXiHui`（旁边放个空的
-  `portable.txt` 就变便携版）。macOS 的 `.app`/DMG 由 `desktop/build_macos.py` 在 GitHub 的 macOS runner
-  上构建并发布（`.github/workflows/macos-build.yml`），数据在 `~/Library/Application Support/CaiXiHui`；
-  主程序启动后会检查 `version.json`，有新版本时在**菜单条下方**弹出更新卡片（OMM-ZEN 纸面样式）：
-  “立即更新”在后台进程里下载、校验、展开，“稍后”安静 24 小时、按版本记，“不再提示此版本”只压住这一版；
-  **下载中关掉窗口不会中断更新**（任务写在 `data/updates/job.json`，日志在 `data/updates/update.log`），
-  下载完成后关窗口或点“重启并完成更新”都会替换程序并自动拉起新版本，新版本若起不来会自己回滚到旧的；
-  设置子菜单里的“更新”一行显示当前版本，并带一个“检查更新”按钮——随时手动查一次，不受“稍后 /
-  不再提示此版本”影响，查完用一句话说明“已是最新”或“发现新版本”；
-  组件目录和用户数据不会被更新碰。源码运行不执行自更新。
-  主窗口跑起来后还有一个 Windows 系统托盘图标（`desktop/tray.py`）：右键“显示主窗口 / 打开数据目录 /
-  退出”，运行完成、运行失败、定时任务开始会弹系统通知，最小化后也能知道结果；托盘右键是系统原生菜单，
-  外观跟随系统亮/暗（OMM-ZEN 只用于应用窗口）。macOS 只用系统通知，不建状态栏项。
-  同一个 workflow 还产出小体积的 `CaiXiHui-Online-Setup-macOS-<arch>.dmg`（安装时读 `version.json`
-  取最新主程序 DMG，再下载 Chrome/Node 装到 `/Applications`）；CatBus 现在也有 macOS 官方构建，安装器会像
-  Windows 一样下载并连同 Node 一起装好。
-  Windows 与 macOS 的在线安装器都能选一个本地的 `CaiXiHui-bert-models-win64.zip`（ONNX 模型两个平台
-  通用；这是只读源），解压到数据文件夹的 `bert_models/`（存放位置随数据文件夹同步）并登记进模型列表。
-  构建、体积与依赖自查见 [`desktop/README.md`](desktop/README.md)。
+- 流式落库、上游表格喂链接、多账号与持久 Profile。**评论采到 0 行不等于没有评论**：风控/登录墙/未渲染/中途停止都把游标钉在那一条，节点按失败或部分收尾，`继续` 从洞口重采；只有站点给出结束标记或命中评论上限才算采完。
+- **第二采集后端 CatBus**：按“平台 × 引擎 × 功能”列出能力与列，全部读适配器清单；不可运行的组合写清原因，绝不静默换后端或降级成空表。登录用适配器自己的账号，运行前必问一次。
+- 细节与列约定： [`docs/collection.md`](docs/collection.md)、[`docs/crawler_rules.md`](docs/crawler_rules.md)。
 
-## 能做什么
+## 处理与分析
 
-- **采集**：知乎、微博、小红书、微信公众号、哔哩哔哩、抖音、红果短剧、中国知网、YouTube、X（Instagram
-  目前只能存 Cookie）。关键词、作者作品、热榜、评论四种玩法，支持流式落库、上游表格喂链接、多账号与持久
-  Profile——红果短剧例外，它的版面全匿名，不建持久 Profile。红果**评论**要驱动本机播放器旁听，仅 Windows，
-  其他平台会置灰并写明原因。**评论采到 0 行不等于没有评论**：风控/登录墙/面板没渲染/中途停止都会把游标钉在
-  那一条，节点按失败或部分收尾，`继续` 从洞口重采；只有站点自己印了结束标记（如小红书 `- THE END -`）或命中
-  用户设的评论上限才算采完。→ [`docs/collection.md`](docs/collection.md)
-- **第二采集引擎 CatBus**：按“平台 × 引擎 × 功能”列出能采什么、出哪些列；能力全部读适配器自己的清单，
-  不可运行的组合直接写清原因，绝不静默换后端或降级成空表。它的登录是适配器自己的账号，运行前总会问一次
-  （与浏览器 Cookie 预检开关无关），失败时把适配器的 `code/message/hint` 原样带进报错。→ [`docs/collection.md`](docs/collection.md)
-- **分析**：情感、倾向、情绪（LLM / sklearn / 微调 BERT，默认 BERT，跑不动会降级并打印实际用的方法）、
-  NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别。→ [`docs/analysis.md`](docs/analysis.md)、
-  [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)
-- **处理**：确定性清洗、去重（含 SimHash 近似重复）、分组聚合、事件研究套件（阶段划分、分阶段 LDA、主题
-  流向、情感演化、二次爆发预警），以及 CSV/JSON/Excel/TXT/HTML/Markdown 导出。→ [`docs/analysis.md`](docs/analysis.md)
-- **内容去重与采集校验**：分析节点的“反向筛选”拿两张上游表比一列，只留下没在另一张表出现过的行（或反过来找
-  重复），链接归一 / 文本归一 / SimHash 近似匹配都能选；采集校验节点把“清单表（链接 + 评论数）”和“评论结果表”
-  对照，报出**没采到的链接**与**条数不足的链接**，缺口表保留原始列、可直接导出再投喂评论采集只重爬这些文章。
-  → [`docs/workflow.md`](docs/workflow.md)
-- **文献计量**：上传就自动识别 CNKI/CSSCI/WoS/Scopus/PubMed/RIS/BibTeX 等导出件，按时间切片建关键词、
-  作者、机构、共被引网络，输出 GraphML/GML/Pajek 等；顶栏的文献计量工作区能存快照、和上次比。→ [`docs/analysis.md`](docs/analysis.md)
-- **可视化与成稿**：ECharts 与 Matplotlib 双引擎的论文风格图表、知识图谱与各类叠加图、LaTeX 图与三线表；
-  “论文成稿”只给 `run_id` 就能把登记过的图与表合成 `ctex` 文档并本机编译。→ [`docs/analysis.md`](docs/analysis.md)
-- **画布与运行**：拖拽、fan-in/fan-out、撤销重做、大纲定位、自动排布、运行队列与停止；15 种节点；画布快照
-  与可复用节点模板；节点级检查点与运行记录，默认载入本工作流最近一次结果，绿勾/转圈/红叉一眼看清上次到哪。
-  → [`docs/workflow.md`](docs/workflow.md)
-- **数据集与定时**：累积数据集带版本与去重策略，可多源合并同构数据集；定时任务用预设或 cron 跑已存画布
-  （含模型节点的画布会标明不能定时），停机错过的时刻只记“已错过”，不补跑。→ [`docs/workflow.md`](docs/workflow.md)
-- **界面**：中英双语、亮暗主题、快捷键与框选、运行前诊断（每个节点常驻校验角标）。→ [`docs/workflow.md`](docs/workflow.md)
+- **清洗与整理**：确定性清洗、去重（含 SimHash 近似重复）、分组聚合、反向筛选（两表比一列找差集/重复）、采集校验（清单表 vs 评论结果表，报出没采到与条数不足的链接）。
+- **分析**：情感、倾向、情绪（BERT 默认，跑不动会降级并打印实际方法）、NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别、分阶段 LDA、主题流向、情感演化、二次爆发预警。
+- **文献计量**：CNKI/CSSCI/WoS/Scopus/PubMed/RIS/BibTeX 导出件，按时间切片建关键词、作者、机构、共被引网络，输出 GraphML/GML/Pajek，可存快照并与上次对比。
+- **导出**：CSV / JSON / Excel / TXT / HTML / Markdown。
+- 细节： [`docs/analysis.md`](docs/analysis.md)、[`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)。
 
-### 看界面
+## 可视化与成稿
 
-下面几张图都是从[图文手册](docs/manual/)里取的，按界面现在的样子拍：
-
-| 数据源面板 | 数据预览 |
-|:--:|:--:|
-| <img src="docs/manual/img/hg-source.png" width="300" alt="数据源节点面板"> | <img src="docs/manual/img/hg-data.png" width="480" alt="数据预览"> |
-| 平台、采集引擎、内容、数量、分片、格式一行一行往下排；需要先选一项的字段不替你猜默认值 | 采完不用导出就能翻，顶上是行数与列数，一页一页往下看 |
-
-分析节点也一样，参数就是这一步的口径，选错按名拒绝：
-
-| 主题距离图（LDA + 句向量） | 情感演化曲线 |
-|:--:|:--:|
-| <img src="docs/manual/img/liu-topicmap.png" width="300" alt="主题距离图节点面板"> | <img src="docs/manual/img/liu-evolution.png" width="300" alt="情感演化曲线节点面板"> |
-| 一行一个主题，出 `topic/pc1/pc2/prevalence_pct` 再交给可视化画气泡 | 按日聚合成指数，接“情感演化”可视化节点出曲线与阶段 |
-
-出图与运行：
+ECharts 与 Matplotlib 双引擎的论文风格图表、知识图谱与叠加图、LaTeX 图与三线表；“论文成稿”给一个 `run_id`
+就能把登记过的图表合成 `ctex` 文档并在本机编译。步骤参数即口径，缺列或选错按名拒绝，不出空图。运行结束还能出
+一份自带内容的 HTML 报告。
 
 | 图表预览 | 控制台日志 |
 |:--:|:--:|
 | <img src="docs/manual/img/demo-chart.png" width="420" alt="图表预览"> | <img src="docs/manual/img/run-log.png" width="480" alt="控制台日志"> |
-| ECharts 与 Matplotlib 两套引擎，出图即可复制 LaTeX 图源与三线表 | 实时日志按工作流分页签，同一份同时写进运行库，事后还能翻到 |
+
+## 画布与运行
+
+- 16 种节点；拖拽、fan-in/fan-out、撤销重做、大纲定位、自动排布、画布快照与可复用节点模板。
+- **一个数据根同时只跑一个运行，忙时排队而不是拒绝**；停止、失败、关服务后已完成的节点与行都在 `data/runs.db`，重开顶部给出“检测到中断的运行”，`继续` 只补缺口（模型走缓存），`重新开始` 则全量重跑。
+- 节点级检查点与运行记录，默认载入本工作流最近一次结果，绿勾/转圈/红叉一眼看清上次到哪；控制台按工作流分页签并持久化每次运行的日志。
+- **数据集**：累积数据集带版本与去重策略，可多源合并同构数据集。
+- **定时任务**：预设或 cron 跑已存画布；需要模型的画布会标明不能定时，停机错过的时刻只记“已错过”，不补跑。
+- **界面**：中英双语、亮暗主题、快捷键与框选、节点常驻校验角标。
+- 细节： [`docs/workflow.md`](docs/workflow.md)。
+
+## 常见用法
+
+| 场景 | 怎么做 |
+|---|---|
+| 从零跑一条 | Data Source 选平台与关键词 → Process 清洗/情感 → 可选 Analysis 出词频或主题 → Visualize 出图、Output 导出 → 连线、用 Name 命名 → 执行 |
+| 只分析已有表 | Upload 传 CSV/TSV/JSON/Excel 或文献导出件，接 Analysis/Visualize/Bibliometrics；也可挂载已保存数据集，或把上游表格直接喂给下游 |
+| 中断后接着跑 | Stop、关服务、失败都不影响已完成的节点与行；重开后顶部提示“检测到中断的运行”，`继续` 补缺口（模型走缓存），`重新开始` 全量重跑 |
+
+## 账号、Cookie 与池
+
+- 一个平台可保存多份登录，一份账号 = 一份 Cookie 文件 + 一个 Chrome Profile；运行前按需预检，登录墙拒绝运行，“无法核对”不阻塞。
+- **账号池（自动轮换）**：账号或出口被登录墙/风控拦下即冷却（默认 2 小时，网络问题只冷却出口 5 分钟），下次跳过换下一组；冷却持久化在 `data/pool.db`，面板可解冻、停用、手动绑定出口。
+- **出口池**：Chrome 代理（HTTP/HTTPS/SOCKS5，可带认证，凭据只走本地回环中继）；出口与账号粘性绑定，坏了才换 IP，登录不变。
+- 规则与归因： [`docs/account_pool.md`](docs/account_pool.md)、[`docs/crawler_rules.md`](docs/crawler_rules.md)。
+
+## AI 工作区
+
+- 顶栏 **AI 工作区** 打开右侧常驻面板：会话、对话、智能体轨迹、上下文检查器；顶栏 **AI** 子菜单负责逐行分析的模型/密钥/测试。
+- **供应商**：DeepSeek 直连（深度思考、联网搜索、读链接、文件上传、安全审核）、OpenCode Go、OpenRouter、本地 Ollama。Key 只在本浏览器 `localStorage`，服务端仅在一次请求内持有，不写入 `data/` 或日志；云端模式按名拒绝本地 Ollama。
+- **桌面版与网页版是同一个工作区**：会话、文件上传、联网搜索/抓页、技能、插件、运行监控、Python 扩展两端都有；差别只在宿主能触达的东西（本机模型/文件/代码插件/只读源码快照/Python），由服务端判定并在面板里按名说明，前端不猜。
+- **运行监控**：AI 提出监控条件（节点失败、输出达到 N 行、控制台出现某句话、运行结束），你选“自动分析”或“只通知”；触发事件进入会话，自动分析用浏览器里的 Key，不花服务端的钱。
+- **Python 扩展**：AI 把通用脚本存入本账号脚本库并运行，画布的 **Python 脚本** 节点引用同一脚本；解释器缺失时先请求允许再下载。脚本不在沙箱中，云端按名拒绝。
+- 读数据默认只给列名、类型与前几行，需要更多才分页或交给 Python；发送前可在上下文检查器看将发送的内容与 token 预算。写入永远是提案（工作流/分析/图表/报告），由你点应用。
+- 不确定时用 `ask_user_question` 停下来等选择。内置技能涵盖项目向导、采集顾问、故障诊断、运行监控、数据分析、画布架构、图表、报告、联网研究、Python 扩展、工作区总控与技能作者。
+- **技能与插件**：内置技能只读，可 Fork；用户技能是数据（提示词 + 上下文来源 + 只读工具）。插件支持声明式技能包、Provider 包、HTTP 工具包与仅本地/管理员的代码插件，云端按名拒绝代码插件。
+- 架构与权限： [`docs/ai_workspace.md`](docs/ai_workspace.md)。
+
+## 设置与采集节奏
+
+- 设置页由服务端 schema 生成，键都带默认值、范围与中英说明；保存立即生效（少数标注“重启生效”的键除外）。支持导出/导入，导入前逐项预演“现在 → 导入后”。
+- **采集速度是九个独立旋钮**（礼貌停顿、滚动、展开、点击后稳定、元素等待、页面到达、页面间隔、像人抖动、耐心重试），每个倍数旁直接显示实际秒数。
+- 预设三档：**标准**（全部回到基线）、**慢速采集**（×3~×4、抖动 30%、同平台排队、跑前验证 Cookie）、**夜间**（再慢一倍、抖动 50%、一次一个浏览器），一键切换与恢复。被风控时顶栏“慢速采集”一键生效。
+- 控制台顶部的“启动 / 阶段耗时”给出浏览器启动、列表、评论走查的耗时与收尾状态（行数、正常/被拦/失效、未证明、登录墙/风控）。
+
+## 部署、桌面版与数据
+
+- **一个数据根只开一个服务**：状态都在同一份 `data/`，第二个实例会把正在写的运行判成中断。需要并存时给独立目录：`CRAWLER_DATA_ROOT=<目录>`。
+- **云端模式**：`python app.py cloud`（或 `CRAWLER_CLOUD=1`）关闭本地模型、强制无头与多账号登录，首次启动必须给 `CRAWLER_ADMIN_PASSWORD` 与 `SECRET_KEY`。每个账号的工作流、数据集、运行、Cookie、导出都在 `data/users/<账号 id>/`；旧数据用 `tools/migrate_accounts.py` 归到管理员名下（默认 dry-run）。
+- **桌面版（Windows / macOS）**：`desktop/` 是唯一的系统打包目录，同一份代码出 Windows 安装包与 macOS `.app`/DMG（macOS 在 GitHub runner 上构建）。原生窗口（Windows WebView2 / macOS WebKit），无控制台；关闭主窗口即退出，最小化继续在后台采集与跑定时任务；数据可放在 C 盘之外（Windows 默认 `%APPDATA%\CaiXiHui`，便携版放空的 `portable.txt`；macOS 在 `~/Library/Application Support/CaiXiHui`）。
+- **安装与更新**：在线安装器安装时读 `version.json` 取最新版，默认走 Gitee / npmmirror 镜像下载 Chrome、chromedriver、Node、CatBus；主程序启动后检查更新，可立即更新、延后或忽略此版本，下载中断可续，起不来会回滚。Windows 另有系统托盘（显示窗口 / 打开数据目录 / 退出，运行结束与失败弹通知），macOS 只用系统通知。
+- 细节： [`docs/installer.md`](docs/installer.md)、[`docs/release.md`](docs/release.md)、[`desktop/README.md`](desktop/README.md)。
+- 环境变量与运行时设置： [`docs/config.md`](docs/config.md)；HTTP 端点： [`docs/api.md`](docs/api.md)。
 
 ## 项目结构
 
@@ -204,49 +120,40 @@ macOS 下载 `CaiXiHui-macOS-<arch>.dmg`（arm64 / x86_64），或用小体积�
 crawler_workflow/
 ├── backend/          # Flask 组合根 + core/runtime/api/engine/nodes/analyzers/crawlers/services/static
 ├── data/             # 运行时数据（gitignore；只有 workflows/ 进版本库）
-├── docs/             # 文档与实测记录
+├── docs/             # 文档与平台记录
 ├── tests/            # unit / api / integration / frontend / 真站
 ├── ml_train/         # 训练脚本与模型（gitignore）
-├── desktop/          # 系统打包：Windows 安装包 + macOS .app/DMG（唯一 OS 打包目录）
+├── desktop/          # 系统打包：Windows 安装包 + macOS .app/DMG
 └── requirements.txt  # 可选依赖在 requirements-optional.txt
 ```
 
-逐模块的目录树在 [`docs/development.md`](docs/development.md)，代码地图在 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
-
-## 三种常见用法
-
-**从零跑一条**：拖 Data Source 选平台和关键词 → Process 选清洗/情感 → 可选 Analysis 出词频或主题 →
-Visualize 出图、Output 导出 → 连线、用 Name 命名 → 执行。
-
-**只分析已有表**：拖 Upload 上传 CSV/TSV/JSON/Excel 或文献导出件，接 Analysis/Visualize/Bibliometrics；
-也可以从“已保存数据集”里挂载，或者直接拿上游节点的表格喂给下游。
-
-**中断了怎么办**：Stop、关服务、中途失败都不要紧，已完成的节点和处理过的行都在 `data/runs.db`。重开后顶部
-会出现“检测到中断的运行”，点“继续”只补缺的部分（模型走缓存不重复付费），点“重新开始”则全量重跑。
+逐模块目录树见 [`docs/development.md`](docs/development.md)，代码地图见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
 ## 文档
 
 | 文件 | 里面是什么 |
 |---|---|
-| [`docs/manual/`](docs/manual/) | 图文手册：从零到成稿，含七个真实工作流 |
-| [Releases](https://github.com/Xingye-Dujing/crawler-workflow/releases) | 手册 PDF（`CaiXiHui-Manual-*.pdf`）与 Windows 安装包（`CaiXiHui-Setup.exe` / 免装 zip） |
+| [`docs/manual/`](docs/manual/) | 图文手册：从零到成稿，含真实工作流 |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 代码结构地图与模块接缝 |
 | [`docs/collection.md`](docs/collection.md) | 各平台采什么、出哪些列、有哪些选项 |
-| [`docs/analysis.md`](docs/analysis.md) | 分析、处理、可视化、文献计量的细节 |
+| [`docs/analysis.md`](docs/analysis.md) | 分析、处理、可视化、文献计量 |
 | [`docs/workflow.md`](docs/workflow.md) | 引擎、断点续跑、界面、节点类型、定时任务 |
+| [`docs/ai_workspace.md`](docs/ai_workspace.md) | AI 工作区：供应商、上下文、技能与插件 |
+| [`docs/account_pool.md`](docs/account_pool.md) | 账号池与出口池规则 |
 | [`docs/api.md`](docs/api.md) | 全部 HTTP 端点 |
-| [`docs/config.md`](docs/config.md) | 环境变量、运行时设置、常量、云端部署 |
-| [`docs/installer.md`](docs/installer.md) | 在线安装器、国内直连镜像、环境检测与组件管理 |
+| [`docs/config.md`](docs/config.md) | 环境变量、运行时设置、云端部署 |
+| [`docs/installer.md`](docs/installer.md) | 在线安装器、镜像、环境检测与组件管理 |
 | [`docs/development.md`](docs/development.md) | 完整结构、测试分层、备份与恢复 |
-| [`docs/crawler_notes.md`](docs/crawler_notes.md) | 逐平台真机实测记录（改爬虫前先看） |
+| [`docs/best_practices.md`](docs/best_practices.md) | 改动顺序、跑道选择、多端与反模式速查 |
+| [`docs/crawler_notes.md`](docs/crawler_notes.md) | 逐平台真机记录 |
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程规则 |
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收矩阵 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | 前端拆分方案 |
-| [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比研究 |
+| [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 微调 BERT 的理由与口径 |
+| [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比 |
 | [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的规则与改动流程 |
 
 ## 许可与备份
 
-MIT，见 [`LICENSE`](LICENSE)。`data/` 不进 git（`data/workflows/` 例外），所以还需要还原点：
-`tools/backup.py` 生成 git bundle 加数据归档（含每个账号的库与工作流，默认不含 Cookie），
-用法见 [`docs/development.md`](docs/development.md)。
+MIT，见 [`LICENSE`](LICENSE)。`data/` 不进 git（`data/workflows/` 例外），用 `tools/backup.py` 生成 git bundle
+与数据归档（含每个账号的库与工作流，默认不含 Cookie），用法见 [`docs/development.md`](docs/development.md)。

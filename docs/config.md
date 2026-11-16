@@ -1,274 +1,108 @@
 # 配置
 
-> 本文是采析绘文档的一部分，返回总览见 [README.md](../README.md)。
+> 返回总览见 [README.md](../README.md)。跨系统与云端部署的规则本体见 [AGENTS.md](../AGENTS.md)，采集节奏带来的行为变化见 [crawler_rules.md](crawler_rules.md)。
 
-环境变量、运行时设置（`data/settings.json`）、保留策略与排队常量、内存说明，以及云端部署（cloud 模式）的说明。
+配置分三层：启动时读取的环境变量、可在设置面板修改并写入 `data/settings.json` 的运行时设置、以及 `core/config.py` 里的固定常量。数据根由 `CRAWLER_DATA_ROOT` 决定，运行时状态在 `data/` 与 `logs/`。
 
 ## 环境变量
 
 | 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `OLLAMA_MODEL` | Ollama 模型名 | `qwen3.5:9b` |
-| `OLLAMA_HOST` | Ollama 服务地址 | `http://localhost:11434` |
-| `SECRET_KEY` | Flask 会话密钥（登录 Cookie 用它签名） | `crawler-workflow-secret-key`；**cloud 模式必须另设**，否则拒绝启动 |
-| `CRAWLER_ADMIN_USER` | 首次启动创建的初始管理员用户名（回退 `CRAWLER_AUTH_USER`） | `admin` |
-| `CRAWLER_ADMIN_PASSWORD` | 首次启动（账号表为空时）用来创建初始管理员的密码；**cloud 必须设置**。已有账号时该变量被忽略，不会重置任何密码。回退 `CRAWLER_AUTH_PASSWORD` | 空 |
-| `CRAWLER_AUTH_USER` / `CRAWLER_AUTH_PASSWORD` | 旧版单密码登录变量，仍作为初始管理员的引导值 | 空 |
-| `CRAWLER_SESSION_IDLE_MINUTES` | 会话空闲超时（分钟），超时即吊销；写坏了不会拒绝启动，按默认值继续 | `120` |
-| `CRAWLER_SESSION_MAX_HOURS` | 会话绝对有效期（小时）；同上 | `24` |
-| `CRAWLER_HTTPS` | 页面实际经 HTTPS 访问（反向代理终止 TLS）时设 `1`：会话 Cookie 标记 `Secure` | 关闭 |
-| `CRAWLER_TRUST_PROXY_DEPTH` | 这台服务前面站了几层反向代理（`1` = 一层）。设了才会读 `X-Forwarded-For` 的**右数第 depth 个**地址作为访客来源（每层代理把自己的 `$remote_addr` 追加到右端，因此一层代理时最右项就是客户端；左侧项是客户端自己填的，不可信），用于审计日志与登录失败窗口；代理层数写在 `remote_addr` 上会让全服共用同一个失败窗口、审计也只能指到代理。**默认 0：完全不信该头**——那等于允许客户端自己编造来源地址 | `0` |
-| `PORT` | 服务端口 | `5000` |
-| `HOST` | 监听地址（默认只监听本机）。局域网内其他机器访问需设为 `0.0.0.0`，**但这要求账号已启用**：没有账号时登录门禁不会打开，绑定非本机地址会被按名拒绝启动（设置 `CRAWLER_ADMIN_PASSWORD` 即可） | `127.0.0.1` |
-| `CRAWLER_DATA_ROOT` | `data/` 与 `logs/` 的父目录（给某个进程一份**自己**的状态：验证脚本、测试里自启的那台服务，都不会碰你真正在用的那份）。**优先级最高**：设了它就只用它，不会退回其他位置 | **源码运行**（`cd backend && python app.py`）默认是仓库根目录，没有 `data-root.txt`/`portable.txt` 这一串回退。**打包启动器**（`desktop/`）另有自己的回退链：安装器选的 `data-root.txt`、便携版 `portable.txt`、Windows `%APPDATA%\CaiXiHui`、macOS `~/Library/Application Support/CaiXiHui`，最后才是程序目录。两者是不同入口，不要按本文去源码树里找安装器文件 |
-| `CRAWLER_CLOUD` | 云端部署形状（`1`/`true`/`yes`/`on`）：隐藏 Ollama 与“无头”设置、所有抓取强制无头、拒绝“浏览器生成”。命令行 `python app.py cloud` 是同一件事，它在 import 之前把这个变量抬起来 | 关闭 |
-| `FLASK_DEBUG` | 调试模式（含热重载与自动打开浏览器，调试器可执行任意代码，勿在他人可达的机器上开启） | 关闭 |
-| `MAX_UPLOAD_MB` | 单个请求体上限（过大时返回 413 JSON，而非把整机内存吃光） | `64` |
-| `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件。按系统查的第二条路（Windows 查安装根、Linux 查 `/usr/bin/chromium` 等与 `PATH`、macOS 查 bundle）；容器里通常是 `CHROME_BIN=/usr/bin/chromium`。设了值却指向不存在的东西 → 采集按名拒绝，**绝不换个浏览器顶上**。安装器模式下启动器只导出安装器装的那一份，候选表不再参与 | 空 |
-| `CIXI_DRIVER_PATH` | chromedriver 路径（等价于设置面板的“驱动路径”）。**“本机已安装的”模式下**留空交给 Selenium Manager（首次采集自动下载匹配版本，需要网络）；填了就必须指向存在的文件，否则按名拒绝。**“安装器安装的”模式下**只认启动器按清单导出的路径：缺失时按名报“安装器未安装”，不会让 Selenium Manager 另下一个顶上 | 空 |
-| `CIXI_COMPONENTS_DIR` | 在线安装器装好的**组件目录**（安装根下的 `components/`，每个组件一个子目录）。清单 `install-manifest.json` 在它的上一级（安装根）；启动器会按清单把 Chrome/驱动/Node/CatBus 路径导出。安装器模式下清单是权威：设置面板里手填的路径只有落在该组件目录内才生效 | 安装根下的 `components/`；源码运行是 `data/components` |
-| `CIXI_COMPONENT_SOURCE` | 本次进程用哪一份组件：`bundled`（安装器装的那份，默认）或 `system`（本机已安装的）。启动器把设置里的选择冻结在这里，所以运行中改设置不会让面板谎报“已换成另一份”；改设置后重启才生效。`bundled` **只认安装器写入的路径**（`CHROME_PATH`/`CIXI_DRIVER_PATH`/`CIXI_NODE_BIN`/`CIXI_CATBUS_CLI` 或清单），不再查安装根、`PATH` 或 npm 全局前缀；缺哪一份就按名报“安装器未安装”，绝不退回本机。没有安装器清单的布局（源码/便携/离线 Setup/云端）自动按本机，不会因为默认值而拒绝采集。`system` 时启动器不导出上一条里的组件路径，并忽略设置里指向安装器目录的旧路径，只查本机候选表 | 启动器写入；源码运行取 `component_source` 设置 |
-| `CIXI_NODE_BIN` / `NODE_BIN` | 第二采集后端（CatBus）用的 Node 运行时，按系统查表；版本按 CatBus `engines` 核对，太旧按名拒绝 | 空 |
-| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 采析绘适配器入口。前两个指名文件、可执行包装或源码 `cli.ts`（自动换成构建产物 `dist/**/cli.js`）；`CATBUS_HOME` 指源码检出根（同样读 `dist` 入口）；都没设时，“本机已安装的”模式按 npm 全局前缀找，“安装器安装的”模式只认启动器导出的入口，缺了按名报“安装器未安装”。**Node 不能直接运行 TS 源码**（类型擦除不重写 `./x.js` 导入），源码没有构建产物时按名说明要构建哪个文件。找不到就是不提供这个后端（面板里那位置灰并写明缺什么，而不是运行起来才拒绝） | 空 |
-| `PYTHONUTF8` / `LANG` | 控制台编码：启动时检查 `stdout/stderr` 能不能写汉字，不能就改 UTF-8 并打印一行；能写就只把 `errors` 设成 `replace`，**不改编码**（强扭成 UTF-8 反而把正常窗口弄成乱码） | — |
-| `CIXI_UPDATE_PUBKEY` | 更新清单（`version.json`）的校验公钥：PEM 文本，或指向 PEM 文件的路径；打包版也可放在数据根下的 `update-pubkey.pem`。**配了就必须签名有效，否则拒绝更新**（能改清单的人可以同时改 URL 与 SHA-256，清单本身需要一个离线信任根）。未配置时自更新照常可用，`/api/update/check` 返回 `signed: false`。详见 [release.md](release.md) | 空 |
+|---|---|---|
+| `OLLAMA_MODEL` / `OLLAMA_HOST` | 本地模型名 / 服务地址 | `qwen3.5:9b` / `http://localhost:11434` |
+| `SECRET_KEY` | 会话签名密钥；cloud 模式沿用仓库默认值会拒绝启动 | `crawler-workflow-secret-key` |
+| `CRAWLER_ADMIN_USER` / `CRAWLER_ADMIN_PASSWORD` | 账号表为空时创建初始管理员；已有账号时忽略。回退 `CRAWLER_AUTH_USER`/`CRAWLER_AUTH_PASSWORD` | `admin` / 空 |
+| `CRAWLER_SESSION_IDLE_MINUTES` / `CRAWLER_SESSION_MAX_HOURS` | 会话空闲与绝对有效期；写坏了按默认值继续启动 | `120` / `24` |
+| `CRAWLER_HTTPS` | 代理终止 TLS 时设 `1`，会话 Cookie 标记 `Secure` | 关闭 |
+| `CRAWLER_TRUST_PROXY_DEPTH` | 前面有几层反向代理。设了才读 `X-Forwarded-For` 的右数第 N 个地址，用于审计与登录失败窗口；`0` 完全不信该头 | `0` |
+| `PORT` / `HOST` | 端口 / 监听地址。绑定非本机地址要求账号已启用，否则按名拒绝启动 | `5000` / `127.0.0.1` |
+| `CRAWLER_DATA_ROOT` | `data/` 与 `logs/` 的父目录，优先级最高；未设时源码运行落在仓库根，打包启动器另有一套回退链 | 仓库根 |
+| `CRAWLER_CLOUD` | 云端形状（`1`/`true`/`yes`/`on`）；`python app.py cloud` 等价 | 关闭 |
+| `FLASK_DEBUG` | 调试模式（热重载、自动开浏览器、可执行任意代码） | 关闭 |
+| `MAX_UPLOAD_MB` | 单请求体上限，超出返回 413 JSON | `64` |
+| `CHROME_PATH` / `CHROME_BIN` | 浏览器可执行文件；指向不存在的文件时采集按名拒绝，不换浏览器顶上 | 空 |
+| `CIXI_DRIVER_PATH` | chromedriver；留空由 Selenium Manager 匹配。安装器模式下只认启动器导出的路径 | 空 |
+| `CIXI_COMPONENTS_DIR` | 在线安装器的组件目录（清单 `install-manifest.json` 在其上一级） | 安装根下的 `components/`；源码运行 `data/components` |
+| `CIXI_COMPONENT_SOURCE` | `bundled`（只认安装器安装的 Chrome/驱动/Node/CatBus）或 `system`（只查本机） | 启动器写入；源码取 `component_source` 设置 |
+| `CIXI_NODE_BIN` / `NODE_BIN` | CatBus 用的 Node 运行时，版本按 CatBus `engines` 核对 | 空 |
+| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 适配器入口或源码检出根；找不到就不提供该后端 | 空 |
+| `CIXI_PYTHON_BIN` / `AI_PYTHON_BIN` | Python 扩展用的解释器，优先于 `ai_python_path` 设置 | 空 |
+| `PYTHONUTF8` / `LANG` | 控制台编码：`stdout/stderr` 写不了汉字时改用 UTF-8 | — |
+| `CIXI_UPDATE_PUBKEY` | 更新清单的校验公钥（PEM 文本或路径）；配了就必须签名有效，见 [release.md](release.md) | 空 |
+| `CIXI_UPDATE_FEED` | 覆盖更新清单地址 | Gitee 与 GitHub 的 `version.json` |
 
-> **反向代理的前缀头**：`X-Forwarded-Prefix` 只被当作**路径前缀**接受（形如 `/cixi` 的一段或多段
-> 无保留字符路径）。带 `//`、反斜杠、`..`、scheme 的值会被丢弃并记一行日志——它会被拼进
-> `Location` 头与相对资源地址，放任客户端自编就等于开放重定向。部署在子路径时让代理按固定值转发该头。
+`X-Forwarded-Prefix` 只接受形如 `/cixi` 的路径前缀，含 `//`、反斜杠、`..` 或 scheme 的值被丢弃并记一行日志。
 
-> **三套系统都在范围内**：Windows 是开发机，Linux 是云端部署目标，macOS 也要求可用。只有 `desktop/`
-> （PyInstaller + UPX + Inno Setup）与“红果短剧评论收割”是 Windows 专属（非 Windows 与 cloud 模式下由
-> `capabilities.registry.requirement_met('windows_desktop')` 这一个答案决定）。云端 Linux 还需要 Chromium +
-> 驱动、`fonts-noto-cjk`、可选 `texlive-xetex`/`texlive-lang-chinese`。第二采集方式（Node + CatBus）是可选依赖，
-> 不装一切照常，只是“采集方式”另一项置灰。规则本体见 `AGENTS.md`“Cross-platform”，逐条实测证据见
-> [agent_practices.md](agent_practices.md)，采集边界见 [crawler_rules.md](crawler_rules.md)。
+## 运行时设置
 
-## 运行时设置（UI 设置面板 → `data/settings.json`）
-
-定义在 `runtime/settings_schema.py` 的 `SETTINGS`（一个键一条 `Setting`，含类型、范围、分组、中英文标签、读取方与是否可导出）；`runtime/settings.py` 只负责加载、校验、持久化、预设与导入导出。设置面板由 `GET /api/settings/schema` 动态渲染，新增键不需要再手写输入框。
-
-**慢速采集**是一套预设（`PRESETS['slow']`），不是单独的开关：它把九个速度倍数（礼貌停顿 / 滚动 / 展开 / 点击 / 元素等待 / 页面到达 / 页面间隔 / 像人抖动 / 耐心）、同平台排队、跑前 Cookie 验证与并发上限写成具体值，并保存启用前的快照；设置页或顶栏按钮可一键启用、一键恢复。九个倍数各自只作用于自己那一类操作，平台自身只保留实测基线，不再有自己的开关——需要“滚动慢一点、展开照旧”时改对应的那一个，而不是把整轮采集一起拖慢。**页面间隔**是“打开完一页到打开下一页”之间的停顿（评论逐条打开、笔记详情逐篇打开）；**像人抖动**（`crawl_jitter`，0~90%）只作用于滚动/展开/点击/页面间隔这几拍，元素等待与页面到达是预算，不参与抖动。
-
-预设共三档，都是写具体值：`standard`（全部回实测基线）、`slow`（当前慢速模板）、`night`（更慢 + 抖动 50% + 单浏览器）。任一档应用时都会保存“启用前的值”，所以换档后恢复仍是回到用户最初的状态。设置页把机器内部时序项（门禁超时、渲染探测、预检预算、池内开关、日志大小等）标成 `advanced`，默认收在“显示高级项”之后。
-
-**设置导出/导入**：`GET /api/settings/export`、`POST /api/settings/import`。默认只导出可移植值，机器路径要显式包含；导入先 `dry_run` 预览，再按 `merge`（默认）或 `replace` 应用，未知键与本机路径会逐项报告。
-
-**保存即生效**：`get_setting` 读的是进程内的最新值，所以保存后下一次采集/下一次开浏览器就用新值；只有三条标了 `restart` 的键（组件来源、日志大小、日志备份数）要重启，设置页会给它们挂“重启生效”徽标。前端在保存（以及应用/恢复预设）后会重新拉 `/api/node-types` 与 `/api/capabilities`，因此“新节点默认值”和 CatBus 引擎列表当场刷新，不会出现“数值改了、拖出来的节点还是旧默认值”。顶栏的并行/无头是浏览器级偏好（`localStorage`），启动时不会被自动重开的那个文件里的旧值覆盖。
+声明在 `runtime/settings_schema.py` 的 `SETTINGS`（一个键一条 `Setting`，含类型、范围、分组、中英文标签、读取方、可移植性），`runtime/settings.py` 负责加载、校验与持久化。设置页由 `GET /api/settings/schema` 渲染，慢速项默认收在“显示高级项”之后。
 
 | 键 | 说明 |
-|------|------|
-| `driver_path` | chromedriver 路径（覆盖 `core/config.py` 默认值） |
-| `browser_binary` | Chrome 二进制路径 |
-| `component_source` | `bundled`（默认，只用在线安装器装好的 Chrome/chromedriver/Node/CatBus；缺了就按名报“安装器未安装”，**不会退回本机**）或 `system`（只查本机已安装的）。在“设置 → 环境与组件”面板顶部切换，重启采析绘后生效；启动器把它冻结为 `CIXI_COMPONENT_SOURCE` |
-| `latex_binary` | `xelatex` 可执行文件（“编译”节点与论文成稿用它把 LaTeX 转 PDF；空=自动检测 PATH 与常见 MiKTeX 安装根） |
-| `catbus_cli` / `catbus_node` | 第二采集后端（CatBus）的两个本机路径，与“驱动路径”同一形状。`catbus_cli` 可填构建产物 `cli.js`、一份 CatBus 目录（自动补入口）或源码 `cli.ts`（自动换成 `dist/**/cli.js`；**Node 跑不了 TS 源码**，构建缺失时按名给出该构建的文件）；`catbus_node` 只接受程序本身。都可留空=按本机系统查找；优先级 设置面板 > 环境变量 > 系统候选表 > `PATH`。路径不存在只警告不拒绝，保存后面板立刻重探本机能力 |
-| `window_size` | 采集浏览器窗口尺寸（`--window-size=WxH`，默认 `960x920`） |
-| `page_load_timeout` / `element_timeout` | 页面/元素超时（秒；默认 40 / 15） |
-| `ollama_host` | Ollama 地址（覆盖环境变量） |
-| `ai_context_scope` | AI 工作区允许读取的项目数据范围：`off` / `summary`（表结构、样本、近期日志）/ `full`（更多行、文档与导出） |
-| `ai_web_search_default` | 新会话默认打开联网搜索；只有声明了 `web_search` 的供应商才显示这个开关 |
-| `ai_safety_level` | DeepSeek 服务端安全审核等级 `low` / `high`（默认高）；没有该能力的供应商会被标注，不伪装成本地检查 |
-| `ai_max_context_chars` | 一次请求中项目事实、实时上下文、文档与会话历史的总字符预算 |
-| `ai_max_tool_rounds` | 智能体一轮最多连续执行多少次只读工具 |
-| `ai_request_timeout` | 单次流式供应商请求允许静默的秒数 |
-| `ai_allow_code_context` | 是否允许开发助手读取本机源码；云端模式按名拒绝 |
-| `cookie_preflight_before_run` | 运行前是否自动验证各平台**浏览器** Cookie，过期就禁止执行（**默认关**；关掉则浏览器什么都不问）。CatBus 的登录态不在这份 Cookie 里：清单声明 `auth: required` 的 cell 每次执行前都会问一次适配器（一个短命 Node 进程），与这个开关无关 |
-| `same_platform_queue` | 真排队：同一平台一次只跑一条采集，前一条整个跑完才轮到下一条（**默认关**）。关掉时按 `same_platform_stagger` 错峰；打开时严格串行。微博不受此开关影响，永远真排队（矩阵 `serial_only`） |
-| `same_platform_stagger` | 同平台错峰间隔（秒，默认 1，可填 0~600；0=不额外隔）。只对同时在跑的同平台采集生效，串行永远无缝 |
-| `ask_overseas_network` | 画布里有海外平台时，运行前先问一句“外网开了吗”（默认开） |
-| `use_browser_profile` | 是否为每个平台使用持久浏览器 Profile 目录（默认开；关闭=每次全新浏览器 + 种一份旧 Cookie 快照） |
-| `browser_profile_dir` | Profile 根目录，留空=内置 `data/chrome_profile/<平台>`（账号模式落在该账号自己的 `data/users/<id>/chrome_profile/<平台>`）；填绝对路径可指向你自己为该工具建的目录——账号模式下每个账号在该根目录下各占 `<user_id>/` 一层，避免两台账号共用同一份登录；`<root>/_template` 仍只有一份（模板不含登录态） |
-| `max_visible_browsers` / `max_headless_browsers` | 一次并行运行最多同时开几台浏览器，按本次是窗口 / 无头分别取（默认都取 `DEFAULT_MAX_WORKERS=4`；窗口比无头更费机器）。串行轮流，不受此限 |
-| `clear_console_before_run` | 新运行一开始就清控制台（每标签及其保留历史；**默认开**，开后上一轮的行不会留到下一轮） |
-| `crawl_pace_scale` / `crawl_scroll_scale` / `crawl_expand_scale` / `crawl_click_scale` / `crawl_wait_scale` / `crawl_arrival_scale` / `crawl_page_scale` / `crawl_jitter` / `crawl_patience_scale` | 九个互相独立的速度旋钮：礼貌停顿 / 滚动间隔（含滚动后等新内容）/ 展开间隔（含展开后等回复挂上）/ 点击后稳定（含弹层出现）/ 元素等待 / 页面到达稳定 / 页面间隔（打开完一页到打开下一页）/ 像人抖动（%、只作用于滚动/展开/点击/页面间隔）/ 耐心重试。前八个默认都是 1（抖动默认 0），即各平台实测基线。慢速预设写入 4 / 3 / 3 / 3 / 2 / 1.6 / 3 / 30 / 2；夜间预设 6 / 5 / 5 / 5 / 3 / 2 / 6 / 50 / 3；标准预设全部回 1（抖动 0）。一键恢复回到启用前的值。`gentle_crawl` 旧键在首次读取时迁移成 `crawl_pace_scale=4` |
-| `page_wait_timeout` | 一页首次内容的总预算（秒，默认 300；原 `Config.PAGE_WAIT_TIMEOUT`） |
-| `wall_retry_backoff` / `wall_proofs` / `wall_poll` | 首行前撞墙的退避、连续读墙次数与复读间隔 |
-| `nav_retry` / `nav_settle` / `max_pending_waits` | 导航重试、重试前等待、连续未到达页面的熔断次数 |
-| `profile_lock_timeout` / `platform_gate_timeout` | Profile 锁与同平台排队的等待上限（秒） |
-| `renderer_probe_timeout` / `renderer_close_timeout` | 渲染器健康检查与关闭宽限（秒） |
-| `cookie_preflight_timeout` / `cookie_preflight_ttl` / `cookie_preflight_max_parallel` | 跑前 Cookie 检测的预算、结论缓存与并发 |
-| `run_max_rows_per_node` / `dataset_max_rows` / `max_upload_mb` | 单节点落盘、单数据集与上传大小上限 |
-| `run_keep_per_workflow` / `run_keep_days` / `dataset_keep_days` / `housekeeping_interval_minutes` | 保留策略与清理间隔 |
-| `log_max_mb` / `log_backup_count` | 日志轮转大小与份数（重启生效） |
-| `default_run_mode` / `default_headless` | 从未选过的浏览器从哪个运行模式/无头状态开始；已保存画布仍用自己的选择 |
-| `default_target_count` / `default_comment_*` / `default_*_part_size` / `default_per_article_file` / `default_keep_parts` / `default_live_export` | 新节点的默认目标、评论上限、分片、按文章拆分、保留分片与实时导出 |
-| `pool_enabled` | 打开账号池/出口池：数据源账号选择里出现“账号池（自动轮换）”（默认关；关掉时行为与旧版完全一致） |
-| `pool_cooldown_seconds` | 硬失败（登录墙 / 风控）冷却时长，默认 7200（2 小时） |
-| `pool_network_cooldown_seconds` | 网络类失败只冷却出口，默认 300；0 = 网络问题不冷却 |
-| `pool_max_attempts` | 单节点每次运行最多换几组“账号+出口”，默认 3 |
-| `pool_escalate` | 冷却结束后再次被拦时把冷却翻倍（最长一周），默认关 |
-| `pool_allow_direct_fallback` | 出口全部冷却时是否允许直连（默认关：宁可拒绝，也不暴露本机地址） |
-| `pool_skip_wall_backoff` | 池模式跳过同账号退避重试（默认开），直接换下一组 |
-| `pool_preflight_live` | 运行前用真浏览器验证池内第一个候选（默认关：只读冷却台账，冷却中的账号不开浏览器） |
-| `hongguo_player_path` | 红果短剧评论收割用的桌面播放器路径（**不自动检测**——猜错路就会对着错误的构建收割，拒绝时点名这个设置；Windows 专属） |
-| `mitmdump_path` | 收割用的 `mitmdump`；空=PATH，再退回本 venv 的 Scripts |
-| `harvest_proxy_port` | 播放器与 mitmproxy 共用的代理端口（默认 8860） |
-| `harvest_auto_install_ca` | 首次收割时把 mitmproxy 根证书装进当前用户可信根（默认开；关掉则收割拒绝并给出手动命令——动信任库不该是突袭） |
+|---|---|
+| `driver_path` · `browser_binary` · `latex_binary` · `window_size` · `page_load_timeout` · `element_timeout` · `ollama_host` | 驱动、浏览器、`xelatex`、窗口尺寸（`960x920`）、页面/元素超时（40/15 秒）、Ollama 地址 |
+| `component_source` · `catbus_cli` · `catbus_node` | 组件来源（重启生效）；CatBus 适配器与 Node 的本机路径，留空按系统查找 |
+| `use_browser_profile` · `browser_profile_dir` · `max_visible_browsers` · `max_headless_browsers` | 每平台持久 Profile（默认开）与其根目录；窗口/无头并行浏览器上限（默认 4） |
+| `crawl_pace_scale` · `crawl_scroll_scale` · `crawl_expand_scale` · `crawl_click_scale` · `crawl_wait_scale` · `crawl_arrival_scale` · `crawl_page_scale` · `crawl_jitter` · `crawl_patience_scale` | 九个独立速度倍数：礼貌停顿、滚动、展开、点击、元素等待、页面到达、页面间隔、像人抖动（%）、耐心重试；默认 1（抖动 0） |
+| `page_wait_timeout` · `same_platform_stagger` · `same_platform_queue` · `cookie_preflight_before_run` · `ask_overseas_network` · `clear_console_before_run` | 首屏预算（300 秒）、同平台错峰秒数、真排队（默认关）、跑前 Cookie 验证（默认关）、海外平台前询问（默认开）、开跑清控制台（默认开） |
+| `wall_retry_backoff` · `wall_proofs` · `wall_poll` · `nav_retry` · `nav_settle` · `max_pending_waits` | 首行前撞墙的退避、读墙次数与间隔；导航重试与未到达页面的熔断 |
+| `profile_lock_timeout` · `platform_gate_timeout` · `renderer_probe_timeout` · `renderer_close_timeout` | Profile 锁、同平台排队、渲染器健康检查与关闭宽限（秒） |
+| `cookie_preflight_timeout` · `cookie_preflight_ttl` · `cookie_preflight_max_parallel` | 跑前验证的预算、结论缓存与并发（45 秒 / 300 秒 / 4） |
+| `run_max_rows_per_node` · `dataset_max_rows` · `max_upload_mb` | 单节点落盘、单数据集与上传大小上限（500000 / 300000 / 64） |
+| `run_keep_per_workflow` · `run_keep_days` · `dataset_keep_days` · `housekeeping_interval_minutes` | 保留策略与清理间隔（20 / 30 / 90 / 60） |
+| `log_max_mb` · `log_backup_count` | 日志轮转大小与份数（重启生效） |
+| `default_run_mode` · `default_headless` · `default_target_count` · `default_comment_limit` · `default_comment_part_size` · `default_source_part_size` · `default_per_article_file` · `default_keep_parts` · `default_live_export` | 新节点的运行模式、目标数、评论上限、分片、按篇拆分、保留分片与实时导出 |
+| `pool_enabled` · `pool_cooldown_seconds` · `pool_network_cooldown_seconds` · `pool_max_attempts` · `pool_escalate` · `pool_allow_direct_fallback` · `pool_skip_wall_backoff` · `pool_preflight_live` | 账号池与出口池的开关、冷却、换号次数与预检；见 [account_pool.md](account_pool.md) |
+| `hongguo_player_path` · `mitmdump_path` · `harvest_proxy_port` · `harvest_auto_install_ca` | 红果短剧评论收割的播放器、`mitmdump`、代理端口（8860）与自动安装抓包证书；Windows 桌面专属 |
+| `ai_context_scope` · `ai_web_search_default` · `ai_safety_level` · `ai_max_context_chars` · `ai_max_tool_rounds` · `ai_request_timeout` · `ai_allow_code_context` · `ai_allow_python` · `ai_python_path` | AI 工作区的数据范围、默认联网、安全等级、上下文与工具轮次预算、请求超时、源码读取、Python 扩展与解释器路径 |
 
-## 常量（`backend/core/config.py`）
+**预设**（`PRESETS`）把九个倍数、同平台排队、跑前验证与并发写成具体值：`standard` 全部回基线；`slow` 为 4/3/3/3/2/1.6/3/30/2，开启排队与验证，窗口/无头并发 1/2；`night` 为 6/5/5/5/3/2/6/50/3，并发 1/1。应用任一档都保存启用前的值，`restore` 原样退回。保存即生效；`component_source`、`log_max_mb`、`log_backup_count` 标 `restart`。
 
-保留策略：
+## 常量（`core/config.py`）
 
 | 常量 | 说明 | 默认值 |
-|------|------|--------|
-| `RUN_KEEP_PER_WORKFLOW` | 每个工作流保留最近 N 次运行 | `20` |
-| `RUN_KEEP_DAYS` | 运行记录最长保留天数 | `30` |
-| `RUN_MAX_ROWS_PER_NODE` | 单节点持久化行数硬上限（**磁盘**上限，不是内存） | `500000` |
-| `DATASET_MAX_ROWS` | 单个上传文件行数上限（**文件**上限，不是内存） | `300000` |
-| `DATASET_KEEP_DAYS` | 无引用文件的清理天数 | `90` |
-| `HOUSEKEEPING_INTERVAL_MINUTES` | 自动执行保留策略的时间闸（启动必清一次，之后每过此时长在运行结束时清） | `60` |
-| `SCHEDULER_TICK_SECONDS` | 定时任务时钟多久看一次清单（规则最小单位是分钟，低于 5 秒抬到 5） | `20` |
-| `LOG_MAX_BYTES` | 单个日志文件上限，超出即滚动 | `5242880`（5 MiB） |
-| `LOG_BACKUP_COUNT` | 保留多少个历史日志 | `5` |
+|---|---|---|
+| `RUN_KEEP_PER_WORKFLOW` / `RUN_KEEP_DAYS` | 每工作流保留的运行数 / 最长保留天数 | `20` / `30` |
+| `RUN_MAX_ROWS_PER_NODE` / `DATASET_MAX_ROWS` | 单节点磁盘行数硬上限 / 单个上传文件行数上限 | `500000` / `300000` |
+| `DATASET_KEEP_DAYS` / `HOUSEKEEPING_INTERVAL_MINUTES` | 无引用文件清理天数 / 保留策略执行间隔 | `90` / `60` |
+| `SCHEDULER_TICK_SECONDS` | 定时任务时钟的查看间隔 | `20` |
+| `LOG_MAX_BYTES` / `LOG_BACKUP_COUNT` | 单个日志上限与保留份数 | `5242880` / `5` |
+| `DEFAULT_HEADLESS` / `DEFAULT_MAX_WORKERS` | 运行默认无头 / 并行浏览器默认数 | `True` / `4` |
+| `PAGE_WAIT_TIMEOUT` | 一页首块内容到达的总预算 | `300` |
+| `RENDERER_PROBE_TIMEOUT` / `RENDERER_CLOSE_TIMEOUT` | 启动后读一次 UA 的上限 / `quit()` 宽限 | `15` / `10` |
+| `SAME_PLATFORM_STAGGER` / `PROFILE_LOCK_TIMEOUT` / `PLATFORM_GATE_TIMEOUT` | 同平台错峰 / Profile 锁 / 排队等待 | `1.0` / `900` / `900` |
+| `WALL_RETRY_BACKOFF` / `COOKIE_PREFLIGHT_TIMEOUT` / `COOKIE_PREFLIGHT_TTL` / `COOKIE_PREFLIGHT_MAX_PARALLEL` | 撞墙退避 / 预检预算 / 结论缓存 / 预检并发 | `45.0` / `45` / `300` / `4` |
+| `WECHAT_BODY_MAX_CHARS` | 公众号正文保留字符数，0 表示全留 | `0` |
 
-爬虫与浏览器默认：
-
-| 常量 | 说明 | 默认值 |
-|------|------|--------|
-| `DEFAULT_HEADLESS` | 运行默认是否无头（面板每次可改） | `True` |
-| `DEFAULT_MAX_WORKERS` | 并行默认浏览器数（也是 `max_visible_browsers`/`max_headless_browsers` 的取值来源） | `4` |
-| `PAGE_WAIT_TIMEOUT` | 一次采集等待**某页首块内容**到达的总预算（区别于只界定 load 事件的 `page_load_timeout`）；有界是设计——"永远等"是一条运行槽扛不住的策略，停止永远是用户在其中的出口 | `300` |
-| `RENDERER_PROBE_TIMEOUT` | 无头浏览器启动后读一次 `navigator.userAgent` 的上限（渲染进程是否还活着）；活的渲染进程毫秒级应答，卡死的永远不会答——读到超时即按名拒绝这次启动 | `15` |
-| `RENDERER_CLOSE_TIMEOUT` | 关闭浏览器时给 `quit()` 的宽限；超时就按 PID 收掉这个会话的驱动进程树，避免在同一个不响应的 socket 上再等一遍 | `10` |
-| `WECHAT_BODY_MAX_CHARS` | 一行公众号正文保留的字符数（0=全留：以前硬砍到 5000 会静默丢掉长文结尾，读起来像短文到此为止） | `0` |
-
-排队、错峰与预检：
-
-站点把"同一账号一秒内的两次搜索"当成异常（微博弹登录页、知乎回 40362），profile 又只允许一个浏览器，
-所以这几条不是性能参数而是正确性参数：
-
-| 常量 | 说明 | 默认值 |
-|------|------|--------|
-| `SAME_PLATFORM_STAGGER` | 同平台两条同时在跑的采集至少隔多久发车（面板 `same_platform_stagger` 可改） | `1.0` |
-| `PROFILE_LOCK_TIMEOUT` | 一个平台的 profile 被另一次采集占用时，最多排队多久；超时即以可读原因判该节点失败，不再抛驱动栈（面板可改） | `900` |
-| `WALL_RETRY_BACKOFF` | 第 0 行就撞墙时的退避重试等待；0 关掉重试（有过半数据的墙不在此列，那是 Cookie 死了，走续跑） | `45.0` |
-| `PLATFORM_GATE_TIMEOUT` | 一次采集最多等多久轮到本平台的同平台排队 | `900` |
-| `COOKIE_PREFLIGHT_TIMEOUT` | 运行前自动验证 Cookie 的总预算（超出即回答“无法核对”，不谎报失效） | `45` |
-| `COOKIE_PREFLIGHT_TTL` | 一个验证结论可被复用的秒数；保存/删除/扫码取回 Cookie 会立即作废 | `300` |
-| `COOKIE_PREFLIGHT_MAX_PARALLEL` | 预检同时最多开几个浏览器（每个都是一次真实页面加载） | `4` |
-
-## 关于内存：唯一没有上限的那一项
-
-上面两个行数上限管的都不是内存。`RUN_MAX_ROWS_PER_NODE` 是**磁盘**上限（防止跑飞的采集把 `runs.db`
-撑爆），`DATASET_MAX_ROWS` 是**单个上传文件**的上限。而运行期间 `execution_state['results']` 会把
-**每个节点**的结果都留在内存里——预览读它，子节点也读它——这件事本身没有上限。代价是实测的：10 万行
-× 4 列，DataFrame 占 17 MB，而节点结果用的“字典列表”占 **53 MB**（约 3.1 倍）。
-
-所以运行会**主动说出来**：单节点产出超过 `HEAVY_RESULT_ROWS`（定义在 `engine/run.py`，默认 10 万行，由
-`note_heavy_result` 触发）时，控制台会打印一行带节点名和行数的提示。它不是报错、也不改数据——大表往往
-正是你要的——只是别让 OOM 在三个节点之后发生而没有任何线索。要让这个成本真正降下来，得把节点之间的传递
-从“字典列表”改成 DataFrame（只在预览/导出/落库的边界转换）：那会动到执行器核心契约的四处，值得单独一次改。
+运行期间 `execution_state['results']` 会把每个节点的结果留在内存里，这一项没有上限。单节点产出超过 `engine/run.py` 的 `HEAVY_RESULT_ROWS`（默认 10 万行）时控制台打印提示，提示不改数据。
 
 ## 云端部署（cloud 模式）
-
-这个项目按"本机单人"设计，但也可以放到服务器上给别人访问。启动时加一个词即可：
 
 ```bash
 cd backend
 python app.py cloud          # 等价：python app.py --cloud，或 CRAWLER_CLOUD=1 python app.py
 ```
 
-**云端必须先配好初始管理员与密钥，否则拒绝启动**（`services.accounts.service.startup_error` 按名指出缺哪一项）：
+cloud 模式必须配好 `CRAWLER_ADMIN_PASSWORD` 与 `SECRET_KEY`，否则 `services/accounts/service.py` 的 `startup_error` 按名拒绝启动；Cookie 经 HTTPS 时再设 `CRAWLER_HTTPS=1`。
 
-```bash
-export CRAWLER_ADMIN_PASSWORD='一长串只有你知道的密码'   # 必须（首次建管理员）；用户名默认 admin，可用 CRAWLER_ADMIN_USER 改名
-export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-export CRAWLER_HTTPS=1                                  # 反向代理已终止 TLS 时（会话 Cookie 标记 Secure）
-```
-
-**账号模型**：账号、服务端会话与审计日志在 `data/accounts.db`（密码用 scrypt 加盐哈希；库里只存**会话 id** 的
-sha256，CSRF token 原样存——页面每次重载都要从 `/api/config` 取回它，而少了 HttpOnly 的会话 id 它对窃取者无用）。
-初始管理员只在账号表为空时由环境变量创建；表里已有账号时这些变量被忽略，不会重置任何密码。
-之后只能由管理员在顶栏“账号”面板里创建/重置密码/启用禁用/强制下线/删除账号（`/api/accounts`）。管理员创建或
-重置的账号带 `must_change_password`：登录后除改密接口外全站 API 返回 403（带 `X-Password-Change-Required`），
-前端弹出改密对话框。
-
-**数据隔离**：每个账号拥有 `data/users/<user_id>/`（工作流、数据集、runs/datasets/biblio/workflow_history/history
-库、Cookie、Chrome profile、导出、检查点、reusable 模板、locks/schedules）；`accounts.db`、`settings.json`、
-`lexicon.db`、`models/`、`logs/` 是系统级共享。删除账号时整个目录移入 `data/users/.trash/<id>-<时间戳>/`，
-不会当场删除；最后一个启用的管理员不能被禁用或删除，有运行中/排队任务的账号也不能。旧的单账号数据根用
-`python tools/migrate_accounts.py --user admin --apply` 迁入管理员账号（默认 dry-run，先复制校验，再把原目录改名到
-`data/.migrated-*`；执行前停掉服务并先做备份）。
-
-**会话与门禁**：设置账号后，`/`、全部 `/api/*`、静态资源都要求登录：页面跳 `/login`，接口答 401（带
-`X-Auth-Required`，前端据此跳回登录页）。Cookie 为签名后的随机会话 id（`cixi_session`，HttpOnly、SameSite=Lax、
-非持久——关浏览器即退出、`CRAWLER_HTTPS=1` 时 Secure），服务端表里只存它的哈希；空闲/绝对超时、退出登录、改密、
-管理员禁用或强制下线都会吊销会话（服务重启不再踢人）。所有写请求必须带会话 CSRF token（前端 fetch 补丁自动加
-`X-CSRF-Token`），登录表单另有一枚一次性 token。登录失败：连续 5 次锁 15 分钟，指数递增至 60 分钟；密码错误一律
-答同一句“账号或密码不正确”，锁定的提示只在**密码正确**时给出（否则一个错误密码就能区分“有这个名字”与“没有”），
-另有按“来源地址 + 用户名”的失败窗口——只按地址计窗会让反向代理后的全体访客被一次爆破一起锁死（要审计与限速指到真实来源，按代理层数设置
-`CRAWLER_TRUST_PROXY_DEPTH`，默认 `0` 完全不读 `X-Forwarded-For`）。公网部署仍建议在
-反向代理再加一层限速。只要启用了账号（cloud 模式，
-或本机设了 `CRAWLER_*_PASSWORD`），仓库默认的 `SECRET_KEY` 都会被按名拒绝——密钥公开等于会话可伪造。
-
-**运行与定时任务**：全站仍只有一个运行槽、一个队列、一个定时器；不同账号串行排队（`并行 ×N` 只描述画布内
-工作流）。运行记录归属于启动它的账号：状态/停止/进程/统计端点对其它账号只返回空结果加 `foreign_run`，
-队列与定时任务按账号列出、按账号的 `schedules.json` 读取，排队任务在拥有者上下文里启动。**被拒绝的运行请求
-不算拥有这次槽位**（缺模型、传输不可用等），它写下的 run id、归属与画布身份都会交回，否则被拒的账号会看到
-上一个账号的控制台与结果，而真正的主人反被判定为“别人的运行”。进程面板在账号模式下只列出**自己这次运行**
-的线程：整张进程线程表是这台机器的东西——里面还有定时器线程（杀掉它等于停掉所有账号的定时任务）和别人
-正开着的登录窗口，按 ident 强杀对非拥有者按名拒绝。重启后从磁盘镜像恢复的排队请求会立刻走同一条启动路径
-（槽位空则开始，不空则继续排队），启动时也不会为从没跑过的账号建出空的 `runs.db`。
-
-服务端与前端**同时**换到"服务器形状"——旗标是服务器的事实，不是页面的猜测：`/api/config` 把 `cloud_mode`
-报给前端，前端据此收掉那些"问这台机器要一台它没有的东西"的控件：
-
-| 云端关掉的东西 | 被绕过时会发生什么 |
-|---|---|
-| **Ollama 全部界面**（AI 子菜单只剩 OpenRouter；设置面板的 Ollama 地址；处理节点里"本地 Ollama"那句） | 每个要模型的运行在建 record 之前**按名字拒绝**（`/api/llm/test`、`/api/llm/ollama/models` 同样拒）；报告仍写出，结论那句换成"这台服务器没有本地模型"，绝不假装跑过 |
-| **“无头”开关**，且所有抓取一律无头 | 请求里写 `headless: false` 也会被改成无头，运行记录里的标也按实际写 |
-| **Cookie 面板的“浏览器生成”** | 路由直接按名字拒绝（隐藏按钮从来不等于收回权限：旧标签页、存下的工作流、手写 POST 都还会来）；“验证 Cookie”与运行前预检改走无头 |
-
-**新账号的浏览器目录从哪来**：云端既没有登录窗口、也绝不允许把用户日常 Chrome 目录复制上服务器，所以这一步归程序自己——
-第一次保存 Cookie 时（人还在屏幕前）程序开一台空白 Chrome 生成 `<Profile 根>/_template`，之后每建一个账号目录都从它克隆。
-它干净的理由是从来没有人登录过它，而不是"把看着私密的文件删掉了"（后一条要猜中 Chrome 全部存储，漏一个就是把一个人的
-会话送上去）。克隆清单永远拒绝这些名字：`Cookies`、`Login Data`、`History`、`Web Data`、`Preferences`、`Local State`
-（机器绑定密钥）、`IndexedDB`、`Network`、`Session Storage`，也拒绝本程序自己的 `.crawler-profile.json`。
-
-判断模板脏不脏**看表里的行数，不看文件名**：实测空白首启的 Chrome 自己就会创建 `Cookies`/`Login Data`/`History`/`Preferences`
-（都是空表），按名字判定会把每一个真模板判成脏。目录只在第一次被创建时播种；模板若被检出登录痕迹，会在任何账号再用它之前
-销毁重建；`POST /api/browser/profiles/template` 是给运维"现在就重建一次"的手动入口。
+- **账号**：账号、服务端会话与审计在 `data/accounts.db`，密码用 scrypt 加盐，库里只存会话 id 的 sha256。管理员在“账号”面板创建、重置、禁用、强制下线或删除；新建或重置的账号带 `must_change_password`，改密前除改密接口外全站 API 403。
+- **隔离**：每个账号拥有 `data/users/<user_id>/`（工作流、数据集、各库、Cookie、Profile、导出、检查点、模板、locks/schedules）；`accounts.db`、`settings.json`、`lexicon.db`、`models/`、`logs/` 系统共享。删除账号把目录移入 `data/users/.trash/`；最后一个启用的管理员不可删。旧单账号数据用 `python tools/migrate_accounts.py --user admin --apply` 迁入（默认 dry-run）。
+- **门禁**：页面跳 `/login`，接口回 401。连续失败按账号与“来源地址 + 用户名”计窗，密码错误一律同一句提示。运行槽、队列与定时器全站各一份，按账号归属；其它账号访问运行端点只得到 `foreign_run` 或空结果。
+- **服务器形状**：`/api/config` 的 `cloud_mode` 决定界面：隐藏全部 Ollama 入口并让需要模型的运行按名拒绝、隐藏无头开关并强制无头、拒绝“浏览器生成 Cookie”（验证与预检改走无头）。
+- **浏览器目录**：首次保存 Cookie 时用空白 Chrome 生成 `<Profile 根>/_template`，之后每个账号目录从它克隆；`Cookies`、`Login Data`、`History`、`Web Data`、`Preferences`、`Local State`、`IndexedDB`、`Network`、`Session Storage` 永不复制。模板脏不脏看表里的行数，`POST /api/browser/profiles/template` 可手动重建。
+- **隐私**：API Key 只存在浏览器 localStorage，Cookie 值只存服务器；采集数据、工作流与运行记录都在服务器 `data/`，能访问服务器的人就能读到。`tests/api/test_privacy_leaks.py` 走遍每条 GET 规则，要求磁盘上放置的独特标记不出现在任何响应里。
 
 ## 三个系统：Windows / Linux / macOS
 
-> 规则本体在 `AGENTS.md`“Cross-platform”一节，逐条实测证据在 `docs/agent_practices.md`。`desktop/`
-> 是唯一故意只服务 Windows 的目录。按当前系统查的机器事实都集中在一处（`core/machine.py` 与两个 services）：
+机器事实集中在 `core/machine.py` 与 `services/charts/`，按目标系统的分隔符拼接；`desktop/` 是唯一的打包树，逐条证据见 [agent_practices.md](agent_practices.md)。
 
 | 要查的东西 | Windows | Linux | macOS |
 |---|---|---|---|
-| Chrome/Chromium | `PROGRAMFILES`/`LOCALAPPDATA` 下的 `chrome.exe` | `/usr/bin/google-chrome[-stable]`、`chromium[-browser]`、`/snap/bin/chromium`，再扫 `PATH` | `/Applications/Google Chrome.app/…`（含 Beta/Chromium/`~/Applications`），再扫 `PATH` |
-| Node 运行时（CatBus 用） | `nodejs\node.exe`，再扫 `PATH` | `/usr/bin/node`、`/usr/local/bin/node`、`/snap/bin/node`，再扫 `PATH` | `/usr/local/bin/node`、`/opt/homebrew/bin/node`，再扫 `PATH` |
-| CatBus 适配器 | `%APPDATA%\npm\node_modules\catbus-cli\…\cli.js` | `/usr/local/lib`、`/usr/lib`、`$HOME/.npm-global` 下同名入口 | `/usr/local/lib`、`/opt/homebrew/lib`、`$HOME/.npm-global` |
-| xelatex | MiKTeX 两处安装根 | `/usr/bin/xelatex`、`/usr/local/bin/xelatex` | `/Library/TeX/texbin/xelatex`、`/usr/texbin/xelatex` |
-| 纸质图中文（ctex） | 显式 `\setCJKmainfont{FangSong}` | `\usepackage[fontset=fandol]{ctex}`，不指名任何字体 | `\usepackage[fontset=macnew]{ctex}` |
-| Matplotlib 中文 | SimHei / Microsoft YaHei 在前 | Noto Sans CJK SC / Source Han Sans SC | PingFang SC / Hiragino Sans GB |
+| Chrome/Chromium | `PROGRAMFILES`/`LOCALAPPDATA` 下的 `chrome.exe` | `/usr/bin/google-chrome[-stable]`、`chromium[-browser]`、`/snap/bin/chromium`，再扫 `PATH` | `/Applications/Google Chrome.app/…`，再扫 `PATH` |
+| Node（CatBus 用） | `nodejs\node.exe`，再扫 `PATH` | `/usr/bin/node`、`/usr/local/bin/node`、`/snap/bin/node` | `/usr/local/bin/node`、`/opt/homebrew/bin/node` |
+| CatBus 适配器 | `%APPDATA%\npm\node_modules\catbus-cli\…\cli.js` | npm 全局前缀下同名入口 | `/usr/local/lib`、`/opt/homebrew/lib`、`$HOME/.npm-global` |
+| xelatex | MiKTeX 安装根 | `/usr/bin/xelatex`、`/usr/local/bin/xelatex` | `/Library/TeX/texbin/xelatex`、`/usr/texbin/xelatex` |
+| 中文排版 | 显式 `\setCJKmainfont{FangSong}` | `ctex` 的 `fontset=fandol` | `ctex` 的 `fontset=macnew` |
+| Matplotlib 中文 | SimHei / Microsoft YaHei | Noto Sans CJK SC / Source Han Sans SC | PingFang SC / Hiragino Sans GB |
 
-仿宋（FangSong）是一套 Windows 字体：TeX Live 与 macOS 都没有它，于是服务器上“论文图”整条功能曾直接死在
-`The font "FangSong" cannot be found`——现在非 Windows 改用 ctex 自带字体集，并把中文来源字族写进 `.tex` 注释里如实说明。
-云端 Linux 要装的系统包（`deploy/Dockerfile` 已装前两项）：
+云端 Linux 需要 Chromium + 驱动、`fonts-noto-cjk`，论文图另需 `texlive-xetex`/`texlive-lang-chinese`（`deploy/Dockerfile` 已装前两项）。启用登录时容器里的 `/api/config` 答 401 是门禁在工作，健康检查接受 `200|302|401`。
 
-```bash
-apt-get install -y chromium chromium-driver fonts-noto-cjk
-apt-get install -y texlive-xetex texlive-lang-chinese   # 可选：论文图与论文成稿
-```
-
-**容器里的 `/api/config` 在启用登录时答 `401`，那是门禁在起作用，不是没起来**：镜像的 HEALTHCHECK 认
-`200|302|401`，任何“等 200 才算启动成功”的探针都会把一个已经在服务的容器判成死的（CI 的 Docker job
-就这么红过一次，容器日志里一行错都没有）。另外 matplotlib 的字体缓存是**首次 import** 时建立的，而
-`fonts-noto-cjk` 是几百个字面；`deploy/Dockerfile` 在构建时以运行用户先把这份缓存建好，免得第一个请求
-替所有人付这笔钱。**换字体包之后要么重建镜像，要么接受一次这样的冷启动。**
-
-**只有 Windows 桌面做得到的能力**：红果短剧评论收割（驱动本机播放器进程 + 把 mitmproxy 的 CA 装进系统证书库）。
-它在 Linux、macOS 与 cloud 模式下被按名拒绝，见 [crawler_rules.md](crawler_rules.md) 的“平台边界”。单机实例互斥、
-双击启动、系统弹窗、`%APPDATA%` 数据根都是 `desktop/` 那棵树的事。
-
-**Linux 文件名算字节，Windows 文件名算字符**：ext4/APFS 的 `NAME_MAX` 是 255 UTF-8 字节，100 个汉字是 300 字节——
-Windows 上写得出去、服务器上 `open()` 直接 `ENAMETOOLONG`。`core/refs.py::sanitize_filename` 两个上限都卡
-（`MAX_FILENAME_LENGTH=100` 字符、`MAX_FILENAME_BYTES=200` 字节）。**控制台编码**见上 `PYTHONUTF8`/`LANG` 一节。
-
-**隐私边界**：OpenRouter API Key 一直只存在浏览器 localStorage，服务端只在一次请求里用它；Cookie 值只存服务器，
-任何接口都不把它发给浏览器。但**采集到的数据、工作流文件与运行记录都存在服务器那份 `data/` 里**，谁能访问这台服务器
-谁能翻到这些表——这不是漏洞，是"本机单人"前提被换掉了，公开部署前请想清楚（首次进入的云端弹窗会把这件事说明一次，
-“知道了”下次还会问、“不再提醒”记在本地 localStorage）。隐私上被**测着**的几件事见 `tests/api/test_privacy_leaks.py`：
-它走 `app.url_map` 上每一条 GET 规则，要求在磁盘上放一份带独特标记的 Cookie 后那标记在任何响应里都不出现。
+红果短剧评论收割只在 Windows 桌面可用，其它系统与 cloud 模式按名拒绝。文件名按 UTF-8 字节与字符双重设限（`core/refs.py` 的 `sanitize_filename`），因为 ext4/APFS 的 `NAME_MAX` 是 255 字节而 Windows 是字符。

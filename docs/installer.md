@@ -1,352 +1,197 @@
-# 在线安装器与环境检测（Windows / macOS）
+# 在线安装器与环境检测
 
-这是一个**可选**的安装方式：先下载一个几 MB 的 `CaiXiHui-Online-Setup.exe`，由它把主程序和需要的
-第三方便携组件下载到用户选择的目录。离线安装包 `CaiXiHui-Setup.exe` 仍然保留，给没有网络或不想下载组件的人。
+在线安装器是可选入口：十几 MB 的 `CaiXiHui-Online-Setup.exe`（macOS 为 DMG），把主程序与第三方便携组件
+下载到用户选择的目录。离线包 `CaiXiHui-Setup.exe` 保留给没有网络或不想下载组件的人。
+安装器窗口是本进程的原生 WebView2 窗口（macOS 为 Cocoa/WebKit），页面由 `127.0.0.1:3968` 上的本地服务
+提供，路径带随机令牌；界面沿用应用前端的纸白/墨黑设计语言，浅色为默认，可切深色，一屏内不出滚动条。
 
-安装器窗口是**本进程自己的原生 WebView2 窗口**：页面由 `127.0.0.1` 上的本地服务提供（固定端口 3968 +
-随机路径令牌，只监听本机），由 `desktop/native_window.py` 用 pywebview 装进 Windows 自带的
-Microsoft Edge WebView2。界面用的就是应用前端的纸白/墨黑设计语言，浅色为默认，右上角可切换深色；
-内容按一屏排布，不出现滚动条。这样就不需要把 Qt / Tcl-Tk 这类 GUI 工具包打进 exe。
+## 组件
 
-**exe 是窗口程序**（`console=False`），且**双击先请求管理员**（manifest 为
-`requireAdministrator`）：UAC 在 onefile 解包之前出现，机器对未提权进程禁止 `%TEMP%` 写入时也能解包。
-主程序本身不带管理员清单。固定端口让页面来源稳定，语言/主题（`localStorage`）下次打开仍然有效；
-关闭窗口即结束进程，正在下载时会拒绝关闭（先点“取消”）。Edge WebView2 运行时随 Win10/11 自带；
-缺少它的机器会被原生对话框按名字拒绝并给出安装地址（`%LOCALAPPDATA%\CaiXiHui\installer.log` 记录
-同一件事）。自动化验收可用 `--no-window` 只起服务，但它同样经过 UAC 清单。
+| 组件 | 版本 | 来源（默认） |
+|---|---|---|
+| 采析绘主程序 | 安装时从 `version.json` 取当前平台最新包 | Gitee / GitHub Release |
+| Chrome for Testing | 157.0.8103.38 | npmmirror（官方地址备用） |
+| chromedriver | 157.0.8103.38 | npmmirror（与 Chrome 同版本） |
+| Node.js | 24.21.0 | npmmirror |
+| CatBus 采析绘适配版 | 0.3.0-crawler-workflow | Gitee Release |
 
-小白默认走**国内直连**：主程序与 CatBus 来自 Gitee，Chrome for Testing / chromedriver / Node.js 来自
-npmmirror，全程不需要翻墙。官方地址只作为备用；所有下载都核对 SHA-256，镜像不可信也不会被当成可信。
+- 国内默认全部直连（Gitee + npmmirror），官方地址只作备用；每项都核对 SHA-256，镜像不可信也不当可信。
+- `requires` 自动补依赖：勾 CatBus 会连 Node 一起装，勾 chromedriver 会连 Chrome 一起装。
+- **只检测、不下载**（灰显不可勾选）：Ollama、BERT 模型包、xelatex（MiKTeX）。它们不参与安装体积，也不起注定失败的任务。
+- **默认不选**：Ollama 运行时与模型（无国内官方镜像；非 LLM 的分析、清洗、统计、图表、报告不受影响）、
+  MiKTeX（国内可用清华 CTAN）、BERT 模型包（约 780 MB，不装时相关节点降级到 ml/snownlp 并打印实际方法）。
+- 清单唯一来源是 `backend/services/components/default_catalog.json`；`tools/release_components.py` 从构建产物生成它。
 
-## 一键安装包含什么
+## 安装流程
 
-| 组件 | 版本 | 体积 | 来源（默认，国内可直连） |
-|---|---|---|---|
-| 采析绘主程序 | 1.0.0 | 121 MB | Gitee Release（分两段） |
-| Chrome for Testing | 157.0.8103.38 | 201 MB | npmmirror |
-| chromedriver | 157.0.8103.38 | 11 MB | npmmirror（与 Chrome 同版本） |
-| Node.js | 24.21.0 | 36 MB | npmmirror |
-| CatBus 采析绘适配版 | 0.3.0 | 165 MB | Gitee Release（分两段） |
+1. **校验安装位置（下载前）**：盘被 Windows/CLR 当网络位置时用一次真实的 `Assembly.LoadFrom` 探针拒绝，
+   点名该文件夹并请改用 C: 或 D:，不等到启动才失败。
+2. **取包**：`app` 条目只写安装参数与清单地址（`feed`），安装时经 `backend/services/components/feed.py`
+   读 `version.json`，按当前平台/架构取包。清单读不到或没有当前平台的包时点名拒绝（显示 URL 与原因），
+   绝不退回旧版本。因此一份安装器可以一直用下去。
+3. **下载**：只接受 HTTPS；逐项核对清单 SHA-256，失败即删除字节并点名 URL；分片按序拼接后校验总包摘要；
+   取消不删除已下载字节，下次断点续传。
+4. **解包**：先解到 staging 再原子移到目标目录；`safe_extract` 拒绝绝对路径、`..` 和符号链接，限制条目数与总大小。
+   macOS 的 Chrome/Node 资产必须保留符号链接与可执行位，改用系统 `ditto`/`tar`，仍是先校验固定字节再替换。
+5. **落盘**（默认目录见下）：
 
-**默认一键 ≈ 535 MB**，装完主程序、Selenium 采集和 CatBus 采集都可用。
+   ```
+   <安装目录>\
+     app\                      主程序（上一版保留为 app.previous）
+     components\<id>\<版本>\    Chrome / chromedriver / Node / CatBus
+     install-manifest.json      每项的版本、路径、SHA-256、来源
+   ```
 
-安装器列表还会列出**只检测、不下载**的依赖（灰色、不可勾选）：Ollama（本地模型）、BERT 微调模型包、
-xelatex（MiKTeX），这样项目全部依赖都在同一页可见；它们不参与“一键安装”的体积。
+6. **导出路径**：启动器在导入配置之前读 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus
+   导出为 `CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`。
+7. **自检**：安装器调用刚装好的 `CaiXiHui.exe --doctor` 显示环境矩阵（每行带 `label_text`/`reason_text`，
+   安装器不复制应用里的词条）。
 
-**安装位置会被提前校验**：如果所选文件夹所在的盘被 Windows/CLR 当作“网络位置”（本项目实测 F: 就是；
-`GetDriveType` 对它仍返回 Fixed），安装器会**在下载前**用一次真实的 `Assembly.LoadFrom` 探针拒绝，并
-点名该文件夹、请改用 C: 或 D:，而不是装完后才在启动时失败。
+## 安装位置与数据目录
 
-以下组件默认**不选**：
+- 默认装在 `%LOCALAPPDATA%\Programs\CaiXiHui`，不需要管理员权限；可改到其他盘。
+- 数据默认在 `%APPDATA%\CaiXiHui`（或 `portable.txt` 的便携模式），与安装目录分开；卸载主程序不删用户数据。
+- 安装器可单独指定**数据文件夹**（例如 `D:\CaiXiHui-data`），写进 `<安装目录>\app\data-root.txt`，启动器优先读它；
+  清空该文件回到默认位置。
+- 目标目录需要管理员权限时（如 `C:\Program Files`）只请求一次 UAC，拒绝时点名不可写的文件夹；
+  manifest 已提权时不再弹第二次（按 `GetTokenInformation` 的 `TokenElevation` 判断）。“打开安装位置”用输入框当前路径。
+- 两个目录不是一回事：**安装根**放 `app/`、`components/` 与清单；`CIXI_COMPONENTS_DIR` 指其中的 `components/`，
+  清单在它上一级。源码运行时二者分别是 `data/` 与 `data/components/`。
+- 桌面快捷方式名为“采析绘”（`采析绘.lnk`），离线包走 Inno 的 `desktopicon`，在线安装器用页面复选框，默认勾选；
+  macOS 不提供该选项（应用进 `/Applications`，由 Launchpad 管理）。
 
-- **Ollama 运行时 + 模型**：官方 Windows zip 约 1.5 GB，模型每个 2–4 GB；没有国内官方镜像。采析绘的
-  非 LLM 分析、清洗、统计、图表、报告不受影响；LLM 节点需要本机 Ollama 或 OpenRouter。
-- **MiKTeX / xelatex**：默认只检测；需要编译 PDF / 论文成稿时再装，国内可用清华 CTAN 镜像。
-- **BERT 模型包**：约 780 MB，单独发布；不装时相关节点会降级到 ml/snownlp 并打印实际方法。
+## 组件来源（严格二选一）
 
-## 安装位置
+“环境与组件”面板可切换“安装器安装的（默认）”与“本机已安装的”。两者都在时是二选一，不是优先：
 
-默认 `%LOCALAPPDATA%\Programs\CaiXiHui`，不需要管理员权限；可以改成 `D:\CaiXiHui` 等其他盘。布局：
+- 选“安装器安装的”只认清单写入的路径，**不查本机安装根、`PATH`、npm 全局前缀**；缺任一份按名报“安装器未安装”
+  （`env.sourceInstallerMissing`），不悄悄换成本机那份。
+- 选“本机已安装的”只查本机，忽略安装器目录里的旧路径。
+- 切换在重启采析绘后生效：持久化选择是 `component_source`，启动器把它冻结成 `CIXI_COMPONENT_SOURCE`，面板如实说“下次生效”。
+- 没有安装器组件树的运行形态（源码、便携 zip、离线 Setup、云端容器）按本机来源处理，不会因此全部报“安装器未安装”。
+- 安装器模式下清单是权威：它覆盖 `settings.json` 里旧版本留下的空值或本机路径，也替换进程环境里指向安装器目录之外的旧值
+  （否则旧 Chrome 会配安装器驱动）。安装器目录内的导出值保留，不清空用户数据。
+- 这个切换只在采析绘软件端提供，安装器本身不提供。
 
-```
-<安装目录>\
-  app\                      主程序（上一版保留为 app.previous）
-  components\<id>\<版本>\    Chrome / chromedriver / Node / CatBus
-  install-manifest.json      每个组件的版本、路径、SHA-256、来源
-```
+## 拒绝与降级
 
-数据默认在 `%APPDATA%\CaiXiHui`（或 `portable.txt` 的便携模式），与安装目录分开；卸载主程序不会删除用户数据。
-**安装器里可以单独特定“数据文件夹”**（例如 `D:\CaiXiHui-data`），装完写进 `<安装目录>\app\data-root.txt`，
-启动器优先读它——这样程序和用户数据都能完全放在 C 盘以外，换盘不用重装。清空这个文件就回到默认位置。
+| 情形 | 行为 |
+|---|---|
+| 缺少 Edge WebView2 运行时 | 原生对话框按名拒绝并给安装地址，同时写 `%LOCALAPPDATA%\CaiXiHui\installer.log` |
+| 安装位置被当网络位置 | 下载前拒绝，点名文件夹 |
+| 目标目录不可写 | 点名文件夹与系统错误，请求一次 UAC |
+| 清单读不到 / 无当前平台包 | 点名拒绝并显示 URL 与原因，不回退旧版本 |
+| 请求安装只检测不下载的组件 | 按名拒绝，不起后台任务 |
+| BERT 包缺 `model.onnx`/`tokenizer.json`/`cixi_bert.json` | 按名拒绝半包 |
+| 来源为安装器但组件缺失 | 按名“安装器未安装”，不悄悄换成本机那份 |
+| 环境探测本身失败 | 无法核对，绝不显示成绿色 |
+| Chrome 版本读不出 | 可用（有降级），不冒充成对 |
 
-目标目录需要管理员权限时（例如 `C:\Program Files` 下），安装器**只请求一次** UAC，并用原来的两个路径重新打开；
-拒绝授权时会点名是哪个文件夹不可写，而不是下载到一半才失败。主程序启动时如果数据目录不可写，也会同样请求一次。
-安装器用进程 token（`GetTokenInformation` 的 `TokenElevation`）判断当前是否已经提权：manifest 已经把进程提权时不会再弹第二次 UAC；
-真的写不进去时提示点名文件夹和系统错误。“打开安装位置”使用输入框里当前的路径，不会跳回默认 C:。
-
-两个 Windows 安装器都有**创建桌面快捷方式**选项，快捷方式名字是“采析绘”（`采析绘.lnk`）：离线 Setup 用
-Inno 的 `desktopicon` 任务，在线安装器用页面上的“创建桌面快捷方式（采析绘）”复选框，默认勾选；取消就不创建。
-macOS 不显示这个选项——应用装到 `/Applications`，由 Launchpad 管理。
-
-启动器会在应用导入配置之前读取 `install-manifest.json`，把 Chrome、chromedriver、Node、CatBus 的路径导出为
-现有环境变量（`CHROME_PATH`、`CIXI_DRIVER_PATH`、`CIXI_NODE_BIN`、`CIXI_CATBUS_CLI`）。安装器模式下清单是权威：
-设置面板里指向安装器组件目录内的路径仍然可用，指向本机或其他位置的路径会被忽略；进程里旧的、指向安装器目录外的同名
-环境变量会被安装器路径替换（否则旧 Chrome 会配安装器驱动，第一次运行就报版本不匹配）。
-
-“环境与组件”面板顶部可以选**组件来源**：默认“安装器安装的”（上表这些便携版），也可以改成“本机已安装的”。
-这是严格二选一，不是“优先”：选“安装器安装的”时只认安装器写入的路径，**不再查本机安装根、`PATH` 或 npm 全局前缀**，
-缺 Chrome/chromedriver/Node/CatBus 任一份就按名报“安装器未安装”（面板和运行拒绝都会点名），绝不悄悄换成本机那份；
-选“本机已安装的”时只查本机，安装器目录里的旧路径也会被忽略。切换在重启采析绘后生效；选择和本次启动生效的来源
-是两个字段（`component_source_preference` / `component_source`），面板不会把“下次才生效”说成“现在就用”。
-这个切换只在采析绘软件端提供，安装器本身不提供。
-
-安装器模式还以**清单为权威**：启动器导出的 Chrome/chromedriver/Node/CatBus 路径覆盖 `settings.json` 里由旧版本留下的空值或本机路径，
-也会替换进程环境里指向安装器目录之外的旧值。否则旧设置会让“安装器安装的”实际拿本机 Chrome 配安装器驱动，首次运行就会报版本不匹配 /
-首次联网下载驱动那种长错误。安装器目录内的导出值保留，不清空用户数据。
-
-两个目录不是一回事：**安装根**放 `app/`、`components/` 和 `install-manifest.json`；`CIXI_COMPONENTS_DIR`
-指的是其中的 `components/`，清单在它的上一级。源码运行时它们分别是 `data/` 和 `data/components/`。
+环境检测只有四种状态：**可用**、**可用（有降级）**、**不可用**（点名缺 Chrome/chromedriver/Node/CatBus/Ollama/xelatex/中文字体）、
+**无法核对**。Chrome 版本在 Windows 上读可执行文件的版本资源，不启动浏览器（`chrome.exe --version` 不打印版本，
+还会把参数交给已开的浏览器）。矩阵覆盖：主程序、Selenium 采集、CatBus 采集、本机 LLM、云端 LLM、BERT、
+PDF 编译、中文图表、上传/分析/报告。
 
 ## 主程序自更新
 
-主程序更新频繁，组件更新很少，所以更新只替换应用本体，不碰 `components/`、`data/`、`logs/`、Cookie、模型和
-`install-manifest.json`。页面启动后会读仓库根目录的 `version.json`（Gitee raw 优先，GitHub raw 兜底，可用
-`CIXI_UPDATE_FEED` 覆盖成内部镜像或本地清单来排练发布），发现版本更高、**当前平台有可下载包且摘要齐全**时，
-在**菜单条下方**弹出更新卡片；只有用户点“立即更新”才下载。“稍后”安静 24 小时并按版本记住，
-“不再提示此版本”只压住那一版；下载中多一个“取消”。
-
-**在线安装器读的是同一份 `version.json`**：它的 `app` 组件条目不写地址和摘要，只写安装参数（`archive`、
-`install_as`、`strip_prefix`、`verify`）和清单地址（`feed`），安装时取当前平台的最新包并校验。所以一份安装器
-可以一直用下去，每次安装拿到的都是当时发布的最新主程序；清单读不到或没有当前平台的包时，安装器**点名拒绝**
-（显示 URL 和原因），不会退回去装旧版本。
-
-**三个进程各做一件事，谁都不假设别人还活着**：
+自更新只替换应用本体，不碰 `components/`、`data/`、`logs/`、Cookie、模型和 `install-manifest.json`。
+页面启动后读 `version.json`（Gitee raw 优先，GitHub raw 兜底，可用 `CIXI_UPDATE_FEED` 覆盖），
+发现更高版本、当前平台有包且摘要齐全时在菜单条下方弹卡片；只有用户点“立即更新”才下载，
+“稍后”安静 24 小时并按版本记住，“不再提示此版本”只压住那一版，下载中多一个“取消”。
 
 | 角色 | 做什么 | 失败时 |
 |---|---|---|
-| 主程序（页面 + 本地服务） | 检查、征求同意、画进度、决定何时退出 | 关掉窗口不影响下载 |
-| 下载进程（同一个 exe `--update-worker`，无窗口） | 下载（分片粒度续传）、逐片与总包 SHA-256、解压、形状校验 | 状态与原因写进 `job.json` 和 `update.log` |
-| 替换脚本（Windows PowerShell / macOS bash） | 等主程序与下载进程都退出 → 逐项替换并重试被占用的文件 → 校验新版本活着 → 拉起 / 回滚 | 写日志、回滚、把旧版本启动起来 |
+| 主程序（页面 + 本地服务） | 检查、征求同意、画进度、决定何时退出 | 关窗口不影响下载 |
+| 下载进程（同一 exe `--update-worker`，无窗口） | 分片续传、逐片与总包 SHA-256、解压、形状校验 | 状态与原因写入 `job.json` 和 `update.log` |
+| 替换脚本（Windows PowerShell / macOS bash） | 等两个进程退出 → 逐项替换并重试被占用文件 → 校验新版本活着 → 拉起或回滚 | 写日志、回滚、启动旧版本 |
 
-任务状态存在 `<data>/updates/job.json`（`downloading → staging → staged → applying → applied`），
-日志是 `<data>/updates/update.log`（256 KB 轮转）。所以**刷新页面、重开窗口、下载中关窗口**都能接上同一个任务：
-页面刷新后由 `/api/update/status` 重新画进度；下载中关窗口，下载进程会把剩下的工作做完，并在应用已经不在时
-直接把包交给替换脚本；下载完成后关窗口等同于点“重启并完成更新”。
+- 任务状态在 `<data>/updates/job.json`（`downloading → staging → staged → applying → applied`），
+  日志 `<data>/updates/update.log`（256 KB 轮转）。刷新页面、重开窗口、下载中关窗口都接回同一任务；
+  刷新后由 `/api/update/status` 重画进度，下载完成后关窗口等同“重启并完成更新”。
+- Windows：下载分片 → 合并 → 校验总摘要 → 解到 `<data>/updates/<version>/staged` → 形状校验（必须有 `CaiXiHui.exe`
+  与 `_internal`）→ 替换 `<安装根>/app`，便携布局只换程序文件，旧版放 `app.previous` → 重启后观察 15 秒，起不来就回滚。
+- macOS：DMG 经 `hdiutil` 挂载、`ditto` 复制 `.app` 到暂存目录，退出后替换整个 `.app`，失败移回
+  `CaiXiHui.app.previous` 再启动（脚本每步显式判断，不用 `set -e`）。
+- 源码运行与没有替换脚本的平台（Linux、非 `.app` 的 macOS 构建）`apply_supported` 为假，卡片只说“请用安装器更新”，
+  绝不先下载再拒绝。
+- 替换期间写 `<data>/updates/applying.marker`，此时双击启动会先等替换结束。
+- 更新失败不改动当前安装：替换中途失败逐项移回，新版本启动后立刻退出也回滚；下次启动按名说明上次失败（`update.err.*`）。
+- **安装回执跟着更新走**：新版本首启把 `job.json` 从 `applying` 收成 `applied` 时，按安装器同一套规则改写
+  `<安装根>/current-version` 与 `<安装根>/versions/<新版本>/install.json`（`method: self-update`，经 `.partial` 改名；
+  便携目录没有指针文件则跳过）。否则“安装器记录的版本”停在最后一次安装，审计与回滚都会读错。
+- 发版顺序、版本号同步、分片与摘要模板见 [`release.md`](release.md)。
 
-- **发布前**：把新包（Windows 的 `CaiXiHui-win64.zip` 分片；macOS 的 DMG）先上传到 Release，再把
-  `version.json` 的 `version`、`sha256`、`size`、`parts`/`url` 更新为这一版；`version.json` 里的版本必须与
-  `backend/services/version.py` 的 `APP_VERSION` 对应。资产没上传时不要先改 `version.json`：应用会因“当前平台没有包”而不提示。
-  **总包与每个分片都必须有 `sha256`**：只有摘要才能把“清单说的字节”和“装上去的字节”对上，缺摘要按名拒绝。
-- **Windows**：下载分片 → 合并 → 校验总 SHA-256 → 解压到 `<data>/updates/<version>/staged` → 形状校验（必须有
-  `CaiXiHui.exe` 与 `_internal`）；用户确认后启动 PowerShell 脚本，等主程序与下载进程都退出，在线安装布局替换
-  `<安装根>/app`，便携布局只替换程序文件（保留用户数据），旧版本放 `app.previous` 供回滚，然后重启
-  `CaiXiHui.exe`，观察 15 秒，起不来就回滚并启动旧版本。
-- **macOS**：下载 DMG → 校验 → `hdiutil` 挂载、`ditto` 复制 `.app` 到暂存目录 → 退出后脚本替换整个 `.app`，
-  失败则移回 `CaiXiHui.app.previous` 再启动（脚本对每一步都显式判断，不用 `set -e`，否则回滚本身会被跳过）。
-- **源码运行**、以及没有替换脚本的平台（Linux、非 `.app` 的 macOS 构建）不提示可下载：检查结果里
-  `apply_supported` 为假，卡片只说“请用安装器更新”，绝不先下载再拒绝。
-- **更新失败不会改动当前安装**：替换中途失败会逐项移回旧文件；新版本启动后立刻退出也会回滚。原因写在
-  `update.log`，下次启动的更新卡片会把上次的失败按名字说出来（`update.err.*`），不再是“什么都没发生”。
-- 替换期间会写 `<data>/updates/applying.marker`，此时双击启动会先等替换结束，不会在半拷贝的目录上启动。
-- **安装回执跟着更新走**：新版本第一次启动把 `job.json` 从 `applying` 收成 `applied` 时，会按安装器的同一套
-  规则改写 `<安装根>/current-version` 与 `<安装根>/versions/<新版本>/install.json`（`method` 记为
-  `self-update`；先写回执、再写指针，两步都经 `.partial` 改名；便携目录没有指针文件，直接跳过）。否则
-  “安装器记录的版本”会永远停在最后一次安装，审计与回滚都会读错。
-- 完整的发版顺序、版本号同步、分片/摘要模板见 [`release.md`](release.md)。
+## BERT 模型包（可选）
 
-## BERT 模型包（可选，Windows / macOS）
+两个路径不能混：**模型压缩包（源）** 是只读输入，安装器不移动也不覆盖；**模型存放位置**是
+`<数据文件夹>/bert_models`，随数据文件夹自动同步、不单独选。下载前检查源路径与 zip 内容，装完组件后解压到存放位置，
+再用 `desktop/bert_pack.py` 登记进 `<数据文件夹>/data/model_registry.json`（存放位置在安装根内则写相对 `app/` 的路径，
+否则写绝对路径；macOS 总是绝对）。已有同名模型目录/条目保留，只补缺的；半包按名拒绝。源路径留空即跳过。
+Windows 与 macOS 都带 onnxruntime + tokenizers，包是同一份 ONNX 目录。
 
-这里有两个**不同**的路径，安装器把它们分开：
+## macOS 安装器
 
-- **模型压缩包（源）**：你已有的 `CaiXiHui-bert-models-win64.zip`（或已经解压的 `bert_models` 文件夹）。
-  这是只读输入，安装器不会移动或覆盖它。
-- **模型存放位置**：`<数据文件夹>/bert_models`，**随“数据文件夹”自动同步**，不需要再单独选一次。
-  页面会在“微调 BERT（可选）”下直接显示这个路径；改数据文件夹，它跟着变。
+`CaiXiHui-Online-Setup-macOS-<arch>.dmg`（arm64 / x86_64 各一个），复用同一安装页面
+（`desktop/bootstrap/installer.py` + `installer_page.html`/`installer_page.js` + `ui_theme.py`），
+由 `desktop/bootstrap/installer_macos.py` 换掉三处平台差异：
 
-安装器会在**下载前**检查源路径和 zip 内容；装完组件后把完整的模型目录解压到模型存放位置，再用
-`desktop/bert_pack.py` 登记进 `<数据文件夹>/data/model_registry.json`。Windows 的存放位置如果就在安装根内，
-注册表写相对 `app/` 的路径；在数据文件夹或别处则写绝对路径（macOS 总是绝对路径）。已有同名模型目录/条目
-保留，安装器只补缺的；只接受带 `model.onnx`、`tokenizer.json`、`cixi_bert.json` 的完整目录，半包按名拒绝。
-
-源路径留空就跳过 BERT，不下载、不占空间；模型存放位置始终显示，因为它只是数据文件夹的派生。Windows 和
-macOS 都带 onnxruntime + tokenizers，模型包是同一份 ONNX 目录。
-
-## macOS 在线安装器
-
-macOS 没有 `CaiXiHui-Online-Setup.dmg` 这种“Windows 安装器换皮”，而是同一个小 `.app` 的 DMG：
-`CaiXiHui-Online-Setup-macOS-<arch>.dmg`（arm64 / x86_64 各一个）。它复用同一个安装页面
-（`desktop/bootstrap/installer.py` + `installer_page.html/js` + `ui_theme.py`），由
-`desktop/bootstrap/installer_macos.py` 换掉三处平台差异：
-
-- 窗口：pywebview 的 Cocoa/WebKit（系统自带），不是 WebView2；
+- 窗口：pywebview 的 Cocoa/WebKit，不是 WebView2；
 - 文件夹选择：`osascript` 的 `choose folder`；
-- 安装：主程序不是 zip，而是一个 DMG。安装器下载并核对它，用 `hdiutil` 挂载、`ditto` 复制
-  `CaiXiHui.app` 到安装位置（默认 `/Applications`；该账号不可写时用 `~/Applications`），再
-  `hdiutil detach`。`ditto` 会保留 .app 内部的 framework 符号链接和可执行位——用 Python 的
-  zipfile 解压会把这些丢掉，装好的程序将无法启动。
+- 安装：主程序是 DMG，用 `hdiutil` 挂载、`ditto` 复制 `CaiXiHui.app` 到安装位置（默认 `/Applications`，
+  该账号不可写时 `~/Applications`），再 `hdiutil detach`。`ditto` 保留 framework 符号链接与可执行位，
+  Python 的 zipfile 会丢掉它们。
 
-Chrome for Testing、chromedriver、Node.js 装到 `~/Library/Application Support/CaiXiHui/components`；
-主程序的数据目录也默认在这里。安装器不请求管理员权限，目标不可写时**点名该文件夹**并请改选
-用户目录，而不是静默失败。安装完成会写入 `data-root.txt`（.app 旁边）和 `com.caixihui.desktop`
-的首选项，所以之后从 Finder 双击也能找到自定义数据目录。
+Chrome/chromedriver/Node 装到 `~/Library/Application Support/CaiXiHui/components`，数据目录默认同处。
+不请求管理员权限，目标不可写时点名该文件夹。安装完成写 `data-root.txt`（.app 旁边）与 `com.caixihui.desktop`
+首选项，之后从 Finder 双击也能找到自定义数据目录。组件清单按 CPU 分开：`darwin-arm64` / `darwin-x64`，
+Chrome、chromedriver、Node、CatBus 的资产都按架构分开，两个地址指向同一份构建；CatBus 的 mac 包自带 Node 依赖。
 
-macOS 的组件清单按 CPU 分开：`darwin-arm64` / `darwin-x64`。Chrome for Testing、chromedriver、
-Node.js 和 **CatBus** 的官方资产都按架构分开；两个地址（npmmirror + Gitee/Google）指向同一份构建。
-CatBus 的 mac 包会自动带上 Node 依赖，安装后在启动器导出 `CIXI_CATBUS_CLI` / `CIXI_NODE_BIN`，
-设置里的“环境与组件”和 CatBus 节点都能直接使用。
+## 构建
 
-构建（macOS runner 上，见 `.github/workflows/macos-build.yml`）：
+```powershell
+# 主程序
+powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
+
+# 在线安装器
+powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
+```
+
+macOS 只在 macOS runner 上构建（`hdiutil`、`ditto`），见 `.github/workflows/macos-build.yml`：
 
 ```bash
 python desktop/build_macos.py --clean
 python desktop/build_macos_installer.py --clean --arch "$(uname -m)"
 ```
 
-安装器**不再**把刚构建的 DMG 摘要写进自己的清单：它的 `app` 条目只写平台架构、`archive: dmg`、
-`install_as: app` 和 `verify`，下载地址/体积/SHA-256 在安装时从 `version.json` 读取（和 Windows 同一套
-`backend/services/components/feed.py`）。所以同一个安装器可以跨版本使用，构建步骤也就不再需要应用 DMG 或
-Release tag 作为输入；`version.json` 里还没有当前架构的 DMG 时，安装器会点名拒绝而不是装错架构。
-
-只改了安装器、主程序没变时，手动触发 workflow 勾上 `installer_only`：只重建并上传两个安装器 DMG，不碰
-`version.json` 已经钉住摘要的应用 DMG。只改了主程序时，照常跑完整构建，产出四个 DMG，再用应用 DMG 的摘要
-更新 `version.json`。
-
-## 环境检测
-
-安装完成后，安装器会调用刚装好的 `CaiXiHui.exe --doctor`，把同一份矩阵显示出来（安装器不复制应用里的
-词条，`--doctor` 每行同时带 `label_text`/`reason_text`，所以窗口里看到的是中文句子而不是键名）；应用运行后也可以在
-“设置 → 环境与组件”打开同一个面板（`GET /api/environment`）。
-
-每一行只有四种状态：
-
-- **可用**：依赖存在且版本匹配；
-- **可用（有降级）**：能跑，但缺少某项会降级（例如没有 BERT 模型）；
-- **不可用**：点名缺什么（Chrome / chromedriver / Node / CatBus / Ollama / xelatex / 中文字体）；
-- **无法核对**：探测本身失败，绝不显示成绿色。
-
-Chrome 的版本在 Windows 上通过可执行文件的版本资源读取，**不会启动浏览器**（`chrome.exe --version` 在
-Windows 上不打印版本，还会把参数交给已经打开的浏览器）；读不出版本时这一行是“可用（有降级）”，不会冒充成对。
-
-矩阵覆盖：主程序、Selenium 采集、CatBus 采集、本机 LLM、云端 LLM、BERT、PDF 编译、中文图表、上传/分析/报告。
+安装器页面由 `desktop/bootstrap/installer_page.html`（结构）、`installer_page.js`（只负责画和发请求）、
+`ui_theme.py`（词条、调色板、CSS）组成；文本一律 `textContent` 写入，图标是内联 SVG，不用字体图标或 Unicode 符号。
+只改安装器、主程序没变时，手动触发 workflow 勾 `installer_only`：只重建并上传两个安装器 DMG，不碰应用 DMG。
 
 ## 组件管理
 
-`GET /api/components` 列出清单与已安装版本；面板可以单项安装 / 更新 / 卸载，安装是后台任务
-（`POST /api/components/install` + `GET /api/components/jobs/<id>` 轮询），不会让一个浏览器请求挂几十分钟。
-组件按版本存放，默认只保留当前和上一版；卸载组件不删除用户数据。只检测不下载的组件（如 MiKTeX）按名拒绝安装，
-不会起一个注定失败的任务。取消安装**不删除**已经下载的字节，下次从断点续传。装好组件后**重启采析绘**才会让采集
-和运行用上新组件（启动器在导入配置前导出路径），面板会提示这一点。
-
-**主程序自己不在面板里更新**：运行中的应用开着它自己的文件，替换会失败，所以“更新主程序”一律交回在线安装器
-（它把旧版移到 `app.previous` 以便回滚）。面板里 `app` 一行永远没有更新按钮。
-
-安装器按 `requires` 自动补依赖：只勾 CatBus 会连 Node 一起装，只勾 chromedriver 会连 Chrome 一起装；只检测的组件
-（MiKTeX）不会被自动加入。清单里写了某个组件文件夹而磁盘上已经没有时，面板显示未安装，而不是照着旧记录说“已安装”。
+`GET /api/components` 列清单与已装版本；面板可单项安装/更新/卸载，安装是后台任务
+（`POST /api/components/install` + `GET /api/components/jobs/<id>` 轮询），不会让一个请求挂几十分钟。
+组件按版本存放，默认只保留当前和上一版；卸载不删用户数据；装好组件需**重启采析绘**才生效（启动器在导入配置前导出路径）。
+`app` 一行永远没有更新按钮：运行中的应用占着自己的文件，主程序更新一律交回在线安装器。
+清单写了某组件但磁盘上已没有时显示未安装，不照旧记录说“已安装”。
 
 ## 安全与合规
 
-- 所有下载只接受 HTTPS；逐项核对清单里的 SHA-256，失败删除字节并点名 URL。
-- 解压拒绝绝对路径、`..`、符号链接，限制条目数与总大小；先解压到 staging，再原子移动到目标目录。
-  用户选择的 BERT 模型包也走同一条 `safe_extract` 检查；只接受带完整三件套的模型目录。
-  macOS 的 Chrome/Node 资产必须保留符号链接和可执行位，所以改用系统 `ditto`/`tar` 解包；它们同样是
-  先核对 SHA-256 的固定字节，且仍解到 staging 后再替换。
-- 不执行下载来的 exe / msi；第三方一律便携 zip 解压。主程序在 macOS 上是 DMG 里的 `.app`，安装器只
-  挂载和复制它，不执行安装脚本。
-- **Chrome 不随安装器重新分发**：安装时从 Google 官方 Chrome for Testing 下载，国内默认走 npmmirror 镜像；
-  两个地址指向同一份官方构建。
-- 安装器与主程序建议代码签名；在线安装器不使用 UPX，降低杀软误报。离线包/主程序的完整签名链
-  （编译不持密钥 → 签 exe → 打 Setup → 签 Setup → 时间戳 → `SHA256SUMS`）见
-  [`desktop/README.md`](../desktop/README.md) 的"分发链"一节。
-- **签名会改变分发出去的字节**：`version.json` 里 `platforms.win32` 的 `sha256`/`size` 和两个分片的摘要，
-  必须在最后一次签名之后、以最终 `CaiXiHui-win64.zip` 为准生成——安装器和自更新都按这份摘要拒绝
-  对不上的字节。macOS 同理：`platforms.darwin-*` 的摘要要取自最终 DMG。
-- 安装器不调用系统 shell 执行下载内容；页面只由本机 `127.0.0.1` 提供服务，路径带随机令牌，并用
-  `Content-Type: application/json` 的 POST（浏览器跨站请求会先被预检拦住）。
-
-## 已验证
-
-2026-11-06 用安装器自己的下载路径（`services.components.fetch.download_asset`，含镜像回退与分片拼接）
-重新下载了默认一键的全部五项，并逐项核对清单：主程序 127,300,751 B、Chrome 210,600,182 B、chromedriver
-11,594,835 B、Node 37,618,919 B、CatBus 173,307,321 B，共约 534.5 MB，大小与 SHA-256 全部一致。
-主程序那一项在发布后又从 Gitee 重下两个分片并拼接，摘要与清单一致。
-
-`install-manifest.json` 的位置也在真机上核对过：用 `python -m services.components --root <目录> install node`
-装到 `<目录>/components/node/<版本>`，清单在 `<目录>/install-manifest.json`；设置 `CIXI_COMPONENTS_DIR=<目录>/components`
-后 `doctor` 能读到这一行。
-
-2026-11-09 安装器改为**原生 WebView2 窗口**后复核：打包的 `CaiXiHui-Online-Setup.exe` 为
-**13,878,349 B（约 13.2 MB）**（无 Qt / Tcl-Tk；多出来的部分是 pywebview + pythonnet + WebView2 的 .NET
-包装，运行时本体用系统已装的 Edge）。`--no-window` 只起服务时，`/`、`/api/state`、`installer_page.js`、
-`icon.ico` 均返回 200，页面来源固定为 `127.0.0.1:3968`；窗口模式在 C: 上解包运行（onefile 解在 exe 旁边
-而不是 `%TEMP%`）时没有控制台，进程和 `msedgewebview2` 子进程都正常，`%LOCALAPPDATA%\CaiXiHui\webview-installer\EBWebView`
-被创建，30 秒内没有触发“页面没加载”的失败分支。`preset=app` 只剩主程序，勾选 `app + catbus` 时体积自动
-加上 Node（338,226,991 B，逐项相加一致）；页面默认浅色、右上角可切深色，一屏内不出现滚动条。环境检查报告
-由应用以 UTF-8 字节输出，安装器按 UTF-8 解码，不再出现乱码。
-
-> **2026-11-09 的窗口修复**：onefile 改为默认解到用户 `%TEMP%`（与参考桌面项目
-> `D:\blog\web\public` 相同），不再用 `runtime_tmpdir='.'` 把 .NET 程序集解到 exe 旁边的 F: 盘上，
-> 于是不再出现 `Failed to resolve Python.Runtime.Loader.Initialize` 或纯白窗口。窗口数据目录会依次尝试
-> `%LOCALAPPDATA%\CaiXiHui`、`%APPDATA%`、程序数据目录、`%TEMP%`，不会再报
-> `Storage path … is not writable`。主程序 exe 如果是整个文件夹放在 F: 这类被 .NET 当“网络位置”的盘上，
-> 会明确提示复制到 C: 或 D:；这不是 WebView2 缺失，也不再误弹“请安装 WebView2”。
->
-> 离线 `CaiXiHui-Setup.exe`：Inno 的 loader 固定 asInvoker，在 UAC 之前就要往用户 `%TEMP%` 解压内层
-> setup，被策略拒绝时正是“unable to create the directory "...\is-XXXX.tmp" ... Error 5”。构建脚本现在用
-> `desktop/patch_manifest.py` 把外层 exe 的 manifest 改成 `requireAdministrator`，双击**先弹 UAC**，
-> loader 在管理员令牌下解包；`PrivilegesRequired=admin` 只是内层 setup 的声明。安装路径与 HKCU PATH
-> 仍是 per-user，装完后程序本身不带管理员清单。
-
-2026-11-09 macOS 的 arm64 / x86_64 应用 DMG 由 GitHub Actions 构建并上传到 Release；在线安装器的
-生成清单（`app.platforms.darwin-arm64` / `darwin-x64` 的 SHA-256、体积、URL）和页面契约由
-`tests/unit/desktop/test_macos_installer.py` 在 Windows 上覆盖。这个 checkout 没有 macOS，
-**未做真实 Mac 启动验证**；安装器 DMG 也在同一次 workflow 中产出。
-
-macOS 的三项组件资产也从 npmmirror 实际下载并核对：Chrome for Testing arm64 196,562,867 B /
-x64 207,117,913 B；chromedriver arm64 9,378,279 B / x64 10,409,330 B；Node arm64 52,909,993 B /
-x64 54,203,979 B。SHA-256 见 `backend/services/components/default_catalog.json` 的 `darwin-arm64` /
-`darwin-x64` 条目。
-
-2026-11-11 的 macOS workflow（`main@a45510c`，发布 tag `exe-2026-11`）也产出了两组产物：应用 DMG arm64
-**177,675,158 B**（SHA-256 `471fb4a1b915ca6c7f8a8b9cd4698b0cb8da3b4744a61528ae05952ada3fdfc1`）/ x86_64
-**187,529,072 B**（`da0e4362b0b4a0b21f4279e38bb36106f49c56f678de79120751fb02f95771eb`）；在线安装器 DMG
-arm64 **14,844,863 B**（`a886c8bb7b927bc5e6bb50941509289c99f0535cc10a11aff63d4074b8f09851`）/ x86_64
-**15,640,403 B**（`9204fc91b31d829ac38f6fd32065d9f6a3b819b7f21bcf6be0a45f09686c6df4`）。
-两个安装器分别写了对应架构应用 DMG 的摘要；**没有在真实 Mac 上运行过**。
-
-2026-11-11 的 Windows 发布（主程序自更新、关闭窗口彻底退出、安装器组件模式以清单为准）：`CaiXiHui-win64.zip`
-**130,169,985 B**（`e055dc1295eb9796c0123e31b6855c6a1902ce003dd3bb3fde0febf057a933ab`）、离线
-`CaiXiHui-Setup.exe` **121,712,901 B**（`55926a539fb7ae4a29bfaa7fb516f3d13f5f37b532abdfdc1c5b81dff7665783`）、
-在线 `CaiXiHui-Online-Setup.exe` **13,878,349 B**（`23fc313ece7f57e75cf3583da1e0ab82e3cf017b4887b7e4577abaaf20d18b80`）。
-三个 exe 图标都从同一份圆形 ICO 资源实测为 32×32、四角 alpha=0、中心 alpha=255；zip/Setup 内是同一份新主程序。
-
-2026-11-12 把安装器改成**安装时读 `version.json`**（`main@cd1c914`）后只重建了安装器，主程序的 zip/Setup/应用 DMG
-一个字节没动：
-
-- 源码模式实测：安装器进程的 `/api/state` 返回 `feed: ok / 2026.11.11.1`，`app` 行版本、体积
-  **130,169,985 B** 与已发布 zip 一致，默认预设勾上了 `app`，总体积 563,291,242 B；`feed.resolve` 对
-  `win32` / `darwin-arm64` / `darwin-x64` 三个条目取到的 URL、摘要与 `version.json` 完全相同。
-- 打包的 `CaiXiHui-Online-Setup.exe` **13,887,902 B**
-  （`28dc8bf9a9f712259ff516c4d7a04cf3906733c17f8042b1c70354baaeec6a99`）里确认带上了
-  `services.components.feed`（`build/pyinstaller-bootstrap/installer/PYZ-00.toc`），PE manifest 仍是
-  `requireAdministrator`；Gitee 上重新下载回来的字节与该摘要一致。窗口版这次没有重跑（需要 UAC 交互），
-  自更新链路未改。
-- `installer_only` 的 macOS run（`42825279883`）只替换了两个安装器 DMG：arm64 **14,852,875 B**
-  （`b1c4377db4a72c246a5364f2d8fe629d947957ef8a5d94b5f7e76f67e45cbfd7`）/ x86_64 **15,647,102 B**
-  （`58a72a0943041de9129f2ac4294e7332691538ee60cb99a8d3ef37458ce97baa`），应用 DMG 的摘要与
-  `version.json` 里的 `471fb4a1…` / `da0e4362…` 保持一致。**同样没有在真实 Mac 上运行过。**
-
-## 构建
-
-```powershell
-# 主程序（已有）
-powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1
-
-# 在线安装器（几 MB：标准库 HTTP 服务 + 组件核心，不带 GUI 工具包）
-powershell -ExecutionPolicy Bypass -File desktop\bootstrap\build.ps1
-```
-
-macOS 的构建命令见上面的“macOS 在线安装器”；它只能在 macOS runner 上执行（`hdiutil`、`ditto`）。
-
-安装器界面由三个文件组成：`desktop/bootstrap/installer_page.html`（结构）、`installer_page.js`
-（只负责画和发请求）和 `ui_theme.py`（词条、调色板、CSS；和 `base.css` 用同一组令牌）。页面文本一律用
-`textContent` 写入，图标全部是内联 SVG（勾选、太阳/月亮），不使用字体图标或 Unicode 符号。
-
-清单：`backend/services/components/default_catalog.json`。发布新版本时更新其中的版本、URL、SHA-256 与体积；
-`tools/release_components.py` 负责从构建产物生成这份文件。一个组件现在可能同时有 `win32`、
-`darwin-arm64`、`darwin-x64` 三项，`--component chrome=...` 默认只改**当前机器**的那一项；要改另一项必须写
-`--component chrome:darwin-arm64=<zip>`，这样一个 Windows zip 不会覆盖 Mac 的摘要。最终产物的 `SHA256SUMS` 与
-`release-manifest.json` 由 `desktop/release_manifest.py` 在签名链的最后一步写出，`--check` 可复核。
-
-例外是 `app`：它没有 URL/摘要，只有 `feed`（`version.json` 的地址）和安装参数。主程序的版本、体积、摘要
-由 `version.json` 一处决定，安装器与自更新都读它；`tools/release_components.py` 不再写 `app` 的字节，也不要
-手工把旧摘要塞回清单。清单里另有一项 `ollama`/`bert`/`xelatex` 这类 `manual` 条目，只检测不下载。
+- 只接受 HTTPS，逐项核对 SHA-256；解压先 staging 后原子替换。
+- 不执行下载来的 exe/msi，第三方一律便携包解压；macOS 只挂载并复制 `.app`，不跑安装脚本。
+- **Chrome 不随安装器重新分发**：从 Google 官方 Chrome for Testing 下载，国内走 npmmirror，两者同一份构建。
+- 安装器与主程序建议代码签名；在线安装器不使用 UPX（降低杀软误报）；完整签名链见
+  [`desktop/README.md`](../desktop/README.md) 的“分发链”一节。
+- **签名会改变分发出去的字节**：`version.json` 的 `platforms.win32` 摘要与分片摘要必须在最后一次签名之后、
+  以最终 `CaiXiHui-win64.zip` 为准生成；`platforms.darwin-*` 取自最终 DMG。安装器与自更新都按这份摘要拒绝对不上的字节。
+- 页面只由本机 `127.0.0.1` 提供，路径带随机令牌，POST 用 `Content-Type: application/json`（跨站请求先被预检拦住）。
+- 安装器窗口是窗口程序（`console=False`）且双击先请求管理员（manifest `requireAdministrator`，UAC 在 onefile 解包之前出现）；
+  关闭窗口即结束进程，下载中拒绝关闭（先点“取消”）。自动化验收可用 `--no-window` 只起服务，但它同样经过 UAC 清单。
 
 ## 已知限制
 
-- 平台登录、Cookie、OpenRouter API Key 是用户身份，不能预装；安装器只把“还缺什么”列出来。
-- Ollama 模型没有国内官方镜像，默认不选；选择本机 LLM 的用户需要能访问 `registry.ollama.ai` 或自备 Ollama。
-- Windows 版为 x64；macOS 版为 11+（arm64 / x86_64）。`desktop/` 是唯一的 OS 打包目录，Windows 和
-  macOS 的平台事实都留在里面，不进 `backend/`。
-- macOS 的 DMG 未签名/未公证，首次打开需右键“打开”；CatBus 有 macOS 官方构建，安装器会连同 Node 一起安装。
-- Windows 与 macOS 都带 onnxruntime + tokenizers；BERT 模型包是同一份 ONNX 目录。torch/transformers
-  仍只在开发机使用，不进桌面包。
+- 平台登录、Cookie、OpenRouter API Key 是用户身份，不能预装；安装器只列出还缺什么。
+- Ollama 模型没有国内官方镜像，默认不选；用本机 LLM 需能访问 `registry.ollama.ai` 或自备 Ollama。
+- Windows 为 x64；macOS 为 11+（arm64 / x86_64）。`desktop/` 是唯一的 OS 打包目录，平台事实不进 `backend/`。
+- macOS 的 DMG 未签名/未公证，首次打开需右键“打开”。
+- torch/transformers 只在开发机使用，不进桌面包。
