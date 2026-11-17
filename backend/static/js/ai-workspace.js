@@ -1423,6 +1423,16 @@ const AIWorkspace = {
         }
     },
 
+    _showChat() {
+        /* Settings and the studio paint into the same column as the transcript. Sending while one
+           of them is up used to look inerta: the click ran, the panel stayed on settings, and the
+           user saw no reaction at all. A send always returns to the conversation first. */
+        if (this._mode === 'chat') return;
+        this._mode = 'chat';
+        if (this._dom.chat) this._dom.chat.innerHTML = '';
+        this._renderMessages();
+    },
+
     _renderMessages(pending) {
         if (!this._dom.chat) return;
         this._mode = 'chat';
@@ -1545,8 +1555,14 @@ const AIWorkspace = {
             this._appendUser(text, context, [], { monitor_event: opts.monitorEventId });
         }
         this._current = null;
+        this._showChat();
         this._sending = true;
         this._setSending(true);
+        /* The reaction is the point: the user must see their message AND a "working" turn before
+           the first byte from the provider, otherwise a slow model looks like a dead button. */
+        this._ensureAssistant();
+        this._paintAssistant();
+        if (this._dom.chat) this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
         const body = {
             conversation_id: this._conversationId || '',
             text,
