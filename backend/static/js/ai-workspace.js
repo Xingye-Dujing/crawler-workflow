@@ -1658,7 +1658,11 @@ const AIWorkspace = {
             this._model = conversation.model || AISettings.modelFor(this._provider, this._bootstrap?.providers);
         }
         const facts = JSON.stringify(event.payload || {}, null, 2);
-        const text = I18n.t('ai.monitor.promptHead') + '\n```json\n' + facts + '\n```\n' + I18n.t('ai.monitor.promptAsk');
+        const failed = ['failed', 'partial', 'stopped'].includes(String((event.payload || {}).outcome || (event.payload || {}).status || ''));
+        const tail = failed
+            ? I18n.t('ai.monitor.promptFailure')
+            : I18n.t('ai.monitor.promptAsk');
+        const text = I18n.t('ai.monitor.promptHead') + '\n```json\n' + facts + '\n```\n' + tail;
         return this._sendText(text, { monitor: true, monitorEventId: event.id });
     },
 

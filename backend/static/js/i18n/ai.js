@@ -198,6 +198,12 @@
         'ai.monitor.promptAsk':
             'Read the live run status and console before answering. Report what happened and the next ' +
             'step; do not claim any action you did not take.',
+        'ai.monitor.promptFailure':
+            'This run FAILED or stopped part-way. Before answering: call app_errors for the backend ' +
+            'log and the failed nodes, then run_console for the tail. Name the node and the exact ' +
+            'reason, separate a site refusal from a bug, and give the smallest fix. If the fix is a ' +
+            'workflow change, propose it (apply_workflow only when the user asked you to act). Do not ' +
+            'claim the run succeeded.',
         'ai.monitor.failed': 'The run monitor could not be armed.',
         'ai.tabPython': 'Python',
         'ai.pythonHint': 'Saved scripts are shared by the AI tools and the canvas Python node. They run in this account\'s ai_python folder and are not sandboxed.',
@@ -461,6 +467,7 @@
         'ai.monitor.notice': '运行监控',
         'ai.monitor.promptHead': '你设置的一个运行监控已触发。事实：',
         'ai.monitor.promptAsk': '回答前先用 run_status / run_console 读取最新事实；报告发生了什么和下一步，不要声称执行过未执行的操作。',
+        'ai.monitor.promptFailure': '这次运行失败或中途停止了。回答前先调用 app_errors 看后端日志与失败节点，再用 run_console 看控制台尾部。点名节点与确切原因，区分站点拒绝与代码缺陷，给出最小修复；如果修复是改工作流，就给出草案（只有用户要求动手时才用 apply_workflow）。不要声称运行成功。',
         'ai.monitor.failed': '监控没能开启。',
         'ai.tabPython': 'Python',
         'ai.pythonHint': '保存的脚本由 AI 工具和画布 Python 节点共用。脚本在本账号的 ai_python 目录运行，不在沙箱中。',
