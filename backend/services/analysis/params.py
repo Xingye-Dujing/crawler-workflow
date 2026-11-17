@@ -207,7 +207,16 @@ def normalize_analysis_params(op: str, params: dict) -> dict:
             result['max_distance'] = distance
         return result
     if op == 'filter_rows':
-        return {'column': params.get('column', ''), 'op': params.get('op', 'eq'), 'value': params.get('value')}
+        return {
+            'column': params.get('column', ''),
+            'op': params.get('op', 'eq'),
+            'value': params.get('value'),
+            # The panel names this box ``filter_keep`` (``keep`` already carries the
+            # anti-join's meaning on the same node's form). A blank box is the untouched
+            # one, and the untouched one keeps the matching rows — what every saved
+            # workflow and every direct caller already does.
+            'keep': params.get('filter_keep') or 'keep',
+        }
     if op == 'rename_columns':
         mapping = {}
         if params.get('rename_from'):

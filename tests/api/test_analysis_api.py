@@ -1172,7 +1172,7 @@ NORMALIZED = {
     ),
     'filter_rows': (
         {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
-        {'column': '城市', 'op': 'not_in', 'value': '北京, 上海'},
+        {'column': '城市', 'op': 'not_in', 'value': '北京, 上海', 'keep': 'keep'},
     ),
     'select_columns': ({'columns': '名称,城市'}, {'columns': ['名称', '城市']}),
     'rename_columns': ({'rename_from': '名称', 'rename_to': '标题'}, {'mapping': {'名称': '标题'}}),
@@ -1222,7 +1222,7 @@ BLANK_FORM = {
     'fill_null': {'columns': [], 'value': None},
     'drop_duplicates': {'columns': None, 'mode': 'exact'},
     'dedupe_similar': {'column': ''},
-    'filter_rows': {'column': '', 'op': 'eq', 'value': None},
+    'filter_rows': {'column': '', 'op': 'eq', 'value': None, 'keep': 'keep'},
     'select_columns': {'columns': []},
     'rename_columns': {'mapping': {}},
     'strip_whitespace': {'columns': []},
@@ -1517,7 +1517,7 @@ class TestNormalizedKwargs:
         [
             ('convert_type', {'column': '', 'dtype': ''}),
             ('fill_null', {'columns': [], 'value': ''}),
-            ('filter_rows', {'column': '', 'op': '', 'value': ''}),
+            ('filter_rows', {'column': '', 'op': '', 'value': '', 'keep': 'keep'}),
             ('groupby_agg', {'group_col': '', 'agg_col': '', 'agg_func': ''}),
             ('join_tables', {'how': '', 'left_on': '', 'right_on': ''}),
         ],
@@ -1734,7 +1734,7 @@ class TestJunkInTheStringFields:
         "column is not there" answer, not the normalizer.
         """
         out = _normalize('filter_rows', {'column': junk, 'op': junk, 'value': junk})
-        assert out == {'column': junk, 'op': junk, 'value': junk}
+        assert out == {'column': junk, 'op': junk, 'value': junk, 'keep': 'keep'}
         assert _normalize('convert_type', {'column': junk, 'dtype': junk}) == {
             'column': junk,
             'dtype': junk,
@@ -1902,6 +1902,9 @@ PARSED_FIELDS = {
     # text the browser happened to store.
     'match_mode',
     'keep_mode',
+    # 筛选行's 匹配行处理 is the same kind of select: a blank box is the untouched
+    # form and keeps the matching rows, so the operator default answers, not ''.
+    'filter_keep',
     'ignore_case',
     'swap_tables',
     # Same story for the event-study steps: every one of these carries a declared default,
@@ -2288,6 +2291,20 @@ class TestFilterOperatorsThroughTheApi:
         ).get_json()
         assert body['row_count'] == expected, (case, params, body['preview'])
 
+    def test_deleting_the_matching_rows_is_reachable_from_the_panel_box(self, app_module, client, paste):
+        """The 匹配行处理 box: the same condition, read as the complement.
+
+        This is the request "某一行有这个值就删掉这一行" sent the way the node's own form
+        sends it — the flat ``filter_keep`` field through ``_normalize_analysis_params``.
+        """
+        dataset_id = paste(FILTER_TABLE, name='filter-drop.csv')
+        params = _normalize('filter_rows', {'column': '城市', 'op': 'eq', 'value': '北京', 'filter_keep': 'exclude'})
+        body = client.post('/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step('filter_rows', params)})
+        result = body.get_json()
+        assert result['ok'], result
+        assert result['row_count'] == 3, result['preview']
+        assert [row['城市'] for row in result['preview']] == ['', '上海', '广州']
+
     def test_a_column_that_is_not_in_the_table_is_refused_for_every_operator(self, app_module, client, paste):
         """For every one of the twelve names: a filter cannot decide anything about a
         column this table does not have, and passing the rows through untouched used to
@@ -2384,6 +2401,7 @@ class TestStepEnumsRefusedByName:
                     'not_null',
                 ],
             ),
+            ('filter_rows', 'keep', ['keep', 'exclude']),
         ],
     )
     def test_every_name_the_step_accepts_still_reaches_the_step(self, client, paste, op, key, allowed):
@@ -2403,7 +2421,7 @@ class TestStepEnumsRefusedByName:
             'join_tables': {'left_on': '名称', 'right_on': '名称'},
             # A numeric column: four of the twelve names compare with float(), so a
             # text column would answer 400 for a reason that is not this test's subject.
-            'filter_rows': {'column': '序号', 'value': '3'},
+            'filter_rows': {'column': '序号', 'op': 'eq', 'value': '3'},
         }[op]
         for name in allowed:
             response = client.post(
@@ -2421,6 +2439,7 @@ class TestStepEnumsRefusedByName:
             ('convert_type', 'dtype', 'number'),
             ('convert_type', 'dtype', 'Int64'),
             ('join_tables', 'how', 'full'),
+            ('filter_rows', 'keep', 'both'),
         ],
     )
     def test_a_name_the_step_does_not_have_is_answered_with_the_list_it_does(self, client, paste, op, key, wrong):
@@ -2434,6 +2453,7 @@ class TestStepEnumsRefusedByName:
             'fill_null': {'columns': ['名称'], 'value': 'x'},
             'convert_type': {'column': '名称'},
             'join_tables': {'left_on': '名称', 'right_on': '名称'},
+            'filter_rows': {'column': '名称', 'value': 'x'},
         }[op]
         response = client.post(
             '/api/analysis/run', json={'dataset_id': dataset_id, 'steps': _step(op, {**extra, key: wrong})}
@@ -2715,6 +2735,9 @@ PANEL_VALUE = {
     'left_on': 'a',
     'right_on': 'b',
     'keep_mode': 'keep',
+    # The single-table filter's own direction box: ``keep`` is anti_join's key on the
+    # same form, so the panel names this one ``filter_keep``.
+    'filter_keep': 'exclude',
     'match_mode': 'text',
     'ignore_case': 'true',
     'swap_tables': 'true',

@@ -350,6 +350,29 @@ class TestRows:
         out = D.filter_rows(df, '作者', 'eq', '乙')
         assert out.index.tolist() == [0, 1]
 
+    def test_deleting_the_matching_rows_is_the_same_condition_read_the_other_way(self, df):
+        """ "删除含这个值的行" is a direction, not a second set of operators.
+
+        ``keep='exclude'`` answers the complement of the named condition, so the user picks
+        等于 + 删除匹配的行 instead of working out that 不等于 keeps everything else. The
+        keep default must stay the keep-complement free path every saved workflow uses.
+        """
+        assert D.filter_rows(df, '作者', 'eq', '乙', keep='exclude')['作者'].tolist() == ['甲', '甲']
+        assert D.filter_rows(df, '作者', 'eq', '乙')['作者'].tolist() == ['乙', '乙']
+        # ``contains`` reads a value as a regular expression; the drop direction deletes the
+        # rows it matches. A null cell matches nothing, so it stays — the same reading of
+        # "does not match" every other operator takes.
+        kept = D.filter_rows(df, '名称', 'contains', '三亚', keep='exclude')['名称'].tolist()
+        assert kept[0] == '海口美食' and len(kept) == 2
+        # A row the condition cannot decide (a null cell) does not match, so it is kept.
+        frame = pd.DataFrame({'t': ['a', None, 'b']})
+        kept = D.filter_rows(frame, 't', 'eq', 'a', keep='exclude')['t'].tolist()
+        assert len(kept) == 2 and kept[1] == 'b'
+
+    def test_a_filter_mode_the_step_does_not_know_is_refused(self, df):
+        with pytest.raises(UnknownOperationError, match='Unknown filter mode: both'):
+            D.filter_rows(df, '作者', 'eq', '乙', keep='both')
+
 
 # ─── column-level operations ───────────────────────────────────────────
 

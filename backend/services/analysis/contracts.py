@@ -81,7 +81,13 @@ STEP_PARAMS: dict = {
     'dedupe_similar': {'one': ('column',)},
     'select_columns': {'some': ('columns',)},
     'strip_whitespace': {'some': ('columns',)},
-    'filter_rows': {'one': ('column',), 'enums': {'op': (NO_DEFAULT, FILTER_OPS)}},
+    'filter_rows': {
+        'one': ('column',),
+        # ``keep`` is how "删除匹配的行" is asked for: the same twelve comparisons, read
+        # as the complement. It shares ``matching.KEEP_MODES`` with anti_join so "排除"
+        # means one thing across both filters.
+        'enums': {'op': (NO_DEFAULT, FILTER_OPS), 'keep': ('keep', KEEP_MODES)},
+    },
     'rename_columns': {'mapping': True},
     'convert_type': {'one': ('column',), 'enums': {'dtype': ('str', CONVERT_TYPES)}},
     'sort_rows': {'one': ('column',)},

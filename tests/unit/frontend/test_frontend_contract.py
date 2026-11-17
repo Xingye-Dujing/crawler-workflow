@@ -419,6 +419,22 @@ class TestFrontendCatalog:
         ]
         assert not missing, '\n'.join(missing)
 
+    def test_every_filter_condition_the_panel_offers_has_a_word_in_both_languages(self):
+        """``settings.filterOp.<name>`` is a computed key, so the same blind spot applies.
+
+        The 条件 dropdown used to print the wire tokens (``eq``/``ne``) themselves; now that
+        the options read as words, a condition added to ``FILTER_OPS`` without a catalogue entry
+        would print the raw key in one language only. Measured from the array, which is the
+        universe of names the panel can ask for.
+        """
+        js = js_text('panels/node-analysis.js')
+        match = re.search(r'var FILTER_OPS = \[([^\]]*)\];', js)
+        assert match, 'the analysis panel no longer declares FILTER_OPS as a flat array'
+        offered = re.findall(r"'([a-z_]+)'", match.group(1))
+        assert len(offered) == 12, offered
+        missing = _words_missing('settings.filterOp.', offered)
+        assert missing == [], f'filter conditions with no zh/en word: {missing}'
+
 
 class TestBiblioPanelContract:
     """The panel's option lists are the Python enums, not a second opinion."""

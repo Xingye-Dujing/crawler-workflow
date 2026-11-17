@@ -6,6 +6,7 @@ import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError, _checked_pattern
+from services.analysis.matching import KEEP_MODES
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +51,18 @@ def _split_values(value) -> list:
     return [part.strip() for part in str(value).split(',')]
 
 
-def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
+def filter_rows(df: pd.DataFrame, column: str, op: str, value, keep: str = 'keep') -> pd.DataFrame:
+    """Keep (or drop) the rows whose ``column`` meets ``op value``.
+
+    ``keep='exclude'`` is the same comparison read the other way round — the rows it
+    matches are DELETED (not rewritten as the negated operator: ``ne``/``not_contains``
+    also change what a NaN cell means, and "删除等于这个值的行" is one sentence the user
+    can pick instead of negating an operator in their head).
+    """
     if column not in df.columns:
         raise UnknownOperationError(t('analysis.step_col_missing', op='filter_rows', col=column))
+    if keep not in KEEP_MODES:
+        raise UnknownOperationError(f'Unknown filter mode: {keep}')
     s = df[column]
     if op == 'eq':
         # The panel stores its operand as TEXT, and ``df['点赞数'] == '25'`` is False for every
@@ -115,4 +125,8 @@ def filter_rows(df: pd.DataFrame, column: str, op: str, value) -> pd.DataFrame:
         mask = s.replace('', pd.NA).notna()
     else:
         raise UnknownOperationError(f'Unknown filter operator: {op}')
+    if keep == 'exclude':
+        # "Delete the matching rows" is the complement of the condition, computed after
+        # every numeric/text branch has decided what matching means.
+        mask = ~mask
     return df[mask].reset_index(drop=True)

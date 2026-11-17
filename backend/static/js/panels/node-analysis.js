@@ -309,6 +309,10 @@ function renderAnalysisSettings(nodeId, p) {
             [{ v: '', l: I18n.t('settings.fillMethodValue') }, { v: 'ffill', l: 'ffill' }, { v: 'bfill', l: 'bfill' }]);
     }
     if (op === 'filter_rows') {
+        /* The condition is READ IN FULL WORDS rather than as the wire token (`ne`, `not_in`):
+           the request "delete the rows holding this value" is answered by picking 删除匹配的行,
+           and a raw token left that choice to be worked out from a double negative. */
+        var filterOp = p.op || 'eq';
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
@@ -316,15 +320,24 @@ function renderAnalysisSettings(nodeId, p) {
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'op\',this.value)">' +
             selectOptionTags(
                 FILTER_OPS.map(function (o) {
-                    return { value: o, label: o };
+                    return { value: o, label: I18n.t('settings.filterOp.' + o) };
                 }),
                 p.op,
                 'eq'
             ) +
-            '</select></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
+            '</select></div>';
+        /* 为空 / 不为空 read no operand: a value box beside them asks for something the
+           comparison never looks at, and a typed number then looks like it was used. */
+        if (filterOp !== 'is_null' && filterOp !== 'not_null') {
+            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
+                '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
+                'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
+        }
+        html += renderParamSelect(nodeId, p, 'filter_keep', 'settings.filterKeep', 'keep',
+            [{ v: 'keep', l: I18n.t('settings.filterKeepKeep') },
+             { v: 'exclude', l: I18n.t('settings.filterKeepExclude') }]);
+        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t('settings.filterRowsHint') + '</div></div>';
     }
     if (op === 'rename_columns') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.renameFrom') + '</label>' +
