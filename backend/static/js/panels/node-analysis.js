@@ -242,6 +242,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'reply_author_col', 'settings.replyAuthorColumn', 'text', '评论者');
         html += renderParamInput(nodeId, p, 'reply_floor_col', 'settings.replyFloorColumn', 'text', '楼层');
         html += renderParamInput(nodeId, p, 'reply_parent_col', 'settings.replyParentColumn', 'text', '父楼层');
+        html += renderParamInput(nodeId, p, 'reply_article_col', 'settings.replyArticleColumn', 'text', '文章URL');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.replyGraphHint') + '</div></div>';
     }

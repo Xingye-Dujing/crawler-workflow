@@ -401,7 +401,8 @@ const canvas = {
             }
             e.preventDefault();
             const node = e.target.closest('.node');
-            this._contextNode = node ? node.id : null;
+            const nodeKey = node ? this._elKey(node) : '';
+            this._contextNode = nodeKey || null;
             this._contextMenuPos = { x: e.clientX, y: e.clientY };
             const ctxMenu = document.getElementById('context-menu');
             document.getElementById('ctx-edit').style.display = node ? 'block' : 'none';
@@ -428,7 +429,7 @@ const canvas = {
                 /* The element `closest()` answered with IS the node box; looking it up
                    by id again used to resolve to whatever page element shared that id
                    (see `_nodeEl`). */
-                const reusable = !!this.nodes[node.id] && this.nodes[node.id].type === 'reusable';
+                const reusable = !!this.nodes[nodeKey] && this.nodes[nodeKey].type === 'reusable';
                 const folded = node.classList.contains('node-folded');
                 /* A reusable node's visible collapse is its own inside view; the generic
                    fold would hide the whole box and have no relationship to it. */
@@ -438,7 +439,7 @@ const canvas = {
                 /* Switching a node TYPE off is the one control no single node's header can
                    express — it takes every box of this kind out of the run at once. Offered on
                    any node, labelled by that node's type, and flipped by the same click. */
-                const thisType = (this.nodes[node.id] || {}).type || '';
+                const thisType = (this.nodes[nodeKey] || {}).type || '';
                 const typeOff = (this.disabledTypes || []).indexOf(thisType) >= 0;
                 const key = typeOff ? 'ctx.enableType' : 'ctx.disableType';
                 typeItem.style.display = 'block';
@@ -454,9 +455,9 @@ const canvas = {
                A right-click on an UNSELECTED node acts on that node, matching 复制 —
                otherwise the item silently groups whatever stale selection was left. */
             const groupIds =
-                this.selectedNodes.length > 0 && node && this.selectedNodes.indexOf(node.id) >= 0
+                this.selectedNodes.length > 0 && nodeKey && this.selectedNodes.indexOf(nodeKey) >= 0
                     ? this.selectedNodes
-                    : (node ? [node.id] : []);
+                    : (nodeKey ? [nodeKey] : []);
             const canGroup =
                 groupIds.length > 0 &&
                 groupIds.every((id) => this.nodes[id] && this.nodes[id].type !== 'reusable');
@@ -464,7 +465,7 @@ const canvas = {
             if (createItem) createItem.style.display = canGroup ? 'block' : 'none';
             const insertItem = document.getElementById('ctx-insert-reusable');
             if (insertItem) insertItem.style.display = 'block';
-            const reusableNode = node && this.nodes[node.id] && this.nodes[node.id].type === 'reusable' ? this.nodes[node.id] : null;
+            const reusableNode = nodeKey && this.nodes[nodeKey] && this.nodes[nodeKey].type === 'reusable' ? this.nodes[nodeKey] : null;
             const previewItem = document.getElementById('ctx-preview-reusable');
             if (previewItem) previewItem.style.display = reusableNode ? 'block' : 'none';
             const toggleItem = document.getElementById('ctx-toggle-reusable');
@@ -486,13 +487,13 @@ const canvas = {
             if (rerunItem) {
                 const busy = typeof RunState !== 'undefined' && RunState.running;
                 const canRerun =
-                    node &&
+                    nodeKey &&
                     !busy &&
-                    this.nodes[node.id] &&
-                    this.nodes[node.id].type !== 'reusable' &&
+                    this.nodes[nodeKey] &&
+                    this.nodes[nodeKey].type !== 'reusable' &&
                     typeof runResults !== 'undefined' &&
                     typeof runResults.canRerun === 'function' &&
-                    runResults.canRerun(node.id);
+                    runResults.canRerun(nodeKey);
                 rerunItem.style.display = canRerun ? 'block' : 'none';
             }
             /* Clamped by what the menu actually is, not by a guessed 200 px: the
@@ -1322,17 +1323,20 @@ const canvas = {
         const ids = this.selectedNodes.length ? this.selectedNodes.slice() : (this.selectedNode ? [this.selectedNode] : []);
         if (ids.length < 2) return false;
         /* A ghost id (see _restoreHistory) has no element; skip it rather than read
-           el.style on null, exactly as _nudgeSelected and _ensureNodeVisible guard. */
+           el.style on null, exactly as _nudgeSelected and _ensureNodeVisible guard.
+           The KEY travels with the box: ``el.id`` is namespaced (see ``addNode``), so
+           reading it back here would align by ``cxi-node-node-3`` and write that into the
+           node map — one ``nodes[undefined]`` per aligned box. */
         const boxes = ids
-            .map((id) => this._nodeEl(id))
-            .filter(Boolean)
-            .map((el) => ({
-                id: el.id,
-                el,
-                x: parseInt(el.style.left, 10) || 0,
-                y: parseInt(el.style.top, 10) || 0,
-                w: el.offsetWidth || 120,
-                h: el.offsetHeight || 60,
+            .map((id) => ({ id, el: this._nodeEl(id) }))
+            .filter((b) => b.el)
+            .map((b) => ({
+                id: b.id,
+                el: b.el,
+                x: parseInt(b.el.style.left, 10) || 0,
+                y: parseInt(b.el.style.top, 10) || 0,
+                w: b.el.offsetWidth || 120,
+                h: b.el.offsetHeight || 60,
             }));
         if (boxes.length < 2) return false;
         const minX = Math.min(...boxes.map((b) => b.x));
@@ -1501,7 +1505,18 @@ const canvas = {
         const title = labels[type] || 'Node';
         const el = document.createElement('div');
         el.className = 'node node-type-' + type;
-        el.id = id;
+        /* The storage KEY and the DOM id are deliberately two strings.
+           A workflow file may carry any id the regex below accepts, and the box is appended
+           into ``#nodes-container``, which sits before every panel and dialog in tree order —
+           so a file-authored id like ``dialog-overlay`` made every module-level
+           ``document.getElementById('dialog-overlay')`` answer THIS box: ``showDialog`` bound
+           its overlay to a node, the message went into the real dialog's body while the
+           overlay never opened, and the promise never settled. The key itself must stay
+           exactly what the file said (run records, cursors and the dedupe ledger key on it),
+           so only its DOM id is namespaced; ``dataset.nodeId`` carries the key for anything
+           that still needs to find a box from markup. */
+        el.id = 'cxi-node-' + id;
+        el.dataset.nodeId = id;
         /* A stored coordinate of 0 is a position, not an absence — `x || random`
            used to re-roll any node whose saved x or y landed exactly on 0 (routine
            after 自动排布's centering), so reopening a workflow scattered the very
@@ -2019,15 +2034,23 @@ const canvas = {
     },
 
     /* A node's element, taken through the node — never through `getElementById`.
-       The id a workflow file carries becomes the DOM id of the box (`addNode` sets
-       `el.id = id`), so a node whose id happens to be `status-zoom`, `svg-layer` or
-       `chart-emotion` resolved to the PAGE element with that name: `deleteNode`
-       removed a piece of the interface, `selectNode` highlighted something that is
-       not a node, and the geometry reads measured it. `nodes[id].el` is the box this
-       object created, which is the only thing these callers may touch. */
+       A workflow file's id used to become the box's DOM id (`el.id = id`), so a node whose
+       id happened to be `status-zoom`, `svg-layer` or `chart-emotion` resolved to the PAGE
+       element with that name: `deleteNode` removed a piece of the interface, `selectNode`
+       highlighted something that is not a node, and the geometry reads measured it. The box
+       now carries a namespaced DOM id (see `addNode`) and the file's id lives on
+       `dataset.nodeId`; `nodes[id].el` is still the one handle these callers may touch. */
     _nodeEl(id) {
         const node = this.nodes[id];
         return node && node.el ? node.el : null;
+    },
+
+    /* The STORAGE KEY an element stands for. ``addNode`` namespaces the element id
+       (`cxi-node-<key>`) so a workflow file cannot shadow a page element, so a handler
+       holding a DOM element must read `dataset.nodeId` — reading `el.id` hands the rest of
+       this file a key no node has. */
+    _elKey(el) {
+        return el && el.dataset ? String(el.dataset.nodeId || '') : '';
     },
 
     /* Stop observing a box this object is about to remove.

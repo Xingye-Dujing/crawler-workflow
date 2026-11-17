@@ -740,7 +740,7 @@ function openSettings(nodeId) {
                 selectOptionTags(modeOptions, p.mode, 'bert') +
                 '</select></div>';
             if (p.mode === 'ml') {
-                html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
+                html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
             }
             if (p.mode === 'bert') {
                 html += renderBertField(nodeId, p);
@@ -771,7 +771,7 @@ function openSettings(nodeId) {
                 html += renderBertField(nodeId, p);
             }
             if (p.mode === 'ml') {
-                html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\',\'' + p.operation + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
+                html += '<div class="settings-group"><button class="menu-btn" onclick="trainMLModel(\'' + nodeId + '\')">' + I18n.t('settings.trainModel') + '</button></div>';
             }
         }
 

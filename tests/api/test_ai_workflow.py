@@ -191,3 +191,90 @@ def test_skill_studio_crud_and_plugin_install(client, fake_ai, clean_ai):
     assert client.delete('/api/ai/plugins/demo.pack').status_code == 200
     client.delete('/api/ai/skills/demo.skill')
     client.delete('/api/ai/skills/demo.skill.copy')
+
+
+def _tool_pack(tools_spec: list, plugin_id: str = 'demo.tools') -> dict:
+    return {
+        'id': plugin_id,
+        'name': 'Demo tools',
+        'version': '1.0.0',
+        'api': 1,
+        'kind': 'tool-pack',
+        'permissions': ['net:http'],
+        'tools': tools_spec,
+    }
+
+
+def _http_tool(name: str) -> dict:
+    return {
+        'name': name,
+        'description': 'demo',
+        'url': 'https://example.com/hook',
+        'allowed_hosts': ['example.com'],
+    }
+
+
+def test_a_refused_tool_pack_never_replaces_the_builtin_it_collides_with(client, clean_ai):
+    """The registry's duplicate check runs BEFORE the table ``tools.execute`` reads.
+
+    Assigning into ``tools.TOOLS`` first meant a manifest the route then refused (400) had
+    already installed its handler under that name for every later turn until restart.
+    """
+    from ai import tools
+    from extensions import HOST
+
+    before = tools.TOOLS['project_facts']
+    refusal = client.post('/api/ai/plugins/install', json=_tool_pack([_http_tool('project_facts')]))
+    assert refusal.status_code == 400, refusal.get_json()
+    assert tools.TOOLS['project_facts'] is before
+    assert HOST.get('tools', 'project_facts') is before
+
+
+def test_a_pack_that_fails_on_a_later_entry_installs_nothing(client, clean_ai):
+    """Two tools of three used to stay callable after the route answered 400."""
+    from ai import tools
+    from extensions import HOST
+
+    pack = _tool_pack([_http_tool('demo_first_tool'), _http_tool('project_facts')], 'demo.partial')
+    assert client.post('/api/ai/plugins/install', json=pack).status_code == 400
+    assert 'demo_first_tool' not in tools.TOOLS
+    assert HOST.get('tools', 'demo_first_tool') is None
+
+
+def test_disabling_a_tool_pack_withdraws_it_and_enabling_brings_it_back(client, clean_ai):
+    """A switch that only relabelled the row left the tool callable."""
+    from ai import tools
+    from extensions import HOST
+
+    assert client.post('/api/ai/plugins/install', json=_tool_pack([_http_tool('demo_live_tool')])).status_code == 200
+    try:
+        assert 'demo_live_tool' in tools.TOOLS
+        assert client.post('/api/ai/plugins/demo.tools/enable', json={'enabled': False}).status_code == 200
+        assert 'demo_live_tool' not in tools.TOOLS
+        assert HOST.get('tools', 'demo_live_tool') is None
+        assert client.post('/api/ai/plugins/demo.tools/enable', json={'enabled': True}).status_code == 200
+        assert 'demo_live_tool' in tools.TOOLS
+    finally:
+        client.delete('/api/ai/plugins/demo.tools')
+    assert 'demo_live_tool' not in tools.TOOLS
+
+
+def test_a_non_admin_may_not_install_a_process_wide_pack(client, clean_ai, monkeypatch):
+    """A tool/provider/code pack writes tables every account reads; a skill pack is per account."""
+    import api.ai as ai_api
+
+    monkeypatch.setattr(ai_api, 'accounts_mode', lambda: True)
+    monkeypatch.setattr(ai_api, 'is_admin', lambda: False)
+    refused = client.post('/api/ai/plugins/install', json=_tool_pack([_http_tool('demo_nope_tool')], 'demo.nope'))
+    assert refused.status_code == 403
+    skill_pack = {
+        'id': 'demo.ownskills',
+        'name': 'Own skills',
+        'version': '1.0.0',
+        'api': 1,
+        'kind': 'skill-pack',
+        'permissions': [],
+        'skills': [{'id': 'demo.ownskills.one', 'prompt': 'Answer briefly.'}],
+    }
+    assert client.post('/api/ai/plugins/install', json=skill_pack).status_code == 200
+    assert client.delete('/api/ai/plugins/demo.ownskills').status_code == 200

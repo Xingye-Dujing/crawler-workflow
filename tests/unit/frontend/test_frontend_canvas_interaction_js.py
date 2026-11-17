@@ -1391,3 +1391,29 @@ class TestKeyboardNavigation:
         top but is taller has a lower centre, and centre distance alone would wrongly
         steer 'S' onto it instead of the node genuinely below."""
         assert ix['keyboard_navigation']['downToBelow'] is True
+
+
+class TestNodeDomId:
+    """A workflow file must not be able to name a page element through a node.
+
+    The box lives in ``#nodes-container``, which sits before every dialog and panel in tree
+    order, so while ``el.id`` WAS the file's id a canvas carrying ``dialog-overlay`` made
+    ``showDialog`` bind its overlay to a node: messages painted, buttons painted, and the
+    overlay never opened. The storage key still has to be exactly the file's id (run records,
+    cursors and the dedupe ledger key on it), so the two strings are separated.
+    """
+
+    def test_the_key_stays_the_files_id_while_the_dom_id_is_namespaced(self, ix):
+        dom = ix['node_dom_id']
+        assert dom['keyKept'] is True
+        assert dom['domIdNamespaced'] is True
+        assert dom['keyOnDataset'] is True
+
+    def test_the_node_does_not_answer_for_the_page_element_of_that_name(self, ix):
+        assert ix['node_dom_id']['doesNotShadowPageId'] is True
+
+    def test_a_handler_on_the_box_names_the_storage_key(self, ix):
+        """The context menu used `node.id`; with a namespaced DOM id that is a key no node
+        has, so every item would act on nothing."""
+        assert ix['node_dom_id']['contextKey'] == 'dialog-overlay'
+        assert ix['node_dom_id']['menuNamesNode'] is True

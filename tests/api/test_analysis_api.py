@@ -1119,8 +1119,13 @@ NORMALIZED = {
         {'column': '城市', 'topn': 12, 'min_count': 3, 'window': 5},
     ),
     'reply_graph': (
-        {'reply_author_col': '人', 'reply_floor_col': '层', 'reply_parent_col': '父'},
-        {'author_col': '人', 'floor_col': '层', 'parent_floor_col': '父'},
+        {
+            'reply_author_col': '人',
+            'reply_floor_col': '层',
+            'reply_parent_col': '父',
+            'reply_article_col': '文',
+        },
+        {'author_col': '人', 'floor_col': '层', 'parent_floor_col': '父', 'article_col': '文'},
     ),
     'compare_platform': (
         {'compare_platform_col': '平台', 'compare_value_col': '分数', 'compare_agg': 'sum'},
@@ -1302,7 +1307,12 @@ BLANK_FORM = {
     },
     'topic_coherence': {'column': '', 'topn': 10},
     'cooccur': {'column': '', 'topn': 30},
-    'reply_graph': {'author_col': '评论者', 'floor_col': '楼层', 'parent_floor_col': '父楼层'},
+    'reply_graph': {
+        'author_col': '评论者',
+        'floor_col': '楼层',
+        'parent_floor_col': '父楼层',
+        'article_col': '文章URL',
+    },
     'compare_platform': {'platform_col': 'platform', 'value_col': '', 'agg': 'mean'},
     # Both look-forward steps name the columns 情感演化曲线 writes, so an untouched form is the
     # hand-off. The two smoothing factors and the two optional alert signals are omitted when
@@ -1993,10 +2003,11 @@ PARSED_FIELDS = {
     'cooccur_topn',
     'cooccur_min_count',
     'cooccur_window',
-    # The reply graph re-shapes all three: each column falls back to a comment-crawl name when blank.
+    # The reply graph re-shapes all four: each column falls back to a comment-crawl name when blank.
     'reply_author_col',
     'reply_floor_col',
     'reply_parent_col',
+    'reply_article_col',
     # The comparison re-shapes all three: platform and aggregate fall back to a declared default
     # when blank, the value column is forwarded (an empty box means "counts only").
     'compare_platform_col',
@@ -2613,6 +2624,24 @@ class TestRenameWithoutANewName:
         assert 'nope' in (status.get('error') or '')
         assert rows == []
 
+    def test_a_rename_onto_an_existing_column_is_refused_not_silently_truncated(self, client, app_module, paste):
+        """``题名 → 标题`` on a table that already has 标题 produced two 标题 columns; the node
+        boundary (``to_dict('records')``) then kept ONE of them with a pandas warning, so the
+        renamed values vanished and the reader got the old column under the new name."""
+        frame = [{'题名': 'A', '标题': '旧1'}, {'题名': 'B', '标题': '旧2'}]
+        status, rows = _run_analysis_chain(
+            client,
+            app_module,
+            paste,
+            '',
+            {},
+            records=frame,
+            steps=_step('rename_columns', {'mapping': {'题名': '标题'}}),
+        )
+        assert status.get('status') == 'failed', status
+        assert '标题' in (status.get('error') or ''), status
+        assert rows == [], 'a refused step must not hand out a table with two same-named columns'
+
     def test_a_rename_that_names_both_columns_renames_it(self, client, app_module, paste):
         """The refusal is about the missing half, not about renaming.
 
@@ -2838,6 +2867,7 @@ PANEL_VALUE = {
     'reply_author_col': '人',
     'reply_floor_col': '层',
     'reply_parent_col': '父',
+    'reply_article_col': '文',
     # None equals its fallback: platform '平台' vs default 'platform', agg 'sum' vs 'mean', and the
     # value probe is a name (blank would be indistinguishable from an untested box).
     'compare_platform_col': '平台',

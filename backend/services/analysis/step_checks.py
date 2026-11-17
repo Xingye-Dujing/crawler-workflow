@@ -42,6 +42,7 @@ PARAM_LABELS = {
     'author_col': 'settings.replyAuthorColumn',
     'floor_col': 'settings.replyFloorColumn',
     'parent_floor_col': 'settings.replyParentColumn',
+    'article_col': 'settings.replyArticleColumn',
     'platform_col': 'settings.comparePlatformColumn',
     'size_col': 'settings.timelineSizeColumn',
     'topic_col': 'settings.timelineTopicColumn',

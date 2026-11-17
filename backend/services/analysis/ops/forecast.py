@@ -90,6 +90,11 @@ def forecast(
     if stamps.isna().all():
         raise UnknownOperationError(t('analysis.forecast_dates', col=column))
     work = pd.DataFrame({'stamp': stamps, 'actual': pd.to_numeric(df[value_col], errors='coerce')})
+    unmeasured = int(work['stamp'].isna().sum() + work['actual'].isna().sum())
+    if unmeasured:
+        # A curve fitted from 8 of 20 rows while the console reports 8 is a number nobody can
+        # audit; the count is the line that makes the drop visible (as filter_rows/bin_column do).
+        logger.warning(t('analysis.forecast_unmeasured', col=value_col, n=unmeasured))
     work = work[work['stamp'].notna() & work['actual'].notna()].sort_values('stamp', kind='stable')
     if len(work) < floor:
         raise UnknownOperationError(t('analysis.forecast_rows', rows=len(work), least=floor))

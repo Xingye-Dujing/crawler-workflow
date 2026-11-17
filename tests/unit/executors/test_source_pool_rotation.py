@@ -182,3 +182,26 @@ def test_a_pool_comment_node_is_left_to_the_comment_engine(scope, lanes, monkeyp
 def test_the_pool_value_is_a_storage_sentinel_not_an_account():
     assert selector.is_pool_value(selector.POOL_VALUE)
     assert not CookieManager.is_account(selector.POOL_VALUE)
+
+
+def test_a_direct_pool_decision_reaches_the_crawler_as_direct(scope, lanes, monkeypatch):
+    """``pool_allow_direct_fallback`` used to be inert: the selector answered "direct"
+    (``proxy is None``) and ``get_crawler`` re-resolved an exit, found the benched one and
+    refused by name — the pre-run gate said the pair was usable, the run said it was not."""
+    _login(scope, 'work')
+    seen = {}
+
+    class _StopError(Exception):
+        pass
+
+    def fake_get_crawler(platform, **kwargs):
+        seen.update(kwargs)
+        raise _StopError
+
+    monkeypatch.setattr(source, 'get_crawler', fake_get_crawler)
+    with pytest.raises(_StopError):
+        source.execute_source_node(
+            _node(account='work'), headless=True, account_override='work', proxy=None, pool_mode=True
+        )
+    assert seen.get('use_proxy') is False, "the pool's direct decision was thrown away"
+    assert 'proxy' not in seen

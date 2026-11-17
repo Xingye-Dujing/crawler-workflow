@@ -294,3 +294,18 @@ def _validate_renames(df: pd.DataFrame, op: str, mapping) -> None:
         raise UnknownOperationError(t('analysis.step_cols_missing', op=op, cols=', '.join(missing)))
     if blank_target:
         raise UnknownOperationError(t('analysis.rename_blank', op=op, cols=', '.join(blank_target)))
+    # A target that is ALREADY a column (and is not itself being renamed away) produces two
+    # columns with one name. ``df.rename`` allows that; the node boundary (``to_dict('records')``)
+    # then keeps only one of them with a pandas warning, so the reader got the OLD values under
+    # the requested name and the renamed column was gone. A source that is also a target is the
+    # legal swap/chained case and stays allowed.
+    taken = [
+        f'{source} → {target}'
+        for source, target in mapping.items()
+        if not _blank(target)
+        and str(target) in columns
+        and str(target) != str(source)
+        and str(target) not in map(str, mapping)
+    ]
+    if taken:
+        raise UnknownOperationError(t('analysis.rename_target_exists', op=op, cols='、'.join(taken)))

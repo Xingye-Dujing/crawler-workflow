@@ -1033,6 +1033,13 @@ class TestPurgeAndStats:
         assert store.get_run('ancient') is None
         assert store.get_run('fresh') is not None
 
+    def test_age_never_deletes_a_run_that_still_owes_a_verdict(self, store):
+        """An interrupted record IS the cursor a 继续 needs; retention used to delete one from
+        a 31-day-old restart with nothing said, making the resume banner's promise a lie."""
+        self._aged_run(store, 'oldstop', 'wf', RUN_INTERRUPTED, started_at='2020-01-01T00:00:00')
+        assert store.purge(keep_per_workflow=50, keep_days=30)['runs'] == 0
+        assert store.get_run('oldstop') is not None
+
     def test_per_workflow_cap_favours_interrupted_runs(self, store):
         # 3 completed + 1 interrupted under one name, keep=1: the interrupted
         # one survives because somebody may still continue it.

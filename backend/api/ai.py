@@ -19,6 +19,7 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from runtime import account_context
 from runtime.settings import get_setting
 
+from api.auth import accounts_mode, is_admin
 from api.http import _bad_body, _json_body, _safe_int
 from i18n import get_lang, set_lang, t
 from services import python_runtime, python_scripts
@@ -255,6 +256,12 @@ def ai_plugin_install():
     data = _json_body()
     if data is None:
         return _bad_body()
+    # A provider pack, a tool pack and a code plugin register into PROCESS-WIDE tables —
+    # ``PROVIDERS``/``tools.TOOLS``/``skills.BUILTIN`` — which every account's turn reads.
+    # Installing one is therefore a machine-level write, guarded the same way as /api/settings
+    # and /api/components; a skill pack only writes this account's own skill library.
+    if str(data.get('kind') or '') != 'skill-pack' and accounts_mode() and not is_admin():
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
     try:
         return jsonify({'ok': True, 'plugin': plugins.install(data)})
     except (AIError, ValueError) as exc:

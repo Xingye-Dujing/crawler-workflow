@@ -228,6 +228,20 @@ _POPUP_CLOSE_JS = r"""
     """
 
 
+def _exact_declared(reported) -> bool:
+    """Whether the site's own counter is an EXACT figure rather than a rounded label.
+
+    douyin prints ``3388`` on small threads and ``3.4万`` / ``99+`` on large ones. A shortfall
+    against an exact denominator is a hole in the walk; against a rounded one it may simply be
+    the rounding, and pinning the cursor there would make 继续 replay a link that was already
+    complete.
+    """
+    text = str(reported or '').strip()
+    if not _BARE_COUNT_RE.match(text) or re.search(r'[万亿wWkK+]', text):
+        return False
+    return parse_count(text) > 0
+
+
 @register('douyin')
 def walk(session, url: str, limit: int) -> tuple:
     """Scroll the rendered comment panel; douyin's API is signed.
@@ -371,11 +385,16 @@ def walk(session, url: str, limit: int) -> tuple:
     # "the site counted this many and the table + unexpandable replies still fall short" — never
     # “这条视频就这么多” when it is not, and the exit reason keeps a user 停止 off the site's head.
     asked = bool(limit and len(rows) >= limit)
+    # The site's denominator may be a ROUNDED label (“3.4万”): a gap against it is not proof of
+    # a hole, so the cursor is only pinned when the label is an exact count.
+    exact_declared = _exact_declared(reported)
+    short = False
     if not with_replies:
         # The replies are the node's own omission, so only a hole in the TOP-LEVEL comments is a
         # shortfall; a table of parents is exactly what 爬楼中楼 off promised.
         top_gap = max(declared - len(rows) - nested, 0) if declared else 0
         if declared and top_gap and not asked:
+            short = True
             session.log(
                 t(
                     'comment.topLevelShort',
@@ -390,6 +409,7 @@ def walk(session, url: str, limit: int) -> tuple:
         elif nested and not asked:
             session.log(t('comment.repliesSkipped', platform='douyin', url=target, rows=len(rows), skipped=nested))
     elif declared and len(rows) + nested < declared and not asked:
+        short = True
         session.log(
             t(
                 'comment.dyShort',
@@ -401,6 +421,11 @@ def walk(session, url: str, limit: int) -> tuple:
                 reason=stop_reason_label(exit_reason),
             )
         )
+    if short and exact_declared:
+        # The same rule every other adapter follows (AGENTS §6): a walk that came home short of
+        # what the site counted is a HOLE, and the cursor must stop at it — otherwise the node
+        # settles DONE over a gap it just printed and 继续 has nothing to replay for this link.
+        session.mark_unproven(target)
     return (rows[:limit] if limit else rows), OK
 
 

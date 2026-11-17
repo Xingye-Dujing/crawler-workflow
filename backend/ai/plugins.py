@@ -4,6 +4,13 @@ The built-in modules register into the same typed registry as user plugins, so a
 skill has one lifecycle. Declarative plugins are data; a local code plugin may add Python
 registrations, but only on a local/desktop host and only for an administrator. Cloud mode refuses
 that kind by name rather than pretending the code did not run.
+
+A provider/tool/code pack registers into the process-wide tables every account's turn reads
+(``PROVIDERS``/``tools.TOOLS``/``skills.BUILTIN``), so installing one is a machine-level write and
+the route refuses a non-administrator when the account registry is on (``api/ai.py``). A skill pack
+writes only the caller's own skill library and is per-account as before. Enabling and disabling are
+symmetric: both add and remove the contributions from the registry AND from those tables, because
+``tools.execute`` reads the table, not the registry.
 """
 
 import importlib.util
@@ -147,8 +154,14 @@ def _http_tool(spec: dict, plugin_id: str):
         return {'status': response.status_code, 'body': text, 'truncated': len(response.text) > 20000}
 
     tool = ToolSpec(name, description, parameters, permission='net:http', handler=handler)
-    tools.TOOLS[name] = tool
+    # The duplicate check is the REGISTRY's, and it runs BEFORE the product table is touched.
+    # ``tools.execute`` resolves a call from ``tools.TOOLS``, never from the registry, so
+    # assigning first meant a manifest the install route then REFUSED (400) had already
+    # replaced the built-in tool of that name for every later turn until restart.
+    if HOST.get('tools', name) is not None or name in tools.TOOLS:
+        raise ValueError(f'tool {name} already exists')
     HOST.register('tools', name, tool, f'plugin:{plugin_id}')
+    tools.TOOLS[name] = tool
     return tool
 
 
@@ -186,8 +199,12 @@ def _provider_pack(spec: dict, plugin_id: str):
         models_url=str(spec.get('models_url') or ''),
     )
     provider = OpenAICompatibleProvider(provider_spec, user_agent='CaiXiHui-AI/1.0')
-    PROVIDERS[provider_id] = provider
+    # Registry first, product table second — the same order as ``_http_tool`` and for the
+    # same reason: a refused duplicate must leave nothing behind.
+    if HOST.get('providers', provider_id) is not None:
+        raise ValueError(f'provider {provider_id} already exists')
     HOST.register('providers', provider_id, provider, f'plugin:{plugin_id}')
+    PROVIDERS[provider_id] = provider
     return provider
 
 
@@ -221,24 +238,60 @@ class _CodeApi:
         self.plugin_id = plugin_id
 
     def add_tool(self, spec: ToolSpec) -> None:
+        owner = f'plugin:{self.plugin_id}'
+        if HOST.get('tools', spec.name) is not None:
+            raise ValueError(f'tool {spec.name} already exists')
+        HOST.register('tools', spec.name, spec, owner)
         tools.TOOLS[spec.name] = spec
-        HOST.register('tools', spec.name, spec, f'plugin:{self.plugin_id}')
 
     def add_provider(self, provider) -> None:
+        owner = f'plugin:{self.plugin_id}'
+        if HOST.get('providers', provider.spec.id) is not None:
+            raise ValueError(f'provider {provider.spec.id} already exists')
+        HOST.register('providers', provider.spec.id, provider, owner)
         PROVIDERS[provider.spec.id] = provider
-        HOST.register('providers', provider.spec.id, provider, f'plugin:{self.plugin_id}')
 
     def add_skill(self, skill) -> None:
+        owner = f'plugin:{self.plugin_id}'
+        if HOST.get('skills', skill.id) is not None:
+            raise ValueError(f'skill {skill.id} already exists')
+        HOST.register('skills', skill.id, skill, owner)
         skills.BUILTIN[skill.id] = skill
-        HOST.register('skills', skill.id, skill, f'plugin:{self.plugin_id}')
 
 
-def install(payload: dict) -> dict:
-    manifest = validate_manifest(payload)
-    existing = store.get_plugin(manifest.id)
-    if existing is not None:
-        raise AIError('ai.pluginConflict', kind='bad_request', plugin=manifest.id)
-    installed_skills = []
+#: The product table each contribution kind actually lives in. The registry is the index; these
+#: are what ``tools.execute``, ``get_provider`` and the skill list read.
+_TABLES = {
+    'tools': lambda: tools.TOOLS,
+    'providers': lambda: PROVIDERS,
+    'skills': lambda: skills.BUILTIN,
+}
+
+
+def _release(plugin_id: str) -> None:
+    """Remove every contribution this plugin added, from the registry AND the product tables.
+
+    Unregistering only from the registry used to leave the object where the code reads it:
+    ``tools.execute`` resolved the disabled tool anyway, and the next ``register_builtin()``
+    re-registered the leftover as ``core.tools`` — a pack the user deleted came back as a
+    built-in that ``uninstall`` could no longer reach.
+    """
+    owner = f'plugin:{plugin_id}'
+    for kind, table_of in _TABLES.items():
+        for name in HOST.owned(kind, owner):
+            table = table_of()
+            if table.get(name) is HOST.get(kind, name):
+                table.pop(name, None)
+    HOST.unregister_owner(owner)
+
+
+def _apply(manifest) -> list:
+    """Register one validated manifest's contributions; answer the user-skill ids it created.
+
+    Every step registers into the registry before the product table, so a refusal part-way
+    leaves nothing callable behind; the caller wraps this in :func:`_release` for that case.
+    """
+    created = []
     if manifest.kind == 'skill-pack':
         for item in manifest.skills:
             if not isinstance(item, dict):
@@ -246,7 +299,7 @@ def install(payload: dict) -> dict:
             item = {**item}
             item.setdefault('id', f'{manifest.id}.{item.get("name", "skill")}'.lower().replace(' ', '_'))
             skills.save_user_skill(item)
-            installed_skills.append(str(item['id']))
+            created.append(str(item['id']))
     elif manifest.kind == 'provider-pack':
         for item in manifest.providers:
             _provider_pack(item, manifest.id)
@@ -257,6 +310,21 @@ def install(payload: dict) -> dict:
         _code_plugin(manifest)
     for item in manifest.ui:
         HOST.register('ui_commands', f'{manifest.id}.{item.get("id")}', item, f'plugin:{manifest.id}')
+    return created
+
+
+def install(payload: dict) -> dict:
+    manifest = validate_manifest(payload)
+    existing = store.get_plugin(manifest.id)
+    if existing is not None:
+        raise AIError('ai.pluginConflict', kind='bad_request', plugin=manifest.id)
+    try:
+        installed_skills = _apply(manifest)
+    except BaseException:
+        # A manifest that installs three tools and fails on the fourth used to leave two
+        # callable — and, for the duplicate case, one built-in tool already replaced.
+        _release(manifest.id)
+        raise
     _DYNAMIC[manifest.id] = {'kind': manifest.kind, 'skills': installed_skills}
     row = store.save_plugin(
         manifest.to_dict(), sorted(manifest.permissions), source='code' if manifest.kind == 'code' else 'user'
@@ -264,18 +332,38 @@ def install(payload: dict) -> dict:
     return {**manifest.to_dict(), 'enabled': True, 'source': row.get('source') or 'user'}
 
 
+def _manifest_of(row: dict):
+    """The validated manifest a stored row carries, or a named refusal."""
+    payload = row.get('manifest')
+    if not isinstance(payload, dict):
+        raise AIError('ai.pluginBadManifest', kind='bad_request', plugin=row.get('id') or '')
+    return validate_manifest(payload)
+
+
 def set_enabled(plugin_id: str, enabled: bool) -> bool:
     row = store.get_plugin(plugin_id)
     if row is None:
         raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
-    if not store.set_plugin_enabled(plugin_id, enabled):
-        raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
     if not enabled:
-        HOST.unregister_owner(f'plugin:{plugin_id}')
+        # Release the CONTRIBUTIONS, not just the registry entry: ``tools.execute`` reads
+        # ``tools.TOOLS``, so a "disabled" tool stayed callable, and the next bootstrap
+        # adopted the leftover as a core contribution.
+        _release(plugin_id)
         dynamic = _DYNAMIC.pop(plugin_id, {})
         for skill_id in dynamic.get('skills') or ():
             if skill_id:
                 store.delete_user_skill(skill_id)
+        if not store.set_plugin_enabled(plugin_id, False):
+            raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
+        return True
+    # Re-enabling has to re-register: the disable path removed the contributions, so the
+    # switch used to be one-way — on again, and nothing was offered any more.
+    if plugin_id not in _DYNAMIC:
+        manifest = _manifest_of(row)
+        created = _apply(manifest)
+        _DYNAMIC[plugin_id] = {'kind': manifest.kind, 'skills': created}
+    if not store.set_plugin_enabled(plugin_id, True):
+        raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
     return True
 
 
@@ -283,7 +371,7 @@ def uninstall(plugin_id: str) -> bool:
     row = store.get_plugin(plugin_id)
     if row is None:
         raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
-    HOST.unregister_owner(f'plugin:{plugin_id}')
+    _release(plugin_id)
     dynamic = _DYNAMIC.pop(plugin_id, {})
     for skill_id in dynamic.get('skills') or ():
         if skill_id:
@@ -307,20 +395,12 @@ def register_stored_plugins() -> None:
         except ValueError:
             continue
         try:
-            if manifest.kind == 'provider-pack':
-                for item in manifest.providers:
-                    _provider_pack(item, plugin_id)
-            elif manifest.kind == 'tool-pack':
-                for item in manifest.tools:
-                    _http_tool(item, plugin_id)
-            elif manifest.kind == 'code':
-                _code_plugin(manifest)
+            created = _apply(manifest)
         except (ValueError, AIError):
+            # A half-applied pack (three tools of four) must not stay callable.
+            _release(plugin_id)
             continue
-        _DYNAMIC[plugin_id] = {
-            'kind': manifest.kind,
-            'skills': [str(item.get('id') or '') for item in manifest.skills if isinstance(item, dict)],
-        }
+        _DYNAMIC[plugin_id] = {'kind': manifest.kind, 'skills': created}
 
 
 def manifest_json(plugin_id: str) -> str:

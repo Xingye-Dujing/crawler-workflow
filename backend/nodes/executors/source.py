@@ -351,6 +351,12 @@ def execute_source_node(
         # works: an argument nobody uses is not worth breaking an interface over.
         if proxy:
             build['proxy'] = proxy
+        elif pool_mode:
+            # The pool's own answer was DIRECT (``pool_allow_direct_fallback``: every exit is
+            # benched). ``get_crawler`` would otherwise re-resolve an exit, find the benched one
+            # and refuse by name — the pre-run gate said this pair is usable, so the switch has
+            # to be honoured here or the run contradicts the panel.
+            build['use_proxy'] = False
         crawler = get_crawler(platform, **build)
     # Registered and guarded from here on: everything between buying a browser
     # and using it can still fail — a read-only or missing export directory, a

@@ -31,6 +31,17 @@ class ExtensionRegistry:
     def all(self, kind: str) -> dict:
         return dict(self._tables.get(kind, {}))
 
+    def owned(self, kind: str, owner: str) -> list:
+        """The names one owner contributed to ``kind``.
+
+        A contribution lives in TWO places: this registry, and the product table the code
+        actually reads (``tools.TOOLS``, ``PROVIDERS``, ``skills.BUILTIN``). Removing a plugin
+        therefore has to know what it added, and the registry is the only place that records
+        the owner — so it answers the names before :meth:`unregister_owner` forgets them.
+        """
+        with self._lock:
+            return [key for key, who in self._owners.get(kind, {}).items() if who == owner]
+
     def unregister_owner(self, owner: str) -> int:
         removed = 0
         with self._lock:

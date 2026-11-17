@@ -11,7 +11,7 @@ same-named row of the previous attempt became an orphan nothing adopts.
 
 import pytest
 
-from engine.run import _continue_record
+from engine.run import _continue_record, _record_belongs, _split_records
 
 pytestmark = pytest.mark.unit
 
@@ -100,3 +100,54 @@ class TestContinueRecord:
             }
         ]
         assert _continue_record('工作流', resumable, resuming=True, requested='crawl-row', node_ids={'upload-1'}) == {}
+
+
+class TestTheRequestedRowBelongsToThisComponent:
+    """The id the user pressed 继续 on may only be kept by the component that owns that row.
+
+    When a serial canvas's sibling record was deleted (or aged out by retention) the first
+    component used to write its nodes into the OTHER workflow's record: ``start_run`` renamed
+    that row, ``node_done`` was then counted against one component's ``node_total`` (the panel
+    read 4/3), and the history carried the same id twice. An empty fingerprint on either side
+    is "not recorded", never a mismatch — old rows and direct callers rely on that.
+    """
+
+    def test_a_row_carrying_this_components_node_belongs_to_it(self):
+        record = {'run_id': 'r', 'workflow_fingerprint': 'fp', 'nodes': [{'node_id': 'n1'}]}
+        assert _record_belongs(record, {'n1', 'n2'}, 'fp') is True
+
+    def test_a_row_of_the_other_workflow_does_not(self):
+        record = {'run_id': 'r', 'workflow_fingerprint': 'fp', 'nodes': [{'node_id': 'upload-1'}]}
+        assert _record_belongs(record, {'crawl-1'}, 'fp') is False
+
+    def test_a_different_canvas_fingerprint_does_not(self):
+        record = {'run_id': 'r', 'workflow_fingerprint': 'other', 'nodes': [{'node_id': 'n1'}]}
+        assert _record_belongs(record, {'n1'}, 'fp') is False
+
+    def test_a_record_with_no_fingerprint_or_nodes_is_acceptable(self):
+        assert _record_belongs({'run_id': 'r'}, {'n1'}, 'fp') is True
+        assert _record_belongs({'run_id': 'r', 'workflow_fingerprint': 'fp'}, {'n1'}, '') is True
+
+    def test_a_missing_record_never_belongs(self):
+        assert _record_belongs(None, {'n1'}, 'fp') is False
+
+
+class TestWhenTheRecordsAreSplit:
+    """Serial is one record per workflow — except a 继续 onto a canvas-wide row."""
+
+    def test_serial_with_several_workflows_splits(self):
+        assert _split_records('serial', 2, None) is True
+
+    def test_parallel_is_one_record_for_the_canvas(self):
+        assert _split_records('parallel', 3, None) is False
+
+    def test_one_workflow_is_one_record(self):
+        assert _split_records('serial', 1, None) is False
+
+    def test_a_continued_canvas_wide_record_keeps_its_one_row(self):
+        """Its rows are filed under that id; per-component records would refuse it and every
+        component but the first would re-crawl paid work."""
+        assert _split_records('serial', 2, {'run_id': 'p', 'wf_count': 2}) is False
+
+    def test_a_continued_component_record_still_splits(self):
+        assert _split_records('serial', 2, {'run_id': 'a', 'wf_count': 1}) is True

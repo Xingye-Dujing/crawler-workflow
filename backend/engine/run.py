@@ -628,6 +628,35 @@ def _record_has_component(candidate: dict, node_ids: set | None) -> bool:
     return not stored or bool(stored & node_ids)
 
 
+def _record_belongs(record: dict | None, node_ids: set | None, fingerprint: str = '') -> bool:
+    """Whether ``record`` is THIS component's row, so its id may be kept by it.
+
+    Two questions, both about not writing one workflow's work onto another's record: the row
+    has to carry one of this component's nodes, and it must describe the same canvas (a
+    same-named component of another fingerprint is a different row). An empty fingerprint on
+    either side is "not recorded", not a mismatch — older rows and direct callers.
+    """
+    if not record:
+        return False
+    recorded = str(record.get('workflow_fingerprint') or '')
+    if fingerprint and recorded and recorded != fingerprint:
+        return False
+    return _record_has_component(record, node_ids)
+
+
+def _split_records(mode: str, wf_count: int, adopted: dict | None) -> bool:
+    """Whether this attempt opens one record per workflow instead of one for the canvas.
+
+    Serial is one row per workflow that starts — but a 继续 onto a record that covered the
+    whole canvas (``wf_count > 1``, written by a 并行 attempt) has to keep that one row: its
+    stored rows are filed under that id, and a per-component row refuses a node set it does
+    not own, so every component but the first would re-crawl work the record already holds.
+    """
+    if mode != 'serial' or wf_count <= 1:
+        return False
+    return not (adopted is not None and int(adopted.get('wf_count') or 1) > 1)
+
+
 def _continue_record(
     name: str,
     resumable: list,
@@ -739,9 +768,9 @@ def _component_run(
     under. Called as the turn arrives, which is what makes an unreached
     workflow leave no record at all — the point of the split.
 
-    Workflow zero takes the id the HTTP response already handed out, so the
-    browser, the status endpoint and the resume banner all name a row that
-    exists. The others are minted as they are reached.
+    Workflow zero takes the id the HTTP response already handed out — but only when the record
+    that id names is THIS component's (see ``requested_owns`` below). The others are minted as
+    they are reached.
 
     ``wf_idx`` is the component's position, the same word the serial loop and
     ``_wf_display_name`` use: naming it ``index`` here shadowed the module's
@@ -755,20 +784,27 @@ def _component_run(
     # "继续 the row I clicked" never degrades into "resume the newest same-named row" (or a cold
     # start after a pure label edit).
     component_ids = {str(key) for key in sub_engine.nodes}
-    if resuming and run_id and not any(str(item.get('run_id') or '') == str(run_id) for item in resumable):
-        requested_record = store.get_run(run_id)
+    requested_record = store.get_run(run_id) if (resuming and run_id) else None
+    if (
+        requested_record is not None
+        and not any(str(item.get('run_id') or '') == str(run_id) for item in resumable)
+        and _record_belongs(requested_record, component_ids, wf_fp)
+    ):
         # Only the component the record belongs to may add it. The upload workflow in a serial
         # canvas shares the canvas name but has its own nodes; inserting the crawl's row for it
         # made the fallback-by-name adopt a record of another component.
-        recorded_fp = str((requested_record or {}).get('workflow_fingerprint') or '')
-        if (
-            requested_record
-            and (not wf_fp or not recorded_fp or recorded_fp == wf_fp)
-            and _record_has_component(requested_record, component_ids)
-        ):
-            resumable.insert(0, requested_record)
+        resumable.insert(0, requested_record)
     earlier = _continue_record(name, resumable, resuming, requested=run_id, fingerprint=wf_fp, node_ids=component_ids)
-    rid = str(earlier.get('run_id') or '') or (run_id if wf_idx == 0 else uuid.uuid4().hex[:12])
+    # The requested id may only be REUSED by the component that record actually belongs to.
+    # ``run_id`` is the record the user pressed 继续 on; when its sibling record was deleted
+    # (or aged out) the first component used to keep writing into the OTHER workflow's row —
+    # two workflows in one "serial" record, ``node_done`` counted against one component's
+    # ``node_total`` (4/3) and the history carrying the same id twice.
+    requested_owns = _record_belongs(requested_record, component_ids, wf_fp)
+    # A PLAIN run's id is the row the claim just opened for the whole attempt, so workflow zero
+    # takes it as before; a 继续 may only keep it when that row is this component's.
+    takes_requested = wf_idx == 0 and (not resuming or requested_owns)
+    rid = str(earlier.get('run_id') or '') or (run_id if takes_requested else uuid.uuid4().hex[:12])
     with execute_lock:
         # Opening the next serial record must be atomic with the bulk-delete routes' "which
         # records are live" read. The worker used to start_run() outside this lock, so a 清空
@@ -1033,8 +1069,11 @@ def _run_worker(
             # No record was opened, so nothing may persist these lines: the durable sink would
             # file them under the claim-stamped run id, and no viewer or retention sweep can ever
             # name that id again (every query walks ``runs``). Take the sink off and drop the
-            # buffer; the live console keeps what the user needs to fix the canvas.
+            # buffer; the live console keeps what the user needs to fix the canvas. ``reset``
+            # is explicit because ``disarm`` now WRITES whatever is still buffered (the normal
+            # end-of-run tail), and a refused run must own no durable line.
             set_log_sink(None)
+            run_log_writer.reset()
             run_log_writer.disarm()
             return
 
@@ -1066,7 +1105,13 @@ def _run_worker(
         # because that is the key the resume banner and /api/runs/resumable match
         # on — separating the records without separating that key is what keeps
         # 继续 findable after the split.
-        split_records = mode == 'serial' and wf_count > 1
+        # A record being resumed that covered the WHOLE canvas (a 并行 attempt) cannot be split
+        # into per-workflow rows: its rows are filed under that one id, and a component record
+        # refuses a node set it does not own — so every component but the first would start
+        # from nothing and re-crawl what the record already holds. This attempt therefore keeps
+        # ONE record too: the one the user pressed 继续 on.
+        adopted_canvas = store.get_run(resume_run_id) if resume_run_id else None
+        split_records = _split_records(mode, wf_count, adopted_canvas)
         # The named workflows the user switched off for this attempt. A disabled workflow is
         # not an effective component, so it opens no row on its own — the record's only trace
         # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead

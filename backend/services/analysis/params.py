@@ -567,6 +567,10 @@ def normalize_analysis_params(op: str, params: dict) -> dict:
             'author_col': str(params.get('reply_author_col') or '评论者').strip(),
             'floor_col': str(params.get('reply_floor_col') or '楼层').strip(),
             'parent_floor_col': str(params.get('reply_parent_col') or '父楼层').strip(),
+            # Floors are numbered per article; this is the column the comment crawl writes for
+            # the article a row came from. A table without it keeps the single-article reading
+            # (and says so), so the field only has to be right for multi-link tables.
+            'article_col': str(params.get('reply_article_col') or '文章URL').strip(),
         }
     if op == 'compare_platform':
         # Platform + aggregate default to the merge-stamped column and the mean; the value column

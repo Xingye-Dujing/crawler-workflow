@@ -1373,6 +1373,30 @@ class TestZhihuAdapter:
 # ─── douyin row identity ────────────────────────────────────────────────
 
 
+class TestDouyinDeclaredCounter:
+    """A shortfall only pins the cursor when the site's denominator is EXACT.
+
+    ``3388`` is a count: a walk that comes home at 900 left a hole 继续 must replay. ``3.4万``
+    and ``99+`` are labels — a gap against them may be the rounding, and pinning there would
+    make 继续 replay a link that was already complete.
+    """
+
+    def test_an_exact_count_is_provable(self):
+        from crawlers.platforms.douyin import comments as dy
+
+        assert dy._exact_declared('3388') is True
+        assert dy._exact_declared('3,388') is True
+
+    def test_a_rounded_or_floored_label_is_not(self):
+        from crawlers.platforms.douyin import comments as dy
+
+        assert dy._exact_declared('3.4万') is False
+        assert dy._exact_declared('1.2w') is False
+        assert dy._exact_declared('99+') is False
+        assert dy._exact_declared('') is False
+        assert dy._exact_declared(None) is False
+
+
 class TestDouyinCommentIds:
     """The panel read now carries each item's own id; the row and the ledger key use it."""
 

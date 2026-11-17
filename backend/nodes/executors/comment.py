@@ -251,12 +251,16 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
     login_seen = False
     sessions = {}
 
-    def _open_browser_session(kind: str, acct: str, proxy) -> None:
+    def _open_browser_session(kind: str, acct: str, proxy, pooled: bool = False) -> None:
         """Open one platform's comment browser as *acct* through *proxy*.
 
         Its own function because a pool rotation rebuilds exactly this: the account's cookie
         file, its profile and its exit are one identity, and a rotation that reused the old
         browser would keep the session that was just refused.
+
+        ``pooled`` carries the pool's DIRECT decision (``proxy`` is None because every exit is
+        benched and ``pool_allow_direct_fallback`` is on): ``get_crawler`` otherwise re-resolves
+        an exit and refuses a pair the pre-run gate counted as usable.
         """
         build = {
             'headless': headless,
@@ -269,6 +273,8 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         }
         if proxy:
             build['proxy'] = proxy
+        elif pooled:
+            build['use_proxy'] = False
         crawler = get_crawler(kind, **build)
         sessions[kind] = (
             crawler,
@@ -329,7 +335,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         claimed[kind] = nxt
         active[kind] = nxt.account
         add_log(t('pool.attempt', platform=kind, n=1, account=pool.account_word(nxt.account), exit=''))
-        _open_browser_session(kind, nxt.account, nxt.proxy)
+        _open_browser_session(kind, nxt.account, nxt.proxy, pooled=True)
         return True
 
     def _writer_for(idx: int) -> PartWriter:
@@ -362,7 +368,10 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
 
     try:
         for idx, url in enumerate(urls, 1):
-            if not execution_state['running']:
+            # ``stop_requested``, not "nobody is running": a direct executor call (a probe, a
+            # test) has no claim at all, and for it "not running" is not "the user pressed 停止"
+            # — reading the wall flag there walked zero links and returned an empty table.
+            if stop_requested():
                 break
             if idx <= resumed_index:
                 continue
@@ -429,7 +438,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                             active[kind] = first.account
                             acct_now, proxy_now = first.account, first.proxy
                             add_log(t('pool.attempt', platform=kind, n=1, account=pool.account_word(acct_now), exit=''))
-                        _open_browser_session(kind, acct_now, proxy_now)
+                        _open_browser_session(kind, acct_now, proxy_now, pooled=pool_mode)
             # One dispatch, one surface: every walker — the browser session, the CatBus backend,
             # the 红果 harness — answers ``walk(platform, url, limit)``, and each refuses a
             # platform it has no adapter for BY NAME.
@@ -497,7 +506,13 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                     # The exception path has no ``status``; leaving the retry loop here is what
                     # the old unconditional ``break`` did.
                     break
-                if status == BLOCKED and pool_mode and rotations < pool.max_attempts():
+                # Rotate ONLY a zero-row wall. ``rows`` is rebound on every attempt and only the
+                # last attempt's rows are stored after this loop, so rotating a link that
+                # already answered rows threw that answer away: the next login paid the same
+                # walk, the account was benched for a link whose data had been read, and when
+                # the pool ran dry the rows existed nowhere. A partial answer keeps the
+                # PARTIAL-and-continue path instead (stored below, cursor left at the hole).
+                if status == BLOCKED and not rows and pool_mode and rotations < pool.max_attempts():
                     facts = {
                         'login_wall': bool(getattr(_crawler, 'login_wall', False)),
                         'risk_blocked': bool(getattr(_crawler, 'risk_blocked', False)),

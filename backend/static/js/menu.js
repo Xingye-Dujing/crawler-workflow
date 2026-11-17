@@ -115,7 +115,10 @@ var TopMenu = {
             LLMSettings.applyToPanel();
             LLMSettings.loadDefaults();
         }
-        if (window.AppSettings) AppSettings.pull(true);
+        // The boot step (`app.js`'s appSettings) already owns the first read; asking again with
+        // force made every page load fetch /api/settings twice, and the second request cleared
+        // the first one's in-flight slot.
+        if (window.AppSettings) AppSettings.pull();
     },
 
     /* Used by RunState / setLang / setBg so the bar stays truthful. */

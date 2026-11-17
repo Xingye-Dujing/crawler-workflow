@@ -59,8 +59,15 @@ class UpkeepMixin:
         cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(0, days) * 86400))
 
         doomed = set()
-        # 1. Too old to be worth continuing, whatever its status.
-        rows = self._query('SELECT run_id FROM runs WHERE started_at < ?', (cutoff,))
+        # 1. Too old to be worth continuing — but never a run that still owes a verdict.
+        # ``identity.UNRESOLVED_RUN_STATUS`` and the purge route both promise "interrupted runs
+        # are the last to go", and 继续 is impossible once the row (and its cursor) is gone; the
+        # age sweep used to delete one from a 31-day-old restart with nothing said.
+        placeholders = ', '.join('?' * len(UNRESOLVED_RUN_STATUS))
+        rows = self._query(
+            f'SELECT run_id FROM runs WHERE started_at < ? AND status NOT IN ({placeholders})',
+            (cutoff, *UNRESOLVED_RUN_STATUS),
+        )
         doomed.update(row['run_id'] for row in rows)
         # 2. Beyond the per-workflow cap. A run that is unfinished in any sense —
         # interrupted, still writing, or stopped but not yet settled — is counted

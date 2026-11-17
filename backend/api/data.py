@@ -19,7 +19,7 @@ import pandas as pd
 from core.refs import as_bool, sanitize_filename
 from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify, request, send_file
-from runtime.state import _dataset_cache, any_run_live, drop_cached_dataset
+from runtime.state import any_run_live, clear_cached_datasets, drop_cached_dataset
 from runtime.stores import _load_dataset, _register_dataset, get_dataset_store
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
@@ -492,11 +492,11 @@ def clear_datasets():
         if any_run_live():
             return jsonify({'ok': False, 'error': t('ds.clearBusy')}), 409
         removed = store.clear()
-        _dataset_cache.clear()
+        clear_cached_datasets()
         logger.warning(t('ds.cleared', n=removed))
         return jsonify({'ok': True, 'removed': removed, 'orphans': 0})
 
-    _dataset_cache.clear()
+    clear_cached_datasets()
     removed = store.purge_unreferenced()
     kept = store.stats()
     # Silence is the normal case, and this route is not only a button: the page boot sweeps

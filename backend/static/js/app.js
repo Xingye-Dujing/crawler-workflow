@@ -328,7 +328,14 @@ const Settings = {
                 return box ? box.checked !== false : true;
             })(),
         };
-        localStorage.setItem(this._key, JSON.stringify(data));
+        try {
+            localStorage.setItem(this._key, JSON.stringify(data));
+        } catch (e) {
+            /* A browser that refuses storage (quota, a privacy mode, a corrupted draft) must not
+               abort the handler that asked for the write: RunState.toggle threw here before
+               TopMenu.refresh(), so the bar kept showing the old switch while the value was gone.
+               The in-memory settings still apply for this page. */
+        }
     },
     load() {
         /* The draft is user-editable and survives every upgrade, so a broken one is

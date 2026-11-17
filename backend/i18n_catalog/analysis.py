@@ -111,6 +111,7 @@ ZH = {
     'analysis.forecast_horizon': '外推步数至少是 1，收到 {value}（0 步只是把最后一格再抄一遍）',
     'analysis.forecast_rows': '外推至少要 {least} 期观测，这一列只有 {rows} 期同时给出时间与数值',
     'analysis.forecast_season': '季节类方法的周期长度至少 2 期，收到 {value}',
+    'analysis.forecast_unmeasured': '预测：{col} 有 {n} 行没有可读的数值（或日期无法解析），已从曲线里剔除',
     'analysis.forecast_season_rows': '季节方法观测不足：至少要 {season} 期，本列只有 {rows} 期',
     'analysis.forecast_smooth': '平滑系数“{name}”要在 0 与 1 之间（不含两端），收到 {value}',
     'analysis.forecast_uneven': '时段间隔不齐：{rows} 期里有 {steps} 步不是 {gap} 天，未来格按 {gap} 天间隔标注',
@@ -158,10 +159,17 @@ ZH = {
     # hand-written pipeline can match them against the file they edited.
     'analysis.need_param': '“{op}”缺少“{param}”，请先填写',
     'analysis.rename_blank': '“{op}”：这些列的新名字是空的，请填写：{cols}',
+    'analysis.rename_target_exists': (
+        '“{op}”：目标列名 {cols} 本来就在表里，这样重命名会得到两个同名列，其中一个会被静默丢弃；请先给其中一列换个名字'
+    ),
     'analysis.reply_graph_done': '回复传播图：{edges} 条边、{nodes} 个节点',
     'analysis.reply_graph_no_edges': (
         '回复传播图找不到可关联的回复：请确认“评论者”“楼层”“父楼层”三列存在，'
         '且确有回复行的“父楼层”能对上某条顶层评论的“楼层”'
+    ),
+    'analysis.reply_graph_no_article': (
+        '“{op}”：表里没有 {col} 列，{floor} 按整张表唯一来读；'
+        '如果这张表来自多条链接，请保留“文章URL”列，否则回复可能连到另一条链接的人'
     ),
     'analysis.review_cancelled': '已停止：还有 {n} 个簇没问模型，它们的综述标为未处理',
     'analysis.review_done': '簇综述：{n} 个簇已写出（模型 {model}）',
@@ -533,6 +541,9 @@ EN = {
         'extrapolating needs at least {least} observed periods, this column gives {rows} with both a date and a number'
     ),
     'analysis.forecast_season': 'a seasonal method needs a cycle length of at least 2 periods, got {value}',
+    'analysis.forecast_unmeasured': (
+        'forecast: {n} rows of {col} had no numeric value (or an unparseable date) and were left out of the curve'
+    ),
     'analysis.forecast_season_rows': 'seasonal methods need at least {season} observed periods; this column has {rows}',
     'analysis.forecast_smooth': 'the smoothing factor "{name}" has to be strictly between 0 and 1, got {value}',
     'analysis.forecast_uneven': (
@@ -588,10 +599,19 @@ EN = {
     'analysis.need_number': '{op}: "{param}" has to be a whole number, got "{value}"',
     'analysis.need_param': '{op} needs {param}, which is empty',
     'analysis.rename_blank': '{op}: these columns have no new name — set one for: {cols}',
+    'analysis.rename_target_exists': (
+        '{op}: the target name(s) {cols} already exist in this table — renaming would leave two '
+        'columns with one name and silently drop one; rename that column first'
+    ),
     'analysis.reply_graph_done': 'reply graph: {edges} edges over {nodes} nodes',
     'analysis.reply_graph_no_edges': (
         'the reply graph found no resolvable reply: check that 评论者 / 楼层 / 父楼层 exist and '
         "that some reply's parent floor matches a top-level comment's floor"
+    ),
+    'analysis.reply_graph_no_article': (
+        '{op}: the table has no {col} column, so {floor} is read as unique across the whole '
+        'table; if it came from several links keep the 文章URL column, or a reply may be '
+        'attached to somebody in another article'
     ),
     'analysis.review_cancelled': 'stopped: {n} clusters were never asked, their reviews are marked unprocessed',
     'analysis.review_done': 'cluster review: {n} clusters written (model {model})',

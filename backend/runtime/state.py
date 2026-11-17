@@ -212,6 +212,18 @@ def drop_cached_dataset(dataset_id) -> None:
     _dataset_cache.pop(dataset_cache_key(dataset_id), None)
 
 
+def clear_cached_datasets() -> None:
+    """Evict every frame of the CURRENT account's scope (a store wipe).
+
+    The cache is keyed ``(scope, dataset_id)`` exactly so one account never reads another's
+    frame — and dataset ids are content hashes, so two accounts uploading identical bytes share
+    an id. A whole-dict ``.clear()`` from one account's 清空 threw away a stranger's warm frames.
+    """
+    scope = account_context.scope_key()
+    for key in [key for key in _dataset_cache if key[0] == scope]:
+        _dataset_cache.pop(key, None)
+
+
 #: Guards every reader and writer of ``execution_state`` (the console buffers and ``results``).
 #: A Lock is only ever acquired, never rebound, so ``app.py`` imports it back and its many
 #: ``with _completed_lock:`` sites keep sharing the exact object the snapshot below takes.

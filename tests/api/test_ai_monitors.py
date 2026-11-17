@@ -173,3 +173,44 @@ def test_python_requires_the_setting_and_refuses_cloud(client, monkeypatch):
     with pytest.raises(AIError) as refused:
         python_runtime.run_code('print(1)', [])
     assert refused.value.key == 'ai.pythonCloud'
+
+
+def _account_tree(root):
+    """One account's ``ai.db`` path, created the way ``runtime.paths`` would name it."""
+    root.mkdir(parents=True, exist_ok=True)
+
+    class _Tree:
+        ai_db = str(root / 'ai.db')
+
+    return _Tree()
+
+
+def test_a_monitor_armed_by_an_account_delivers_into_that_accounts_tree(tmp_path, monkeypatch):
+    """``threading.Thread`` starts with NO account context, so the delivery worker used to read
+    the local owner's ``ai.db``: a monitor armed by a signed-in account matched nothing, and a
+    broadcast one wrote that account's run facts into the owner's table. The account travels
+    with the queued event; this pins both halves."""
+    from ai import monitors, store
+    from runtime import account_context, paths, run_events
+
+    owner = account_context.Account(user_id='u1', username='u1')
+    mine = _account_tree(tmp_path / 'users' / 'u1')
+    system = _account_tree(tmp_path / 'system')
+
+    def active():
+        return mine if account_context.current() is owner else system
+
+    monkeypatch.setattr(paths, 'active', active)
+    with account_context.use(owner):
+        conversation = store.create_conversation('deepseek', 'm', 'project')
+        monitors.create(
+            conversation['id'],
+            {'run_id': 'run-acc', 'events': ['node.finished'], 'statuses': ['failed']},
+        )
+        run_events.publish('node.finished', run_id='run-acc', node_id='n1', status='failed', rows=0)
+    assert monitors.drain(timeout=10) is True
+    with account_context.use(owner):
+        delivered = store.list_monitor_events(pending_only=True)
+    with account_context.use(None):
+        assert store.list_monitor_events(pending_only=True) == [], 'the delivery landed in the local tree'
+    assert len(delivered) == 1 and delivered[0]['payload']['run_id'] == 'run-acc'

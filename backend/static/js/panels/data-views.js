@@ -455,6 +455,12 @@ var dataNodes = {
 async function trainMLModel(nodeId, modelType) {
     var node = canvas.nodes[nodeId];
     if (!node) return;
+    /* Which classifier to train is the NODE's own answer, never a second argument spliced
+       into an ``onclick`` string. ``operation`` comes from a workflow file, so the old
+       ``trainMLModel('<id>','<operation>')`` handler was a stored-XSS sink: one quote in
+       that param ended the JS literal and ran in the app origin. The id alone is safe (a
+       node id is `[\\w.-]`), and this read cannot disagree with what the node runs. */
+    modelType = modelType || (node.params && node.params.operation) || '';
     var payload = {};
     /* Training data comes from upstream, like every other data-consuming
        node: a file reaches here through an Upload node, not from a dataset

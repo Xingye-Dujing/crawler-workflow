@@ -153,11 +153,14 @@ def workspace(create: bool = True) -> str:
 def _safe_path(relative: str) -> str:
     from ai.errors import AIError
 
-    root = os.path.abspath(workspace())
+    # ``realpath``, not ``abspath``: the workspace is writable by the user's own scripts, and a
+    # symlink inside it (``leak -> ~/.ssh``) passes a prefix test on the JOINED string while the
+    # actual target is somewhere else — the same reason the export resolver uses realpath.
+    root = os.path.realpath(workspace())
     text = str(relative or '').strip().replace('\\', '/')
     if not text or text.startswith('/') or '..' in text.split('/'):
         raise AIError('ai.pythonPath', kind='bad_request', path=relative)
-    target = os.path.abspath(os.path.join(root, *text.split('/')))
+    target = os.path.realpath(os.path.join(root, *text.split('/')))
     if not target.startswith(root + os.sep):
         raise AIError('ai.pythonPath', kind='bad_request', path=relative)
     return target

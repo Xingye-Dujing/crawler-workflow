@@ -47,7 +47,7 @@
 | `profile_lock_timeout` · `platform_gate_timeout` · `renderer_probe_timeout` · `renderer_close_timeout` | Profile 锁、同平台排队、渲染器健康检查与关闭宽限（秒） |
 | `cookie_preflight_timeout` · `cookie_preflight_ttl` · `cookie_preflight_max_parallel` | 跑前验证的预算、结论缓存与并发（45 秒 / 300 秒 / 4） |
 | `run_max_rows_per_node` · `dataset_max_rows` · `max_upload_mb` | 单节点落盘、单数据集与上传大小上限（500000 / 300000 / 64） |
-| `run_keep_per_workflow` · `run_keep_days` · `dataset_keep_days` · `housekeeping_interval_minutes` | 保留策略与清理间隔（20 / 30 / 90 / 60） |
+| `run_keep_per_workflow` · `run_keep_days` · `dataset_keep_days` · `housekeeping_interval_minutes` | 保留策略与清理间隔（20 / 30 / 90 / 60）；中断/进行中的运行不会被“按天”清掉——它是继续要用的游标 |
 | `log_max_mb` · `log_backup_count` | 日志轮转大小与份数（重启生效） |
 | `default_run_mode` · `default_headless` · `default_target_count` · `default_comment_limit` · `default_comment_part_size` · `default_source_part_size` · `default_per_article_file` · `default_keep_parts` · `default_live_export` | 新节点的运行模式、目标数、评论上限、分片、按篇拆分、保留分片与实时导出 |
 | `workflow_save_mode` | 工作流文件保存方式：`auto`（默认，改动后几秒静默写回打开的文件）或 `manual`（只有点“保存”才写文件；刷新/重启保留未保存的画布草稿，不覆盖它） |

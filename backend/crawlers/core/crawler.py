@@ -312,6 +312,11 @@ class Crawler(ABC):
         """
         from runtime import phases
 
+        if self.driver is None:
+            # A backend whose ``_create_driver`` answers nothing never launched a browser
+            # (CatBus runs an adapter process). Recording a 0 s “浏览器” phase described
+            # something that did not happen, next to the real crawl/walk phases.
+            return
         phases.record(
             'browser',
             time.monotonic() - started,

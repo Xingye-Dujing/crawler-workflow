@@ -466,6 +466,13 @@ class TestColumns:
         out = D.convert_type(frame, 'v', 'int')
         assert pd.isna(out['v'].iloc[0])
 
+    def test_a_conversion_that_cannot_run_is_refused_by_name(self):
+        """``1.5 -> int`` cannot be honest: the step used to log and hand the TEXT column on,
+        so the node settled DONE with the type the user asked to replace still there."""
+        frame = pd.DataFrame({'评分': ['1.5', '2.5']})
+        with pytest.raises(UnknownOperationError, match='评分'):
+            D.convert_type(frame, '评分', 'int')
+
 
 class TestReshaping:
     def test_sort_rows_both_directions(self):
@@ -524,12 +531,37 @@ class TestReshaping:
         with pytest.raises(UnknownOperationError, match='nope'):
             D.groupby_agg(frame, 'g', 'v', 'sum', agg_metrics=[('nope', 'mean')])
 
-    def test_groupby_agg_orders_groups_by_name_when_no_order_column_is_given(self):
-        frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '序': [4, 1, 2], 'v': [1, 2, 3]})
+    def test_a_phase_marker_column_orders_the_groups_without_naming_it(self):
+        """The 分阶段 step's position column survives the node boundary; a group-by that reads
+        it must not need the user to repeat it in 排序依据 (where a phase column with no order
+        sorted by code point put 二次爆发期 before 发酵期)."""
+        frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '阶段序号': [3, 1, 2], 'v': [1, 2, 3]})
         frame = pd.DataFrame(frame.to_dict('records'))
         out = D.groupby_agg(frame, '阶段', 'v', 'sum')
-        assert out['阶段'].tolist()[0] == '二次爆发期', 'a name sort puts the fourth phase first'
-        assert list(out.columns) == ['阶段', 'v']
+        assert out['阶段'].tolist() == ['发酵期', '爆发期', '二次爆发期']
+        assert list(out.columns) == ['阶段', 'v'], 'the marker must not leak into the result'
+
+    def test_an_ordinary_group_by_keeps_its_name_order(self):
+        """作者/城市 have no lifecycle; a name sort IS the answer and no order is invented."""
+        frame = pd.DataFrame({'城市': ['北京', '上海'], 'v': [1, 2]})
+        assert D.groupby_agg(frame, '城市', 'v', 'sum')['城市'].tolist() == ['上海', '北京']
+
+    def test_an_ordered_categorical_still_orders_the_groups_without_an_order_column(self):
+        """Same node, no boundary: the 分阶段 step's categorical IS the order and must be used."""
+        frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], 'v': [1, 2, 3]})
+        frame['阶段'] = pd.Categorical(frame['阶段'], categories=['发酵期', '爆发期', '二次爆发期'], ordered=True)
+        out = D.groupby_agg(frame, '阶段', 'v', 'sum')
+        assert out['阶段'].tolist() == ['发酵期', '爆发期', '二次爆发期']
+
+    def test_a_date_group_column_sorts_itself_in_time_order(self):
+        frame = pd.DataFrame({'日期': ['2024-02-01', '2024-01-01'], 'v': [1, 2]})
+        out = D.groupby_agg(frame, '日期', 'v', 'sum')
+        assert out['日期'].tolist() == ['2024-01-01', '2024-02-01']
+
+    def test_a_numeric_group_column_sorts_itself_numerically(self):
+        frame = pd.DataFrame({'批次': ['10', '2', '1'], 'v': [1, 1, 1]})
+        out = D.groupby_agg(frame, '批次', 'v', 'sum')
+        assert out['批次'].tolist() == ['1', '2', '10']
 
     def test_naming_an_order_column_puts_the_groups_back_in_lifecycle_order(self):
         frame = pd.DataFrame({'阶段': ['二次爆发期', '发酵期', '爆发期'], '序': [4, 1, 2], 'v': [1, 2, 3]})
@@ -2250,6 +2282,27 @@ class TestReplyGraph:
         frame = pd.DataFrame({'评论者': ['甲'], '楼层': ['1']})
         with pytest.raises(UnknownOperationError, match='父楼层'):
             D.reply_graph(frame)
+
+    def test_floors_are_read_per_article_not_across_the_whole_table(self):
+        """A multi-link comment node holds three #1 comments. Resolving 父楼层 against one
+        global map attached article B's reply to article A's author — a complete-looking
+        graph that is simply about the wrong person."""
+        frame = pd.DataFrame(
+            {
+                '文章URL': ['https://a', 'https://a', 'https://b', 'https://b'],
+                '评论者': ['甲', '丙', '乙', '丁'],
+                '楼层': ['1', '2', '1', '2'],
+                '父楼层': ['', '1', '', '1'],
+            }
+        )
+        out = D.reply_graph(frame)
+        pairs = {(r.src_author, r.dst_author): r.weight for r in out.itertuples()}
+        assert pairs == {('甲', '丙'): 1, ('乙', '丁'): 1}
+
+    def test_a_table_without_the_article_column_keeps_the_single_thread_reading(self):
+        out = D.reply_graph(self._thread())
+        pairs = {(r.src_author, r.dst_author): r.weight for r in out.itertuples()}
+        assert pairs == {('甲', '丙'): 1, ('甲', '丁'): 1}
 
 
 class TestComparePlatform:

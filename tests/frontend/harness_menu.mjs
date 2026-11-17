@@ -296,8 +296,12 @@ async function startUp() {
     /* init() fires the AI placeholder and server-settings reads without awaiting
        them, so the requests have to be given a turn before they are visible.
        `_defaultsPulled` is a one-shot latch a previous init() already spent, so it
-       is cleared here to observe what a genuine first load asks for. */
+       is cleared here to observe what a genuine first load asks for — and so are
+       AppSettings' own latches: the menu now asks with pull() (not pull(true)), which
+       is exactly the dedupe being pinned here (one /api/settings per boot, not two). */
     state.LLMSettings._defaultsPulled = false;
+    state.AppSettings._pulled = false;
+    state.AppSettings._inflight = null;
     requests.length = 0;
     TopMenu.init();
     await new Promise((resolve) => setImmediate(resolve));

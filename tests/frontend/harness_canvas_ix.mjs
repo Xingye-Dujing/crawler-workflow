@@ -210,6 +210,10 @@ const canvas = sandbox.__canvas;
 const Outline = sandbox.__outline;
 const Clipboard = sandbox.__clipboard;
 const doc = sandbox.document;
+/* A node's DOM id is namespaced (`canvas.addNode`: the storage key is the file's id, the
+ * element id is `cxi-node-<key>` so a workflow file cannot shadow a page element). Every
+ * scenario below names a node by its KEY, so they all go through this one reader. */
+const nodeEl = (id) => doc.getElementById('cxi-node-' + id);
 const updateParam = vm.runInContext('updateParam', sandbox);
 const out = {};
 
@@ -284,7 +288,7 @@ function addNode(type, x = 100, y = 100, w = 220, h = 120) {
        auto-layout rank advance and reset-view centring can tell sizes apart —
        and so a wide/tall node can actually collide with a fixed lattice.
        Defaults keep every older scenario's numbers byte-identical. */
-    const el = doc.getElementById(nid);
+    const el = nodeEl(nid);
     el.offsetLeft = x;
     el.offsetTop = y;
     el.offsetWidth = w;
@@ -303,7 +307,7 @@ function addNode(type, x = 100, y = 100, w = 220, h = 120) {
    _getPortCenter the wires use. */
 function syncGeometry(ids) {
     ids.forEach((id) => {
-        const el = doc.getElementById(id);
+        const el = nodeEl(id);
         el.offsetLeft = parseFloat(el.style.left) || 0;
         el.offsetTop = parseFloat(el.style.top) || 0;
     });
@@ -316,7 +320,7 @@ function wireDs() {
 }
 
 function portOf(id, which) {
-    return doc.getElementById(id).querySelectorAll('.node-port').find((p) => p.dataset.port === which);
+    return nodeEl(id).querySelectorAll('.node-port').find((p) => p.dataset.port === which);
 }
 
 function draft() {
@@ -345,14 +349,14 @@ freshWorld();
 const selA = addNode('source', 0, 0);
 const selB = addNode('output', 400, 0);
 canvas.selectNode(selA);
-const first = doc.querySelectorAll('.node.selected').map((el) => el.id);
+const first = doc.querySelectorAll('.node.selected').map((el) => el.dataset.nodeId);
 canvas.selectNode(selB);
-const second = doc.querySelectorAll('.node.selected').map((el) => el.id);
+const second = doc.querySelectorAll('.node.selected').map((el) => el.dataset.nodeId);
 canvas.deselectNode();
 out.selection = {
     afterFirst: first,
     afterSecond: second,
-    afterDeselect: doc.querySelectorAll('.node.selected').map((el) => el.id),
+    afterDeselect: doc.querySelectorAll('.node.selected').map((el) => el.dataset.nodeId),
     selectedId: canvas.selectedNode,
     statusText: doc.getElementById('status-nodes').textContent,
 };
@@ -417,7 +421,7 @@ canvas._settingsNodeId = vz;
 dragConnection(tk, vz);
 out.tokenize_visualize = {
     mode: canvas.nodes[tk].params.output_mode,
-    content: doc.getElementById(tk).querySelector('.node-content').textContent,
+    content: nodeEl(tk).querySelector('.node-content').textContent,
     panelStillOn: canvas._settingsNodeId,
     persistedMode: draft().nodes[tk].params.output_mode,
 };
@@ -477,7 +481,7 @@ out.repaint.orphan = { lines: lines().length };
 freshWorld();
 const fold = addNode('process', 0, 0);
 canvas.toggleFold(fold);
-const foldEl = doc.getElementById(fold);
+const foldEl = nodeEl(fold);
 out.fold = {
     folded: foldEl.classList.contains('node-folded'),
     contentHidden: foldEl.querySelector('.node-content').style.display,
@@ -488,8 +492,8 @@ out.fold = {
 const foldedDraft = sandbox.localStorage.getItem('crawler_canvas');
 canvas.toggleFold(fold);
 out.fold.unfolded = {
-    folded: doc.getElementById(fold).classList.contains('node-folded'),
-    contentShown: doc.getElementById(fold).querySelector('.node-content').style.display === '',
+    folded: nodeEl(fold).classList.contains('node-folded'),
+    contentShown: nodeEl(fold).querySelector('.node-content').style.display === '',
     persisted: draft().nodes[fold].folded,
 };
 const foldsBefore = Object.keys(canvas.nodes).length;
@@ -500,8 +504,8 @@ freshWorld();
 sandbox.localStorage.setItem('crawler_canvas', foldedDraft);
 canvas.init();
 out.fold.after_reload = {
-    folded: doc.getElementById(fold).classList.contains('node-folded'),
-    contentHidden: doc.getElementById(fold).querySelector('.node-content').style.display,
+    folded: nodeEl(fold).classList.contains('node-folded'),
+    contentHidden: nodeEl(fold).querySelector('.node-content').style.display,
 };
 
 /* ── zoom and view ─────────────────────────────────────────────────── */
@@ -579,7 +583,7 @@ const fA = addNode('source', 0, 0);
 const fB = addNode('output', 4000, 3000);
 canvas.resetView();
 const projectFit = (id) => {
-    const el = doc.getElementById(id);
+    const el = nodeEl(id);
     const l = canvas.panX + el.offsetLeft * canvas.zoom;
     const t = canvas.panY + el.offsetTop * canvas.zoom;
     return {
@@ -607,12 +611,12 @@ const l3 = addNode('output', 13, 41);
 canvas.connections = [{ from: l1, to: l2 }, { from: l2, to: l3 }];
 canvas.autoLayout();
 const box = (ids) => ids.map((id) => {
-    const el = doc.getElementById(id);
+    const el = nodeEl(id);
     return [parseFloat(el.style.left), parseFloat(el.style.top)];
 });
 const laid = box([l1, l2, l3]);
 const laidRects = [l1, l2, l3].map((id) => {
-    const el = doc.getElementById(id);
+    const el = nodeEl(id);
     const L = parseFloat(el.style.left);
     const T = parseFloat(el.style.top);
     return { L, T, R: L + el.offsetWidth, B: T + el.offsetHeight };
@@ -807,7 +811,7 @@ freshWorld();
 const e1 = addNode('source', 0, 0);
 const panel = doc.getElementById('node-settings');
 canvas.editNode(e1);
-const openBtn = doc.getElementById(e1).querySelector('.node-action-btn');
+const openBtn = nodeEl(e1).querySelector('.node-action-btn');
 out.edit = {
     settingsNode: canvas._settingsNodeId,
     selected: canvas.selectedNode,
@@ -822,7 +826,7 @@ canvas.editNode(e1);
 out.edit.toggled_off = {
     settingsNode: canvas._settingsNodeId,
     panelOpen: panel.classList.contains('open'),
-    buttonMarked: doc.getElementById(e1).querySelector('.node-action-btn').classList.contains('settings-open'),
+    buttonMarked: nodeEl(e1).querySelector('.node-action-btn').classList.contains('settings-open'),
 };
 canvas.editNode(e1);
 out.edit.reopened = { settingsNode: canvas._settingsNodeId, panelOpen: panel.classList.contains('open') };
@@ -845,18 +849,18 @@ async function renameScenarios() {
     const r1 = addNode('source', 0, 0);
     /* Screen-reader identity: the box is a named group, labelled by its visible name. */
     const created = {
-        role: doc.getElementById(r1).getAttribute('role'),
-        aria: doc.getElementById(r1).getAttribute('aria-label'),
+        role: nodeEl(r1).getAttribute('role'),
+        aria: nodeEl(r1).getAttribute('aria-label'),
     };
     dialogAnswer = '  我的爬虫  ';
     await canvas.renameNode(r1);
     results.created = created;
     results.typed = {
         title: canvas.nodes[r1].title,
-        stamped: doc.getElementById(r1).querySelector('.node-title').textContent,
+        stamped: nodeEl(r1).querySelector('.node-title').textContent,
         persisted: draft().nodes[r1].title,
         /* The accessible name must follow the rename, not stay the creation-time type label. */
-        aria: doc.getElementById(r1).getAttribute('aria-label'),
+        aria: nodeEl(r1).getAttribute('aria-label'),
         dialog: dialogs[0],
     };
 
@@ -864,7 +868,7 @@ async function renameScenarios() {
     await canvas.renameNode(r1);
     results.cleared_to_type_label = {
         title: canvas.nodes[r1].title,
-        stamped: doc.getElementById(r1).querySelector('.node-title').textContent,
+        stamped: nodeEl(r1).querySelector('.node-title').textContent,
     };
 
     const before = canvas.nodes[r1].title;
@@ -890,7 +894,7 @@ async function renameScenarios() {
         englishLabel,
         chineseLabel: canvas.nodes[r2].title,
         changed: canvas.nodes[r2].title !== englishLabel,
-        stamped: doc.getElementById(r2).querySelector('.node-title').textContent,
+        stamped: nodeEl(r2).querySelector('.node-title').textContent,
     };
     I18n.lang = 'en';
     out.rename = results;
@@ -901,11 +905,11 @@ async function renameScenarios() {
 freshWorld();
 out.wiring = {};
 const w1 = addNode('source', 40, 60);
-const header = doc.getElementById(w1).querySelector('.node-header');
+const header = nodeEl(w1).querySelector('.node-header');
 dispatchOn(header, 'pointerdown', ev({ clientX: 140, clientY: 160, target: { closest: () => null } }));
 out.wiring.drag = {
     isDragging: canvas.isDragging,
-    dragTargetId: canvas.dragTarget && canvas.dragTarget.id,
+    dragTargetId: canvas.dragTarget && canvas.dragTarget.dataset.nodeId,
     selected: canvas.selectedNode,
 };
 dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 240, clientY: 260 });
@@ -919,12 +923,12 @@ out.wiring.released = {
 /* A mousedown that starts inside the action bar is a button press, not a drag. */
 dispatchOn(header, 'pointerdown', ev({ target: { closest: (sel) => (sel === '.node-actions' ? { id: 'actions' } : null) } }));
 out.wiring.actions_press_does_not_drag = canvas.isDragging === false;
-const btns = doc.getElementById(w1).querySelectorAll('.node-action-btn');
+const btns = nodeEl(w1).querySelectorAll('.node-action-btn');
 out.wiring.no_inline_handlers = {
     /* Behaviour lives in listeners; a `onclick` attribute here would mean the
        id-injection fix regressed. */
     onclickAbsent: btns.map((b) => b.onclick === undefined),
-    innerHtmlHasOn: btns.map((b) => /on[a-z]+\s*=/i.test(b._html || '') || /on[a-z]+\s*=/.test(doc.getElementById(w1)._html)),
+    innerHtmlHasOn: btns.map((b) => /on[a-z]+\s*=/i.test(b._html || '') || /on[a-z]+\s*=/.test(nodeEl(w1)._html)),
     titles: btns.map((b) => b.title),
     listenerTypes: btns.map((b) => Object.keys(b._events)),
 };
@@ -984,7 +988,7 @@ out.pan.background_click_closed_settings = canvas._settingsNodeId === null;
 canvas.editNode(p1);
 dispatchOn(workspace, 'pointerdown', ev({
     button: 0,
-    target: { closest: (sel) => (sel === '.node' ? doc.getElementById(p1) : null) },
+    target: { closest: (sel) => (sel === '.node' ? nodeEl(p1) : null) },
 }));
 out.pan.node_click_kept_settings = canvas._settingsNodeId === p1;
 
@@ -1035,7 +1039,7 @@ const ctxMenu = doc.getElementById('context-menu');
 dispatchOn(workspace, 'contextmenu', ev({
     clientX: 220,
     clientY: 240,
-    target: { closest: (sel) => (sel === '.node' ? doc.getElementById(cmNode) : null) },
+    target: { closest: (sel) => (sel === '.node' ? nodeEl(cmNode) : null) },
 }));
 out.context_menu = {
     open: ctxMenu.classList.contains('open'),
@@ -1059,13 +1063,13 @@ const clickItem = (action, insideMenu = true) => dispatchDocument(sandbox.__hand
 });
 clickItem('ctxFoldNode');
 out.context_menu.fold_action = {
-    folded: doc.getElementById(cmNode).classList.contains('node-folded'),
+    folded: nodeEl(cmNode).classList.contains('node-folded'),
     stillOpen: ctxMenu.classList.contains('open'),
     nodes: Object.keys(canvas.nodes).length,
 };
 /* The same node, now folded: the row has to advertise the OPPOSITE action, or the
    second right-click folds a folded node and reads as a dead menu item. */
-const onNode = { closest: (sel) => (sel === '.node' ? doc.getElementById(cmNode) : null) };
+const onNode = { closest: (sel) => (sel === '.node' ? nodeEl(cmNode) : null) };
 dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onNode }));
 out.context_menu.on_folded = {
     foldLabel: doc.getElementById('ctx-fold-node').textContent,
@@ -1088,7 +1092,7 @@ out.context_menu.delete_action = { nodes: Object.keys(canvas.nodes).length, menu
 const copyFirst = addNode('source', 5, 5);
 canvas._contextNode = copyFirst;
 clickItem('ctxCopy');
-dispatchOn(workspace, 'contextmenu', ev({ clientX: 120, clientY: 140, target: { closest: (sel) => (sel === '.node' ? doc.getElementById(copyFirst) : null) } }));
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 120, clientY: 140, target: { closest: (sel) => (sel === '.node' ? nodeEl(copyFirst) : null) } }));
 out.context_menu.paste_after_copy = doc.getElementById('ctx-paste-node').style.display;
 /* A new node from the menu lands at the click position, not at a random one. */
 canvas._contextMenuPos = { x: 300, y: 300 };
@@ -1098,7 +1102,7 @@ const added = Object.keys(canvas.nodes).filter((id) => !beforeNew.includes(id));
 out.context_menu.new_node = {
     count: added.length,
     /* `_screenToCanvas` divides by zoom (1) and the menu offsets the hotspot. */
-    at: added.map((id) => [doc.getElementById(id).style.left, doc.getElementById(id).style.top]),
+    at: added.map((id) => [nodeEl(id).style.left, nodeEl(id).style.top]),
 };
 clickItem(null, false);
 out.context_menu.outside_click_closes = ctxMenu.classList.contains('open');
@@ -1114,7 +1118,7 @@ const ctxBatch = doc.getElementById('context-menu');
 const bpA = addNode('source', 0, 0);
 const bpB = addNode('process', 400, 0);
 canvas.setSelectedNodes([bpA, bpB]);
-const onBatchA = { closest: (sel) => (sel === '.node' ? doc.getElementById(bpA) : null) };
+const onBatchA = { closest: (sel) => (sel === '.node' ? nodeEl(bpA) : null) };
 dispatchOn(wsBatch, 'contextmenu', ev({ clientX: 50, clientY: 50, target: onBatchA }));
 canvas._contextNode = bpA;
 canvas.copySelection();
@@ -1134,17 +1138,17 @@ const rpB = addNode('output', 400, 0);
 const rpC = addNode('process', 800, 0);
 canvas.selectNode(rpA);
 canvas.selectNode(rpB, true);
-dispatchOn(doc.getElementById(rpA).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 50, clientY: 50 }));
+dispatchOn(nodeEl(rpA).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 50, clientY: 50 }));
 out.right_press_on_group_member = {
     setAfter: canvas.selectedNodes.slice().sort(),
     expected: [rpA, rpB].sort(),
     startedDrag: canvas.isDragging,
 };
 /* …and the menu it summons still reads the same group (the handler never touched selection). */
-dispatchOn(workspace, 'contextmenu', ev({ clientX: 50, clientY: 50, target: { closest: (sel) => (sel === '.node' ? doc.getElementById(rpA) : null) } }));
+dispatchOn(workspace, 'contextmenu', ev({ clientX: 50, clientY: 50, target: { closest: (sel) => (sel === '.node' ? nodeEl(rpA) : null) } }));
 out.right_press_on_group_member.menuSetAfter = canvas.selectedNodes.slice().sort();
 /* A right-press on a node NOT in the group selects only it. */
-dispatchOn(doc.getElementById(rpC).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 850, clientY: 50 }));
+dispatchOn(nodeEl(rpC).querySelector('.node-header'), 'pointerdown', ev({ button: 2, clientX: 850, clientY: 50 }));
 out.right_press_on_unselected = {
     set: canvas.selectedNodes.slice(),
     anchor: canvas.selectedNode,
@@ -1163,8 +1167,8 @@ canvas.init();
 out.init = {
     restored: Object.keys(canvas.nodes),
     title: canvas.nodes['node-9'].title,
-    stamped: doc.getElementById('node-9').querySelector('.node-title').textContent,
-    contentHidden: doc.getElementById('node-9').querySelector('.node-content').style.display,
+    stamped: nodeEl('node-9').querySelector('.node-title').textContent,
+    contentHidden: nodeEl('node-9').querySelector('.node-content').style.display,
     nextId: canvas.nextId,
     status: doc.getElementById('status-nodes').textContent,
     historyLength: canvas._history.length,
@@ -1188,7 +1192,7 @@ const u2 = addNode('process', 300, 0);
 canvas.connections = [{ from: u1, to: u2 }];
 out.upstream = { found: canvas.getUpstreamNodeId(u2), none: canvas.getUpstreamNodeId(u1) };
 out.icons = {
-    markupHasSvg: doc.getElementById(u1).innerHTML.indexOf('<svg') >= 0,
+    markupHasSvg: nodeEl(u1).innerHTML.indexOf('<svg') >= 0,
     summary: canvas.nodes[u1].el.querySelector('.node-content').textContent,
 };
 /* Deleting a node must delete the wires that touched it, not orphan them. */
@@ -1369,11 +1373,11 @@ async function touchGestureScenario() {
     // A finger drag on a node header moves the node.
     freshWorld();
     const tD = addNode('source', 40, 60);
-    const headerD = doc.getElementById(tD).querySelector('.node-header');
+    const headerD = nodeEl(tD).querySelector('.node-header');
     dispatchOn(headerD, 'pointerdown', ev({ pointerType: 'touch', clientX: 140, clientY: 160, target: { closest: () => null } }));
     dispatchDocument(sandbox.__handlers, 'pointermove', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
     dispatchDocument(sandbox.__handlers, 'pointerup', { pointerType: 'touch', clientX: 240, clientY: 260, target: { closest: () => null } });
-    res.nodeMovedByFinger = doc.getElementById(tD).style.left !== '40px';
+    res.nodeMovedByFinger = nodeEl(tD).style.left !== '40px';
 
     // Two fingers spread apart on the background → pinch zooms IN. The base is the two
     // fingers' landing positions, so one spread already reads as zoom (not a no-op).
@@ -1426,8 +1430,8 @@ function resizeRepaintScenario() {
     /* Both boxes grow — what the webfont does when it lands, and what
        CustomSelect UNDOES when it collapses a node's raw <select> to a trigger.
        The wire holds literal numbers, so its ends now sit 50px off the ports. */
-    doc.getElementById(fA).offsetHeight = 220;
-    doc.getElementById(fB).offsetHeight = 220;
+    nodeEl(fA).offsetHeight = 220;
+    nodeEl(fB).offsetHeight = 220;
     const historyBefore = canvas._history.length;
     const draftBefore = sandbox.localStorage.getItem('crawler_canvas');
     sandbox.__fireResizes();
@@ -1594,18 +1598,18 @@ function nodeClipboardScenario() {
         title: canvas.nodes[pastedId].title,
         keyword: canvas.nodes[pastedId].params.keyword,
         /* The copy must land a cascade step off the selected node, not on top of it. */
-        leftDelta: parseInt(doc.getElementById(pastedId).style.left, 10) - 120,
+        leftDelta: parseInt(nodeEl(pastedId).style.left, 10) - 120,
     };
     const addedByPaste = Object.keys(canvas.nodes).length - countBefore;
     const pasteToast = toasts[toasts.length - 1];
 
     /* Arrow nudge moves the still-selected node 10px (Shift → 1px). */
-    const leftBefore = parseInt(doc.getElementById(nid).style.left, 10);
+    const leftBefore = parseInt(nodeEl(nid).style.left, 10);
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowRight', target: doc.body });
-    const nudgeStep = parseInt(doc.getElementById(nid).style.left, 10) - leftBefore;
-    const topBefore = parseInt(doc.getElementById(nid).style.top, 10);
+    const nudgeStep = parseInt(nodeEl(nid).style.left, 10) - leftBefore;
+    const topBefore = parseInt(nodeEl(nid).style.top, 10);
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowDown', shiftKey: true, target: doc.body });
-    const fineStep = parseInt(doc.getElementById(nid).style.top, 10) - topBefore;
+    const fineStep = parseInt(nodeEl(nid).style.top, 10) - topBefore;
 
     /* Ctrl+C with nothing selected must not overwrite the clipboard. */
     canvas._clipboardData = { type: 'output', title: '', params: {} };
@@ -2009,7 +2013,7 @@ function multiSelectScenario() {
     res.shiftAdd = {
         set: canvas.selectedNodes.slice(),
         anchor: canvas.selectedNode,
-        highlighted: doc.querySelectorAll('.node.selected').map((el) => el.id).sort(),
+        highlighted: doc.querySelectorAll('.node.selected').map((el) => el.dataset.nodeId).sort(),
     };
     canvas.selectNode(sA);
     res.plainResets = { set: canvas.selectedNodes.slice() };
@@ -2022,8 +2026,8 @@ function multiSelectScenario() {
     canvas.selectNode(nB, true);
     dispatchDocument(sandbox.__handlers, 'keydown', { key: 'ArrowRight', target: doc.body });
     res.batchNudge = {
-        aLeft: parseInt(doc.getElementById(nA).style.left, 10),
-        bLeft: parseInt(doc.getElementById(nB).style.left, 10),
+        aLeft: parseInt(nodeEl(nA).style.left, 10),
+        bLeft: parseInt(nodeEl(nB).style.left, 10),
     };
 
     // Batch delete removes both as one edit with one toast.
@@ -2107,7 +2111,7 @@ function multiSelectScenario() {
     const countAfter = Object.keys(canvas.nodes).length;
     const newIds = canvas.selectedNodes.slice();
     const boxOf = (id) => {
-        const el = doc.getElementById(id);
+        const el = nodeEl(id);
         return [parseInt(el.style.left, 10), parseInt(el.style.top, 10)];
     };
     res.batchPaste = {
@@ -2162,14 +2166,14 @@ function multiSelectScenario() {
     const gB = addNode('output', 400, 0, 200, 100);
     canvas.selectNode(gA);
     canvas.selectNode(gB, true);
-    dispatchOn(doc.getElementById(gA).querySelector('.node-header'), 'pointerdown', ev({ clientX: 140, clientY: 160 }));
+    dispatchOn(nodeEl(gA).querySelector('.node-header'), 'pointerdown', ev({ clientX: 140, clientY: 160 }));
     dispatchDocument(sandbox.__handlers, 'pointermove', { clientX: 240, clientY: 260 });
     dispatchDocument(sandbox.__handlers, 'pointerup', { clientX: 240, clientY: 260, target: { closest: () => null } });
     res.batchDrag = {
-        aLeft: parseInt(doc.getElementById(gA).style.left, 10),
-        aTop: parseInt(doc.getElementById(gA).style.top, 10),
-        bLeft: parseInt(doc.getElementById(gB).style.left, 10),
-        bTop: parseInt(doc.getElementById(gB).style.top, 10),
+        aLeft: parseInt(nodeEl(gA).style.left, 10),
+        aTop: parseInt(nodeEl(gA).style.top, 10),
+        bLeft: parseInt(nodeEl(gB).style.left, 10),
+        bTop: parseInt(nodeEl(gB).style.top, 10),
         // the grabbed box alone (a single press) moved only it; here BOTH moved by +100/+100.
         group: canvas.selectedNodes.slice().sort(),
         persistedA: draft().nodes[gA].x,
@@ -2250,13 +2254,13 @@ function alignScenario() {
 
     const histBefore = canvas._history.length;
     res.leftResult = canvas.alignSelected('left') === true;
-    res.leftPositions = [a, b, c].map((id) => parseInt(doc.getElementById(id).style.left, 10));
+    res.leftPositions = [a, b, c].map((id) => parseInt(nodeEl(id).style.left, 10));
     res.historyOneStep = canvas._history.length - histBefore;
     res.toast = toasts[toasts.length - 1];
 
     // top: every y collapses to the smallest.
     canvas.alignSelected('top');
-    res.topPositions = [a, b, c].map((id) => parseInt(doc.getElementById(id).style.top, 10));
+    res.topPositions = [a, b, c].map((id) => parseInt(nodeEl(id).style.top, 10));
 
     // distributeH: extremes fixed, the middle re-centred so centres are evenly spaced.
     freshWorld();
@@ -2265,7 +2269,7 @@ function alignScenario() {
     const d3 = addNode('process', 400, 0, 220, 120);
     canvas.setSelectedNodes([d1, d2, d3]);
     canvas.alignSelected('distributeH');
-    const dx = [d1, d2, d3].map((id) => parseInt(doc.getElementById(id).style.left, 10));
+    const dx = [d1, d2, d3].map((id) => parseInt(nodeEl(id).style.left, 10));
     const centres = dx.map((l) => l + 110);
     res.distribute = {
         firstUnchanged: dx[0] === 0,
@@ -2375,7 +2379,7 @@ async function clipboardScenario() {
     const groupEntry = Clipboard.items[0].id;
     const groupPasted = Clipboard.paste(groupEntry, { x: 50, y: 50 });
     const groupBoxOf = (id) => {
-        const el = doc.getElementById(id);
+        const el = nodeEl(id);
         return [parseInt(el.style.left, 10), parseInt(el.style.top, 10)];
     };
     res.groupPaste = {
@@ -2507,7 +2511,7 @@ function keyboardNavigationScenario() {
 
     key('d');
     const afterD = canvas.selectedNode;              // expect B
-    const nudgedByWasd = parseInt(doc.getElementById(B).style.left, 10) !== 300; // must NOT move
+    const nudgedByWasd = parseInt(nodeEl(B).style.left, 10) !== 300; // must NOT move
     key('a');
     const afterA = canvas.selectedNode;              // expect A
     key('s');
@@ -2590,7 +2594,7 @@ function keyboardNavigationScenario() {
    node the loaded run can actually replay (settled WITH rows, nothing running). */
 function runBadgesScenario() {
     freshWorld();
-    const badgeNode = (id) => doc.getElementById(id).querySelector('.node-run-badge');
+    const badgeNode = (id) => nodeEl(id).querySelector('.node-run-badge');
     const readBadge = (id) => {
         const el = badgeNode(id);
         return {
@@ -2642,7 +2646,7 @@ function runBadgesScenario() {
     RR.statuses = {
         [ids.rerun]: { status: 'done', row_count: 3, run_id: 'run-second' },
     };
-    const onRerunNode = { closest: (sel) => (sel === '.node' ? doc.getElementById(ids.rerun) : null) };
+    const onRerunNode = { closest: (sel) => (sel === '.node' ? nodeEl(ids.rerun) : null) };
     dispatchOn(workspace, 'contextmenu', ev({ clientX: 220, clientY: 240, target: onRerunNode }));
     const rerunItem = doc.getElementById('ctx-rerun-node');
     const visibleForSettled = rerunItem.style.display;
@@ -2672,6 +2676,29 @@ function runBadgesScenario() {
     RR.runIds = [];
 }
 
+/* The storage KEY and the DOM id are two strings. A workflow file's id must never be able to
+   shadow a page element (the node box is appended before every panel and dialog, so
+   `getElementById('dialog-overlay')` would answer the box and every dialog would silently
+   attach to it), while every handler must still receive the key the run store knows. */
+function nodeDomIdScenario() {
+    freshWorld();
+    const key = 'dialog-overlay';
+    const created = canvas.addNode('name', 10, 10, key);
+    const el = canvas._nodeEl(key);
+    out.node_dom_id = {
+        keyKept: created === key,
+        domIdNamespaced: !!el && el.id === 'cxi-node-' + key,
+        keyOnDataset: !!el && el.dataset.nodeId === key,
+        doesNotShadowPageId: !!el && doc.getElementById('dialog-overlay') !== el,
+    };
+    /* The context menu is the handler that used to read `node.id`; it must name the KEY. */
+    dispatchOn(workspace, 'contextmenu', ev({ clientX: 30, clientY: 30, target: { closest: (sel) => (sel === '.node' ? el : null) } }));
+    out.node_dom_id.contextKey = canvas._contextNode;
+    out.node_dom_id.menuNamesNode = doc.getElementById('ctx-fold-node').textContent === I18n.t('canvas.fold');
+    freshWorld();
+}
+
+nodeDomIdScenario();
 resizeRepaintScenario();
 runBadgesScenario();
 paletteKeyboardScenario();

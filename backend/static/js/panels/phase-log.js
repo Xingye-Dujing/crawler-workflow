@@ -20,11 +20,22 @@ const PhaseLog = {
         this._timer = setInterval(function () {
             PhaseLog.refresh();
         }, 2000);
+        const details = document.getElementById('console-phases');
+        if (details) {
+            /* The strip is collapsed until the user opens it (index.html no longer carries
+               ``open``): paint once when it opens, so the timings are there at the moment they
+               are looked at without a 2 Hz rebuild of hidden markup. */
+            details.addEventListener('toggle', function () {
+                if (details.open) PhaseLog.refresh();
+            });
+        }
     },
 
     async refresh() {
         const panel = document.getElementById('console-panel');
         if (!panel || !panel.classList.contains('open')) return;
+        const details = document.getElementById('console-phases');
+        if (details && details.open === false) return;
         let data = null;
         try {
             const resp = await fetch('/api/run/phases');

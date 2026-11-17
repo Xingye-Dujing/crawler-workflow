@@ -82,6 +82,18 @@ class TestAttribution:
         assert [r[4] for r in rows] == ['first line', 'second line']
         assert all(r[3] == 'info' for r in rows)
 
+    def test_a_line_that_arrives_after_the_final_flush_is_still_written(self, writer):
+        """The settle window: ``flush()`` then the sink is taken off, and a line printed in
+        between sat in ``_buf`` until ``disarm`` dropped it. The writer's one promise is that a
+        run's console is never lost, and this is that line's last chance."""
+        _module, w, store, state = writer
+        _set_run(state, 'rZ')
+        w.push(['settled line'], 0, 'info')
+        w.flush()
+        w.push(['tail line'], 0, 'info')
+        w.disarm()
+        assert [r[4] for batch in store.batches for r in batch[1]] == ['settled line', 'tail line']
+
     def test_a_run_id_switch_drains_the_previous_batch_first(self, writer):
         """The serial-split case, and the one that answers "run A's log survives run B".
 

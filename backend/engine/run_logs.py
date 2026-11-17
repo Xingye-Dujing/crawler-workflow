@@ -113,7 +113,14 @@ class RunLogWriter:
             self._buf_run_id = None
 
     def disarm(self) -> None:
-        """Close this run's window: the sink is off, so no owner may be remembered for it."""
+        """Close this run's window: write whatever still arrived, then forget the owner.
+
+        A line that reached ``push`` between the final ``flush()`` and the sink being taken off
+        was buffered here and then DROPPED by ``reset``. The run is already settled, so this is
+        that line's last chance — and this writer's one promise is that console output is never
+        lost. ``_drain`` owns its own failure handling (it keeps the batch for a later flush).
+        """
+        self._drain()
         self._account = None
         self.reset()
 

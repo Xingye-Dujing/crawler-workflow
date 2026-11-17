@@ -1,13 +1,9 @@
 """The ``convert_type`` step, one module of the analysis op registry (see ops/__init__.py)."""
 
-import logging
-
 import pandas as pd
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError, _to_bool, _to_datetime
-
-logger = logging.getLogger(__name__)
 
 
 def convert_type(df: pd.DataFrame, column: str, dtype: str) -> pd.DataFrame:
@@ -44,7 +40,11 @@ def convert_type(df: pd.DataFrame, column: str, dtype: str) -> pd.DataFrame:
         else:
             work[column] = work[column].astype(str)
     except (ValueError, TypeError) as e:
-        logger.warning(t('analysis.type_convert_failed', col=column, dtype=dtype, err=e))
+        # A conversion that could not run is the STEP's answer, not a note: logging it and
+        # returning the column unchanged settled the node DONE with a text column the user
+        # asked to be numeric (``['1.5','2.5'] -> int`` was a complete no-op). Every sibling op
+        # turns its own library exception into a named refusal; so does this one.
+        raise UnknownOperationError(t('analysis.type_convert_failed', col=column, dtype=dtype, err=e)) from e
     return work
 
 

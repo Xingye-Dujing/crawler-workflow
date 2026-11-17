@@ -12,16 +12,17 @@ prompt tells the model to read the run through its read-only tools, so the evide
 from the run store.
 """
 
+import contextlib
 import logging
 import queue
 import threading
 import time
 
-from runtime import paths, run_events
+from runtime import account_context, paths, run_events
 
 from ai import store
 from ai.errors import AIError
-from i18n import t
+from i18n import get_lang, set_lang, t
 
 logger = logging.getLogger('ai.monitors')
 
@@ -219,18 +220,25 @@ def _deliver(payload: dict) -> None:
 
 
 def _on_event(payload: dict) -> None:
-    """Queue one matching event. Never opens SQLite on the run thread.
+    """Queue one matching event, WITH the account it happened under. Never opens SQLite on the
+    run thread.
 
     The run emits one ``run.log`` per console line; a listener that wrote a row inline put a disk
     commit in front of the crawl. Filtering uses the warm cache when it has one and otherwise
     defers to the worker, which loads the list off the run thread.
+
+    The identity travels because ``threading.Thread`` starts with an EMPTY account context:
+    ``paths.active().ai_db`` in the worker resolved to the local owner's tree, so a monitor
+    armed by a signed-in account never matched anything (and a broadcast one would have written
+    that account's run facts into the owner's table). The language is captured for the same
+    reason — the failure line below is logged on the worker thread.
     """
     if str(payload.get('event') or '') not in EVENTS:
         return
     armed = _cached_armed()
     if armed is not None and not armed:
         return
-    _QUEUE.put(payload)
+    _QUEUE.put((account_context.current(), get_lang(), payload))
 
 
 _QUEUE: queue.Queue = queue.Queue()
@@ -241,12 +249,20 @@ _LOCK = threading.Lock()
 
 def _work() -> None:
     while True:
-        payload = _QUEUE.get()
+        owner, lang, payload = _QUEUE.get()
         try:
+            token = account_context.bind(owner)
             try:
+                set_lang(lang or 'zh')
                 _deliver(payload)
             except Exception:  # a monitoring failure is logged, never raised into the run
-                logger.warning(t('run.eventListenerFailed', event=payload.get('event') or ''), exc_info=True)
+                # ...and never allowed to kill this worker either: the console handler forwards
+                # logger.* through the run sink, and a sink that throws (a closing store) would
+                # otherwise end the thread for the life of the process, silently.
+                with contextlib.suppress(Exception):
+                    logger.warning(t('run.eventListenerFailed', event=payload.get('event') or ''), exc_info=True)
+            finally:
+                account_context.unbind(token)
         finally:
             _QUEUE.task_done()
 

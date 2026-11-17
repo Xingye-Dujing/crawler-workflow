@@ -107,8 +107,17 @@ class QueueMixin:
             # read an empty record, discarded it, and threw away paid-for rows.
             self.settle_nodes(run_id)
             self._execute(
-                'UPDATE runs SET status = ?, updated_at = ?, node_done = ?, note = ? WHERE run_id = ?',
-                (RUN_INTERRUPTED, stamp, self._finished_count(run_id), note or t('run.interrupted_by_restart'), run_id),
+                'UPDATE runs SET status = ?, updated_at = ?, finished_at = ?, node_done = ?, note = ? WHERE run_id = ?',
+                (
+                    RUN_INTERRUPTED,
+                    stamp,
+                    # The run ENDED at this restart, so its record says when. Left NULL, the
+                    # panel printed no end time and no duration for a run it had just closed.
+                    stamp,
+                    self._finished_count(run_id),
+                    note or t('run.interrupted_by_restart'),
+                    run_id,
+                ),
             )
         if ids:
             logger.warning(t('run.promoted', n=len(ids)))

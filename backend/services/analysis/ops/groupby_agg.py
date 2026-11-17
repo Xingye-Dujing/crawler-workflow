@@ -5,9 +5,14 @@ import logging
 import pandas as pd
 
 from i18n import t
-from services.analysis.kernels import UnknownOperationError
+from services.analysis.kernels import UnknownOperationError, _to_datetime
 
 logger = logging.getLogger(__name__)
+
+#: The position column a phase step writes for its own labels (``topic_by_stage``, ``bin_time``).
+#: Named here as a vocabulary, never as a guess about VALUES: when one is present it IS the
+#: lifecycle order, and a group-by should not make the user repeat it in 排序依据.
+STAGE_ORDER_COLUMNS = ('阶段序号', 'stage_order', '阶段排序')
 
 
 def groupby_agg(
@@ -42,6 +47,11 @@ def groupby_agg(
             raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=column))
     if order_col and order_col not in df.columns:
         raise UnknownOperationError(t('analysis.step_col_missing', op='groupby_agg', col=order_col))
+    if not order_col:
+        # The phase marker the 分阶段 step writes (AGENTS: a phase-table step must emit its
+        # position column) is the order, so the group-by does not need the user to name it
+        # again — and a phase table that crossed a node boundary keeps its lifecycle.
+        order_col = next((name for name in STAGE_ORDER_COLUMNS if name in df.columns and name != group_col), '')
     try:
         agg_map = {agg_col: (agg_col, agg_func)}
         for column, func in metrics:
@@ -69,9 +79,50 @@ def groupby_agg(
             grouped = grouped.assign(_group_rank=ranks).sort_values('_group_rank', kind='stable')
             grouped = grouped.drop(columns=['_group_rank'])
         else:
-            grouped = grouped.sort_values(group_col, kind='stable')
+            grouped = _in_phase_order(df, grouped, group_col)
+    except UnknownOperationError:
+        # A refusal this module already worded must not be relabelled as "groupby_agg failed":
+        # the reason (an unranked phase, a group column with no order) is the actionable half.
+        raise
     except (TypeError, ValueError) as e:
         # e.g. sum() over a text column: report the operation instead of a
         # raw pandas error deeper in the pipeline.
         raise UnknownOperationError(f'groupby_agg({agg_func}) failed on "{agg_col}": {e}') from e
     return grouped.reset_index(drop=True)
+
+
+def _in_phase_order(df: pd.DataFrame, grouped: pd.DataFrame, group_col: str) -> pd.DataFrame:
+    """Sort the grouped table by what the group column MEANS where it can be known.
+
+    Sorting by the raw name is right for days and for a number, and wrong for Chinese phase
+    labels: code points put 二次爆发期 before 发酵期, so a complete-looking 各阶段 table ran the
+    lifecycle backwards. A column that parses WHOLE as a date or a number sorts itself; a phase
+    column takes the ordered categorical the same-node 分阶段 step wrote (``df``, not
+    ``grouped`` — the categorical is the source's). What is left is either an ordinary group
+    (作者, 城市), where a name sort IS the answer, or a phase column that lost its categorical
+    at the node boundary — indistinguishable from here, so the fallback is announced with the
+    fix instead of refusing, which would take every ordinary group-by down with it.
+    """
+    if len(grouped) <= 1:
+        return grouped
+    values = grouped[group_col]
+    stamps = _to_datetime(values)
+    if stamps.notna().all():
+        return grouped.assign(_sort=stamps).sort_values('_sort', kind='stable').drop(columns=['_sort'])
+    ranks = pd.to_numeric(values, errors='coerce')
+    if ranks.notna().all():
+        return grouped.assign(_sort=ranks).sort_values('_sort', kind='stable').drop(columns=['_sort'])
+    from services.analysis.topic_kernels import _stage_order
+
+    try:
+        order = _stage_order(df, group_col, '', op='groupby_agg')
+    except UnknownOperationError:
+        # An ordinary group (作者, 城市) has no lifecycle to honour and a name sort IS the answer.
+        return grouped.sort_values(group_col, kind='stable')
+    positions = {str(name): index for index, name in enumerate(order)}
+    unknown = [str(name) for name in values if str(name) not in positions]
+    if unknown:
+        raise UnknownOperationError(
+            t('analysis.stage_order_unranked', op='groupby_agg', col=group_col, stages='、'.join(unknown))
+        )
+    return grouped.assign(_sort=values.map(positions)).sort_values('_sort', kind='stable').drop(columns=['_sort'])

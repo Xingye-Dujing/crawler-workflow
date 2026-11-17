@@ -97,7 +97,10 @@ const AppSettings = {
             } catch (e) {
                 /* Panel just keeps whatever it has; save() reports failures. */
             } finally {
-                this._inflight = null;
+                // Only clear the slot if it is still THIS request: a forced call (or a later
+                // one) replaces `_inflight`, and nulling that would let a third caller start
+                // another fetch while the newer one is still in flight.
+                if (this._inflight === request) this._inflight = null;
             }
         })();
         this._inflight = request;
