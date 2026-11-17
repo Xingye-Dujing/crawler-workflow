@@ -162,3 +162,17 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['approval']['options'] == ['Allow once', 'Allow for this session', 'Deny']
         assert out['approval']['badge'] is True
         assert out['runStatus'] == ['n2', 'n9'], 'a run_status answer did not name its failed node'
+
+    def test_a_reloaded_transcript_keeps_the_error_and_the_question(self):
+        """Both used to live only in the live DOM, so a refresh left a silent gap."""
+        out = _run_workspace()['storedEvidence']
+        assert 'unresolved tool call' in out['error'], out['error']
+        assert out['asked'] == 'Which dataset?', out['asked']
+        assert 'Dataset A' in out['answered'], out['answered']
+
+    def test_the_folder_picker_reaches_the_other_disks(self):
+        out = _run_workspace()['folderPicker']
+        assert out['roots'] == ['C:/', 'D:/'], out['roots']
+        assert out['native'] is True, 'the system dialog button is missing'
+        assert out['opened'] == ['D:/'], out['opened']
+        assert out['picked'] == ['pick'], out['picked']

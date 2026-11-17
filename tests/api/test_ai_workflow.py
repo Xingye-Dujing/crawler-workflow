@@ -456,6 +456,87 @@ def test_apply_workflow_validates_saves_and_asks_the_page_to_load(client, monkey
     assert client.get('/api/workflow/list').get_json()['workflows']
 
 
+class BadDraftProvider(FakeProvider):
+    """Presents an illegal workflow draft, then answers once it has been told why."""
+
+    def __init__(self):
+        super().__init__('fake_bad_draft')
+
+    def stream(self, request):
+        told = any(message.get('role') == 'tool' for message in request.get('messages', []))
+        if not told:
+            yield {
+                'type': 'tool_call',
+                'id': 'call_draft',
+                'name': 'present_artifact',
+                'arguments': {
+                    'title': 'Bad draft',
+                    'kind': 'workflow',
+                    'payload': {'nodes': [{'id': 'n1', 'type': '分析'}]},
+                },
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'text_delta', 'text': 'The draft was refused; here is why.'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
+def test_an_illegal_draft_goes_back_to_the_model_instead_of_ending_the_turn(client, monkeypatch, clean_ai):
+    """A refusal must be the call's tool result, never an AIError.
+
+    Raising ended the turn with the ``tool_use`` unpaired: the user saw “工作流草稿无法载入” and
+    nothing repaired it, and the NEXT message died with the provider's 400 “unresolved tool
+    call”. The model now gets the problems in the same turn and can fix its own draft.
+    """
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_bad_draft', BadDraftProvider())
+    response = _chat(client, provider='fake_bad_draft', model='fake-model', text='build it')
+    data = response.get_json()
+    assert data['ok'] is True
+    events = data['events']
+    refused = [event for event in events if event['type'] == 'tool_result' and event['name'] == 'present_artifact']
+    assert refused and refused[0]['ok'] is False
+    assert '分析' in refused[0]['error']
+    assert not any(event['type'] == 'error' for event in events)
+    types = [event['type'] for event in events]
+    assert 'text' in types and types[-1] == 'done'
+    conversation_id = events[0]['conversation_id']
+    stored = client.get('/api/ai/conversations/' + conversation_id).get_json()
+    assert any(message['role'] == 'tool' and message['meta'].get('is_error') for message in stored['messages'])
+
+
+def test_a_tool_call_left_without_a_result_is_repaired_before_replay():
+    """One crashed turn must not poison the conversation.
+
+    Every provider refuses a later turn whose history holds a ``tool_use`` with no result
+    (DeepSeek: “unresolved tool call”). The repair answers it synthetically and drops tool rows
+    whose call is gone with a skipped assistant row.
+    """
+    from ai.agent import _repair_tool_pairs
+
+    messages = [
+        {'role': 'user', 'content': 'go', 'blocks': [], 'meta': {}},
+        {
+            'role': 'assistant',
+            'content': '',
+            'blocks': [
+                {'type': 'tool_use', 'id': 'call_a', 'name': 'workspace_list', 'input': {}},
+                {'type': 'tool_use', 'id': 'call_b', 'name': 'run_cmd', 'input': {}},
+            ],
+            'meta': {},
+        },
+        {'role': 'tool', 'content': '{}', 'tool_call_id': 'call_a', 'is_error': False, 'meta': {}},
+        {'role': 'tool', 'content': '{}', 'tool_call_id': 'call_ghost', 'is_error': False, 'meta': {}},
+    ]
+    repaired = _repair_tool_pairs(messages)
+    ids = [message.get('tool_call_id') for message in repaired if message['role'] == 'tool']
+    assert sorted(ids) == ['call_a', 'call_b'], 'the unanswered call gets a result, the orphan is dropped'
+    synthetic = next(message for message in repaired if message.get('tool_call_id') == 'call_b')
+    assert synthetic['is_error'] is True
+    assert synthetic['role'] == 'tool'
+
+
 def test_retry_reruns_the_last_turn_without_a_second_user_message(client, fake_ai, clean_ai):
     response = _chat(client, text='try this again')
     conversation_id = response.get_json()['events'][0]['conversation_id']

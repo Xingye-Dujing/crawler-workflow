@@ -177,6 +177,48 @@ class TestWorkspaceApi:
         assert 'workspace' in body
         assert 'folder' in body['workspace']
 
+    def test_browse_names_the_other_roots(self, client, tmp_path):
+        """A picker that only walks down from one drive can never reach another."""
+        listing = client.get('/api/ai/workspace/browse?path=' + str(tmp_path)).get_json()
+        assert listing['ok'] is True
+        assert listing['roots'], 'browse answers the disks/mounts the picker may jump to'
+        assert all(row.get('path') and row.get('name') for row in listing['roots'])
+
+    def test_a_closed_system_dialog_is_a_cancellation_not_an_error(self, client, monkeypatch):
+        import subprocess
+
+        from ai import workspace
+
+        monkeypatch.setattr(workspace.machine, 'folder_dialog_commands', lambda *a, **k: [['picker']])
+        monkeypatch.setattr(workspace.subprocess, 'run', lambda *a, **k: subprocess.CompletedProcess([], 1, b'', b''))
+        body = client.post('/api/ai/workspace/pick', json={}).get_json()
+        assert body['ok'] is True
+        assert body['cancelled'] is True
+
+    def test_a_picked_path_is_answered_normalized(self, client, monkeypatch, tmp_path):
+        import subprocess
+
+        from ai import workspace
+
+        monkeypatch.setattr(workspace.machine, 'folder_dialog_commands', lambda *a, **k: [['picker']])
+        monkeypatch.setattr(
+            workspace.subprocess,
+            'run',
+            lambda *a, **k: subprocess.CompletedProcess([], 0, str(tmp_path).encode(), b''),
+        )
+        body = client.post('/api/ai/workspace/pick', json={'start': str(tmp_path)}).get_json()
+        assert body['ok'] is True
+        assert body['path'] == str(tmp_path)
+        assert body['cancelled'] is False
+
+    def test_a_machine_with_no_dialog_is_refused_by_name(self, client, monkeypatch):
+        from ai import workspace
+
+        monkeypatch.setattr(workspace.machine, 'folder_dialog_commands', lambda *a, **k: [])
+        body = client.post('/api/ai/workspace/pick', json={}).get_json()
+        assert body['ok'] is False
+        assert body['key'] == 'ai.pickUnavailable'
+
     def test_setting_a_folder_round_trips(self, client, tmp_path):
         response = client.post('/api/ai/workspace', json={'path': str(tmp_path)})
         body = response.get_json()

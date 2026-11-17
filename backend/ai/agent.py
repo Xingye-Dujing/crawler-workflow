@@ -875,20 +875,44 @@ class AgentService:
             'payload': args.get('payload') if isinstance(args.get('payload'), dict) else {},
             'summary': str(args.get('summary') or ''),
         }
+        meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
         if artifact['kind'] in ('workflow', 'workflow_draft'):
-            # A draft the canvas cannot load is refused HERE, by name, with the offending node —
-            # applying it used to leave blank boxes and a 500 on every diagnostics poll. Structure
-            # AND the engine's run validation are asked, so "it loads" and "it can run" agree.
+            # A draft the canvas cannot load is refused by name, with the offending node — applying
+            # it used to leave blank boxes and a 500 on every diagnostics poll. Structure AND the
+            # engine's run validation are asked, so "it loads" and "it can run" agree.
+            #
+            # The refusal goes back to the MODEL as this call's tool result, never up as an AIError.
+            # Raising ended the turn with the tool_use unpaired: the user saw “工作流草稿无法载入” and
+            # nothing repaired the draft, and the NEXT message was refused by the provider
+            # (“unresolved tool call”) because that call never got an answer.
             report = workflow_draft.validate(artifact['payload'])
             if not report['ok']:
-                detail = '; '.join((report['structural'] + report['engine'])[:6])
-                raise AIError('ai.workflowDraftInvalid', kind='bad_request', detail=detail)
+                problems = (report['structural'] + report['engine'])[:8]
+                message = t('ai.workflowDraftInvalid', detail='; '.join(problems))
+                store.append_message(
+                    conversation['id'],
+                    'tool',
+                    json.dumps({'ok': False, 'error': message, 'problems': report}, ensure_ascii=False),
+                    status='done',
+                    meta={**meta, 'is_error': True, 'name': 'present_artifact'},
+                )
+                store.add_step(
+                    run_id, t('ai.stepTool', tool='present_artifact'), tool='present_artifact', status='failed'
+                )
+                yield {
+                    'type': 'tool_result',
+                    'id': call['id'],
+                    'name': 'present_artifact',
+                    'ok': False,
+                    'error': message,
+                }
+                return
         store.append_message(
             conversation['id'],
             'tool',
             json.dumps({'ok': True, 'artifact': artifact}, ensure_ascii=False),
             status='done',
-            meta={'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']},
+            meta=meta,
         )
         store.add_step(run_id, artifact['title'], tool='present_artifact', args=artifact, status='done')
         yield {'type': 'artifact', 'artifact': artifact}
@@ -1202,7 +1226,64 @@ def _history(conversation_id: str) -> list:
                     'meta': message.get('meta') or {},
                 }
             )
-    return out
+    return _repair_tool_pairs(out)
+
+
+def _repair_tool_pairs(messages: list) -> list:
+    """Make every ``tool_use`` in the replay have exactly one result, in place.
+
+    A turn can die between “the model asked for a tool” and “the tool answered”: a stop, a
+    crash, a provider fault, an action whose handler raised. The assistant row keeps its
+    ``tool_use`` block, no ``tool`` row follows — and every provider then refuses the NEXT
+    message with 400 “unresolved tool call”, so one failed turn poisoned the whole
+    conversation. The repair answers the missing call with a synthetic result that says it was
+    never completed, and drops a ``tool`` row whose call is not in the history at all (its
+    assistant row was skipped as an error, so the pair can never be completed).
+    """
+    if not messages:
+        return messages
+    known: set[str] = set()
+    for message in messages:
+        if message['role'] != 'assistant':
+            continue
+        for block in message.get('blocks') or ():
+            if block.get('type') == 'tool_use' and block.get('id'):
+                known.add(str(block['id']))
+    answered: set[str] = set()
+    kept: list = []
+    for message in messages:
+        if message['role'] != 'tool':
+            kept.append(message)
+            continue
+        call_id = str(message.get('tool_call_id') or '')
+        # An orphan (no assistant call in this window) or a second answer to one call would both
+        # be refused by the provider; the first real answer is the one that counts.
+        if call_id not in known or call_id in answered:
+            continue
+        answered.add(call_id)
+        kept.append(message)
+    repaired: list = []
+    for message in kept:
+        repaired.append(message)
+        if message['role'] != 'assistant':
+            continue
+        for block in message.get('blocks') or ():
+            if block.get('type') != 'tool_use' or not block.get('id'):
+                continue
+            call_id = str(block['id'])
+            if call_id in answered:
+                continue
+            answered.add(call_id)
+            repaired.append(
+                {
+                    'role': 'tool',
+                    'content': json.dumps({'ok': False, 'error': t('ai.toolUnanswered')}, ensure_ascii=False),
+                    'tool_call_id': call_id,
+                    'is_error': True,
+                    'meta': {'tool_call_id': call_id, 'name': str(block.get('name') or ''), 'is_error': True},
+                }
+            )
+    return repaired
 
 
 def _turn_user(conversation_id: str, turn_id: str) -> dict | None:
@@ -1232,7 +1313,15 @@ def _abandon_pending(conversation_id: str) -> None:
         store.append_message(
             conversation_id,
             'tool',
-            json.dumps({'cancelled': True, 'reason': t('ai.questionUnanswered')}, ensure_ascii=False),
+            json.dumps(
+                {
+                    'cancelled': True,
+                    'tool': 'ask_user_question',
+                    'questions': question.get('questions') or [],
+                    'reason': t('ai.questionUnanswered'),
+                },
+                ensure_ascii=False,
+            ),
             status='done',
             meta={
                 'turn_id': (assistant.get('meta') or {}).get('turn_id') or assistant['id'],

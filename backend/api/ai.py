@@ -586,6 +586,25 @@ def ai_workspace_browse():
     return jsonify({'ok': True, **listing})
 
 
+@bp.route('/api/ai/workspace/pick', methods=['POST'])
+def ai_workspace_pick():
+    """Open the OS's own folder dialog (the panel's walker is for browsers without one).
+
+    A dialog waits for a person, so the call is long; the browser sends the path it is showing so
+    the dialog opens there. Cancelling answers ``cancelled`` — a decision, not an error.
+    """
+    from ai import workspace
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        picked = workspace.pick_folder(str(data.get('start') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, **picked})
+
+
 @bp.route('/api/ai/workflow/validate', methods=['POST'])
 def ai_workflow_validate():
     from ai import workflow_draft

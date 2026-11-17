@@ -49,6 +49,7 @@ BODY_ROUTES = [
     '/api/ai/rerun',
     '/api/ai/workflow/validate',
     '/api/ai/workspace',
+    '/api/ai/workspace/pick',
     '/api/ai/monitors',
     '/api/ai/python/install',
     '/api/ai/python/scripts',

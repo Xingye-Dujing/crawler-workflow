@@ -901,3 +901,96 @@ def venv_python(repo: str, system: str | None = None) -> str:
     if platform_name(system) == 'win32':
         return os.path.join(repo, '.venv', 'Scripts', 'python.exe')
     return os.path.join(repo, '.venv', 'bin', 'python3')
+
+
+# ─── Native folder dialog ───
+
+
+def filesystem_roots(system: str | None = None) -> list[dict]:
+    """Every place a folder picker may START: drive letters, or the mount points this OS uses.
+
+    Windows answers its drive letters; a picker that only walks DOWN from ``C:\\`` can never leave
+    it, because ``dirname('C:\\\\')`` is itself — so every other disk used to be unreachable.
+    macOS mounts disks under ``/Volumes`` and Linux desktops under ``/media`` or ``/mnt``; an
+    unreadable or missing parent is skipped, never guessed.
+    """
+    os_name = platform_name(system)
+    if os_name == 'win32':
+        return _windows_drive_roots()
+    roots = [{'name': '/', 'path': '/'}]
+    seen = {'/'}
+    for parent in ('/Volumes', '/media', '/mnt', '/run/media'):
+        if not os.path.isdir(parent):
+            continue
+        try:
+            with os.scandir(parent) as scan:
+                children = sorted(
+                    (item for item in scan if not item.name.startswith('.')), key=lambda i: i.name.lower()
+                )
+        except OSError:
+            continue
+        for item in children:
+            path = os.path.realpath(item.path)
+            if path in seen or not os.path.isdir(path):
+                continue
+            seen.add(path)
+            roots.append({'name': item.name, 'path': path})
+    return roots
+
+
+def _windows_drive_roots() -> list[dict]:
+    """The drive letters this machine has. The kernel's bitmask is the authority (a mapped
+    network drive is a drive); probing A:…Z: is the fallback, and only a drive that answers
+    ``isdir`` is listed."""
+    letters = ''
+    try:
+        import ctypes
+
+        mask = int(ctypes.windll.kernel32.GetLogicalDrives())  # type: ignore[attr-defined]
+        letters = ''.join(chr(ord('A') + index) for index in range(26) if mask & (1 << index))
+    except (AttributeError, OSError):
+        letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    return [{'name': f'{letter}:', 'path': f'{letter}:\\'} for letter in letters if os.path.isdir(f'{letter}:\\')]
+
+
+def _powershell_literal(text: str) -> str:
+    """One-quoted PowerShell string; a quote inside is doubled, never escaped with a backtick."""
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def _applescript_literal(text: str) -> str:
+    return '"' + str(text).replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def folder_dialog_commands(start: str = '', title: str = '', system: str | None = None) -> list[list[str]]:
+    """The OS's OWN “choose a folder” dialog, as commands whose stdout is the chosen path.
+
+    A list means "try each in order": Linux has no single dialog, so a desktop with neither zenity
+    nor kdialog is refused by the caller rather than left with a button that does nothing. The
+    dialog is a separate process on purpose — the server must not own a GUI event loop, and a
+    packaged build has no interpreter left to run Tk in.
+    """
+    os_name = platform_name(system)
+    if os_name == 'win32':
+        script = (
+            'Add-Type -AssemblyName System.Windows.Forms | Out-Null;'
+            '$d = New-Object System.Windows.Forms.FolderBrowserDialog;'
+            f'$d.Description = {_powershell_literal(title)};'
+            f'$d.SelectedPath = {_powershell_literal(start)};'
+            '$d.ShowNewFolderButton = $true;'
+            'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {'
+            ' [Console]::Out.Write($d.SelectedPath) }'
+        )
+        return [
+            ['powershell', '-NoProfile', '-STA', '-Command', script],
+            ['pwsh', '-NoProfile', '-STA', '-Command', script],
+        ]
+    if os_name == 'darwin':
+        location = f' default location POSIX file {_applescript_literal(start)}' if start else ''
+        script = f'POSIX path of (choose folder with prompt {_applescript_literal(title)}{location})'
+        return [['osascript', '-e', script]]
+    folder_hint = f'{start.rstrip(os.sep)}{os.sep}' if start else ''
+    return [
+        ['zenity', '--file-selection', '--directory', '--title', title, '--filename', folder_hint],
+        ['kdialog', '--getexistingdirectory', start or str(Path.home()), '--title', title],
+    ]

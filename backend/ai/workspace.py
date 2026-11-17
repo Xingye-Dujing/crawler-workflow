@@ -30,6 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from core import machine
 from core.config import Config
 from core.procs import popen_kwargs
 
@@ -187,6 +188,18 @@ def _relative(path: str, kind: str = 'folder') -> str:
     return os.path.relpath(path, root).replace('\\', '/')
 
 
+def volumes() -> list[dict]:
+    """The filesystem's roots: drives on Windows, mounts elsewhere.
+
+    A picker that only walks DOWN from ``C:\\`` can never leave it: ``dirname('C:\\\\')`` is itself,
+    so at the drive root the parent button disappeared and every other disk was unreachable. The
+    list itself is the per-OS table in ``core.machine``; this module only refuses in cloud mode.
+    """
+    if _cloud():
+        return []
+    return machine.filesystem_roots()
+
+
 def browse(path: str = '') -> dict:
     """Directories and files one level down, for the folder picker.
 
@@ -222,9 +235,48 @@ def browse(path: str = '') -> dict:
         'path': current,
         'parent': parent if parent and parent != current else '',
         'entries': entries,
+        'roots': volumes(),
         'home': str(Path.home()),
         'folder': folder(),
     }
+
+
+def pick_folder(start: str = '') -> dict:
+    """Open the OS's own folder dialog and answer the path the user picked.
+
+    The panel's picker walks one directory at a time; the system dialog can jump anywhere, shows
+    mounted disks and remembers recent places. A closed dialog is a decision (``cancelled``), not a
+    failure, and a machine with none of the per-OS dialogs is refused by name.
+    """
+    from i18n import t
+
+    if _cloud():
+        raise AIError('ai.workspaceCloud', kind='capability')
+    hint = os.path.expanduser(str(start or '').strip()) or folder() or str(Path.home())
+    if not os.path.isdir(hint):
+        hint = str(Path.home())
+    timeout = 600
+    for argv in machine.folder_dialog_commands(hint, t('ai.workspace.pickTitle')):
+        try:
+            proc = subprocess.run(argv, capture_output=True, timeout=timeout, check=False, **popen_kwargs())
+        except FileNotFoundError:
+            continue
+        except OSError as exc:
+            raise AIError('ai.pickUnavailable', kind='capability', detail=str(exc)[:160]) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise AIError('ai.pickTimeout', kind='error', seconds=timeout) from exc
+        # Every one of these dialogs exits non-zero when the user closes it (zenity/kdialog 1,
+        # osascript -128); that is a choice, so it is reported, never raised.
+        if proc.returncode != 0:
+            return {'path': '', 'cancelled': True}
+        picked = _decode(proc.stdout or b'').strip().strip('"')
+        if not picked:
+            return {'path': '', 'cancelled': True}
+        resolved = os.path.realpath(picked)
+        if not os.path.isdir(resolved):
+            raise AIError('ai.workspaceNotFound', kind='not_found', path=picked)
+        return {'path': resolved, 'cancelled': False}
+    raise AIError('ai.pickUnavailable', kind='capability', detail='no system folder dialog')
 
 
 def snapshot(limit: int = 40) -> str:

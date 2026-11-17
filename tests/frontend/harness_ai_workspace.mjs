@@ -242,4 +242,65 @@ out.cards = {
     },
 };
 
+/* A reloaded transcript must keep WHAT FAILED and WHAT WAS ASKED. Both lived only in the live
+   DOM: the stored assistant row carries meta.error, and an answered question's tool row carries
+   the questions. Reopening a conversation used to show a silent gap in their place. */
+workspace._messages = [
+    {
+        id: 'm1',
+        role: 'assistant',
+        status: 'error',
+        blocks: [{ type: 'text', text: 'partial answer' }],
+        meta: { error: '供应商拒绝了请求（400）：unresolved tool call' },
+        usage: {},
+    },
+    {
+        id: 'm2',
+        role: 'tool',
+        content: JSON.stringify({
+            tool: 'ask_user_question',
+            questions: [{ id: 'q1', question: 'Which dataset?', header: 'Scope' }],
+            answers: [{ id: 'q1', selected: ['Dataset A'] }],
+        }),
+        meta: {},
+    },
+];
+workspace._renderMessages([]);
+const errorRow = workspace._dom.chat.querySelectorAll('.ai-error-text')[0];
+const askedRow = workspace._dom.chat.querySelectorAll('.ai-question-text')[0];
+const answeredRow = workspace._dom.chat.querySelectorAll('.ai-question-answered')[0];
+out.storedEvidence = {
+    error: errorRow ? String(errorRow.textContent) : '',
+    asked: askedRow ? String(askedRow.textContent) : '',
+    answered: answeredRow ? String(answeredRow.textContent) : '',
+};
+
+/* The folder picker must name the OTHER disks and offer the system dialog: walking down from one
+   drive could never leave it (`dirname('C:\\')` is itself, so Up vanished at the root). */
+workspace._folderState = {
+    path: 'D:/work',
+    parent: '',
+    folder: '',
+    roots: [
+        { name: 'C:', path: 'C:/' },
+        { name: 'D:', path: 'D:/' },
+    ],
+    entries: [{ name: 'data', path: 'D:/work/data', dir: true }],
+};
+workspace._renderFolder();
+const rootButtons = workspace._dom.folderDialog.querySelectorAll('[data-ai-folder-root]');
+const nativeButton = workspace._dom.folderDialog.querySelectorAll('[data-ai-folder-native]')[0];
+const openedPaths = [];
+workspace._openFolder = async (path) => openedPaths.push(path);
+const pickedNative = [];
+workspace._pickNativeFolder = async () => pickedNative.push('pick');
+dispatchOn(workspace._dom.root, 'click', { target: rootButtons[1] });
+dispatchOn(workspace._dom.root, 'click', { target: nativeButton });
+out.folderPicker = {
+    roots: rootButtons.map((el) => el.getAttribute('data-ai-folder-root')),
+    native: !!nativeButton,
+    opened: openedPaths,
+    picked: pickedNative,
+};
+
 fs.writeFileSync(1, JSON.stringify(out));

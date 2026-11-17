@@ -46,3 +46,28 @@ def test_a_non_object_json_body_is_a_clean_refusal(client):
     # as "no fields" — that is the case _json_body guards against.
     r = client.post('/api/workflow/diagnostics', json=[1, 2])
     assert r.status_code == 400
+
+
+def test_a_node_whose_params_are_a_sentence_answers_instead_of_500(client):
+    """The crash that blanked every badge: `node_params` assumed an object.
+
+    ``upload.emit_columns`` read ``node_params(node).get('dataset_id')`` and an AI-written
+    ``"params": "去重，按评论内容"`` made it raise AttributeError — an HTML 500 the canvas cannot
+    parse, so every column badge silently disappeared. The shape is now a per-node problem the
+    badge shows, and the rest of the graph is still answered.
+    """
+    body = {
+        'nodes': {
+            'u': {'id': 'u', 'type': 'upload', 'params': '去重，按评论内容'},
+            'a': {'id': 'a', 'type': 'analysis', 'params': {'steps': [{'op': 'topic_map', 'column': '正文'}]}},
+        },
+        'connections': [{'from': 'u', 'to': 'a'}],
+        'settings': {},
+    }
+    response = client.post('/api/workflow/diagnostics', json=body)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['ok'] is True
+    assert data['columns']['u'] is None
+    assert data['columns']['a'] == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
+    assert data['problems']['u'][0]['code'] == 'params_shape'

@@ -55,11 +55,20 @@ def node_operation(node: dict) -> str:
     A node keeps ``operation`` beside the node itself or inside ``params`` depending on how it was
     built; the column contract keys on it either way.
     """
-    return str(node.get('operation') or (node.get('params') or {}).get('operation') or '')
+    return str(node.get('operation') or node_params(node).get('operation') or '')
 
 
 def node_params(node: dict) -> dict:
-    return node.get('params') or {}
+    """A node's params as a mapping — the ONE reader for a file whose params are not an object.
+
+    An AI-written or hand-edited workflow can carry ``"params": "去重，按评论内容"`` (a sentence,
+    not an object). Assuming a dict made the first ``.get`` raise ``AttributeError: 'str' object
+    has no attribute 'get'`` inside ``/api/workflow/diagnostics`` — an HTML 500 the canvas cannot
+    parse, so every column badge vanished. The invalid shape is refused where it is reported
+    (``validate_workflow`` / ``workflow_draft.problems``), not mid-computation.
+    """
+    params = node.get('params') if isinstance(node, dict) else None
+    return params if isinstance(params, dict) else {}
 
 
 def columns_from_params(params: dict, names) -> list[str]:

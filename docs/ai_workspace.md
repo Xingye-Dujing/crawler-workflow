@@ -114,7 +114,11 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   `workflow_apply` 事件给页面；页面用真实 `workflow.loadFromJSON()` 载入，`run=true` 时接着走正常 Run 通道。
   失败时页面把原因作为“自动反馈”消息送回 AI，让它改完再试。
 - **工作文件夹**：`ai/workspace.py`，每账号存在 `ai.db` 的 `prefs` 表；所有路径解析后必须留在根内，
-  `..`/绝对路径/越界符号链接按名字拒绝。页面顶栏 chip 打开目录选择器（服务端 `/api/ai/workspace/browse`）。
+  `..`/绝对路径/越界符号链接按名字拒绝。页面顶栏 chip 打开目录选择器（服务端 `/api/ai/workspace/browse`）；
+  选择器顶部列出本机**所有磁盘/挂载点**（`core.machine.filesystem_roots`，Windows 盘符、macOS `/Volumes`、
+  Linux `/media` `/mnt`），所以文件夹不限于系统盘。`POST /api/ai/workspace/pick` 用**系统自带**的文件夹
+  对话框（Windows PowerShell `FolderBrowserDialog`、macOS `osascript`、Linux `zenity`/`kdialog`）选完即设为
+  工作文件夹；关掉窗口算取消，机器上没有任何一个对话框时按名拒绝（`ai.pickUnavailable`），云端不提供。
 - **本地文件 → 数据集 / Python / 命令**：`workspace_import` 走上传面板同一套解析器；`run_cmd` 不是 shell，
   只接受白名单可执行文件、无管道/重定向、超时与输出上限，工作目录为所选文件夹（未选时用仓库根/安装根）。
 - **反馈闭环**：`app_errors` 读后端 `logs/app.log` 尾部 + 最近失败/部分完成运行的节点错误与控制台；
@@ -185,7 +189,8 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | POST | `/api/ai/stop` | 取消事件 |
 | POST | `/api/ai/context` | 上下文预览 |
 | GET/POST | `/api/ai/workspace` | 工作文件夹状态 / 设置 |
-| GET | `/api/ai/workspace/browse` | 目录选择器（只列目录） |
+| GET | `/api/ai/workspace/browse` | 目录选择器（只列目录，附本机磁盘/挂载点 `roots`） |
+| POST | `/api/ai/workspace/pick` | 调起系统文件夹对话框，返回所选路径或 `cancelled` |
 | POST | `/api/ai/workflow/validate` | 工作流草案的结构 + 引擎校验 |
 | POST | `/api/ai/rerun` | 从已保存文件重跑一个失败节点及其下游（失败节点卡片的按钮） |
 | GET | `/api/ai/usage` | 本账号 token 汇总 |

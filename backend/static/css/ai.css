@@ -1806,3 +1806,29 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+
+/* The other disks. One row of chips, wrapping; the current root is marked, never hidden. */
+.ai-folder-roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 0 6px;
+}
+.ai-folder-root {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.ai-folder-root:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.ai-folder-root.is-current {
+  color: var(--accent);
+  border-color: var(--accent);
+}

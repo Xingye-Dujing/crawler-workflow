@@ -19,6 +19,9 @@
    ``missingColumnProblems`` does for a missing column. ``field`` is a label key the
    settings panel already displays, so the message names the box the user is looking at. */
 function analysisParamMessage(title, problem) {
+    if (problem.code === 'params_shape') {
+        return I18n.t('validate.paramsShape').replace('{title}', title);
+    }
     var op = I18n.t('op.' + problem.op);
     if (problem.code === 'steps_shape') {
         return I18n.t('validate.analysisStepsShape').replace('{title}', title);

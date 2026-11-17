@@ -927,17 +927,55 @@ const AIWorkspace = {
                 '<span class="ai-folder-name">' + AIRender.escape(row.name) + '</span></button>'
             ).join('')
             : '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.empty')) + '</div>';
+        /* The roots are the OTHER disks. Walking down from one drive could never reach another
+           (`dirname('C:\\')` is itself, so the Up button vanished at the root), which made every
+           folder outside C: unreachable from this panel. The server answers the list per OS. */
+        const roots = state.roots || [];
+        const rootRow = roots.length > 1
+            ? '<div class="ai-folder-roots">' + roots.map((root) =>
+                '<button type="button" class="ai-folder-root' +
+                (String(root.path) === String(state.path) ? ' is-current' : '') +
+                '" data-ai-folder-root="' + AIRender.escape(root.path) + '">' +
+                AIRender.escape(root.name) + '</button>'
+            ).join('') + '</div>'
+            : '';
         host.innerHTML =
             '<div class="ai-folder-head">' + AIRender.escape(I18n.t('ai.workspace.title')) + '</div>' +
+            rootRow +
             '<div class="ai-folder-path" title="' + AIRender.escape(state.path) + '">' + AIRender.escape(state.path) + '</div>' +
             '<div class="ai-folder-list">' + list + '</div>' +
             '<div class="ai-folder-actions">' +
             (state.parent ? '<button type="button" class="ai-ghost" data-ai-folder-open="' + AIRender.escape(state.parent) + '">' + AIRender.escape(I18n.t('ai.workspace.up')) + '</button>' : '') +
+            '<button type="button" class="ai-ghost" data-ai-folder-native="1">' + AIRender.escape(I18n.t('ai.workspace.native')) + '</button>' +
             '<button type="button" class="ai-primary" data-ai-folder-use="' + AIRender.escape(state.path) + '">' + AIRender.escape(I18n.t('ai.workspace.use')) + '</button>' +
             (this._workspace().folder ? '<button type="button" class="ai-ghost" data-ai-folder-clear="1">' + AIRender.escape(I18n.t('ai.workspace.clear')) + '</button>' : '') +
             '<button type="button" class="ai-ghost" data-ai-folder-close="1">' + AIRender.escape(I18n.t('ai.workspace.close')) + '</button>' +
             '</div>' +
             '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.hint')) + '</div>';
+    },
+
+    /* The OS's own dialog: it can jump to any disk, remembers recent places and shows network
+       drives. The server opens it in a child process, so this request waits until the user picks. */
+    async _pickNativeFolder() {
+        const host = this._dom.folderDialog;
+        if (!host) return;
+        host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.pickWaiting')) + '</div>';
+        try {
+            const response = await fetch('/api/ai/workspace/pick', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start: (this._folderState && this._folderState.path) || '' }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
+            if (data.cancelled || !data.path) {
+                this._renderFolder();
+                return;
+            }
+            await this._setFolder(data.path);
+        } catch (error) {
+            host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.failed', { detail: error.message })) + '</div>';
+        }
     },
 
     async _setFolder(path) {
@@ -1236,7 +1274,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1334,6 +1372,14 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-folder-open')) {
             this._openFolder(target.getAttribute('data-ai-folder-open'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-root')) {
+            this._openFolder(target.getAttribute('data-ai-folder-root'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-native')) {
+            this._pickNativeFolder();
             return;
         }
         if (target.hasAttribute('data-ai-folder-use')) {
@@ -1584,6 +1630,10 @@ const AIWorkspace = {
         if (!this._dom.chat) return;
         this._mode = 'chat';
         this._dom.chat.innerHTML = '';
+        /* The live turn's element lived in the DOM just wiped. Keeping the pointer made a pending
+           question paint into a DETACHED node — the card was built and never visible, which reads
+           as “my question disappeared after the reload”. */
+        this._current = null;
         if (!this._messages.length) {
             this._renderWelcome();
             return;
@@ -1607,11 +1657,18 @@ const AIWorkspace = {
 
     _renderStoredAssistant(message) {
         const blocks = message.blocks || [];
+        const meta = message.meta || {};
+        const error = String(meta.error || '');
         const el = document.createElement('article');
         el.className = 'ai-message assistant';
+        if (message.id) el.setAttribute('data-ai-message', message.id);
         el.innerHTML =
             '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div><div class="ai-message-body">' +
             '<div class="ai-flow">' + AIRender.assistantFlow(blocks) + '</div>' +
+            /* A turn that ENDED in an error is part of the transcript: the reason was painted into
+               this page once and then lost on every reload, so a user reopening the conversation
+               saw a silent gap where the provider had said exactly what was wrong. */
+            (error ? '<div class="ai-error-text">' + AIRender.escape(error) + '</div>' : '') +
             '<div class="ai-usage">' + AIRender.usage(message.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
             '<button type="button" class="ai-ghost" data-ai-copy-answer="1">' + AIRender.escape(I18n.t('ai.copyAnswer')) + '</button>' +
@@ -1628,23 +1685,37 @@ const AIWorkspace = {
         } catch (e) {
             /* plain text tool output is shown verbatim */
         }
-        /* An answered question is its own row: the choice is part of the transcript, not only of
-           a request that already finished. */
+        /* An answered (or abandoned) question is its own row: what was ASKED and what was
+           ANSWERED are both part of the transcript, so a reload must not reduce it to a bare
+           “answered” line — the question text used to vanish with the live card. */
         const answers = payload && Array.isArray(payload.answers) ? payload.answers : null;
-        if (answers && payload.tool === 'ask_user_question') {
-            const chosen = answers.flatMap((item) => (item && item.selected) || []).filter(Boolean).join(', ');
-            if (chosen) {
-                const question = (payload.questions || []).find((item) => item && item.kind === 'approval') || {};
-                const picked = (question.options || []).find((option) => option && option.label === chosen) || {};
-                const approval = !!question.kind;
-                const el = document.createElement('div');
-                el.className = 'ai-question-answered';
-                el.textContent = String(picked.value || '') === 'deny'
-                    ? I18n.t('ai.approvalDenied')
-                    : (approval ? I18n.t('ai.approvalAnswered') : I18n.t('ai.questionAnswered')) + ': ' + chosen;
-                this._dom.chat.appendChild(el);
-                return;
+        const cancelled = !!(payload && payload.cancelled);
+        if ((answers || cancelled) && payload.tool === 'ask_user_question') {
+            const chosen = answers ? answers.flatMap((item) => (item && item.selected) || []).filter(Boolean).join(', ') : '';
+            const asked = (payload.questions || []).filter((item) => item && item.question);
+            const approval = asked.some((item) => String(item.kind || '') === 'approval');
+            let picked = {};
+            if (approval) {
+                const question = asked.find((item) => String(item.kind || '') === 'approval') || {};
+                picked = (question.options || []).find((option) => option && option.label === chosen) || {};
             }
+            const el = document.createElement('section');
+            el.className = 'ai-question' + (approval ? ' ai-question-approval' : '');
+            const lines = asked.map((item) => '<p class="ai-question-text">' + AIRender.escape(String(item.question)) + '</p>');
+            let verdict = I18n.t('ai.questionUnansweredRow');
+            if (cancelled) verdict = I18n.t('ai.questionCancelled');
+            else if (String(picked.value || '') === 'deny') verdict = I18n.t('ai.approvalDenied');
+            else if (chosen) {
+                verdict = (approval ? I18n.t('ai.approvalAnswered') : I18n.t('ai.questionAnswered')) + ': ' + chosen;
+            }
+            el.innerHTML =
+                '<div class="ai-question-head"><span class="ai-dot"></span>' +
+                AIRender.escape((asked[0] && asked[0].header) || I18n.t('ai.questionTitle')) +
+                '</div>' +
+                lines.join('') +
+                '<div class="ai-question-answered">' + AIRender.escape(verdict) + '</div>';
+            this._dom.chat.appendChild(el);
+            return;
         }
         const artifact = payload && payload.artifact;
         if (artifact) {

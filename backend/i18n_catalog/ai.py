@@ -78,6 +78,12 @@ ZH = {
     'ai.workspaceUnsupported': '不支持把这个文件导入为数据集：{name}',
     'ai.workspaceParseFailed': '无法解析 {name}：{detail}',
     'ai.workspaceMultiSheet': '“{name}”有多个工作表（{sheets}），请指明要哪一个，或先另存为单表。',
+    'ai.workspace.pickTitle': '选择 AI 工作文件夹',
+    'ai.pickUnavailable': (
+        '这台机器没有可用的系统文件夹窗口（Windows 用 PowerShell，macOS 用 osascript，'
+        'Linux 用 zenity 或 kdialog）。请在上方列表里逐层选择。'
+    ),
+    'ai.pickTimeout': '系统文件夹窗口超过 {seconds} 秒没有返回，已放弃；需要的话再点一次。',
     'ai.cmdEmpty': '命令是空的。',
     'ai.cmdShellRefused': '这里不是 shell，不能使用管道/重定向/串联（{detail}）。一次只跑一个程序。',
     'ai.cmdUnparsable': '命令无法解析：{detail}',
@@ -89,6 +95,9 @@ ZH = {
     'ai.noKey': '这个供应商需要 API Key，先在 AI 设置里填写。',
     'ai.capabilityRefused': '{provider} 的 {model} 不支持“{capability}”；没有静默降级。',
     'ai.toolFailed': '工具执行失败：{detail}',
+    'ai.toolUnanswered': (
+        '这次工具调用没有执行完（会话被停止、刷新或服务中断），没有结果。请重新调用，或告诉我该怎么做。'
+    ),
     'ai.toolBudgetHeader': '工具调用预算',
     'ai.toolBudgetQuestion': '本轮已经执行了 {rounds} 次工具调用，达到了当前上限。要继续吗？',
     'ai.toolBudgetContinue': '继续',
@@ -248,6 +257,12 @@ EN = {
     'ai.workspaceUnsupported': 'This file cannot be imported as a dataset: {name}',
     'ai.workspaceParseFailed': 'Could not parse {name}: {detail}',
     'ai.workspaceMultiSheet': '“{name}” has several sheets ({sheets}). Name the one to import, or save it as one.',
+    'ai.workspace.pickTitle': 'Choose the AI working folder',
+    'ai.pickUnavailable': (
+        'This machine has no usable system folder window (PowerShell on Windows, osascript on macOS, '
+        'zenity or kdialog on Linux). Walk the list above instead.'
+    ),
+    'ai.pickTimeout': 'The system folder window did not answer within {seconds} seconds; try again if you need it.',
     'ai.cmdEmpty': 'The command is empty.',
     'ai.cmdShellRefused': 'This is not a shell: no pipes, redirection or chaining ({detail}). One program at a time.',
     'ai.cmdUnparsable': 'The command could not be parsed: {detail}',
@@ -263,6 +278,10 @@ EN = {
         '{provider} model {model} does not support “{capability}”; nothing was silently downgraded.'
     ),
     'ai.toolFailed': 'The tool failed: {detail}',
+    'ai.toolUnanswered': (
+        'This tool call never finished (the turn was stopped, the page reloaded or the server '
+        'restarted), so it has no result. Call it again, or tell me what to do instead.'
+    ),
     'ai.toolBudgetHeader': 'Tool budget',
     'ai.toolBudgetQuestion': 'This turn has made {rounds} tool calls and reached the current budget. Continue?',
     'ai.toolBudgetContinue': 'Continue',
