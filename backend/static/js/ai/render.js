@@ -287,9 +287,14 @@ const AIRender = {
                 const nameKey = 'ai.skill.' + id + '.name';
                 const label = I18n.has(nameKey) ? I18n.t(nameKey) : id;
                 const reason = String(block.reason || '');
-                const why = reason === 'auto'
-                    ? I18n.t('ai.skillAuto')
-                    : (I18n.has('ai.skill.' + reason + '.name') ? I18n.t('ai.skill.' + reason + '.name') : '');
+                /* Three distinct facts: auto-routed, chosen by the user, or authored by the model.
+                   Printing the skill's own name as its "reason" (`画布建构师 · 画布建构师`) said
+                   nothing; the block carries which of the three it was. */
+                let why = '';
+                if (reason === 'auto') why = I18n.t('ai.skillAuto');
+                else if (reason && reason !== id && reason !== label) {
+                    why = I18n.has('ai.skill.' + reason + '.name') ? I18n.t('ai.skill.' + reason + '.name') : reason;
+                } else if (reason) why = I18n.t('ai.skillManual');
                 parts.push(
                     '<div class="ai-skill-row"><span class="ai-skill-kind">' + this.escape(I18n.t('ai.skillRow')) + '</span>' +
                     '<span class="ai-skill-name">' + this.escape(label) + '</span>' +

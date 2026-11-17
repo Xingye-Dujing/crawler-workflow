@@ -181,7 +181,8 @@ class AgentService:
         conversation = store.get_conversation(conversation_id) if conversation_id else None
         if conversation is None:
             conversation = store.create_conversation(provider_id, model, str(payload.get('skill') or 'auto'))
-        skill_id = str(payload.get('skill') or 'auto')
+        requested_skill = str(payload.get('skill') or 'auto')
+        skill_id = requested_skill
         agent_mode = 'plan' if str(payload.get('agent_mode') or '').lower() == 'plan' else 'build'
         if skill_id == 'auto':
             skill_id = skills.route(text, str((payload.get('context') or {}).get('page') or ''))
@@ -208,6 +209,7 @@ class AgentService:
             context_text = f'{context_text}\n\n{references_text}'.strip()
         skill_meta = {
             'skill': skill.id,
+            'skill_reason': requested_skill,
             'provider': provider_id,
             'model': model,
             'thinking': thinking,
@@ -283,7 +285,7 @@ class AgentService:
             conversation=conversation,
             turn_id=turn_id,
             skill=skill,
-            skill_reason=skill_id,
+            skill_reason=requested_skill,
             provider=provider,
             model=model,
             api_key=api_key,
@@ -327,7 +329,7 @@ class AgentService:
             conversation=conversation,
             turn_id=user['id'],
             skill=skill,
-            skill_reason=str(meta.get('skill') or skill.id),
+            skill_reason=str(meta.get('skill_reason') or meta.get('skill') or skill.id),
             provider=provider,
             model=model,
             api_key=api_key,
@@ -396,7 +398,7 @@ class AgentService:
             conversation=store.get_conversation(conversation_id) or {},
             turn_id=(assistant.get('meta') or {}).get('turn_id') or user['id'],
             skill=skill,
-            skill_reason=meta.get('skill') or skill.id,
+            skill_reason=meta.get('skill_reason') or meta.get('skill') or skill.id,
             provider=provider,
             model=model,
             api_key=api_key,
