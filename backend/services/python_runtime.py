@@ -282,6 +282,7 @@ def run_code(
     cancel_event=None,
     max_rows: int = MAX_OUTPUT_ROWS,
     label: str = 'script',
+    scope: str = '',
 ) -> dict:
     """Run *code* against *rows*; return ``{rows, stdout, stderr, duration_ms, ...}``."""
     from ai.errors import AIError
@@ -334,8 +335,9 @@ def run_code(
             # The interpreter probed a second ago, so the OS is answering about the spawn itself.
             # The old code reported "no Python" here, which is a different fact and a wrong fix.
             raise AIError('ai.pythonSpawnFailed', kind='capability', detail=str(exc)[:200]) from exc
-        # A script can loop for minutes; the panel must be able to name it and stop it.
-        process_id = processes.register('python', ' '.join(command), proc)
+        # A script can loop for minutes; the panel must be able to name it and stop it, and the
+        # conversation that asked for it owns it (a chat that ends takes it down).
+        process_id = processes.register('python', ' '.join(command), proc, scope=scope)
         readers = [
             threading.Thread(target=_pump, args=(proc.stdout, sinks[0]), daemon=True),
             threading.Thread(target=_pump, args=(proc.stderr, sinks[1]), daemon=True),

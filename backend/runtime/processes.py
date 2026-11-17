@@ -25,8 +25,13 @@ _SEQ = 0
 GRACE = 1.5
 
 
-def register(kind: str, command: str, proc, owner: str = '') -> str:
-    """Track ``proc`` under the calling account. Returns the id the panel will use."""
+def register(kind: str, command: str, proc, owner: str = '', scope: str = '') -> str:
+    """Track ``proc`` under the calling account. Returns the id the panel will use.
+
+    ``scope`` is the conversation that asked for it: a conversation that ends (停止, 删除) must take
+    everything it started with it, so a batch job cannot keep burning the machine after its chat is
+    gone.
+    """
     global _SEQ
     with _LOCK:
         _SEQ += 1
@@ -37,6 +42,7 @@ def register(kind: str, command: str, proc, owner: str = '') -> str:
             'command': str(command or '')[:300],
             'pid': int(getattr(proc, 'pid', 0) or 0),
             'owner': str(owner if owner else account_context.scope_key()),
+            'scope': str(scope or ''),
             'started': time.time(),
             'proc': proc,
         }
@@ -109,6 +115,29 @@ def stop(ident: str, owner: str | None = None) -> tuple[str, str]:
         # A child that exited on its own is not a failure: the reap says "no such process".
         return ('gone', '') if not _alive(row) else ('gone', reason)
     return 'stopped', ''
+
+
+def stop_scope(scope: str, owner: str | None = None) -> int:
+    """Stop every child one conversation started; returns how many were asked to stop.
+
+    Called when the conversation ends — 停止, 删除 — so a command or script it launched cannot keep
+    running (and spending) after the chat that owns it is gone.
+    """
+    key = str(scope or '')
+    if not key:
+        return 0
+    with _LOCK:
+        targets = [
+            ident
+            for ident, row in _ROWS.items()
+            if row.get('scope') == key and (owner is None or row.get('owner') == owner)
+        ]
+    stopped = 0
+    for ident in targets:
+        status, _reason = stop(ident, owner)
+        if status == 'stopped':
+            stopped += 1
+    return stopped
 
 
 def reset_for_tests() -> None:

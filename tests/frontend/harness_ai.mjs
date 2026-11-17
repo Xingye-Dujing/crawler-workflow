@@ -73,6 +73,11 @@ const out = {
     escapedScript: sandbox.AIRender.markdown('<script>alert(1)</script>'),
     escapedLink: sandbox.AIRender.markdown('[x](javascript:alert(1))'),
     safeLink: sandbox.AIRender.markdown('[ok](https://example.com/a)'),
+    /* A pipe inside inline code and an escaped pipe are CELLS, not column breaks. This is the row
+       that used to render as two extra cells with a stray "连接，groupby_agg` 不会展开". */
+    tablePipes: sandbox.AIRender.markdown(
+        '| 步骤 | 做法 |\n| --- | --- |\n| 图 7 | 多重编码用 `a|b` 连接 |\n| 图 8 | 用 \\| 连接，`groupby_agg` 不会展开 |\n'
+    ),
     question: sandbox.AIRender.questionCard({ id: 'q1', question: 'Pick <b>', options: [{ label: 'A' }] }, false),
     artifact: sandbox.AIRender.artifactCard({ id: 'a1', title: 'Draft', kind: 'workflow_draft', payload: { nodes: [] } }),
     runtimeTitle: workspace._runtimeTitle(),

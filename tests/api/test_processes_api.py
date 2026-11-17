@@ -13,6 +13,14 @@ import pytest
 pytestmark = pytest.mark.api
 
 
+@pytest.fixture
+def clean_ai():
+    from ai import store
+
+    store.mark_interrupted()
+    yield
+
+
 def _spawn(seconds: float = 30) -> subprocess.Popen:
     return subprocess.Popen(
         [sys.executable, '-c', f'import time; time.sleep({seconds})'],
@@ -120,6 +128,49 @@ class TestProcessesApi:
         child.wait(timeout=10)
         body = client.post(f'/api/processes/{ident}/stop').get_json()
         assert body['ok'] is True and body['stopped'] is False
+
+
+class TestScope:
+    """A conversation owns what it started: 停止 or 删除 takes the children with it."""
+
+    def test_stop_scope_only_takes_that_conversations_children(self):
+        from runtime import processes
+
+        first = _spawn()
+        second = _spawn()
+        try:
+            processes.register('cmd', 'chat a', first, scope='c_a')
+            b = processes.register('cmd', 'chat b', second, scope='c_b')
+            assert processes.stop_scope('c_a') == 1
+            first.wait(timeout=10)
+            assert first.poll() is not None
+            assert second.poll() is None, 'another conversation lost its child'
+            assert [row['id'] for row in processes.rows()] == [b]
+        finally:
+            processes.stop_scope('c_b')
+
+    def test_the_stop_route_ends_the_conversations_children(self, client):
+        from runtime import processes
+
+        child = _spawn()
+        processes.register('cmd', 'chat batch', child, scope='c_stop')
+        body = client.post('/api/ai/stop', json={'conversation_id': 'c_stop'}).get_json()
+        assert body['ok'] is True
+        assert body['stopped_processes'] == 1
+        child.wait(timeout=10)
+        assert child.poll() is not None
+
+    def test_deleting_a_conversation_stops_its_children(self, client, clean_ai):
+        from ai import store
+        from runtime import processes
+
+        conversation = store.create_conversation('deepseek', 'deepseek-flash', 'auto')
+        child = _spawn()
+        processes.register('cmd', 'orphan batch', child, scope=conversation['id'])
+        body = client.delete('/api/ai/conversations/' + conversation['id']).get_json()
+        assert body['ok'] is True and body['stopped_processes'] == 1
+        child.wait(timeout=10)
+        assert child.poll() is not None
 
 
 def test_the_registry_forgets_nothing_that_still_runs():

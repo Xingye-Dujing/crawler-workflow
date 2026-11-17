@@ -394,7 +394,7 @@ def tool_python_save_script(args: dict, _ctx: dict) -> dict:
     return {'script': python_scripts.save_script(args)}
 
 
-def tool_python_run(args: dict, _ctx: dict) -> dict:
+def tool_python_run(args: dict, ctx: dict) -> dict:
     _python_ready()
     from services import python_runtime, python_scripts
 
@@ -410,6 +410,7 @@ def tool_python_run(args: dict, _ctx: dict) -> dict:
         timeout=_int_arg(args.get('timeout'), 120, 1, 3600),
         max_rows=_int_arg(args.get('max_rows'), 1000, 1, python_runtime.MAX_OUTPUT_ROWS),
         label=str((script or {}).get('name') or 'inline'),
+        scope=str((ctx or {}).get('conversation_id') or ''),
     )
     # The AI gets the shape and a sample, not the whole table: a node run keeps every row, but a
     # conversation turn only needs to know whether the script worked and what its output looks like.
@@ -554,7 +555,7 @@ def tool_workspace_import(args: dict, _ctx: dict) -> dict:
     return workspace.import_table(str(args.get('path') or ''), str(args.get('name') or ''))
 
 
-def tool_run_command(args: dict, _ctx: dict) -> dict:
+def tool_run_command(args: dict, ctx: dict) -> dict:
     _files_ready()
     from ai import workspace
 
@@ -562,6 +563,7 @@ def tool_run_command(args: dict, _ctx: dict) -> dict:
         str(args.get('command') or ''),
         cwd=str(args.get('cwd') or ''),
         timeout=_int_arg(args.get('timeout'), 120, 1, workspace.MAX_TIMEOUT),
+        scope=str((ctx or {}).get('conversation_id') or ''),
     )
 
 
@@ -1089,7 +1091,9 @@ TOOLS = {
             'run_cmd',
             'Run ONE allow-listed executable in the working folder (or the app root when no folder is '
             'chosen). No shell, no pipes, no chaining; args are passed as a list. Returns exit code, '
-            'stdout and stderr — use it to run a saved script, git status or a test.',
+            'stdout and stderr — use it to run a saved script, git status or a test. This call WAITS for '
+            'the process: pass timeout (up to 600) for a batch job, and make the script print progress so '
+            'the run is visibly alive.',
             {
                 'type': 'object',
                 'properties': {

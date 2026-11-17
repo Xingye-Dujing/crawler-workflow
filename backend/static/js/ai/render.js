@@ -27,6 +27,39 @@ const AIRender = {
         return out;
     },
 
+    /* Split one table row into cells. Two things are NOT column breaks:
+       - a `|` inside inline code (`` `a|b` ``), which a model writes all the time when naming a
+         pipe-joined value;
+       - an escaped `\|`, Markdown's own way to keep a literal pipe in a cell.
+       Without this, one cell became two and the rest of the row shifted. */
+    tableCells(line) {
+        const body = String(line || '').slice(1, -1);
+        const cells = [];
+        let current = '';
+        let inCode = false;
+        for (let index = 0; index < body.length; index += 1) {
+            const ch = body[index];
+            if (ch === '\\' && body[index + 1] === '|') {
+                current += '|';
+                index += 1;
+                continue;
+            }
+            if (ch === '`') {
+                inCode = !inCode;
+                current += ch;
+                continue;
+            }
+            if (ch === '|' && !inCode) {
+                cells.push(current.trim());
+                current = '';
+                continue;
+            }
+            current += ch;
+        }
+        cells.push(current.trim());
+        return cells;
+    },
+
     markdown(text) {
         const source = String(text || '');
         const parts = [];
@@ -75,8 +108,17 @@ const AIRender = {
         };
         const closeTable = () => {
             if (table) {
+                /* A table is RECTANGULAR: a row with one cell too few/too many used to shift every
+                   following column. Rows are padded/trimmed to the header's width. */
+                const width = table.head.length;
                 const head = '<thead><tr>' + table.head.map((cell) => '<th>' + this.inline(cell) + '</th>').join('') + '</tr></thead>';
-                const body = '<tbody>' + table.rows.map((row) => '<tr>' + row.map((cell) => '<td>' + this.inline(cell) + '</td>').join('') + '</tr>').join('') + '</tbody>';
+                const body = '<tbody>' + table.rows
+                    .map((row) => {
+                        const cells = row.slice(0, width);
+                        while (cells.length < width) cells.push('');
+                        return '<tr>' + cells.map((cell) => '<td>' + this.inline(cell) + '</td>').join('') + '</tr>';
+                    })
+                    .join('') + '</tbody>';
                 out.push('<div class="ai-table-wrap"><table class="ai-table">' + head + body + '</table></div>');
                 table = null;
             }
@@ -90,7 +132,7 @@ const AIRender = {
             }
             if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
                 closeList();
-                const cells = trimmed.slice(1, -1).split('|').map((cell) => cell.trim());
+                const cells = this.tableCells(trimmed);
                 if (cells.every((cell) => /^:?-{2,}:?$/.test(cell))) continue;
                 if (!table) table = { head: cells, rows: [] };
                 else table.rows.push(cells);
@@ -247,7 +289,11 @@ const AIRender = {
                     : (artifact.kind === 'workflow' || artifact.kind === 'workflow_draft')
                         ? '<button type="button" class="ai-primary" data-ai-apply-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoad')) + '</button>' +
                           '<button type="button" class="ai-ghost" data-ai-run-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoadRun')) + '</button>'
-                        : '';
+                        /* Every OTHER artifact (a plan, a chart spec, a report) is a proposal with no
+                           mechanical "apply" of its own — but it must still be actionable, or it reads
+                           as a dead card. The button hands the proposal back to the assistant, which
+                           builds the canvas with its validated tools. */
+                        : '<button type="button" class="ai-primary" data-ai-implement-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.artifactImplement')) + '</button>';
         return (
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +
@@ -282,11 +328,12 @@ const AIRender = {
             argsText = '';
         }
         const argsLine = argsText ? '<code class="ai-tool-args">' + this.escape(argsText) + '</code>' : '';
+        const runningClock = status === 'running' ? '<span class="ai-tool-clock" aria-hidden="true"></span>' : '';
         return (
             '<div class="ai-tool ' + (status === 'running' ? 'is-running' : status === 'failed' ? 'is-failed' : '') + '">' +
             '<span class="ai-tool-dot"></span><span class="ai-tool-name">' + this.escape(name) + '</span>' +
             argsLine +
-            '<span class="ai-tool-state">' + this.escape(summary) + (took ? ' · ' + this.escape(took) : '') + '</span>' +
+            '<span class="ai-tool-state">' + this.escape(summary) + runningClock + (took ? ' · ' + this.escape(took) : '') + '</span>' +
             detail +
             '</div>'
         );

@@ -570,4 +570,89 @@ out.pin = {
     unpinnedClosed: workspace._open === false,
 };
 
+/* A running command card carries a live seconds counter; the counter disappears with its result. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._sending = true;
+workspace._onEvent({ type: 'meta', conversation_id: 'c-clock', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
+workspace._onEvent({ type: 'tool_start', id: 'call_c', name: 'run_cmd', arguments: { command: 'py x.py' } });
+workspace._paintAssistant();
+const runningClocks = workspace._dom.chat.querySelectorAll('.ai-tool-clock').length;
+workspace._onEvent({ type: 'tool_result', id: 'call_c', name: 'run_cmd', ok: true, result: { ok: true } });
+workspace._paintAssistant();
+out.toolClock = { running: runningClocks, after: workspace._dom.chat.querySelectorAll('.ai-tool-clock').length };
+
+/* Local-only is a guard, not a preference: with it on, a paid provider is refused before any
+   request leaves the page (this is the switch that makes "测试只用本地免费模型" enforceable). */
+sandbox.AISettings.save({ localOnly: true, provider: 'deepseek' });
+workspace._provider = 'deepseek';
+workspace._sending = false;
+workspace._bootstrap.providers = [
+    { id: 'deepseek', requires_key: true, local_only: false, models: [{ id: 'deepseek-flash' }] },
+    { id: 'ollama', requires_key: false, local_only: true, models: [{ id: 'qwen3.5:4b' }] },
+];
+const blockedToasts = [];
+const realToast = workspace._toast;
+workspace._toast = (message) => blockedToasts.push(String(message));
+const blocked = await workspace._sendText('hello', {});
+workspace._toast = realToast;
+sandbox.AISettings.save({ localOnly: false });
+out.localOnly = {
+    refused: blocked === false,
+    toast: blockedToasts.length ? blockedToasts[blockedToasts.length - 1] : '',
+};
+
+/* Clicking a FINISHED tool card's own row opens its result, and the skill row's detail loads when
+   its summary is clicked (that branch was unreachable: `data-ai-skill` was missing from the
+   delegated selector, so no click ever reached it). */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._sending = false;
+workspace._onEvent({ type: 'meta', conversation_id: 'c-click', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
+workspace._onEvent({ type: 'tool_start', id: 'call_d', name: 'run_cmd', arguments: { command: 'py x.py' } });
+workspace._onEvent({ type: 'tool_result', id: 'call_d', name: 'run_cmd', ok: true, result: { ok: true } });
+workspace._paintAssistant();
+const toolCard = workspace._dom.chat.querySelector('.ai-tool');
+const toolRow = workspace._dom.chat.querySelector('.ai-tool-name');
+dispatchOn(workspace._dom.root, 'click', { target: toolRow });
+const clickedDetail = workspace._dom.chat.querySelector('details.ai-tool-detail');
+const skillRow = workspace._dom.chat.querySelector('details.ai-skill-row');
+const skillSummary = skillRow ? skillRow.querySelector('summary') : null;
+let skillLoads = 0;
+workspace._loadSkillDetail = async () => {
+    skillLoads += 1;
+};
+dispatchOn(workspace._dom.root, 'click', { target: skillSummary });
+out.clicks = {
+    toolOpened: !!clickedDetail && clickedDetail.open === true,
+    skillLoads: skillLoads,
+};
+
+
+/* A plan/chart artifact must be actionable too: its button hands the proposal back to the assistant.
+   Only workflow drafts had a button, so every other card looked dead. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._artifactsById = {};
+workspace._sending = false;
+workspace._onEvent({
+    type: 'artifact',
+    artifact: { id: 'art_plan', kind: 'analysis_plan', title: '执行计划 (S0-S7)', payload: { steps: [] } },
+});
+const planButton = workspace._dom.chat.querySelector('[data-ai-implement-artifact]');
+let implementAsk = '';
+workspace._sendText = async (text) => {
+    implementAsk = String(text || '');
+    return true;
+};
+dispatchOn(workspace._dom.root, 'click', { target: planButton });
+out.artifactAction = {
+    hasButton: !!planButton,
+    asked: implementAsk.includes('执行计划 (S0-S7)'),
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
+

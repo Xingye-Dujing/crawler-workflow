@@ -45,6 +45,14 @@ class TestAIStreamAndRenderer:
         assert '<a ' not in out['escapedLink']
         assert 'href="https://example.com/a"' in out['safeLink']
 
+    def test_a_pipe_inside_code_or_escaped_does_not_split_a_table_cell(self):
+        """The model's own rows: `a|b` and `\\|` stay inside one cell, and every row keeps 2 cells."""
+        out = _run()['tablePipes']
+        assert out.count('<td>') == 4, out
+        assert 'a|b' in out, 'a pipe inside inline code was treated as a column break'
+        assert '用 | 连接' in out, out
+        assert '不会展开' in out
+
     def test_question_and_artifact_cards_carry_data_actions(self):
         out = _run()
         assert 'data-ai-answer="A"' in out['question']
@@ -204,6 +212,32 @@ class TestWorkspaceRepaintAndDelegation:
         assert '1000' in numbers and '100' in numbers, numbers
         assert '80%' in numbers, numbers
         assert any(value.startswith('¥0.0006') for value in numbers), numbers
+
+    def test_a_running_command_shows_a_live_seconds_counter(self):
+        """A batch command can run for minutes: "运行中 52s" tells "working" from "stuck"."""
+        out = _run_workspace()['toolClock']
+        assert out['running'] == 1, out
+        assert out['after'] == 0, out
+
+    def test_local_only_refuses_a_paid_provider_before_sending(self):
+        """The switch makes "only the free local model" enforceable, not a hope."""
+        out = _run_workspace()['localOnly']
+        assert out['refused'] is True, out
+        assert 'Ollama' in out['toast'] or '本机' in out['toast'] or 'Local' in out['toast'], out
+
+    def test_a_plan_artifact_offers_an_action_too(self):
+        """Only workflow drafts had a button, so a plan or chart spec card looked dead. Its button
+        hands the proposal back to the assistant (which has the validated tools)."""
+        out = _run_workspace()['artifactAction']
+        assert out['hasButton'] is True, out
+        assert out['asked'] is True, 'the button did not ask the assistant to build it'
+
+    def test_clicking_a_finished_tool_row_opens_it_and_a_skill_row_loads(self):
+        """Both were dead clicks: the tool row was not wired, and `data-ai-skill` was missing from
+        the delegated selector so the skill branch could never be reached."""
+        out = _run_workspace()['clicks']
+        assert out['toolOpened'] is True, 'a finished tool card did not open on click'
+        assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
     def test_the_pin_keeps_the_panel_open_on_an_outside_click(self):
         out = _run_workspace()['pin']

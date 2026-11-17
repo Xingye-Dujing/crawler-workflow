@@ -100,6 +100,7 @@ const AIWorkspace = {
         this._renderPin();
         AISettings.save({ open: this._open });
         this._provider = AISettings.providerId(null);
+        if (AISettings.load().localOnly) this._provider = 'ollama';
         this._model = AISettings.modelFor(this._provider, null);
         this._skill = AISettings.load().skill || 'auto';
         this._agentMode = AISettings.load().agentMode === 'plan' ? 'plan' : 'build';
@@ -284,6 +285,27 @@ const AIWorkspace = {
            on its own button (excluded below), and a drag that begins inside and ends outside must
            not read as "outside" — a `click` listener would see exactly that. */
         document.addEventListener('pointerdown', (event) => this._onOutsidePress(event), true);
+        /* A click needs mousedown and mouseup on the SAME element. While a turn streams, the block
+           stream is rebuilt whenever it changes (~90 ms), so a press that straddled a repaint never
+           became a click — "点击展开没有反应". Repainting waits for the button to come back up. */
+        document.addEventListener(
+            'pointerdown',
+            () => {
+                this._pointerDown = true;
+            },
+            true
+        );
+        document.addEventListener(
+            'pointerup',
+            () => {
+                this._pointerDown = false;
+                if (this._current && this._current._pendingPaint) {
+                    this._current._pendingPaint = false;
+                    this._paintAssistant();
+                }
+            },
+            true
+        );
     },
 
     /* True when a press lands outside every surface this panel owns. */
@@ -1101,6 +1123,12 @@ const AIWorkspace = {
            2. the open/closed state of every disclosure is remembered and re-applied, so reading a
               thinking block or a tool result is not undone by the next streaming delta. */
         if (current._flowHtml === html) return;
+        if (this._pointerDown) {
+            /* The reader is pressing something in here: keep the nodes stable until the press ends
+               (see the document pointerup listener), or the click lands on a node that just left. */
+            current._pendingPaint = true;
+            return;
+        }
         current._flowHtml = html;
         this._collectOpenDetails(current.flowEl);
         current.flowEl.innerHTML = html;
@@ -1441,8 +1469,11 @@ const AIWorkspace = {
     async _loadSkillDetail(el) {
         const body = el.querySelector('.ai-skill-body');
         if (!body || body.getAttribute('data-loaded') === '1') return;
-        body.setAttribute('data-loaded', '1');
         const id = el.getAttribute('data-ai-skill') || '';
+        /* `data-loaded` is set only AFTER the answer arrives: marking it first made one failed
+           request permanent — every later click returned early and the row could never load. */
+        body.setAttribute('data-loading', '1');
+        body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoading')) + '</div>';
         try {
             const response = await fetch('/api/ai/skills/' + encodeURIComponent(id));
             const data = await response.json();
@@ -1455,9 +1486,20 @@ const AIWorkspace = {
                 '<div class="ai-skill-meta"><span>' + AIRender.escape(I18n.t('ai.skillContext')) + ': ' +
                 AIRender.escape(context) + '</span><span>' + AIRender.escape(I18n.t('ai.skillTools')) + ': ' +
                 AIRender.escape(tools) + '</span></div>';
+            body.setAttribute('data-loaded', '1');
         } catch (error) {
+            body.removeAttribute('data-loading');
             body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoadFailed')) + '</div>';
         }
+    },
+
+    /* A plan or a chart spec has no mechanical "apply" of its own: the honest action is to ask the
+       assistant to BUILD it with the same validated tools (apply_workflow, workspace_write), so the
+       card is a proposal that can become a canvas rather than a dead frame. */
+    _implementArtifact(id) {
+        const artifact = (this._artifactsById || {})[id] || null;
+        const title = String((artifact && artifact.title) || id || '');
+        this._sendText(I18n.t('ai.artifactImplementAsk', { title: title }), {});
     },
 
     _copyAnswer(target) {
@@ -1545,6 +1587,21 @@ const AIWorkspace = {
 
     _onChange(event) {
         const target = event.target;
+        if (target && target.hasAttribute('data-ai-local-only')) {
+            const on = !!target.checked;
+            AISettings.save({ localOnly: on });
+            if (on && this._provider !== 'ollama') {
+                this._provider = 'ollama';
+                AISettings.setProvider('ollama');
+                this._model = AISettings.modelFor('ollama', this._bootstrap?.providers);
+                AISettings.setModel('ollama', this._model);
+                this._renderSettings();
+                this._renderModelOptions();
+                this._renderToggles();
+            }
+            this._toast(I18n.t(on ? 'ai.localOnlyOn' : 'ai.localOnlyOff'));
+            return;
+        }
         if (target && target.hasAttribute('data-ai-switch-provider')) {
             this._provider = target.value;
             AISettings.setProvider(this._provider);
@@ -1577,6 +1634,8 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
+        /* A click with no target (a synthetic event from a harness or a detached node) is nothing. */
+        if (!event || !event.target) return;
         /* A tool card's own row toggles its result BEFORE the data-action lookup: the row carries no
            data-ai-* attribute, and clicking the result's body must not close what it points at. */
         const raw = event.target;
@@ -1588,7 +1647,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1880,6 +1939,10 @@ const AIWorkspace = {
             this._loadSpend();
             return;
         }
+        if (target.hasAttribute('data-ai-implement-artifact')) {
+            this._implementArtifact(target.getAttribute('data-ai-implement-artifact'));
+            return;
+        }
         if (target.hasAttribute('data-ai-test')) {
             this._testProvider();
             return;
@@ -2163,6 +2226,10 @@ const AIWorkspace = {
         }
         const artifact = payload && payload.artifact;
         if (artifact) {
+            /* A reloaded transcript's artifacts must answer their own buttons: the payload lives in
+               this row, not in an event, so it is remembered here as well. */
+            this._artifactsById = this._artifactsById || {};
+            if (artifact.id) this._artifactsById[artifact.id] = artifact;
             const holder = document.createElement('div');
             holder.innerHTML = AIRender.artifactCard(artifact);
             return holder.firstElementChild;
@@ -2217,6 +2284,12 @@ const AIWorkspace = {
             return false;
         }
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        /* Local-only: a paid provider is refused BEFORE any request leaves the page. This is the
+           switch that makes "I only want the free local model" enforceable, not a preference. */
+        if (AISettings.load().localOnly && (!provider || !provider.local_only)) {
+            this._toast(I18n.t('ai.localOnlyBlocked'));
+            return false;
+        }
         const key = AISettings.keyFor(this._provider);
         if (provider?.requires_key && !key) {
             this._toast(I18n.t('ai.keyMissing'));
@@ -2474,6 +2547,7 @@ const AIWorkspace = {
                 if (name === 'app_errors') this._ingestFailedNodes(event.result, current);
                 else if (name === 'run_status') this._ingestRunNodes(event.result, current);
             }
+            if (!current.blocks.some((row) => row.type === 'tool_use' && row.status === 'running')) this._stopToolClock();
             return;
         }
         if (type === 'rerun_started') {
@@ -2515,7 +2589,9 @@ const AIWorkspace = {
             current.artifacts.push(event.artifact);
             this._artifactsById = this._artifactsById || {};
             if (event.artifact && event.artifact.id) this._artifactsById[event.artifact.id] = event.artifact;
-            current.artifactsEl.insertAdjacentHTML('beforeend', AIRender.artifactCard(event.artifact));
+            const holder = document.createElement('div');
+            holder.innerHTML = AIRender.artifactCard(event.artifact);
+            if (holder.firstElementChild) current.artifactsEl.appendChild(holder.firstElementChild);
             return;
         }
         if (type === 'workflow_apply') {
@@ -2554,6 +2630,7 @@ const AIWorkspace = {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
             this._sending = false;
             this._setSending(false);
+            this._stopToolClock();
             this._paintAssistant();
             this._refreshConversations();
             /* A finished turn changed the numbers the side panel shows (usage, and the balance).
@@ -2571,8 +2648,31 @@ const AIWorkspace = {
         }, 90);
     },
 
-    _renderError(message) {
-        const current = this._ensureAssistant();
+    /* A command can run for minutes; the card says "运行中" with a live seconds counter, so "still
+       working" and "stuck" no longer look the same. One interval for the whole turn. */
+    _startToolClock() {
+        if (this._toolClock) return;
+        this._toolClock = setInterval(() => {
+            const clocks = this._dom.chat ? this._dom.chat.querySelectorAll('.ai-tool-clock') : [];
+            if (!clocks.length) {
+                this._stopToolClock();
+                return;
+            }
+            const running = (this._current?.blocks || []).filter(
+                (row) => row.type === 'tool_use' && row.status === 'running'
+            );
+            const started = Number((running[0] && running[0].startedAt) || Date.now());
+            const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+            for (const el of clocks) el.textContent = ' · ' + seconds + 's';
+        }, 1000);
+    },
+
+    _stopToolClock() {
+        if (this._toolClock) clearInterval(this._toolClock);
+        this._toolClock = null;
+    },
+
+    _renderError(message) {        const current = this._ensureAssistant();
         /* The failure belongs at the END of whatever the turn already produced, in order. */
         current.blocks.push({ type: 'text', text: '' });
         current.blocks.push({ type: 'error', text: String(message || '') });
@@ -2810,6 +2910,10 @@ const AIWorkspace = {
             models.map((item) => '<option value="' + AIRender.escape(item.id) + '"' + (item.id === this._model ? ' selected' : '') + '>' + AIRender.escape(item.label || item.id) + '</option>').join('') +
             '</select></label></div>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.key')) + '</span><input class="ai-input" type="password" autocomplete="off" data-ai-key value="' + AIRender.escape(key) + '" placeholder="' + AIRender.escape(I18n.t('ai.keyPlaceholder')) + '" /></label>' +
+            /* The one switch that protects a wallet: with it on, every send must go to the local
+               daemon, and a paid provider is refused with a sentence instead of a charge. */
+            '<label class="ai-field ai-field-check"><input type="checkbox" data-ai-local-only="1"' + (AISettings.load().localOnly ? ' checked' : '') + ' /><span>' + AIRender.escape(I18n.t('ai.localOnly')) + '</span></label>' +
+            '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.localOnlyHint')) + '</p>' +
             '<div class="ai-skill-meta">' + capabilityRows + '</div>' +
             '<p class="ai-hint">' + AIRender.escape(I18n.has(provider.notes_key) ? I18n.t(provider.notes_key) : '') + '</p>' +
             '<div class="ai-editor-actions"><button type="button" class="ai-primary" data-ai-save-settings="1">' + AIRender.escape(I18n.t('ai.save')) + '</button>' +

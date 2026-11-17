@@ -388,7 +388,7 @@ def _split(command: str) -> list[str]:
     return [part.strip('"').strip("'") if os.name == 'nt' else part for part in parts if part]
 
 
-def run_command(command: str, *, cwd: str = '', timeout: int = 120) -> dict:
+def run_command(command: str, *, cwd: str = '', timeout: int = 120, scope: str = '') -> dict:
     """Run one allow-listed executable in the working folder (or the app root) and capture output.
 
     Not a shell: the arguments are passed as a list, metacharacters are refused, and only the
@@ -423,7 +423,7 @@ def run_command(command: str, *, cwd: str = '', timeout: int = 120) -> dict:
         )
     except FileNotFoundError as exc:
         raise AIError('ai.cmdMissing', kind='not_found', command=argv[0]) from exc
-    ident = processes.register('cmd', command, child)
+    ident = processes.register('cmd', command, child, scope=scope)
     try:
         stdout_raw, stderr_raw = child.communicate(timeout=limit)
     except subprocess.TimeoutExpired as exc:

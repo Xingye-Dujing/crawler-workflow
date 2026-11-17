@@ -813,9 +813,14 @@ def ai_conversation_update(conversation_id: str):
 @bp.route('/api/ai/conversations/<conversation_id>', methods=['DELETE'])
 def ai_conversation_delete(conversation_id: str):
     deleted = store.delete_conversation(conversation_id)
+    # A deleted conversation takes its children with it: a command or script it started must not
+    # keep running after the chat is gone.
+    from runtime import processes
+
+    stopped = processes.stop_scope(conversation_id, account_context.scope_key())
     # Its monitors and deliveries went with the row; the armed list must not keep serving them.
     monitors.invalidate()
-    return jsonify({'ok': True, 'deleted': deleted})
+    return jsonify({'ok': True, 'deleted': deleted, 'stopped_processes': stopped})
 
 
 @bp.route('/api/ai/references', methods=['GET'])
@@ -942,7 +947,13 @@ def ai_stop():
     if data is None:
         return _bad_body()
     conversation_id = str(data.get('conversation_id') or '')
-    return jsonify({'ok': True, 'stopped': agent.stop(conversation_id)})
+    # 停止 ends the conversation's work, not just the stream: every command and background task it
+    # started is stopped here, so a batch script cannot keep running (and spending) after the user
+    # said stop.
+    from runtime import processes
+
+    stopped = processes.stop_scope(conversation_id, account_context.scope_key())
+    return jsonify({'ok': True, 'stopped': agent.stop(conversation_id), 'stopped_processes': stopped})
 
 
 @bp.route('/api/ai/usage', methods=['GET'])
