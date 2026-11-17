@@ -101,6 +101,8 @@ var datasetManager = {
                 '\')">' + I18n.t(picked ? 'datasetMgr.compareOn' : 'datasetMgr.compare') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleMerge(\'' + self._quote(id) +
                 '\')">' + I18n.t(mergePicked ? 'datasetMgr.mergeOn' : 'datasetMgr.merge') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="datasetManager.download(\'' + self._quote(id) +
+                '\')">' + I18n.t('datasetMgr.download') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.rename(\'' + self._quote(id) + '\', \'' +
                 self._quote(row.name || '') + '\')">' + I18n.t('datasetMgr.rename') + '</button>';
             ops += '<button class="runs-mgr-btn del" onclick="datasetManager.remove(\'' + self._quote(id) +
@@ -278,6 +280,19 @@ var datasetManager = {
 
     _quote(value) {
         return attrJsArg(value);
+    },
+
+    /* Same hidden iframe as the exports panel's download: the route answers a file, so a
+       navigation would replace the canvas the user is working on, and fetchJSON would try
+       to parse a CSV as JSON. Nothing is written to the export folder — the rows are
+       rendered from datasets.db on demand. */
+    download(id) {
+        if (!id) return;
+        var frame = document.createElement('iframe');
+        frame.style.display = 'none';
+        frame.src = window.__cu('/api/data/datasets/' + encodeURIComponent(id) + '/download');
+        document.body.appendChild(frame);
+        setTimeout(function () { document.body.removeChild(frame); }, 60000);
     },
 
     async rename(id, current) {

@@ -12,11 +12,13 @@ Paths and behaviour are unchanged; none of these handlers has a monkeypatch seam
 import io
 import json
 import logging
+import os
+import tempfile
 
 import pandas as pd
-from core.refs import as_bool
+from core.refs import as_bool, sanitize_filename
 from core.refs import json_safe_records as _json_safe_records
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from runtime.state import _dataset_cache, any_run_live, drop_cached_dataset
 from runtime.stores import _load_dataset, _register_dataset, get_dataset_store
 
@@ -232,6 +234,35 @@ def dataset_detail(dataset_id: str):
     df = _load_dataset(dataset_id)
     meta['preview'] = _json_safe_records(df, 10) if df is not None else []
     return jsonify({'ok': True, 'dataset': meta})
+
+
+@bp.route('/api/data/datasets/<dataset_id>/download', methods=['GET'])
+def dataset_download(dataset_id: str):
+    """Send one stored dataset to the browser as a CSV file.
+
+    The rows live inside ``datasets.db`` — there is no file on disk to hand back, so the
+    dataset panel's 下载 button has to render one. It goes through ``DataExporter`` so the
+    bytes match a canvas export: the same platform labels the user reads and the same
+    formula escaping that keeps a crawled ``=HYPERLINK(...)`` cell from turning live in
+    their spreadsheet. The file is rendered into a private temporary directory because
+    the writer publishes by atomic replace; nothing is added to the export folder.
+    """
+    from services.exports.writer import DataExporter
+
+    meta = get_dataset_store().meta(dataset_id)
+    df = _load_dataset(dataset_id) if meta is not None else None
+    if meta is None or df is None:
+        return jsonify({'ok': False, 'error': t('api.datasetMissing', did=dataset_id)}), 404
+    # The stored name is a display label, not a path: it may be Chinese, carry an
+    # extension of another format, or have none at all. The CSV suffix is this
+    # response's format, so the name is normalized to it rather than trusted.
+    filename = DataExporter.normalize_filename(sanitize_filename(meta.get('name') or ''), 'csv')
+    with tempfile.TemporaryDirectory() as folder:
+        staged = os.path.join(folder, filename)
+        DataExporter.save(df, staged, fmt='csv')
+        with open(staged, 'rb') as handle:
+            payload = handle.read()
+    return send_file(io.BytesIO(payload), mimetype='text/csv', as_attachment=True, download_name=filename)
 
 
 @bp.route('/api/data/datasets/<dataset_id>', methods=['DELETE'])

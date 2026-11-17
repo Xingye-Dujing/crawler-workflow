@@ -198,6 +198,16 @@ class TestExportActions:
 
 
 class TestDatasetActions:
+    def test_a_dataset_row_downloads_the_stored_rows_as_a_file(self, pa):
+        """A stored table is rows in datasets.db, so 下载 cannot be a link to an export
+        file; it goes through the dataset's own route in a hidden iframe, the same
+        way the exports panel downloads without losing the canvas."""
+        assert 'datasetManager.download(' in pa['dataset_download_row']['html']
+        download = pa['dataset_download']
+        assert download['tag'] == 'IFRAME'
+        assert download['hidden'] == 'none'
+        assert download['src'] == '/api/data/datasets/d1/download'
+
     def test_renaming_posts_the_new_name(self, pa):
         renamed = pa['dataset_renamed']
         assert renamed['url'] == '/api/data/datasets/ds1/rename'

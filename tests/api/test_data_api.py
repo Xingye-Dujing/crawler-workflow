@@ -250,6 +250,27 @@ class TestDatasetRegistry:
         # Stats describe the whole store, not the page that was returned.
         assert limited['stats']['datasets'] == 2
 
+    def test_download_renders_the_stored_rows_as_a_csv_file(self, client, paste):
+        """A dataset is rows inside datasets.db — there is no file on disk to link to, so
+        the panel's 下载 button asks the server to render one. The bytes come from the same
+        writer as a canvas export, which is what keeps a formula-looking cell text."""
+        dataset_id = paste([{'title': '=HYPERLINK("x")', 'score': 3}], name='sanya')
+        response = client.get(f'/api/data/datasets/{dataset_id}/download')
+        assert response.status_code == 200
+        assert response.mimetype == 'text/csv'
+        disposition = response.headers['Content-Disposition']
+        assert disposition.startswith('attachment')
+        assert '.csv' in disposition, 'a downloaded table must keep its extension'
+        text = response.data.decode('utf-8-sig')
+        header, first_row = text.splitlines()[:2]
+        assert set(header.split(',')) == {'title', 'score'}, text
+        assert "'=HYPERLINK" in first_row, 'a formula-shaped cell must stay text in a spreadsheet'
+
+    def test_downloading_a_missing_dataset_answers_404_not_a_file(self, client):
+        response = client.get('/api/data/datasets/nope/download')
+        assert response.status_code == 404
+        assert response.get_json()['ok'] is False
+
 
 class TestInspectAndPreview:
     def test_inspect_reports_shape_and_missing_values(self, client, paste):

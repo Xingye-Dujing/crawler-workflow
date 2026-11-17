@@ -548,6 +548,25 @@ requests.length = 0;
 await pa.datasetManager.remove('ds1', 'old.csv', false);
 out.dataset_remove_declined = { requested: requests.length };
 
+/* 下载 renders the stored table from datasets.db into a file, so it is a download
+   route of its own — a navigation would throw away the canvas, and fetchJSON would
+   try to parse a CSV. The row must carry the button for every dataset, not only
+   exported ones, because a pasted/merged table has no file on disk to link to. */
+fresh();
+pa.datasetManager._last = [
+    { dataset_id: 'd1', name: 'A.csv', source: 'upload', row_count: 2, byte_size: 10, workflows: [] },
+];
+pa.datasetManager.render();
+out.dataset_download_row = { html: id('dataset-mgr-body').innerHTML };
+fresh();
+pa.datasetManager.download('d1');
+const datasetFrame = doc.body.children[doc.body.children.length - 1];
+out.dataset_download = {
+    tag: datasetFrame.tagName,
+    src: decodeURIComponent(datasetFrame.src),
+    hidden: datasetFrame.style.display,
+};
+
 /* Dataset merge: the bar offers a multi-selection, the request names every chosen
    id, and the server's column refusal is shown verbatim. */
 fresh();
