@@ -243,6 +243,16 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
 
 ## 体积边界
 
+**2026-11-17 构建（2026.11.17.1：AI 工作区、工作流保存方式与一批审计修复）**：
+`CaiXiHui-win64.zip` **137,789,647 B（131.4 MB）**、`CaiXiHui-Setup.exe` **127,438,896 B（121.5 MB）**；
+`CaiXiHui-Online-Setup.exe` **18,421,402 B（17.6 MB）**——安装器代码在 2026-11-11 之后有改动（组件来源、界面布局），
+按“安装器变了才重建”的规则这次一并重打，`patch_manifest.py --check` 仍是 `requireAdministrator`。
+构建用 `-Installer -Version 2026.11.17.1` 并沿用 11-15 的构建环境（`desktop/requirements-*.txt` 未变，`-SkipInstall`），
+UPX 默认开；zip 顶层仍只有 `CaiXiHui/`，没有 `data/` 与 `portable.txt`。Gitee 分片按 **99,614,720 B** 切
+（zip：99,614,720 + 38,174,927；Setup：99,614,720 + 27,824,176），拼接后的 SHA-256 与整包逐字节一致。
+**这一轮没有量启动毫秒数**（exe 在本机隔离数据根下仍会走一次自身的提权重启，没有可读的计时点），
+体积与摘要都是实测，启动数仍是 2026-11-09 的 1612 ms。
+
 **2026-11-14 第二次构建（2026.11.14.2：登录窗口保存 Cookie 后账号列表即时刷新、慢速控制台与评论首个导航修复）**：
 `CaiXiHui-win64.zip` **134,960,440 B（128.7 MB）**、`CaiXiHui-Setup.exe` **125,986,035 B（120.1 MB）**；
 `CaiXiHui-Online-Setup.exe` 仍是 2026-11-11 那份 **13,887,671 B（13.2 MB）**（安装器代码没改，它读 `version.json`

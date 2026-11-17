@@ -1,26 +1,26 @@
 {
   "schema": 1,
-  "version": "2026.11.15.1",
-  "released": "2026-11-15",
-  "notes": "知乎采集按“停止”不再刷一屏错误栈，已采到的行照旧保留；红果短剧榜单按站点新载荷形状读取，不再空转 5 分钟；知网题录导出改用可见窗口；慢速采集的可见窗口（跑前检查、验证 Cookie）加了限时诊断，渲染器不回答就按名报错并关窗；微博评论选帖口径修正；另有全仓审计的 30 处修复（运行记录/日志归属、评论走查有界导航、分析步骤空值与缺列的具名拒绝等）。",
+  "version": "2026.11.17.1",
+  "released": "2026-11-17",
+  "notes": "新增「采析绘 AI 工作区」：可接入 DeepSeek / OpenCode Go / OpenRouter / 本地 Ollama，按技能读取项目上下文、用只读工具取证、生成可直接应用的草稿，并带运行监控、插件与 Python 脚本扩展（含画布 Python 节点）。工作流文件保存方式可设为“一修改就保存 / 手动保存”；画布一键复制、多选粘贴保留组内连线；数据集面板可直接下载 CSV，筛选行可删除匹配行；评论采集新增“爬楼中楼”开关，滚动改为一下一间隔。另修复一批审计问题：插件按安装账号隔离、Provider Key 不再进 URL、锁定期内再猜密码不再延长锁定、禁用账号不再抢走进行中请求的数据库、新建同名工作流先确认。",
   "platforms": {
     "win32": {
       "archive": "zip",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-15.1/CaiXiHui-win64.zip",
-      "sha256": "6662a5787b5c01c4a1705161f0a4f4e1268b0c89f9707a54c756a3c7a27a65bc",
-      "size": 134968395
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-17.1/CaiXiHui-win64.zip",
+      "sha256": "0ee8ee95aba1b3697e43b018956da195503d00bd52cfde4c894472327aa53743",
+      "size": 137789647
     },
     "darwin-arm64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-15.1/CaiXiHui-macOS-arm64.dmg",
-      "sha256": "c4d694a2b628a648fb11643b36e84bf128da2497397f6dd844485e76c7116b90",
-      "size": 185303890
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-17.1/CaiXiHui-macOS-arm64.dmg",
+      "sha256": "b61ba535a4e3e48ac1cadfb44ca825821c6619e8cc35253fd375020b2b4780a8",
+      "size": 193199380
     },
     "darwin-x64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-15.1/CaiXiHui-macOS-x86_64.dmg",
-      "sha256": "abf39e8e3b9f04176918e91db1d37cb0ed47c261f20a4fec420e20d351f0faa0",
-      "size": 195291571
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-17.1/CaiXiHui-macOS-x86_64.dmg",
+      "sha256": "6c393221a458ea44ed01df55019b37eb395e0403d7657f1d1c85b08c340c9b84",
+      "size": 203351732
     }
   }
 }
