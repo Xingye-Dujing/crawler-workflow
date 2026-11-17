@@ -2072,10 +2072,17 @@ function multiSelectScenario() {
     freshWorld();
     const bA = addNode('source', 0, 0, 200, 100);
     const bB = addNode('process', 400, 0, 200, 100);
+    // A wire BETWEEN the two selected nodes is part of the group, not of the canvas around it.
+    canvas.connectNodes(bA, bB);
+    /* An outside node A also feeds: its wire must NOT be copied, because its source is not in
+       the selection. Copied alone, that wire would come back from a node the paste never made. */
+    const bOut = addNode('output', 800, 0, 200, 100);
+    canvas.connectNodes(bB, bOut);
     canvas.setSelectedNodes([bA, bB]);
     toasts.length = 0;
     canvas.copySelection();
     const clipLen = (canvas._clipboardNodes || []).length;
+    const clipOffsets = (canvas._clipboardNodes || []).map((rec) => [rec.dx, rec.dy, (rec.links || []).length]);
     const copyToast = toasts[toasts.length - 1];
     const countBefore = Object.keys(canvas.nodes).length;
     const histBefore = canvas._history.length;
@@ -2083,14 +2090,25 @@ function multiSelectScenario() {
     const pasteToast = toasts[toasts.length - 1];
     const countAfter = Object.keys(canvas.nodes).length;
     const newIds = canvas.selectedNodes.slice();
+    const boxOf = (id) => {
+        const el = doc.getElementById(id);
+        return [parseInt(el.style.left, 10), parseInt(el.style.top, 10)];
+    };
     res.batchPaste = {
         clipLen,
+        clipOffsets,
         copyToast,
         added: countAfter - countBefore,
         // suppressed per-node pushState + one saveState → history grows by a single step
         singleUndoStep: canvas._history.length - histBefore,
         selectedNew: newIds.length === 2 && newIds.indexOf(bA) < 0 && newIds.indexOf(bB) < 0,
         pasteToast,
+        // Relative layout preserved: the copy's second box is still 400px right of the first.
+        boxes: newIds.map(boxOf),
+        // The wire inside the group came back on the copies; the one leaving it did not.
+        copiedWires: canvas.connections.filter((c) => newIds.indexOf(c.from) >= 0 && newIds.indexOf(c.to) >= 0),
+        strayWires: canvas.connections.filter((c) => newIds.indexOf(c.from) >= 0 || newIds.indexOf(c.to) >= 0)
+            .filter((c) => !(newIds.indexOf(c.from) >= 0 && newIds.indexOf(c.to) >= 0)),
     };
 
     // Same-type multi-select: one updateParam lands on every node in the group.
@@ -2328,6 +2346,26 @@ async function clipboardScenario() {
         entries: Clipboard.items.length,
         kind: Clipboard.items[0] && Clipboard.items[0].kind,
         payloadLen: Clipboard.items[0] && Clipboard.items[0].payload.length,
+    };
+
+    /* A group entry survives the board's JSON round trip as a whole: pasting it back from
+       localStorage re-creates the layout and the wire, not just the boxes. */
+    freshWorld();
+    const g1 = addNode('source', 0, 0);
+    const g2 = addNode('process', 300, 120);
+    canvas.connectNodes(g1, g2);
+    canvas.setSelectedNodes([g1, g2]);
+    canvas.copySelection();
+    const groupEntry = Clipboard.items[0].id;
+    const groupPasted = Clipboard.paste(groupEntry, { x: 50, y: 50 });
+    const groupBoxOf = (id) => {
+        const el = doc.getElementById(id);
+        return [parseInt(el.style.left, 10), parseInt(el.style.top, 10)];
+    };
+    res.groupPaste = {
+        boxes: (groupPasted || []).map(groupBoxOf),
+        wires: canvas.connections.filter((c) => (groupPasted || []).indexOf(c.from) >= 0
+            && (groupPasted || []).indexOf(c.to) >= 0).length,
     };
 
     // Pasting a stored entry funnels through canvas._pasteAt: it adds the node, is an

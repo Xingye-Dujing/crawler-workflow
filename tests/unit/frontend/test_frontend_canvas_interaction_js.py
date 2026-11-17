@@ -1148,6 +1148,20 @@ class TestMultiSelect:
         assert b['selectedNew'] is True, 'the paste must select the new copies, not the originals'
         assert b['pasteToast'] == 'NODES-PASTED'
 
+    def test_a_copied_group_keeps_its_layout_and_its_inner_wires(self, ix):
+        """A multi-node copy is one WHOLE: the copy keeps the group's relative layout and the
+        wires that ran inside it, and never brings back a wire whose other end was outside the
+        selection."""
+        b = ix['multi_select']['batchPaste']
+        assert b['clipOffsets'] == [[0, 0, 1], [400, 0, 0]], (
+            'each copied record must keep its offset from the group corner and the links it fed'
+        )
+        [(ax, ay), (bx, by)] = b['boxes']
+        assert [ax, ay] == [0, 500], 'the group must land where the paste asked'
+        assert bx - ax == 400 and by == ay, 'the pasted group must keep its 400px separation'
+        assert len(b['copiedWires']) == 1, 'the wire between two copied nodes must be copied too'
+        assert b['strayWires'] == [], 'a wire leaving the selection must not be duplicated'
+
     def test_a_same_type_selection_writes_one_param_to_every_member(self, ix):
         a = ix['multi_select']['applyToAll']
         assert a['targets'] == 3
@@ -1215,6 +1229,11 @@ class TestClipboardDrawer:
     def test_a_batch_copy_records_one_nodes_entry_sized_to_the_selection(self, ix):
         b = ix['clipboard']['batchCopy']
         assert b['entries'] == 1 and b['kind'] == 'nodes' and b['payloadLen'] == 2
+
+    def test_a_stored_group_entry_pastes_back_its_layout_and_wire(self, ix):
+        g = ix['clipboard']['groupPaste']
+        assert g['boxes'] == [[50, 50], [350, 170]], 'the board paste must keep the group offsets'
+        assert g['wires'] == 1, 'the board paste must re-create the group wire'
 
     def test_pasting_a_board_entry_uses_the_shared_funnel_and_its_own_key(self, ix):
         p = ix['clipboard']['paste']

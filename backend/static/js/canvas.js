@@ -1098,15 +1098,53 @@ const canvas = {
 
     /* Batch copy of the whole selection. One node delegates to the single-copy path so the
        clipboard shape (and every existing paste consumer) is unchanged; two or more are stored as
-       a list pasteNodesAt reads back. */
+       a list pasteNodesAt reads back.
+
+       A group copy is a WHOLE, so a record also carries what makes the group a group:
+       `dx`/`dy` is the node's offset from the selection's top-left corner, and `links` lists the
+       indices of the copied nodes this one fed (a wire whose two ends are both in the selection).
+       Without them a paste rebuilt the boxes in a diagonal pile with no wires — the layout the
+       user had assembled was the part thrown away. Both fields are per-record so the clipboard
+       stays one JSON array: `Clipboard` deep-copies and persists that array as-is, which a
+       sibling `{nodes, connections}` object would have broken for every reader (`payload.length`,
+       the drawer's badge count, the old entries already in localStorage). */
     copySelection() {
         const ids = (this.selectedNodes.length ? this.selectedNodes : (this.selectedNode ? [this.selectedNode] : []))
             .filter((id) => this.nodes[id]);
         if (!ids.length) return false;
         if (ids.length === 1) return this.copyNodeToClipboard(ids[0]);
-        this._clipboardNodes = ids.map((id) => {
+        /* Position is read where the model keeps it (el.style, the same place getState and the
+           nudge read), so a copied group lands exactly as it is drawn. */
+        const at = {};
+        ids.forEach((id) => {
+            const el = this._nodeEl(id);
             const n = this.nodes[id];
-            return { type: n.type, title: n.title || '', params: JSON.parse(JSON.stringify(n.params || {})) };
+            at[id] = {
+                x: el ? (parseInt(el.style.left, 10) || 0) : (Number(n.x) || 0),
+                y: el ? (parseInt(el.style.top, 10) || 0) : (Number(n.y) || 0),
+            };
+        });
+        const minX = Math.min.apply(null, ids.map((id) => at[id].x));
+        const minY = Math.min.apply(null, ids.map((id) => at[id].y));
+        const slot = Object.create(null);
+        ids.forEach((id, i) => { slot[id] = i; });
+        const links = ids.map(() => []);
+        (this.connections || []).forEach((c) => {
+            const from = slot[c.from];
+            const to = slot[c.to];
+            if (from === undefined || to === undefined) return;
+            links[from].push(to);
+        });
+        this._clipboardNodes = ids.map((id, i) => {
+            const n = this.nodes[id];
+            return {
+                type: n.type,
+                title: n.title || '',
+                params: JSON.parse(JSON.stringify(n.params || {})),
+                dx: at[id].x - minX,
+                dy: at[id].y - minY,
+                links: links[i],
+            };
         });
         this._clipboardData = null;
         Clipboard.add({ kind: 'nodes', payload: this._clipboardNodes });
@@ -1115,8 +1153,11 @@ const canvas = {
     },
 
     /* Paste the batch as ONE undo step: suppress per-node history while each addNode runs its own
-       saveState, then a single saveState records the whole group. Copies cascade and the new set
-       becomes the selection. */
+       saveState, then a single saveState records the whole group (nodes AND the wires between
+       them). Each copy keeps its offset from the group's top-left corner, so the pasted group has
+       the shape it was copied with; the internal wires are re-created on the new ids, and the new
+       set becomes the selection. An entry copied before offsets existed has none, so it falls back
+       to the old diagonal cascade. */
     pasteNodesAt(pos) {
         const list = this._clipboardNodes;
         if (!list || !list.length) return [];
@@ -1124,7 +1165,9 @@ const canvas = {
         this._historySaving = true;
         const ids = [];
         list.forEach((rec, i) => {
-            const id = this.addNode(rec.type, base.x + i * this.PASTE_CASCADE, base.y + i * this.PASTE_CASCADE);
+            const dx = Number.isFinite(rec.dx) ? rec.dx : i * this.PASTE_CASCADE;
+            const dy = Number.isFinite(rec.dy) ? rec.dy : i * this.PASTE_CASCADE;
+            const id = this.addNode(rec.type, base.x + dx, base.y + dy);
             if (this.nodes[id]) {
                 this.nodes[id].params = JSON.parse(JSON.stringify(rec.params || {}));
                 if (rec.title) {
@@ -1135,6 +1178,16 @@ const canvas = {
                 this.updateNodeDisplay(id);
             }
             ids.push(id);
+        });
+        /* A copied wire is structure, not a new user decision: every endpoint is a node this
+           paste just minted, so it cannot self-loop, duplicate or close a cycle, and it needs no
+           per-wire toast. Written inside the suppressed-history window so the whole group is ONE
+           undo step, exactly like the nodes themselves. */
+        list.forEach((rec, i) => {
+            if (!ids[i]) return;
+            (Array.isArray(rec.links) ? rec.links : []).forEach((j) => {
+                if (ids[j]) this.connections.push({ from: ids[i], to: ids[j] });
+            });
         });
         this._historySaving = false;
         this.saveState();
