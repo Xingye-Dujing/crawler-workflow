@@ -1707,3 +1707,43 @@
 .ai-jump[hidden] {
   display: none;
 }
+
+/* The skill row is a disclosure: closed it is one quiet line, open it shows the prompt and tools. */
+.ai-skill-row > summary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.ai-skill-row > summary::-webkit-details-marker {
+  display: none;
+}
+.ai-skill-row > summary::after {
+  content: "▾";
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-faint);
+}
+.ai-skill-row[open] > summary::after {
+  content: "▴";
+}
+.ai-skill-body {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 2px;
+}
+.ai-skill-prompt {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+}
+.ai-skill-meta {
+  display: grid;
+  gap: 2px;
+  font-size: 10px;
+  color: var(--text-faint);
+}

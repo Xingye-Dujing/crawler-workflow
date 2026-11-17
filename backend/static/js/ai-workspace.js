@@ -990,6 +990,30 @@ const AIWorkspace = {
         return true;
     },
 
+    /* The skill row expands into what the skill ACTUALLY carries: its prompt, context sources and
+       tools. Fetched on first open, so a long prompt costs nothing until it is asked for. */
+    async _loadSkillDetail(el) {
+        const body = el.querySelector('.ai-skill-body');
+        if (!body || body.getAttribute('data-loaded') === '1') return;
+        body.setAttribute('data-loaded', '1');
+        const id = el.getAttribute('data-ai-skill') || '';
+        try {
+            const response = await fetch('/api/ai/skills/' + encodeURIComponent(id));
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            const skill = data.skill || {};
+            const context = (skill.context || []).join(', ') || '—';
+            const tools = (skill.tools || []).join(', ') || '—';
+            body.innerHTML =
+                '<p class="ai-skill-prompt">' + AIRender.escape(String(skill.prompt || '')) + '</p>' +
+                '<div class="ai-skill-meta"><span>' + AIRender.escape(I18n.t('ai.skillContext')) + ': ' +
+                AIRender.escape(context) + '</span><span>' + AIRender.escape(I18n.t('ai.skillTools')) + ': ' +
+                AIRender.escape(tools) + '</span></div>';
+        } catch (error) {
+            body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoadFailed')) + '</div>';
+        }
+    },
+
     _copyAnswer(target) {
         const message = target.closest('.ai-message');
         const flow = message ? message.querySelector('.ai-flow') : null;
@@ -1140,6 +1164,9 @@ const AIWorkspace = {
         if (target.hasAttribute('data-ai-context-preview')) {
             this._previewContext();
             return;
+        }
+        if (target.closest('[data-ai-skill]')) {
+            this._loadSkillDetail(target.closest('[data-ai-skill]'));
         }
         if (target.hasAttribute('data-ai-agents')) {
             this.setAgentMode(target.getAttribute('data-ai-agents'));

@@ -296,10 +296,13 @@ const AIRender = {
                     why = I18n.has('ai.skill.' + reason + '.name') ? I18n.t('ai.skill.' + reason + '.name') : reason;
                 } else if (reason) why = I18n.t('ai.skillManual');
                 parts.push(
-                    '<div class="ai-skill-row"><span class="ai-skill-kind">' + this.escape(I18n.t('ai.skillRow')) + '</span>' +
+                    '<details class="ai-skill-row" data-ai-skill="' + this.escape(id) + '">' +
+                    '<summary><span class="ai-skill-kind">' + this.escape(I18n.t('ai.skillRow')) + '</span>' +
                     '<span class="ai-skill-name">' + this.escape(label) + '</span>' +
                     (why ? '<span class="ai-skill-why">' + this.escape(why) + '</span>' : '') +
-                    '</div>'
+                    '</summary>' +
+                    '<div class="ai-skill-body"><div class="ai-hint">' + this.escape(I18n.t('ai.skillHint')) + '</div></div>' +
+                    '</details>'
                 );
                 continue;
             }
