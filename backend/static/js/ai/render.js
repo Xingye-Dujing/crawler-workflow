@@ -220,11 +220,19 @@ const AIRender = {
         );
     },
 
-    toolCard(name, args, status, result) {
+    toolCard(name, args, status, result, block) {
         const summary = status === 'running' ? I18n.t('ai.toolRunning') : status === 'failed' ? I18n.t('ai.toolFailed') : I18n.t('ai.toolDone');
+        const row = block || {};
+        let took = '';
+        if (row.startedAt && row.endedAt && row.endedAt >= row.startedAt) {
+            const seconds = (row.endedAt - row.startedAt) / 1000;
+            took = seconds < 1 ? '< 1s' : (seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)) + 's';
+        }
         const detail = status === 'done' && result
             ? '<details class="ai-tool-detail"><summary>' + this.escape(I18n.t('ai.toolResult')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(result, null, 2)) + '</pre></details>'
-            : '';
+            : status === 'failed' && result
+                ? '<pre class="ai-code ai-tool-error">' + this.escape(typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + '</pre>'
+                : '';
         /* What it was ASKED to do, not only what came back: a reader following the trace needs the
            folder/command/kind, and the running card would otherwise show only a tool name. */
         let argsText = '';
@@ -239,7 +247,7 @@ const AIRender = {
             '<div class="ai-tool ' + (status === 'running' ? 'is-running' : status === 'failed' ? 'is-failed' : '') + '">' +
             '<span class="ai-tool-dot"></span><span class="ai-tool-name">' + this.escape(name) + '</span>' +
             argsLine +
-            '<span class="ai-tool-state">' + this.escape(summary) + '</span>' +
+            '<span class="ai-tool-state">' + this.escape(summary) + (took ? ' · ' + this.escape(took) : '') + '</span>' +
             detail +
             '</div>'
         );
@@ -338,7 +346,7 @@ const AIRender = {
                 const key = String(block.id || '') || 'name:' + String(block.name || '');
                 if (seen.has(key)) continue;
                 seen.add(key);
-                push('tools', this.toolCard(block.name || '', block.input || {}, block.status || 'done', block.result ?? null));
+                push('tools', this.toolCard(block.name || '', block.input || {}, block.status || 'done', block.result ?? null, block));
                 continue;
             }
             if (type === 'server_tool_use' || type === 'web_search_tool_result' || type === 'web_fetch_tool_result') {

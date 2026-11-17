@@ -1747,3 +1747,14 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+
+.ai-tool-error {
+  margin: 4px 0 0;
+  color: var(--err);
+  white-space: pre-wrap;
+}
+.ai-tool-detail summary {
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--text-faint);
+}

@@ -1771,6 +1771,7 @@ const AIWorkspace = {
                 name: String(event.name || ''),
                 input: event.arguments || {},
                 status: 'running',
+                startedAt: Date.now(),
             });
             this._schedulePaint(current);
             return;
@@ -1781,6 +1782,7 @@ const AIWorkspace = {
             if (block) {
                 block.status = event.ok ? 'done' : 'failed';
                 block.result = event.ok ? (event.result || null) : (event.error || null);
+                block.endedAt = Date.now();
                 this._schedulePaint(current);
             }
             return;
