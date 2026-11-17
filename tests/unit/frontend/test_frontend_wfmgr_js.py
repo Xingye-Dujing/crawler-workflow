@@ -59,7 +59,35 @@ class TestRenderedTable:
 
     def test_a_broken_file_stays_deletable_but_cannot_be_opened(self, rendered):
         row = rendered['brokenRow']
-        assert row == {'opens': False, 'renames': True, 'removes': True, 'chip': True}
+        assert row == {'opens': False, 'copies': False, 'renames': True, 'removes': True, 'chip': True}
+
+
+class TestCopy:
+    """复制 duplicates a saved canvas: one POST, no question, no canvas replacement."""
+
+    def test_a_readable_row_offers_copy_next_to_open(self, rendered):
+        row = next(chunk for chunk in rendered['current'].split('</tr>') if '日报' in chunk)
+        assert "wfFiles.copy('日报')" in row
+
+    def test_the_click_posts_the_stem_and_reloads_the_list(self, rendered):
+        copy = rendered['copy']
+        assert copy['url'] == '/api/workflow/copy'
+        assert copy['method'] == 'POST'
+        assert copy['body'] == {'name': '日报'}
+        assert copy['reloaded'] is True, 'the new row is not on screen without a re-read'
+        assert copy['toast'] == 'Copied to {name}'
+        assert copy['rows'] == ['日报', '日报 (2)']
+
+    def test_the_canvas_keeps_editing_the_original(self, rendered):
+        # Opening the copy would throw away whatever the user was doing; 复制 only
+        # adds a file, so the open canvas must stay where it was.
+        assert rendered['copy']['currentFile'] == '日报'
+
+    def test_a_refused_copy_shows_the_server_reason_and_does_not_repaint(self, rendered):
+        assert rendered['copy_refused'] == {'toast': 'LOCK-REFUSED', 'reloaded': False}
+
+    def test_a_refusal_without_a_reason_uses_the_panels_own_word(self, rendered):
+        assert rendered['copy_failed_without_reason'] == {'toast': 'Copy failed'}
 
 
 class TestQuoting:
@@ -118,3 +146,30 @@ class TestPageWiring:
             '#workflows-mgr-body',
         ):
             assert re.search(re.escape(selector) + r'[,{\s]', css), selector
+
+
+class TestActionColumn:
+    """A row's actions wrap; they are never clipped.
+
+    The shared data table caps every cell at 240px with ``text-overflow: ellipsis`` —
+    right for a name or an id, wrong for an action strip: whatever did not fit vanished
+    behind “…” with no way to click it (a workflow row now carries 打开/复制/重命名/删除/🔒,
+    a run row up to seven buttons). Only the strip opts out.
+    """
+
+    @staticmethod
+    def _rule(css: str, selector: str) -> str:
+        match = re.search(re.escape(selector) + r'\s*\{([^}]*)\}', css)
+        assert match, f'no rule for {selector}'
+        return match.group(1)
+
+    def test_the_ops_cell_wraps_instead_of_showing_an_ellipsis(self):
+        body = self._rule(css_text(), '.runs-mgr-ops')
+        assert 'white-space: normal' in body
+        assert 'max-width: none' in body
+        assert 'overflow: visible' in body
+        assert 'text-overflow: clip' in body
+
+    def test_one_button_label_never_breaks_in_the_middle(self):
+        body = self._rule(css_text(), '.runs-mgr-ops .runs-mgr-btn')
+        assert 'white-space: nowrap' in body

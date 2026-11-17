@@ -301,6 +301,65 @@ class TestWorkflowRename:
         assert (data_root / 'data' / 'workflows' / ('z' * 60 + '.json')).exists()
 
 
+class TestWorkflowCopy:
+    """复制 duplicates a saved canvas immediately — no target-name question, no overwrite."""
+
+    def _save(self, client, name, nodes=None):
+        workflow = _workflow(nodes or [_node('node-1', 'upload', params={'dataset_id': 'x'})], [])
+        return client.post('/api/workflow/save', json={'name': name, 'workflow': workflow})
+
+    def test_copy_creates_a_second_file_and_keeps_the_original(self, client, data_root):
+        self._save(client, 'dup-me')
+        response = client.post('/api/workflow/copy', json={'name': 'dup-me'})
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body['ok'] is True and body['name'] == 'dup-me (2)'
+        assert (data_root / 'data' / 'workflows' / 'dup-me.json').exists()
+        assert (data_root / 'data' / 'workflows' / 'dup-me (2).json').exists()
+        names = _list_names(client)
+        assert 'dup-me' in names and 'dup-me (2)' in names
+        loaded = client.get('/api/workflow/load', query_string={'name': 'dup-me (2)'}).get_json()
+        assert loaded['workflow']['name'] == 'dup-me (2)'
+
+    def test_a_second_copy_gets_the_next_tail(self, client):
+        self._save(client, 'twice')
+        first = client.post('/api/workflow/copy', json={'name': 'twice'}).get_json()
+        second = client.post('/api/workflow/copy', json={'name': 'twice'}).get_json()
+        assert (first['name'], second['name']) == ('twice (2)', 'twice (3)')
+
+    def test_the_copy_reads_the_same_datasets(self, client, paste):
+        dataset_id = paste(E2E_RECORDS, name='orders.csv')
+        upload = {'dataset_id': dataset_id, 'dataset_name': 'orders.csv'}
+        client.post(
+            '/api/workflow/save',
+            json={'name': 'copy-ref', 'workflow': _workflow([_node('n1', 'upload', params=upload)], [])},
+        )
+        copied = client.post('/api/workflow/copy', json={'name': 'copy-ref'}).get_json()
+        assert copied['datasets'] == 1, 'the node → file binding did not follow the copy'
+        entry = client.get('/api/workflow/load', query_string={'name': copied['name']}).get_json()['datasets'][0]
+        assert entry['restored'] is True, 'the copy lost its dataset and would ask for the file again'
+        # Both canvases now reference the file, so deleting it names both.
+        guard = client.delete(f'/api/data/datasets/{dataset_id}')
+        assert guard.status_code == 409
+        assert 'copy-ref' in str(guard.get_json()) and 'copy-ref (2)' in str(guard.get_json())
+
+    def test_copying_a_missing_workflow_is_404(self, client):
+        assert client.post('/api/workflow/copy', json={'name': 'ghost'}).status_code == 404
+
+    @pytest.mark.parametrize('bad', ['', '  ', '..', '....', 123])
+    def test_a_hostile_or_empty_name_is_refused(self, client, bad):
+        assert client.post('/api/workflow/copy', json={'name': bad}).status_code == 400
+
+    def test_a_copy_is_allowed_while_a_run_is_live(self, client, app_module, monkeypatch):
+        """Copy only READS the source file, so it cannot re-key the record a live run is
+        writing — unlike rename/delete, which the panel refuses mid-run."""
+        self._save(client, 'live-canvas')
+        monkeypatch.setitem(app_module.execution_state, 'running', True)
+        response = client.post('/api/workflow/copy', json={'name': 'live-canvas'})
+        assert response.status_code == 200
+        assert response.get_json()['name'] == 'live-canvas (2)'
+
+
 class TestLoadRefusedWhileRunning:
     def test_a_second_tab_cannot_rekey_a_live_run(self, client, app_module, monkeypatch):
         import json as _json
@@ -1308,7 +1367,7 @@ class _FakeCommentSession:
 
     rows = [{'平台': 'zhihu', '文章URL': 'https://x/1', '评论者': 'a', '评论内容': 'good'}]
 
-    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
         self.log = log
         self.abort = abort
 
@@ -1426,7 +1485,7 @@ class TestSourceCommentsMode:
                 pass
 
         class _RecordingSession:
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 pass
 
             def walk(self, platform, url, limit):
@@ -1473,7 +1532,7 @@ class TestSourceCommentsMode:
             # One ``walk`` for every platform: that is the surface the engine dispatches through now
             # (``CommentSession.walk(platform, url, limit)``), so a double that still answers
             # ``crawl_zhihu`` would silently prove nothing about the routing it claims to record.
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 pass
 
             def walk(self, platform, url, limit):
@@ -1990,7 +2049,7 @@ class TestACommentNodeHonoursHeadless:
                 pass
 
         class _FakeSession:
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 pass
 
             def walk(self, platform, url, limit):

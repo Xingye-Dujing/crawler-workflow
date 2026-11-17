@@ -126,6 +126,7 @@ BODY_ROUTES = [
     '/api/studio/save-pdf',
     '/api/studio/sources',
     '/api/visualize/render',
+    '/api/workflow/copy',
     '/api/workflow/delete',
     '/api/workflow/diagnostics',
     '/api/workflow/execute',

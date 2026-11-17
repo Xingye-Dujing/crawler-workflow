@@ -230,6 +230,48 @@ class WorkflowManager:
             atomic_replace(src, dst)
         return self.clean_name(new)
 
+    def copy(self, name: str) -> str | None:
+        """Write ``name`` a second time under the first free ``stem (N)`` name.
+
+        Returns the new stem, or ``None`` when the source file is not there. The target is
+        never an existing file — a duplicate the user asked for must not cost a third
+        canvas — and the tail is reserved BEFORE the length cap for the same reason the
+        project import reserves it: ``clean_name`` would otherwise cut the tail off a long
+        stem and the probe would keep landing on the name that is already taken. The inner
+        ``name`` is rewritten as ``rename`` does it, or the copy renames itself back on its
+        next save.
+        """
+        src = self.path_for(name)
+        if not os.path.exists(src):
+            return None
+        base = self.clean_name(name)
+        taken = {clean.casefold() for clean in self.list_workflows()}
+        candidate = base
+        suffix = 2
+        while candidate.casefold() in taken or os.path.exists(self.path_for(candidate)):
+            tail = f' ({suffix})'
+            room = max(1, self.MAX_NAME_LENGTH - len(tail))
+            candidate = self.clean_name(f'{base[:room]}{tail}')
+            suffix += 1
+        try:
+            with open(src, encoding='utf-8') as f:
+                payload = dict(json.load(f) or {})
+        except ValueError:
+            # A corrupt file keeps its bytes: the panel only offers 复制 on a readable row,
+            # but a hand-made request should still answer with a second file, not a 500.
+            payload = None
+        if payload is not None:
+            self.save(candidate, payload)
+        else:
+            dst = self.path_for(candidate)
+            tmp = f'{dst}.tmp-{os.getpid()}-{uuid.uuid4().hex[:8]}'
+            with open(src, 'rb') as source, open(tmp, 'wb') as target:
+                target.write(source.read())
+                target.flush()
+                os.fsync(target.fileno())
+            atomic_replace(tmp, dst)
+        return self.clean_name(candidate)
+
     def delete(self, name: str):
         path = self.path_for(name)
         if os.path.exists(path):

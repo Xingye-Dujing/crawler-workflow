@@ -553,7 +553,7 @@ var biblioWorkspace = {
                 '<td>' + escapeHtml(
                     I18n.t(snap.params_verified ? 'biblioWs.paramsVerified' : 'biblioWs.paramsUnverified')
                 ) + '</td>',
-                '<td>',
+                '<td class="runs-mgr-ops">',
                 '<button class="runs-mgr-btn" type="button" onclick="biblioWorkspace.setBaseline(\'' +
                     attrJsArg(snap.snapshot_id) + '\')">' + escapeHtml(I18n.t('biblioWs.setBaseline')) + '</button>',
                 '<button class="runs-mgr-btn" type="button" onclick="biblioWorkspace.compareWith(\'' +

@@ -715,6 +715,10 @@ var wfFiles = {
             if (!row.broken) {
                 ops += '<button class="runs-mgr-btn" onclick="wfFiles.open(\'' + self._quote(name) + '\')">' +
                     I18n.t('wfMgr.open') + '</button>';
+                /* 复制 needs no question: it only ADDS a file (the server picks the next free
+                   “name (2)”), so a mis-click costs nothing and asking would be ceremony. */
+                ops += '<button class="runs-mgr-btn" onclick="wfFiles.copy(\'' + self._quote(name) + '\')">' +
+                    I18n.t('wfMgr.copy') + '</button>';
             }
             ops += '<button class="runs-mgr-btn" onclick="wfFiles.rename(\'' + self._quote(name) + '\')">' +
                 I18n.t('wfMgr.rename') + '</button>';
@@ -788,6 +792,23 @@ var wfFiles = {
             this.refresh();
         } else {
             showToast((result && result.error) || I18n.t('wfMgr.renameFailed'));
+        }
+    },
+
+    /* A copy is immediate on purpose: it adds a file and can never overwrite one, so
+       there is nothing to confirm. The canvas being edited stays where it is — only the
+       panel's list gains the new row. */
+    async copy(name) {
+        var result = await fetchJSON('/api/workflow/copy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
+            body: JSON.stringify({ name: name }),
+        });
+        if (result && result.ok) {
+            showToast(I18n.t('wfMgr.copyDone', { name: result.name || '' }));
+            await this.refresh();
+        } else {
+            showToast((result && result.error) || I18n.t('wfMgr.copyFailed'));
         }
     },
 

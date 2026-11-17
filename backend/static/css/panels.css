@@ -603,7 +603,23 @@ table.data-preview-table tr:hover td {
   border-color: var(--ok);
   color: var(--ok);
 }
+/* A row's actions WRAP; they are never clipped. The table's cells are capped at 240px
+   with ``text-overflow: ellipsis`` — right for a name or an id, wrong for an action
+   strip: a workflow row now carries 打开/复制/重命名/删除/🔒, a run row up to seven
+   buttons and the saved-logins rows more, and whatever did not fit used to vanish
+   behind “…” with no way to click it. This cell opts out of the cap and lets the
+   buttons flow onto second and third lines; one button's own label still never
+   breaks in the middle. */
 .runs-mgr-ops {
+  white-space: normal;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  /* The strip is the last column: keep it from squeezing the name almost to nothing
+     on a narrow dock, and let its own line height stay tight when it wraps. */
+  min-width: 96px;
+}
+.runs-mgr-ops .runs-mgr-btn {
   white-space: nowrap;
 }
 .runs-mgr-btn {

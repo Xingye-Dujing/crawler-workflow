@@ -190,6 +190,56 @@ class TestListingAndDeleting:
         assert manager.workflow_dir == str(target) and target.is_dir()
 
 
+class TestCopy:
+    """复制 is the one mutation that only ADDS: it must never overwrite a canvas."""
+
+    def test_a_copy_is_a_new_file_with_its_own_name_inside(self, manager):
+        manager.save('周报', dict(WORKFLOW))
+        new = manager.copy('周报')
+        assert new == '周报 (2)'
+        assert sorted(manager.list_workflows()) == sorted(['周报', '周报 (2)'])
+        assert manager.load(new)['nodes'] == WORKFLOW['nodes']
+        # The inner name follows the FILE (a copy still saying 周报 would rename itself
+        # back on its next save, exactly as the rename path guards).
+        assert manager.load(new)['name'] == '周报 (2)'
+        assert manager.load('周报')['name'] == '周报', 'the original must keep its own name'
+
+    def test_a_second_copy_takes_the_next_free_tail(self, manager):
+        manager.save('周报', dict(WORKFLOW))
+        assert manager.copy('周报') == '周报 (2)'
+        assert manager.copy('周报') == '周报 (3)'
+        assert manager.copy('周报 (2)') == '周报 (2) (2)'
+        assert sorted(manager.list_workflows()) == ['周报', '周报 (2)', '周报 (2) (2)', '周报 (3)']
+
+    def test_an_existing_neighbour_is_never_overwritten(self, manager):
+        manager.save('a', {'nodes': [1]})
+        manager.save('a (2)', {'nodes': [2]})
+        assert manager.copy('a') == 'a (3)'
+        assert manager.load('a (2)')['nodes'] == [2], 'the copy stepped on a foreign canvas'
+
+    def test_copying_a_missing_workflow_answers_none(self, manager):
+        assert manager.copy('没有这个') is None
+        assert manager.list_workflows() == []
+
+    def test_a_capped_name_keeps_its_tail_inside_the_budget(self, manager):
+        stem = '长' * WorkflowManager.MAX_NAME_LENGTH
+        manager.save(stem, dict(WORKFLOW))
+        first = manager.copy(stem)
+        second = manager.copy(stem)
+        assert first != second, 'the tail was cut back off a capped stem, so the probe never advanced'
+        for name in (first, second):
+            assert len(name) <= WorkflowManager.MAX_NAME_LENGTH
+            assert manager.load(name) is not None
+
+    def test_a_corrupt_file_is_copied_byte_for_byte(self, manager):
+        with open(manager.save('坏', dict(WORKFLOW)), 'w', encoding='utf-8') as handle:
+            handle.write('{ not json')
+        new = manager.copy('坏')
+        assert new == '坏 (2)'
+        with open(manager.path_for(new), encoding='utf-8') as handle:
+            assert handle.read() == '{ not json'
+
+
 class TestCapturedParamsWithReusableNodes:
     def test_a_run_node_inside_a_group_is_found_by_its_expanded_id(self, manager):
         """A run records expanded child ids; the saved file keeps the group. Without

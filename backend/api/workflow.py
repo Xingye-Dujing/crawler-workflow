@@ -1,6 +1,6 @@
 """``/api/workflow/*``: the canvas door — saved files, the waiting list, and the live console.
 
-Fourteen routes. The saved-canvas cluster writes and reads ``data/workflows`` through the store
+Fifteen routes. The saved-canvas cluster writes and reads ``data/workflows`` through the store
 singleton and keeps a reloaded canvas pointing at the datasets its upload nodes name; the queue
 reads are the panel's view of what is parked; the stop/status/processes cluster is what the
 console, the node badges and the thread inspector read while a run is in flight.
@@ -288,6 +288,32 @@ def rename_workflow():
     lock_store.rename_scope('workflows', old, new)
     logger.info(t('api.workflowRenamed', old=old, new=new))
     return jsonify({'ok': True, 'name': new, 'path': get_workflow_manager().path_for(new), 'datasets': refs})
+
+
+@bp.route('/api/workflow/copy', methods=['POST'])
+def copy_workflow():
+    """Duplicate a saved canvas under the first free ``stem (2)`` name.
+
+    There is no target name argument on purpose: a copy that asked for one would be a save
+    under a new name, and the panel's 复制 promises the one thing that needs no answer —
+    an immediate second file. Nothing here re-keys a live run (the source file is only
+    read), so this action is allowed mid-run where rename/delete are refused.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    name = _request_workflow_name(data.get('name', ''))
+    if name is None:
+        return jsonify({'ok': False, 'error': t('api.workflowNameRequired')}), 400
+    new = get_workflow_manager().copy(name)
+    if new is None:
+        return jsonify({'ok': False, 'error': t('api.workflowMissing', name=name)}), 404
+    # The copy reads the same datasets, so the node → file ledger is bound for the new
+    # name too; without it the copy reopens with empty Upload nodes and asks for the files
+    # again even though they are right there.
+    bound = get_dataset_store().bind(new, _workflow_dataset_refs(get_workflow_manager().load(new) or {}))
+    logger.info(t('api.workflowCopied', old=name, new=new))
+    return jsonify({'ok': True, 'name': new, 'datasets': bound})
 
 
 @bp.route('/api/workflow/delete', methods=['POST'])

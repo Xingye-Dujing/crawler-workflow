@@ -28,6 +28,9 @@ const DICT = {
         'wfMgr.current': 'open',
         'wfMgr.broken': 'unreadable',
         'wfMgr.open': 'Open',
+        'wfMgr.copy': 'Copy',
+        'wfMgr.copyDone': 'Copied to {name}',
+        'wfMgr.copyFailed': 'Copy failed',
         'wfMgr.rename': 'Rename',
         'wfMgr.remove': 'Delete',
     },
@@ -36,6 +39,9 @@ const DICT = {
         'wfMgr.current': '当前',
         'wfMgr.broken': '已损坏',
         'wfMgr.open': '打开',
+        'wfMgr.copy': '复制',
+        'wfMgr.copyDone': '已复制为 {name}',
+        'wfMgr.copyFailed': '复制失败',
         'wfMgr.rename': '重命名',
         'wfMgr.remove': '删除',
     },
@@ -99,10 +105,12 @@ out.when = {
     garbage: manager._when('abc'),
 };
 
-/* A broken row is the one that must stay removable, and must not offer 打开. */
+/* A broken row is the one that must stay removable, and must not offer 打开 or 复制
+   (there is no readable payload to duplicate). */
 const brokenRow = out.current.split('</tr>').find((chunk) => chunk.indexOf('back') >= 0) || '';
 out.brokenRow = {
     opens: brokenRow.indexOf("wfFiles.open(") >= 0,
+    copies: brokenRow.indexOf('wfFiles.copy(') >= 0,
     renames: brokenRow.indexOf('wfFiles.rename(') >= 0,
     removes: brokenRow.indexOf('wfFiles.remove(') >= 0,
     chip: brokenRow.indexOf(I18n.t('wfMgr.broken')) >= 0,
@@ -156,5 +164,54 @@ out.openRepaints = { fetches, currentChip: body.innerHTML.indexOf(DICT.zh['wfMgr
 
 I18n.lang = 'en';
 out.headers = render(ROWS, '').indexOf('Name') >= 0;
+
+/* ── 复制: one POST, no question, no canvas change ────────────────────
+   The action duplicates a saved file under the next free " (2)" name. It must ask
+   nothing (a button that only ADDS a file has nothing to lose), must not open the
+   copy over the canvas being edited, and must reload the list so the new row is
+   there. A refused copy shows the server's own reason. */
+const copyCalls = [];
+let copyAnswer = { ok: true, name: '日报 (2)' };
+sandbox.fetch = (url, opts) => {
+    const path = String(url).split('?')[0];
+    copyCalls.push({ url: path, method: (opts && opts.method) || 'GET', body: opts && opts.body });
+    const answered =
+        path === '/api/workflow/copy'
+            ? copyAnswer
+            : {
+                  ok: true,
+                  workflows: [
+                      { name: '日报', nodes: 3, labels: [], size: 1200, mtime: 0, broken: false },
+                      { name: '日报 (2)', nodes: 3, labels: [], size: 1200, mtime: 0, broken: false },
+                  ],
+              };
+    const text = JSON.stringify(answered);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(answered), text: () => Promise.resolve(text) });
+};
+const copyToasts = [];
+sandbox.showToast = (message) => copyToasts.push(String(message));
+workflow.currentFile = '日报';
+await manager.copy('日报');
+out.copy = {
+    url: copyCalls[0] && copyCalls[0].url,
+    method: copyCalls[0] && copyCalls[0].method,
+    body: copyCalls[0] ? JSON.parse(copyCalls[0].body) : null,
+    toast: copyToasts[0],
+    reloaded: copyCalls.some((call) => call.url === '/api/workflow/list'),
+    rows: (manager._last || []).map((row) => row.name),
+    currentFile: workflow.currentFile,
+};
+
+copyCalls.length = 0;
+copyToasts.length = 0;
+copyAnswer = { ok: false, error: 'LOCK-REFUSED' };
+await manager.copy('locked');
+out.copy_refused = { toast: copyToasts[0], reloaded: copyCalls.some((call) => call.url === '/api/workflow/list') };
+
+copyCalls.length = 0;
+copyToasts.length = 0;
+copyAnswer = { ok: false };
+await manager.copy('locked');
+out.copy_failed_without_reason = { toast: copyToasts[0] };
 
 process.stdout.write(JSON.stringify(out));
