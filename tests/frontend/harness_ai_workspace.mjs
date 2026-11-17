@@ -522,6 +522,9 @@ out.storedTwoRounds = {
     skills: workspace._dom.chat.querySelectorAll('.ai-skill-row').length,
     tools: workspace._dom.chat.querySelectorAll('.ai-tool').length,
     detached: workspace._dom.chat.querySelectorAll('.ai-message-tool').length,
+    /* The tool RESULT lives in its own stored row; the card must get it back, or it has no
+       `<details>` and a finished card can never be opened after a reload. */
+    details: workspace._dom.chat.querySelectorAll('details.ai-tool-detail').length,
 };
 
 /* Which model answered a saved conversation, and this session's numbers (tokens, cache hit rate,

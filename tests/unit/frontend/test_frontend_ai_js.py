@@ -123,6 +123,7 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['skills'] == 1, out
         assert out['tools'] == 1, out
         assert out['detached'] == 0, 'a standalone tool row appeared beside the bubble'
+        assert out['details'] == 1, 'the stored card lost its result, so it could not be opened'
 
     def test_controls_outside_the_transcript_reach_the_delegated_handler(self):
         out = _run_workspace()['delegated']

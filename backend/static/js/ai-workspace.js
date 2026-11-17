@@ -2081,6 +2081,11 @@ const AIWorkspace = {
            “AI”. */
         const order = [];
         const turns = new Map();
+        /* A tool RESULT is stored in its own `tool` row, never inside the assistant's `tool_use`
+           block. Live the block carries it (the event sets `result`), so a reloaded card had no
+           `result`, therefore no `<details>` — a card that could not be opened. The rows are folded
+           back into their blocks here, before anything is painted. */
+        const toolPayloads = new Map();
         const turnFor = (message) => {
             const meta = message.meta || {};
             const turnId = String(meta.turn_id || message.id || '');
@@ -2109,11 +2114,29 @@ const AIWorkspace = {
             const meta = message.meta || {};
             const callId = String(meta.tool_call_id || '');
             const inline = !!(callId && this._inlineToolCalls.has(callId));
+            if (callId && inline) {
+                let payload = message.content || null;
+                try {
+                    payload = JSON.parse(payload);
+                } catch (e) {
+                    /* a plain-text tool output stays a string; the card shows it verbatim */
+                }
+                toolPayloads.set(callId, { payload: payload, isError: !!meta.is_error });
+            }
             if (!this._isStandaloneToolRow(message, inline)) continue;
             const turnId = String(meta.turn_id || '');
             const turn = turnId ? turns.get(turnId) : null;
             if (turn) turn.extras.push(message);
             else order.push({ kind: 'tool', message: message });
+        }
+        for (const turn of turns.values()) {
+            for (const block of turn.blocks) {
+                if (!block || block.type !== 'tool_use') continue;
+                const found = toolPayloads.get(String(block.id || ''));
+                if (!found) continue;
+                block.status = found.isError ? 'failed' : 'done';
+                block.result = found.payload;
+            }
         }
         for (const item of order) {
             if (item.kind === 'user') this._appendUser(item.message.content, item.message.meta?.context, item.message.meta?.attachments, null, false);
