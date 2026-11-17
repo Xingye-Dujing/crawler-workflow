@@ -2031,3 +2031,15 @@
 .ai-tool-args {
   min-width: 0;
 }
+
+
+/* The theme gives EVERY element a radius (`base.css`: `*, *::before, *::after`), so a full-bleed
+   child — a thinking body, a table cell — painted rounded corners over the frame that contains it:
+   the "four blank corners". These are the surfaces that must be square. */
+.ai-thinking-body {
+  border-radius: 0;
+}
+.ai-table th,
+.ai-table td {
+  border-radius: 0;
+}
