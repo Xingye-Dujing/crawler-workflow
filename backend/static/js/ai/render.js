@@ -304,8 +304,23 @@ const AIRender = {
         );
     },
 
+    /* While a tool runs, say WHAT is being produced — a plan, a question, a workflow — instead of a
+       generic “读取中…”. The model emits no prose before `present_artifact` / `ask_user_question`, so
+       without this the turn looks stalled exactly when the useful part is being built. */
+    _runningLabel(name) {
+        const key = {
+            present_artifact: 'ai.toolRunningArtifact',
+            ask_user_question: 'ai.toolRunningQuestion',
+            apply_workflow: 'ai.toolRunningWorkflow',
+            run_cmd: 'ai.toolRunningCommand',
+            python_run: 'ai.toolRunningPython',
+            workspace_import: 'ai.toolRunningImport',
+        }[String(name || '')];
+        return I18n.has(key || '') ? I18n.t(key) : I18n.t('ai.toolRunning');
+    },
+
     toolCard(name, args, status, result, block) {
-        const summary = status === 'running' ? I18n.t('ai.toolRunning') : status === 'failed' ? I18n.t('ai.toolFailed') : I18n.t('ai.toolDone');
+        const summary = status === 'running' ? this._runningLabel(name) : status === 'failed' ? I18n.t('ai.toolFailed') : I18n.t('ai.toolDone');
         const row = block || {};
         let took = '';
         if (row.startedAt && row.endedAt && row.endedAt >= row.startedAt) {

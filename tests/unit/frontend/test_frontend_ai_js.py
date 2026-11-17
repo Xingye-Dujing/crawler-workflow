@@ -244,6 +244,15 @@ class TestWorkspaceRepaintAndDelegation:
         # “answered” row while two questions are still open (the hint proves the card is still there).
         assert out['submitted'] <= 1, out
 
+    def test_a_stored_artifact_still_draws_its_card_and_a_running_tool_says_what_it_does(self):
+        """Reloading dropped the artifact card (only the tool row survived), and a running
+        present_artifact said “读取中…”, which reads as a stalled turn."""
+        out = _run_workspace()
+        assert out['storedArtifact']['cards'] == 1, out['storedArtifact']
+        assert out['storedArtifact']['inExtras'] is True, out['storedArtifact']
+        assert 'Generating the artifact' in out['runningLabel'], out['runningLabel']
+        assert '读取中' not in out['runningLabel'], out['runningLabel']
+
     def test_a_plan_artifact_offers_an_action_too(self):
         """Only workflow drafts had a button, so a plan or chart spec card looked dead. Its button
         hands the proposal back to the assistant (which has the validated tools)."""

@@ -705,7 +705,39 @@ const paidDefault = workspace._thinkingOn();
 sandbox.AISettings.save({ thinkingLocal: false });
 out.thinking = { localDefault: localDefault, localOn: localOn, paidDefault: paidDefault };
 
+
+/* A stored `present_artifact` row must still draw its artifact card (the reloaded transcript used to
+   show only the tool card, so the plan looked like it had never been produced). */
+workspace._messages = [
+    {
+        id: 'a_art',
+        role: 'assistant',
+        blocks: [
+            { type: 'skill', name: 'workflow', reason: 'auto' },
+            { type: 'tool_use', id: 'call_art', name: 'present_artifact', input: { title: '方案' }, status: 'done' },
+        ],
+        meta: { turn_id: 't_art' },
+        usage: {},
+    },
+    {
+        role: 'tool',
+        content: JSON.stringify({ ok: true, artifact: { id: 'art_1', title: '方案', kind: 'analysis_plan', payload: {} } }),
+        meta: { turn_id: 't_art', tool_call_id: 'call_art', name: 'present_artifact' },
+    },
+];
+workspace._renderMessages([]);
+/* The stub has no descendant combinators: find the extras host, then its card. */
+const extrasHost = workspace._dom.chat.querySelector('.ai-extras');
+out.storedArtifact = {
+    cards: workspace._dom.chat.querySelectorAll('.ai-artifact').length,
+    inExtras: !!(extrasHost && extrasHost.querySelector('.ai-artifact')),
+};
+
+/* A running present_artifact must say what it is doing, not “读取中…”. */
+out.runningLabel = sandbox.AIRender.toolCard('present_artifact', {}, 'running', null, { id: 'c9' });
+
 fs.writeFileSync(1, JSON.stringify(out));
+
 
 
 
