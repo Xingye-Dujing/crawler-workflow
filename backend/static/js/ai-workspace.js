@@ -1507,7 +1507,13 @@ const AIWorkspace = {
 
     async send() {
         const text = (this._dom.input?.value || '').trim();
-        await this._sendText(text, {});
+        /* Any early return inside `_sendText` says why (toast); a throw says why too. Silence is
+           what makes a slow turn and a dead button look identical. */
+        try {
+            await this._sendText(text, {});
+        } catch (error) {
+            this._toast((I18n.t('ai.error') || '') + ': ' + String((error && error.message) || error));
+        }
     },
 
     async _sendText(text, options) {
@@ -1519,7 +1525,10 @@ const AIWorkspace = {
         if (!opts.monitor && !opts.feedback) this._feedbackCount = 0;
         const pendingAttachments = opts.monitor ? [] : this._attachments.slice();
         const pendingRefs = opts.monitor ? [] : this._refs.slice();
-        if (!text && !pendingAttachments.length && !pendingRefs.length) return false;
+        if (!text && !pendingAttachments.length && !pendingRefs.length) {
+            this._toast(I18n.t('ai.emptyMessage'));
+            return false;
+        }
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         const key = AISettings.keyFor(this._provider);
         if (provider?.requires_key && !key) {

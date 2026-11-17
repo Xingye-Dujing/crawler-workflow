@@ -21,6 +21,7 @@ SPEC = ProviderSpec(
     base_url='',
     models=(ModelSpec('qwen3.5:9b', 'qwen3.5:9b', 32768, frozenset()),),
     local_only=True,
+    requires_key=False,
     capabilities=frozenset(),
 )
 
