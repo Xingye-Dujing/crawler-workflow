@@ -227,7 +227,9 @@ class TestAccountLifecycle:
         service = accounts_service.get_account_service()
         events = []
         original_delete = service.delete_user
-        monkeypatch.setattr(accounts_api.stores, 'release_user', lambda user_id: events.append(('release', user_id)))
+        monkeypatch.setattr(
+            accounts_api.stores, 'release_user', lambda user_id, **kwargs: events.append(('release', user_id))
+        )
 
         def spy(*args, **kwargs):
             events.append(('delete', args[1]))
@@ -248,7 +250,7 @@ class TestAccountLifecycle:
         _create(admin_client, 'mallory')
         mallory = _settle_password(_login(_new_client(admin_client), 'mallory', PASSWORD))
         releases = []
-        monkeypatch.setattr(accounts_api.stores, 'release_user', releases.append)
+        monkeypatch.setattr(accounts_api.stores, 'release_user', lambda user_id, **kwargs: releases.append(user_id))
 
         wrong = _delete(admin_client, f'/api/accounts/{bob["user_id"]}', {'confirm_username': 'nobody'})
         assert wrong.status_code == 400, wrong.get_json()
@@ -321,12 +323,36 @@ class TestAccountLifecycle:
         assert os.path.isdir(os.path.join(Config.DATA_DIR, 'users', bob['user_id'])), 'the tree moved anyway'
         assert bob['user_id'] in [row['user_id'] for row in admin_client.get('/api/accounts').get_json()['accounts']]
 
+    def test_a_force_logout_waits_for_the_accounts_in_flight_request(self, admin_client):
+        """The run is not the only holder: the owner's own upload/AI turn has the store open for
+        the length of its request, and closing it there answered ``Cannot operate on a closed
+        database`` mid-write. The close moves to that request's teardown."""
+        from runtime import account_context, stores
+
+        bob = _create(admin_client, 'bob').get_json()['user']
+        with account_context.use(Account(bob['user_id'], 'bob')):
+            stores.get_run_store()
+        stores.enter_request(bob['user_id'])
+        try:
+            assert _post(admin_client, f'/api/accounts/{bob["user_id"]}/logout').status_code == 200
+            assert bob['user_id'] in stores.user_slots(), 'the scope was closed under a live request'
+        finally:
+            stores.leave_request(bob['user_id'])
+        assert bob['user_id'] not in stores.user_slots(), 'the deferred close never ran'
+
+    def test_every_request_balances_its_in_use_mark(self, admin_client):
+        """A leaked mark would defer every later release of that account forever."""
+        from runtime import stores
+
+        admin_client.get('/api/config')
+        assert stores._REQUEST_USERS == {}
+
     def test_force_logout_releases_the_scope_only_when_no_run_is_writing(self, admin_client, monkeypatch):
         from api import accounts as accounts_api
 
         bob = _create(admin_client, 'bob').get_json()['user']
         releases = []
-        monkeypatch.setattr(accounts_api.stores, 'release_user', releases.append)
+        monkeypatch.setattr(accounts_api.stores, 'release_user', lambda user_id, **kwargs: releases.append(user_id))
         assert _post(admin_client, f'/api/accounts/{bob["user_id"]}/logout').status_code == 200
         assert releases == [bob['user_id']]
 
@@ -353,7 +379,7 @@ class TestAccountLifecycle:
         bob = _create(admin_client, 'bob').get_json()['user']
         held = []
 
-        def spy(user_id):
+        def spy(user_id, **_kwargs):
             acquired = accounts_api.execute_lock.acquire(blocking=False)
             if acquired:
                 accounts_api.execute_lock.release()
@@ -377,7 +403,7 @@ class TestAccountLifecycle:
         _settle_password(_login(_new_client(admin_client), 'bob', PASSWORD))
         live_at_release = []
 
-        def spy(user_id):
+        def spy(user_id, **_kwargs):
             rows = accounts_service.get_account_service().store._all(
                 'SELECT sid_hash FROM sessions WHERE user_id = ? AND revoked_at IS NULL', (user_id,)
             )

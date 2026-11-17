@@ -1,7 +1,9 @@
 """The one provider catalog. Every route, analyzer and test asks this module."""
 
 from core.config import Config
+from runtime import account_context
 
+from ai import scopes
 from ai.errors import AIError
 from ai.providers.deepseek import DeepSeekProvider
 from ai.providers.ollama import OllamaProvider
@@ -26,7 +28,9 @@ ORDER = ('deepseek', 'opencode_go', 'openrouter', 'ollama')
 def get_provider(provider_id: str):
     key = str(provider_id or '').strip()
     provider = PROVIDERS.get(key)
-    if provider is None:
+    # ``unknown`` is also the answer for another account's plugin provider: naming it exists, but
+    # calling it would spend that account's endpoint choice from a conversation it never approved.
+    if provider is None or not scopes.visible('providers', key, account_context.scope_key()):
         raise AIError('ai.unknownProvider', kind='bad_request', provider=key)
     return provider
 
@@ -35,6 +39,8 @@ def public_catalog() -> list:
     out = []
     for key in ORDER:
         provider = PROVIDERS[key]
+        if not scopes.visible('providers', key, account_context.scope_key()):
+            continue
         item = provider.public()
         item['local_available'] = not (provider.spec.local_only and Config.CLOUD_MODE)
         if provider.spec.local_only and Config.CLOUD_MODE:

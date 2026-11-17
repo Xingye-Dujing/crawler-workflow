@@ -24,7 +24,7 @@ from core.config import Config
 from extensions import API_VERSION, HOST, validate_manifest
 from runtime import account_context, paths
 
-from ai import skills, store, tools
+from ai import scopes, skills, store, tools
 from ai.errors import AIError
 from ai.providers import PROVIDERS
 from ai.providers.openai_compat import OpenAICompatibleProvider
@@ -162,6 +162,7 @@ def _http_tool(spec: dict, plugin_id: str):
         raise ValueError(f'tool {name} already exists')
     HOST.register('tools', name, tool, f'plugin:{plugin_id}')
     tools.TOOLS[name] = tool
+    scopes.claim('tools', name, account_context.scope_key())
     return tool
 
 
@@ -205,6 +206,7 @@ def _provider_pack(spec: dict, plugin_id: str):
         raise ValueError(f'provider {provider_id} already exists')
     HOST.register('providers', provider_id, provider, f'plugin:{plugin_id}')
     PROVIDERS[provider_id] = provider
+    scopes.claim('providers', provider_id, account_context.scope_key())
     return provider
 
 
@@ -243,6 +245,7 @@ class _CodeApi:
             raise ValueError(f'tool {spec.name} already exists')
         HOST.register('tools', spec.name, spec, owner)
         tools.TOOLS[spec.name] = spec
+        scopes.claim('tools', spec.name, account_context.scope_key())
 
     def add_provider(self, provider) -> None:
         owner = f'plugin:{self.plugin_id}'
@@ -250,6 +253,7 @@ class _CodeApi:
             raise ValueError(f'provider {provider.spec.id} already exists')
         HOST.register('providers', provider.spec.id, provider, owner)
         PROVIDERS[provider.spec.id] = provider
+        scopes.claim('providers', provider.spec.id, account_context.scope_key())
 
     def add_skill(self, skill) -> None:
         owner = f'plugin:{self.plugin_id}'
@@ -257,6 +261,7 @@ class _CodeApi:
             raise ValueError(f'skill {skill.id} already exists')
         HOST.register('skills', skill.id, skill, owner)
         skills.BUILTIN[skill.id] = skill
+        scopes.claim('skills', skill.id, account_context.scope_key())
 
 
 #: The product table each contribution kind actually lives in. The registry is the index; these
@@ -282,6 +287,7 @@ def _release(plugin_id: str) -> None:
             table = table_of()
             if table.get(name) is HOST.get(kind, name):
                 table.pop(name, None)
+            scopes.release(kind, name)
     HOST.unregister_owner(owner)
 
 
@@ -330,6 +336,11 @@ def install(payload: dict) -> dict:
         manifest.to_dict(), sorted(manifest.permissions), source='code' if manifest.kind == 'code' else 'user'
     )
     return {**manifest.to_dict(), 'enabled': True, 'source': row.get('source') or 'user'}
+
+
+def visible_tool(name: str) -> bool:
+    """Whether the signed-in account may see and call this tool (see ``ai.scopes``)."""
+    return scopes.visible('tools', name, account_context.scope_key())
 
 
 def _manifest_of(row: dict):

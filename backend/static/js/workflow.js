@@ -169,27 +169,54 @@ const workflow = {
            replace the group with its children, and reopening would lose the feature. */
         const workflowData = canvas.toWorkflowJSON({ expandReusable: false });
         let name = this.currentFile;
+        const creating = !name;
         if (!name) {
             name = await showDialog({
                 message: I18n.t('dialog.workflowName'),
-                input: { placeholder: 'my_workflow', value: '' },
+                input: { placeholder: 'my_workflow' },
                 buttons: [
                     { label: I18n.t('dialog.cancel'), value: null },
                     { label: I18n.t('dialog.confirm'), primary: true },
                 ],
             });
             if (!name) return;
-            this.currentFile = name;
-            if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         }
-        try {
-            const resp = await fetch('/api/workflow/save', {
+        const post = async (overwrite) => {
+            const body = { name: name, workflow: workflowData };
+            /* ``create`` marks a name this canvas just typed: the server then refuses to replace
+               an existing workflow until the user says so. Saving an OPENED file omits it, which
+               is why autosave keeps overwriting its own file. */
+            if (creating) body.create = true;
+            if (overwrite) body.overwrite = true;
+            return fetch('/api/workflow/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name, workflow: workflowData }),
+                body: JSON.stringify(body),
             });
-            const result = await resp.json();
+        };
+        try {
+            let resp = await post(false);
+            let result = await resp.json();
+            if (!result.ok && result.exists) {
+                /* A taken name is a decision, not a surprise: overwriting destroys a workflow the
+                   user did not open. Nothing is remembered until a save actually succeeds — a
+                   remembered name would let the next autosave replace that file silently. */
+                const answer = await showDialog({
+                    message: I18n.t('dialog.workflowOverwrite', { name: name }),
+                    buttons: [
+                        { label: I18n.t('dialog.cancel'), value: null },
+                        { label: I18n.t('dialog.overwrite'), value: 'overwrite' },
+                    ],
+                });
+                if (answer !== 'overwrite') return;
+                resp = await post(true);
+                result = await resp.json();
+            }
             if (result.ok) {
+                if (creating) {
+                    this.currentFile = name;
+                    if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
+                }
                 showToast(I18n.t('toast.workflowSaved') + ': ' + name);
                 localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
                 this._persistOpenFile();

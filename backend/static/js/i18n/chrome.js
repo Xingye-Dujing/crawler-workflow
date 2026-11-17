@@ -185,6 +185,8 @@
            everything that is wrong, not the one thing they will get to see. */
         'toast.problems': '{n} problems to fix before this run can start:',
         'dialog.workflowName': 'Workflow name:',
+        'dialog.workflowOverwrite': 'A workflow named “{name}” already exists. Save over it?',
+        'dialog.overwrite': 'Overwrite',
         'dialog.nodeJsonCopy': 'Copy this node JSON (select all, then Ctrl+C):',
         'dialog.nodeJsonImport': 'Paste a node JSON to add:',
         'dialog.selectWorkflow': 'Enter workflow name to load:',
@@ -470,6 +472,8 @@
         'toast.cookiesSaved': 'Cookies 已保存',
         'toast.problems': '本次运行前有 {n} 个问题需要处理:',
         'dialog.workflowName': '工作流名称:',
+        'dialog.workflowOverwrite': '已有同名工作流“{name}”，要覆盖它吗？',
+        'dialog.overwrite': '覆盖',
         'dialog.nodeJsonCopy': '复制以下节点 JSON（全选后 Ctrl+C）：',
         'dialog.nodeJsonImport': '粘贴一个节点 JSON 以添加：',
         'dialog.selectWorkflow': '输入要加载的工作流名称:',

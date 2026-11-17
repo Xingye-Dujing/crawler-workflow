@@ -281,7 +281,9 @@ async function refreshAPIProviderModels() {
     if (btn) btn.disabled = true;
     try {
         const key = (LLMSettings.load()[provider] || {}).api_key || '';
-        const resp = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/models?key=' + encodeURIComponent(key));
+        const resp = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/models', {
+            headers: { 'X-Provider-Key': key },
+        });
         const result = await resp.json();
         if (result.ok && result.models.length) {
             const current = (LLMSettings.load()[provider] || {}).model || '';

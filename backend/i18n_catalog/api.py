@@ -16,6 +16,7 @@ ZH = {
     'api.reportSaveFailed': '报告保存失败：导出目录不可写或磁盘已满，请清理磁盘后重试',
     'api.excelTooLarge': '表格 {name} 解压后过大（{detail}），超过导入上限，请拆分后再上传',
     'api.workflowSaveFailed': '工作流保存失败：工作流目录不可写或磁盘已满，请清理磁盘后重试',
+    'api.workflowExists': '已有同名工作流“{name}”，覆盖会替换它的内容',
     'api.compareNeedsBothRuns': '对比两次运行需要在 a 与 b 里各给一个运行 id',
     'api.compareLimitInteger': '对比的 limit 必须是整数（每列最多列出多少行差异）',
     'api.biblioDecodeSuspect': (
@@ -228,6 +229,7 @@ EN = {
     'api.workflowSaveFailed': (
         'The workflow could not be saved: the workflow directory is not writable or the disk is full'
     ),
+    'api.workflowExists': 'A workflow named “{name}” already exists; saving would replace its contents',
     'api.biblioDecodeSuspect': (
         '{name} decodes to mojibake as GB18030 (it is probably Big5 or Shift-JIS): re-save it as UTF-8 and upload again'
     ),

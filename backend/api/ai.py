@@ -96,7 +96,10 @@ def ai_models(provider_id: str):
         provider = get_provider(provider_id)
     except AIError as exc:
         return _error(exc)
-    key = str(request.args.get('key') or '')
+    # The key travels in a HEADER, never the query string: a documented deployment puts a
+    # reverse proxy in front of this server, and an access log writes `$request` (query and
+    # all) — a `?key=sk-…` line would put the user's credential in the operator's log file.
+    key = str(request.headers.get('X-Provider-Key') or '')
     host = str(get_setting('ollama_host') or '') if provider.spec.id == 'ollama' else ''
     try:
         return jsonify({'ok': True, 'models': provider.list_models(key, host), 'provider': provider.spec.id})
@@ -183,6 +186,7 @@ def ai_bootstrap():
             'tools': [
                 {**spec.schema(), 'control': spec.control, 'permission': spec.permission}
                 for spec in tools.TOOLS.values()
+                if plugins.visible_tool(spec.name)
             ],
             'context_sources': sorted(skills.CONTEXT_SOURCES),
             'runtime': environment.capabilities(),

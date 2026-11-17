@@ -115,6 +115,13 @@ class _UserStores:
 _USER_STORES: dict[str, _UserStores] = {}
 _USER_STORES_LOCK = threading.RLock()
 
+#: In-flight HTTP requests per account (``enter_request``/``leave_request`` in ``api.auth``), and
+#: the accounts whose release was asked for while one was running. An ordinary request holds a
+#: store handle for the length of its body; closing that handle under it was a 500 mid-write.
+_REQUEST_USERS: dict[str, int] = {}
+_DEFERRED_RELEASE: set = set()
+_REQUEST_LOCK = threading.Lock()
+
 #: Ids whose tree was moved to the trash by a DELETE that is still in progress (or has finished).
 #: Permanent for the life of the process because a deleted id is never handed out again: keeping it
 #: costs one string, and it closes the window in which a thread that was already running could open
@@ -171,15 +178,61 @@ def owner_is_live(account) -> bool:
     return bool(row) and str(row.get('status') or '') == 'active'
 
 
-def release_user(user_id: str) -> None:
-    """Close and forget one account's stores. The caller must have proved no run is live."""
+def release_user(user_id: str, force: bool = False) -> None:
+    """Close and forget one account's stores — unless a request of that account is still using them.
+
+    The caller proves no RUN is live (``execute_lock`` plus ``_busy_run``), but a run is not the
+    only holder: the owner's own 强制下线/禁用 lands while that account may be mid-upload, mid-delete
+    or mid-AI-turn in an ordinary request, and closing the SQLite handle under it answered
+    ``Cannot operate on a closed database`` (a 500 in the middle of a write). A live request
+    therefore DEFERS the close: the last request's teardown performs it (see ``enter_request``/
+    ``leave_request``). ``force`` is for account DELETION, where the tombstone and the tree move
+    already own the outcome.
+    """
+    key = str(user_id or '')
+    with _REQUEST_LOCK:
+        if not force and _REQUEST_USERS.get(key, 0) > 0:
+            _DEFERRED_RELEASE.add(key)
+            return
+        _DEFERRED_RELEASE.discard(key)
+    _close_user(key)
+
+
+def _close_user(key: str) -> None:
     with _USER_STORES_LOCK:
-        slot = _USER_STORES.pop(str(user_id or ''), None)
+        slot = _USER_STORES.pop(key, None)
     if slot is not None:
         slot.close()
-    for key in [key for key in _dataset_cache if key[0] == str(user_id or '')]:
-        _dataset_cache.pop(key, None)
-    forget_ambient(user_id)
+    for cache_key in [row for row in _dataset_cache if row[0] == key]:
+        _dataset_cache.pop(cache_key, None)
+    forget_ambient(key)
+
+
+def enter_request(user_id: str) -> None:
+    """Mark one HTTP request of *account* as in flight (paired with :func:`leave_request`)."""
+    key = str(user_id or '')
+    if not key:
+        return
+    with _REQUEST_LOCK:
+        _REQUEST_USERS[key] = _REQUEST_USERS.get(key, 0) + 1
+
+
+def leave_request(user_id: str) -> None:
+    """Drop one in-flight mark; the LAST one runs a release that was deferred for this account."""
+    key = str(user_id or '')
+    if not key:
+        return
+    close = False
+    with _REQUEST_LOCK:
+        count = _REQUEST_USERS.get(key, 0) - 1
+        if count > 0:
+            _REQUEST_USERS[key] = count
+        else:
+            _REQUEST_USERS.pop(key, None)
+            close = key in _DEFERRED_RELEASE
+            _DEFERRED_RELEASE.discard(key)
+    if close:
+        _close_user(key)
 
 
 def retire_user(user_id: str) -> None:
@@ -193,7 +246,7 @@ def retire_user(user_id: str) -> None:
     text = str(user_id or '')
     with _USER_STORES_LOCK:
         _RETIRED.add(text)
-    release_user(text)
+    release_user(text, force=True)
 
 
 def unretire_user(user_id: str) -> None:

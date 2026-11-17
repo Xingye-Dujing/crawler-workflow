@@ -86,7 +86,8 @@ cloud 模式必须配好 `CRAWLER_ADMIN_PASSWORD` 与 `SECRET_KEY`，否则 `ser
 
 - **账号**：账号、服务端会话与审计在 `data/accounts.db`，密码用 scrypt 加盐，库里只存会话 id 的 sha256。管理员在“账号”面板创建、重置、禁用、强制下线或删除；新建或重置的账号带 `must_change_password`，改密前除改密接口外全站 API 403。
 - **隔离**：每个账号拥有 `data/users/<user_id>/`（工作流、数据集、各库、Cookie、Profile、导出、检查点、模板、locks/schedules）；`accounts.db`、`settings.json`、`lexicon.db`、`models/`、`logs/` 系统共享。删除账号把目录移入 `data/users/.trash/`；最后一个启用的管理员不可删。旧单账号数据用 `python tools/migrate_accounts.py --user admin --apply` 迁入（默认 dry-run）。
-- **门禁**：页面跳 `/login`，接口回 401。连续失败按账号与“来源地址 + 用户名”计窗，密码错误一律同一句提示。运行槽、队列与定时器全站各一份，按账号归属；其它账号访问运行端点只得到 `foreign_run` 或空结果。
+- **门禁**：页面跳 `/login`，接口回 401。连续失败按账号与“来源地址 + 用户名”计窗，密码错误一律同一句提示；锁定期内再猜**不改**期限也不加计数（否则每次到期前猜一次就能把主人永久锁在外面），管理员可解除。运行槽、队列与定时器全站各一份，按账号归属；其它账号访问运行端点只得到 `foreign_run` 或空结果。
+- **禁用 / 强制下线关库**：账号自己的库（`runs.db` 等）在“没有它的运行、也没有它的请求”时才关；如果此时它正有普通请求在跑（上传、删除、AI 对话），关闭推迟到那个请求结束时执行，不会把 SQLite 句柄从正在写的请求下面抽走。
 - **服务器形状**：`/api/config` 的 `cloud_mode` 决定界面：隐藏全部 Ollama 入口并让需要模型的运行按名拒绝、隐藏无头开关并强制无头、拒绝“浏览器生成 Cookie”（验证与预检改走无头）。
 - **浏览器目录**：首次保存 Cookie 时用空白 Chrome 生成 `<Profile 根>/_template`，之后每个账号目录从它克隆；`Cookies`、`Login Data`、`History`、`Web Data`、`Preferences`、`Local State`、`IndexedDB`、`Network`、`Session Storage` 永不复制。模板脏不脏看表里的行数，`POST /api/browser/profiles/template` 可手动重建。
 - **隐私**：API Key 只存在浏览器 localStorage，Cookie 值只存服务器；采集数据、工作流与运行记录都在服务器 `data/`，能访问服务器的人就能读到。`tests/api/test_privacy_leaks.py` 走遍每条 GET 规则，要求磁盘上放置的独特标记不出现在任何响应里。

@@ -31,7 +31,7 @@ from urllib.parse import quote, urlsplit
 
 from core.config import Config
 from flask import Blueprint, Response, jsonify, redirect, request, session
-from runtime import account_context
+from runtime import account_context, stores
 
 from i18n import get_lang, normalize, set_lang, t
 from services.accounts import security
@@ -282,6 +282,11 @@ def _bind(account) -> None:
     """Publish the identity for this request and remember the token that restores the previous."""
     request.environ['cixi_account'] = account
     request.environ['cixi_account_reset'] = account_context.bind(account)
+    if account is not None:
+        # One in-flight request of this account. A 强制下线/禁用 that lands mid-request would
+        # otherwise close the store handle this request is using; the close is deferred to the
+        # last request's teardown (``runtime.stores.release_user``).
+        stores.enter_request(account.user_id)
 
 
 def teardown(_exc=None) -> None:
@@ -289,7 +294,9 @@ def teardown(_exc=None) -> None:
     token = (request.environ or {}).pop('cixi_account_reset', None)
     if token is not None:
         account_context.unbind(token)
-    (request.environ or {}).pop('cixi_account', None)
+    account = (request.environ or {}).pop('cixi_account', None)
+    if account is not None:
+        stores.leave_request(account.user_id)
 
 
 def gate():

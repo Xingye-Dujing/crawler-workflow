@@ -11,6 +11,7 @@ class FakeProvider:
     def __init__(self, provider_id: str = 'fake_ai'):
         from ai.types import ModelSpec, ProviderSpec
 
+        self.seen_keys = []
         capabilities = frozenset({'thinking', 'tools', 'ask_user'})
         self.spec = ProviderSpec(
             id=provider_id,
@@ -24,6 +25,10 @@ class FakeProvider:
 
     def supports(self, capability: str, model: str = '') -> bool:
         return capability in self.spec.capabilities
+
+    def list_models(self, api_key: str = '', _host: str = '') -> list:
+        self.seen_keys.append(api_key)
+        return [{'id': 'fake-model', 'label': 'Fake'}]
 
     def stream(self, request):
         if request.get('_ask'):
@@ -278,3 +283,89 @@ def test_a_non_admin_may_not_install_a_process_wide_pack(client, clean_ai, monke
     }
     assert client.post('/api/ai/plugins/install', json=skill_pack).status_code == 200
     assert client.delete('/api/ai/plugins/demo.ownskills').status_code == 200
+
+
+def test_the_provider_key_travels_in_a_header_not_the_url(client, fake_ai):
+    """A documented deployment puts a reverse proxy in front: its access log writes the request
+    line, so a ``?key=sk-…`` URL would put the user's credential in the operator's log file."""
+    from ai.providers import PROVIDERS
+
+    provider = PROVIDERS['fake_ai']
+    body = client.get('/api/ai/providers/fake_ai/models', headers={'X-Provider-Key': 'sk-header'}).get_json()
+    assert body['ok'] is True and body['models'] == [{'id': 'fake-model', 'label': 'Fake'}]
+    assert provider.seen_keys[-1] == 'sk-header'
+
+    # The query string is no longer read: a stale client would get an unauthenticated list
+    # (and, more importantly, the key would already be in the log).
+    client.get('/api/ai/providers/fake_ai/models?key=sk-query')
+    assert provider.seen_keys[-1] == ''
+
+
+def test_a_pack_installed_by_one_account_is_not_anothers_to_use(client, clean_ai):
+    """Installing is machine-level (admin-only), USING is per account.
+
+    Without this, account B's agent was offered account A's HTTP tool and could call it — posting
+    B's conversation arguments to a host only A had approved — and A's provider id resolved from
+    B's settings request.
+    """
+    from ai import plugins, tools
+    from ai.errors import AIError
+    from runtime import account_context
+    from runtime.account_context import Account
+
+    alice = Account('u_' + 'a' * 12, 'alice')
+    bob = Account('u_' + 'b' * 12, 'bob')
+    pack = _tool_pack([_http_tool('demo_scoped_tool')], 'demo.scoped')
+    try:
+        with account_context.use(alice):
+            plugins.install(pack)
+            assert plugins.visible_tool('demo_scoped_tool') is True
+            assert any(row['name'] == 'demo_scoped_tool' for row in tools.schemas())
+        with account_context.use(bob):
+            assert plugins.visible_tool('demo_scoped_tool') is False
+            assert all(row['name'] != 'demo_scoped_tool' for row in tools.schemas()), 'offered to the wrong account'
+            with pytest.raises(AIError) as refusal:
+                tools.execute('demo_scoped_tool', {}, {})
+            assert refusal.value.key == 'ai.toolRefused'
+            assert refusal.value.params.get('reason') == 'not available for this account'
+    finally:
+        with account_context.use(alice):
+            plugins.uninstall('demo.scoped')
+    assert 'demo_scoped_tool' not in tools.TOOLS
+
+
+def test_a_provider_pack_is_invisible_to_another_account(client, clean_ai):
+    from ai import plugins
+    from ai.errors import AIError
+    from ai.providers.registry import get_provider
+    from runtime import account_context
+    from runtime.account_context import Account
+
+    alice = Account('u_' + 'c' * 12, 'alice')
+    bob = Account('u_' + 'd' * 12, 'bob')
+    pack = {
+        'id': 'demo.provider',
+        'name': 'Demo provider',
+        'version': '1.0.0',
+        'api': 1,
+        'kind': 'provider-pack',
+        'permissions': ['provider:custom'],
+        'providers': [
+            {
+                'id': 'demo_provider',
+                'base_url': 'https://example.com/v1',
+                'models': [{'id': 'demo-model'}],
+            }
+        ],
+    }
+    try:
+        with account_context.use(alice):
+            plugins.install(pack)
+            assert get_provider('demo_provider').spec.id == 'demo_provider'
+        with account_context.use(bob):
+            with pytest.raises(AIError) as refusal:
+                get_provider('demo_provider')
+            assert refusal.value.key == 'ai.unknownProvider'
+    finally:
+        with account_context.use(alice):
+            plugins.uninstall('demo.provider')

@@ -154,6 +154,31 @@ class TestWorkflowCrud:
         workflow = client.get('/api/workflow/load', query_string={'name': 'overwrite-me'}).get_json()['workflow']
         assert [node['id'] for node in workflow['nodes']] == ['node-1', 'node-2']
 
+    def test_a_new_canvas_may_not_silently_replace_a_workflow_of_that_name(self, client):
+        """Typing the name of an existing file is a decision: the panel has to ask first.
+
+        Saving an OPENED file omits ``create`` and keeps overwriting itself (the test above), so
+        autosave and the explicit 保存 are untouched; only a name this canvas just invented is
+        refused until ``overwrite`` is sent.
+        """
+        original = _workflow([_node('node-1', 'upload', params={'dataset_id': 'a'})], [])
+        replacement = _workflow([_node('node-1', 'upload', params={'dataset_id': 'b'}), _node('node-2', 'output')], [])
+        assert client.post('/api/workflow/save', json={'name': 'taken', 'workflow': original}).status_code == 200
+
+        refused = client.post('/api/workflow/save', json={'name': 'taken', 'workflow': replacement, 'create': True})
+        assert refused.status_code == 409, refused.get_json()
+        assert refused.get_json()['exists'] is True
+        kept = client.get('/api/workflow/load', query_string={'name': 'taken'}).get_json()['workflow']
+        assert [node['id'] for node in kept['nodes']] == ['node-1'], 'the existing workflow was replaced unasked'
+
+        saved = client.post(
+            '/api/workflow/save',
+            json={'name': 'taken', 'workflow': replacement, 'create': True, 'overwrite': True},
+        )
+        assert saved.status_code == 200, saved.get_json()
+        replaced = client.get('/api/workflow/load', query_string={'name': 'taken'}).get_json()['workflow']
+        assert [node['id'] for node in replaced['nodes']] == ['node-1', 'node-2']
+
     def test_a_typed_name_becomes_one_safe_file_stem(self, client, data_root):
         workflow = _workflow([_node('node-1', 'upload', params={'dataset_id': 'a'})], [])
         messy = '../../etc/passwd'

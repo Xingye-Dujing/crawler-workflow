@@ -206,6 +206,33 @@ def test_a_lock_is_never_armed_over_a_login_that_just_succeeded(service):
     assert float(service.store.get_user(user_id)['locked_until']) == 0
 
 
+def test_a_guess_while_the_lock_is_live_does_not_move_the_deadline(service):
+    """A wrong password DURING an active lock is refused, and changes nothing.
+
+    The store resets the counter only once the lock has expired, so the old flow re-armed
+    ``locked_until`` from the growing total: one guess just before each expiry pushed the window
+    out again and the owner never got a turn. Here the deadline and the counter must be
+    untouched — and the answer is still the generic wrong-password one (not a lock oracle).
+    """
+    admin = _bootstrap(service)
+    user_id = admin['user_id']
+    now = time.time()
+    for _ in range(5):
+        failures = service.store.bump_failure(user_id, now)
+    service.store.set_locked_until(user_id, now + 900, failures)
+    before = service.store.get_user(user_id)
+    deadline = float(before['locked_until'])
+    count = int(before['failed_attempts'])
+
+    with pytest.raises(AccountError) as exc:
+        _login(service, username='admin', password='wrong-password')
+    assert exc.value.key == 'auth.badCredentials'
+
+    after = service.store.get_user(user_id)
+    assert float(after['locked_until']) == deadline, 'a guess during the lock pushed the deadline out'
+    assert int(after['failed_attempts']) == count, 'a guess during the lock advanced the counter'
+
+
 def test_an_expired_lock_starts_a_fresh_failure_window(service):
     """Without a reset, a victim could be kept locked out forever: each post-expiry guess
     incremented the old count and pushed ``locked_until`` another hour out."""

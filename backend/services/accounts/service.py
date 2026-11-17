@@ -260,6 +260,23 @@ class AccountService:
         # registered username from an unregistered one, and a locked row also skipped the hashing,
         # so the timing said the same thing.
         if not security.verify_password(password, row['password_hash']):
+            if float(row['locked_until'] or 0) > now:
+                # A guess WHILE the lock is live must not move the deadline. The counter used to
+                # grow and re-arm `locked_until` from the new total, so one wrong password just
+                # before each expiry pushed the window out forever and the owner never got a
+                # turn — the exact "one guess per hour" attack the store's reset was written to
+                # stop. The attempt is still refused, with the same sentence as any other wrong
+                # password (a different one would be a lock oracle).
+                _throttle.record(ip, row['username'])
+                self._audit(
+                    EVENT_LOGIN_FAIL,
+                    user_id=row['user_id'],
+                    username=row['username'],
+                    ip=ip,
+                    detail='locked',
+                    now=now,
+                )
+                raise AccountError('auth.badCredentials')
             failures = self.store.bump_failure(row['user_id'], now)
             locked_until = now + security.lock_seconds(failures) if security.lock_seconds(failures) else 0
             if locked_until:

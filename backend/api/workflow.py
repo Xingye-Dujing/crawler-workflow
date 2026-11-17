@@ -203,8 +203,19 @@ def save_workflow():
     workflow = data.get('workflow', {})
     if not isinstance(workflow, dict):
         return jsonify({'ok': False, 'error': t('api.paramInvalid', name='workflow')}), 400
+    manager = get_workflow_manager()
+    # A NEW canvas typed a name that is already taken: overwriting is a deliberate act, so the
+    # client has to confirm it. Saving an OPENED file never sends ``create``, so autosave and the
+    # explicit 保存 keep overwriting their own file as before.
+    if data.get('create') is True and data.get('overwrite') is not True:
+        clean = manager.clean_name(name)
+        if clean in {row['name'] for row in manager.describe()}:
+            return (
+                jsonify({'ok': False, 'exists': True, 'name': clean, 'error': t('api.workflowExists', name=clean)}),
+                409,
+            )
     try:
-        path = get_workflow_manager().save(name, workflow)
+        path = manager.save(name, workflow)
     except OSError:
         # Same rule as the export writer: an errno and an absolute path are not an answer the panel
         # can act on, and the console already carries the specific sentence (misc.save_workflow_failed).
@@ -213,9 +224,9 @@ def save_workflow():
     # The file mapping is part of the save: every Upload node records which
     # stored dataset it reads, so reopening this workflow later finds its file
     # already loaded instead of asking for another upload.
-    bound = get_dataset_store().bind(get_workflow_manager().clean_name(name), _workflow_dataset_refs(workflow))
+    bound = get_dataset_store().bind(manager.clean_name(name), _workflow_dataset_refs(workflow))
     if bound:
-        logger.info(t('store.datasets_bound', wf=get_workflow_manager().clean_name(name), n=bound))
+        logger.info(t('store.datasets_bound', wf=manager.clean_name(name), n=bound))
     return jsonify({'ok': True, 'path': path, 'datasets': bound})
 
 

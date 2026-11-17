@@ -6,9 +6,10 @@ the server refuses a skill whose provider cannot honour its requirements. User s
 per account; built-ins are code and are forked, never overwritten.
 """
 
+from runtime import account_context
 from runtime.settings import get_setting
 
-from ai import environment, store
+from ai import environment, scopes, store
 from ai.errors import AIError
 from ai.types import SKILL_ID_RE, SkillSpec, skill_from_manifest
 
@@ -293,7 +294,10 @@ def _user_skill(row: dict) -> SkillSpec:
 
 
 def all_skills() -> dict:
-    skills = dict(BUILTIN)
+    scope = account_context.scope_key()
+    # A code plugin may add a skill to BUILTIN; it belongs to the account that installed it, the
+    # same way its tools and providers do.
+    skills = {key: skill for key, skill in BUILTIN.items() if scopes.visible('skills', key, scope)}
     for row in store.list_user_skills():
         try:
             skill = _user_skill(row)

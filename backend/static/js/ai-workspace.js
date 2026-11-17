@@ -1355,7 +1355,9 @@ const AIWorkspace = {
     async _refreshModels() {
         const key = AISettings.keyFor(this._provider);
         try {
-            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/models?key=' + encodeURIComponent(key));
+            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/models', {
+                headers: { 'X-Provider-Key': key },
+            });
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'models failed');
             const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);

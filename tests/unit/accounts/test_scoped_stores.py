@@ -76,6 +76,49 @@ def test_release_user_forgets_the_slot(two_accounts):
     assert alice.user_id not in stores.user_slots()
 
 
+def test_a_release_waits_for_the_last_request_using_that_account(two_accounts):
+    """禁用/强制下线 lands while the owner may be mid-upload: closing the SQLite handle under
+    that request answered ``Cannot operate on a closed database``. The close is deferred to the
+    last request's teardown, and the handle stays open (and usable) in between."""
+    alice, _ = two_accounts
+    with account_context.use(alice):
+        run_store = stores.get_run_store()
+    stores.enter_request(alice.user_id)
+    stores.release_user(alice.user_id)
+    assert alice.user_id in stores.user_slots(), 'the store was closed under a live request'
+    with account_context.use(alice):
+        assert stores.get_run_store() is run_store, 'the live request lost its handle'
+    stores.leave_request(alice.user_id)
+    assert alice.user_id not in stores.user_slots(), 'the deferred close never ran'
+
+
+def test_two_requests_of_one_account_close_only_after_the_last(two_accounts):
+    alice, _ = two_accounts
+    with account_context.use(alice):
+        stores.get_run_store()
+    stores.enter_request(alice.user_id)
+    stores.enter_request(alice.user_id)
+    stores.release_user(alice.user_id)
+    stores.leave_request(alice.user_id)
+    assert alice.user_id in stores.user_slots(), 'the first teardown closed a handle still in use'
+    stores.leave_request(alice.user_id)
+    assert alice.user_id not in stores.user_slots()
+
+
+def test_deleting_an_account_closes_now_regardless_of_requests(two_accounts):
+    """Deletion owns the tree move: the tombstone must not be left holding an open slot."""
+    alice, _ = two_accounts
+    with account_context.use(alice):
+        stores.get_run_store()
+    stores.enter_request(alice.user_id)
+    try:
+        stores.retire_user(alice.user_id)
+        assert alice.user_id not in stores.user_slots()
+    finally:
+        stores.unretire_user(alice.user_id)
+        stores.leave_request(alice.user_id)
+
+
 def test_a_bare_workflow_manager_follows_the_bound_account(two_accounts):
     """``WorkflowManager()`` is constructed bare by the schedules picker, project bundles and
     provenance readers — it must resolve the caller's folder, not the checkout-level one."""

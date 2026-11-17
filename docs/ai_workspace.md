@@ -37,7 +37,7 @@ POST /api/ai/chat → AgentService
 | `ollama` | 本机 `/api/chat` | 仅聊天；云端按名字拒绝 |
 
 `backend/ai/providers/registry.py` 是唯一目录，行分析器 `analyzers/llm_client.py` 也读它。
-Key 只存浏览器 `localStorage`，随请求体发送，服务端仅在本次调用持有；`ai.db` 与日志绝不写入 Key。
+Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-Provider-Key` 请求头，绝不进 URL——反代的访问日志会记整行请求），服务端仅在本次调用持有；`ai.db` 与日志绝不写入 Key。
 供应商不支持的能力按名字拒绝，不静默降级。
 
 ## 3. 技能、上下文与工具
@@ -107,7 +107,11 @@ AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分�
 
 `backend/extensions/` 是清单/权限注册表，`backend/ai/plugins.py` 是宿主。声明式（skill-pack /
 provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插件只允许本地/管理员，云端按名字拒绝。
-安装前校验 `api`、id、version、kind、permissions；禁用即从注册表移除。
+安装前校验 `api`、id、version、kind、permissions；禁用即从注册表移除，并同时从 `PROVIDERS`/`tools.TOOLS`/`skills.BUILTIN` 撤掉。
+
+**安装是机器级的，使用是账号级的。** provider/tool/code 包装进进程共用的表，因此开启账号系统时只有管理员
+能安装；但每条贡献在 `backend/ai/scopes.py` 里记下安装它的账号作用域，工具清单、`tools.execute`、
+`get_provider` 与技能目录都按当前账号过滤——别的账号既看不到、也调不动。
 
 ## 8. OMM-ZEN
 

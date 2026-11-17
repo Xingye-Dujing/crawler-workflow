@@ -18,8 +18,10 @@ intercepts them and never looks for a handler here.
 import re
 
 from core.config import Config
+from runtime import account_context
 from runtime.settings import get_setting
 
+from ai import scopes
 from ai.context import docs_search, project_facts
 from ai.errors import AIError
 from ai.types import ToolSpec
@@ -772,7 +774,11 @@ TOOLS = {
 
 def schemas(allow_code: bool = False, allow_python: bool = False) -> list:
     out = []
+    scope = account_context.scope_key()
     for tool in TOOLS.values():
+        if not scopes.visible('tools', tool.name, scope):
+            # A tool another account installed is not this account's to offer.
+            continue
         if tool.permission == 'read:code' and not allow_code:
             continue
         if tool.permission in ('read:python', 'write:python', 'exec:python') and not allow_python:
@@ -791,6 +797,9 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
     tool = TOOLS.get(name)
     if tool is None:
         raise AIError('ai.toolUnknown', kind='bad_request', tool=name)
+    if not scopes.visible('tools', name, account_context.scope_key()):
+        # Registered by another account's plugin: installing is machine-level, USING is not.
+        raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='not available for this account')
     if allowed is not None and name not in allowed:
         raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='not offered in this turn')
     if tool.control:
