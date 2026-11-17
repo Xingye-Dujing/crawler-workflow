@@ -303,4 +303,132 @@ out.folderPicker = {
     picked: pickedNative,
 };
 
+/* A local daemon's REAL model list replaces the one static name the bootstrap row carries, and a
+   stored choice survives the refresh; an id the daemon no longer serves falls back to its first. */
+const localProvider = {
+    id: 'ollama',
+    local_only: true,
+    requires_key: false,
+    capabilities: ['tools', 'thinking'],
+    models: [{ id: 'qwen3.5:9b', label: 'qwen3.5:9b', capabilities: ['tools', 'thinking'] }],
+};
+workspace._bootstrap = { ok: true, providers: [localProvider], conversations: [] };
+workspace._provider = 'ollama';
+sandbox.AISettings.setModel('ollama', 'qwen3.5:4b');
+sandbox.__routes['/models'] = {
+    ok: true,
+    models: [{ id: 'qwen3.5:4b' }, { id: 'qwen3.5:9b' }],
+};
+workspace._renderModelOptions = () => {};
+workspace._renderToggles = () => {};
+await workspace._refreshLocalModels();
+out.localModels = {
+    ids: (localProvider.models || []).map((row) => row.id),
+    model: workspace._model,
+};
+sandbox.AISettings.setModel('ollama', 'gone:1b');
+await workspace._refreshLocalModels();
+out.localModels.missingFallsBackTo = workspace._model;
+
+/* Two overlapping bootstraps, answered out of order: the OLDER answer must not write the picker.
+   That race made the provider chip and the actual request disagree right after a switch. */
+const pendingBootstraps = [];
+const realFetch = sandbox.fetch;
+sandbox.fetch = (url) =>
+    new Promise((resolve) => {
+        pendingBootstraps.push({
+            url: String(url),
+            resolve: () =>
+                resolve({
+                    ok: true,
+                    json: () =>
+                        Promise.resolve({
+                            ok: true,
+                            providers: [{ id: String(url).includes('provider=ollama') ? 'ollama' : 'deepseek' }],
+                            settings: {},
+                        }),
+                }),
+        });
+    });
+workspace._provider = 'deepseek';
+const firstBoot = workspace._loadBootstrap();
+workspace._provider = 'ollama';
+const secondBoot = workspace._loadBootstrap();
+pendingBootstraps[1].resolve();
+await secondBoot;
+pendingBootstraps[0].resolve();
+await firstBoot;
+sandbox.fetch = realFetch;
+out.staleBootstrap = workspace._provider;
+
+/* ONE turn, TWO provider rounds (a tool call between them). The transcript must stay one assistant
+   bubble with one skill row — the daemon answers each round as its own assistant row, and drawing
+   each round separately made a single answer look like two answers on screen. */
+workspace._messages = [];
+workspace._conversationId = 'c-two';
+workspace._current = null;
+workspace._sending = true;
+workspace._dom.chat.innerHTML = '';
+const rounds = [
+    { type: 'meta', conversation_id: 'c-two', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' },
+    { type: 'thinking', text: '先看看文件夹。' },
+    { type: 'tool_start', id: 'call_1', name: 'workspace_list', arguments: {} },
+    { type: 'tool_result', id: 'call_1', name: 'workspace_list', ok: true, result: { entries: [] } },
+    { type: 'meta', conversation_id: 'c-two', message_id: 'm2', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' },
+    { type: 'thinking', text: '再回答。' },
+    { type: 'text', text: '只有一个 notes.txt。' },
+    { type: 'usage', usage: { prompt_tokens: 10, completion_tokens: 5 } },
+    { type: 'done', stop_reason: 'end_turn' },
+];
+for (const event of rounds) workspace._onEvent(event);
+out.twoRounds = {
+    bubbles: workspace._dom.chat.querySelectorAll('.ai-message.assistant').length,
+    skills: workspace._dom.chat.querySelectorAll('.ai-skill-row').length,
+    tools: workspace._dom.chat.querySelectorAll('.ai-tool').length,
+    text: String(workspace._dom.chat.textContent || ''),
+};
+
+/* The transcript the user was reading reopens after a reload: the id is browser-local, the rows
+   stay on the server. Without this a refresh opened a NEW empty chat. */
+sandbox.AISettings.save({ conversation: 'c-saved' });
+workspace._conversationId = '';
+out.restoreConversation = workspace._restoreConversation();
+workspace._rememberConversation('');
+out.clearedAfterNewChat = sandbox.AISettings.load().conversation;
+
+/* An answer box on a question card takes `@` too: the menu opens for THAT box, the pick becomes a
+   chip in the card, and the answer carries the reference to the server. */
+workspace._messages = [];
+workspace._conversationId = 'c-q';
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._appendQuestion({
+    id: 'q1',
+    message_id: 'm1',
+    questions: [{ id: 'q1', header: 'Scope', question: 'Which data?', options: [{ label: 'A' }] }],
+});
+const answerBox = workspace._dom.chat.querySelector('textarea[data-ai-custom]');
+answerBox.value = '用这个 @';
+workspace._onRefInput({ target: answerBox });
+const refTargetOk = workspace._refTarget === answerBox;
+workspace._refResults = [{ kind: 'dataset', id: 'd1', label: 'Corpus' }];
+workspace._refIndex = 0;
+workspace._renderRefMenu();
+workspace._pickRef('dataset', 'd1', 'Corpus');
+const answerRefsHost = workspace._dom.chat.querySelector('[data-ai-question-refs]');
+const answerChips = (answerRefsHost ? answerRefsHost.querySelectorAll('.ai-ref-label') : []).map((el) =>
+    String(el.textContent || '')
+);
+let sentAnswer = null;
+workspace._maybeAnswer = async () => {
+    sentAnswer = workspace._current.answers.q1;
+};
+workspace._answerCustom('q1', answerBox.value);
+out.answerRefs = {
+    targetOk: refTargetOk,
+    chips: answerChips,
+    custom: sentAnswer && sentAnswer.custom,
+    refs: (sentAnswer && sentAnswer.references) || [],
+};
+
 fs.writeFileSync(1, JSON.stringify(out));

@@ -1832,3 +1832,27 @@
   color: var(--accent);
   border-color: var(--accent);
 }
+
+/* An answer box takes `@` too: the chips it picked sit above the textarea, inside the question
+   card, and disappear entirely while empty. */
+.ai-question-refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ai-question-refs:empty {
+  display: none;
+}
+.ai-question-refs .ai-ref-x {
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+.ai-question-refs .ai-ref-x:hover {
+  color: var(--err);
+}

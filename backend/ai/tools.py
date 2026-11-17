@@ -1031,7 +1031,9 @@ TOOLS = {
         ),
         ToolSpec(
             'workspace_list',
-            'List one directory inside the working folder (or the app root with root="app").',
+            'List one directory of the WORKING FOLDER the user chose (the default: root="folder") — '
+            'this is what “工作文件夹 / my folder / the project folder” means. Use root="app" ONLY when the '
+            'user asks about this program’s own install/repository tree.',
             {
                 'type': 'object',
                 'properties': {
@@ -1045,7 +1047,9 @@ TOOLS = {
         ),
         ToolSpec(
             'workspace_read',
-            'Read one text file inside the working folder or the app root. Bounded and reports truncation.',
+            'Read one text file of the WORKING FOLDER the user chose (default root="folder"); '
+            'root="app" is this program’s own tree, only when the user asks about the app. '
+            'Bounded and reports truncation.',
             {
                 'type': 'object',
                 'properties': {

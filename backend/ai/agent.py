@@ -98,8 +98,12 @@ def _system_prompt(skill, provider, model: str, agent_mode: str = 'build') -> st
         f'你与采析绘的应用是双向的：工作流草案可以用 apply_workflow 直接校验、保存并载入画布（用户要求运行时再加 '
         f'run=true）；失败的运行可以用 rerun_node 只重跑那个失败节点及其下游'
         f'（读已保存的工作流文件，不替换用户的画布）；'
-        f'本地文件可以用 workspace_* 读取、写回、导入为数据集；run_cmd 在你的工作文件夹里执行一个白名单'
+        f'本地文件可以用 workspace_* 读取、写回、导入为数据集'
+        f'（默认 root=folder，即用户选的“工作文件夹”；root=app 是这个程序自己的安装/仓库目录，'
+        f'只有用户明确问程序本身时才用）；run_cmd 在你的工作文件夹里执行一个白名单'
         f'程序（不是 shell）；app_errors 读后端日志与最近失败运行。做完一件事就调用一个工具，不要只描述。'
+        f'同一份被拒绝的草案不要原样重发：按错误修改，'
+        f'缺的数据（数据集、平台/账号、关键词）用 ask_user_question 问用户。'
         f'“自动同意本机操作”关闭时，run_cmd / workspace_write / workspace_import / rerun_node 会先被拒绝：'
         f'用 request_approval 提出同样的确切参数，用户同意后再原样重试那个调用。\n\n'
         f'Active skill: {skill.id}\n{skill.prompt}\n\n'
@@ -170,6 +174,21 @@ def _meta_event(conversation: dict, message: dict, skill, reason: str, run_id: s
 
 class AgentService:
     """One turn, with its provider rounds, tools and pending question."""
+
+    #: Same-problems draft refusals counted within the current turn (see ``send``).
+    _draft_refusals: dict[str, int] = {}
+
+    def _refusal_note(self, problems: list[str]) -> str:
+        """A sentence for a draft refused with exactly the same problems again.
+
+        Nothing changed between two identical submissions, so the third cannot be different either.
+        The model is told to change the draft or to ask the user for what is missing, instead of
+        spending another round (and the user's patience) on the same call.
+        """
+        key = '|'.join(sorted(problems))
+        count = self._draft_refusals.get(key, 0) + 1
+        self._draft_refusals[key] = count
+        return t('ai.draftRefusedAgain') if count >= 2 else ''
 
     def send(self, conversation_id: str, payload: dict):
         text = str(payload.get('text') or '').strip()
@@ -285,6 +304,10 @@ class AgentService:
         if not conversation.get('title'):
             store.touch_conversation(conversation['id'], title=_fallback_title(text), title_source='fallback')
         run = store.create_run(conversation['id'], user['id'])
+        # One turn = one refusal memory. A draft that is refused twice with the SAME problems is not
+        # going to become legal by resending it; the second answer says so (a small model otherwise
+        # looped five identical submissions in one turn).
+        self._draft_refusals: dict[str, int] = {}
         return self._loop(
             conversation=conversation,
             turn_id=turn_id,
@@ -346,7 +369,15 @@ class AgentService:
             agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
         )
 
-    def answer(self, conversation_id: str, message_id: str, question_id: str, answers: list, api_key: str = ''):
+    def answer(
+        self,
+        conversation_id: str,
+        message_id: str,
+        question_id: str,
+        answers: list,
+        api_key: str = '',
+        refs: list | None = None,
+    ):
         question = store.get_question(question_id)
         if question is None or question.get('conversation_id') != conversation_id:
             raise AIError('ai.apiNoQuestion', kind='bad_request', question=question_id)
@@ -361,6 +392,10 @@ class AgentService:
             (str(item.get('custom') or '') for item in answers or () if isinstance(item, dict) and item.get('custom')),
             '',
         )
+        # An answer may point at things the user already has (a dataset, a run, an uploaded file)
+        # instead of describing them. Resolved HERE, bounded, exactly like the composer's `@`:
+        # the model must not receive a whole table or a filesystem path because someone typed `@`.
+        refs_text, _ref_files = references.resolve(refs or []) if refs else ('', [])
         approvals.settle(conversation_id, str(question.get('tool_use_id') or ''), answers, custom=custom)
         assistant = store.get_message(message_id)
         if assistant is None:
@@ -372,6 +407,8 @@ class AgentService:
             'questions': question.get('questions') or [],
             'answers': answers,
         }
+        if refs_text:
+            tool_result['references'] = refs_text
         store.append_message(
             conversation_id,
             'tool',
@@ -888,7 +925,10 @@ class AgentService:
             report = workflow_draft.validate(artifact['payload'])
             if not report['ok']:
                 problems = (report['structural'] + report['engine'])[:8]
+                note = self._refusal_note(problems)
                 message = t('ai.workflowDraftInvalid', detail='; '.join(problems))
+                if note:
+                    message = f'{message}\n{note}'
                 store.append_message(
                     conversation['id'],
                     'tool',
@@ -941,8 +981,11 @@ class AgentService:
             return
         report = workflow_draft.validate(payload)
         if not report['ok']:
-            detail = '; '.join((report['structural'] + report['engine'])[:8])
-            message = t('ai.workflowDraftInvalid', detail=detail)
+            problems = (report['structural'] + report['engine'])[:8]
+            note = self._refusal_note(problems)
+            message = t('ai.workflowDraftInvalid', detail='; '.join(problems))
+            if note:
+                message = f'{message}\n{note}'
             store.append_message(
                 conversation['id'],
                 'tool',

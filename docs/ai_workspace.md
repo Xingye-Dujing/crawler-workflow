@@ -34,7 +34,7 @@ POST /api/ai/chat → AgentService
 | `deepseek` | 原生 Chat Completions（`api.deepseek.com/chat/completions`） | thinking、web search、读链接、安全、标题、文件、工具、提问 |
 | `opencode_go` | OpenAI Chat Completions | thinking、工具、提问、视觉；无服务端联网/文件 |
 | `openrouter` | OpenAI Chat Completions | 视模型而定；无服务端工具 |
-| `ollama` | 本机 `/api/chat` | 仅聊天；云端按名字拒绝 |
+| `ollama` | 本机 `/api/chat` | 工具、思考（每个模型以 `/api/show` 的 `capabilities` 为准）；无文件/联网；云端按名字拒绝 |
 
 DeepSeek 走它自己的原生协议，不走 Anthropic 兼容层：`thinking` 显式给 `enabled/disabled`（缺省即开启），强度用
 `reasoning_effort`，思考文本在 `delta.reasoning_content`，用量随最后一个 chunk（`stream_options.include_usage`）。
@@ -46,7 +46,12 @@ ISO-8859-1，中文变火星文、跨 chunk 的多字节字符把 JSON 截断（
 **省 token 的三条规矩**：大表格（≥128 KB 或超过 200 行）上传时直接进数据集，前端得到一个 `@` 数据集引用——AI 用
 `dataset_peek` 只读前几行，绝不把整张表塞进提示词；单个附件超过 4 MB 按名字拒绝，并提示改走数据集或拆分；`@` 引用
 的导出文件/工作流只在服务端展开有界文本（每项 1200 字符、整轮 6000 字符）。同一份文件在不同会话里上传时按 sha256
-复用已上传的 `file_id`，不重复上传、不重复解析计费。
+复用已上传的 `file_id`，不重复上传、不重复解析计费。**提问卡的回答框同样支持 `@`**：引用随 `answers` 一起送到
+`/api/ai/answer`，服务端用同一个 `references.resolve` 展开后放进该次工具结果，模型看到的是有界文本而不是路径。
+
+**本机 Ollama 不是“只有聊天”**：模型列表来自 `/api/tags`（面板打开时静默刷新一次，存过的选择只要守护进程还有就保留），
+`tools`/`thinking` 以 `/api/show` 的逐模型 `capabilities` 为答案；请求里 `messages` 保留 `role: tool`、assistant 回传
+`tool_calls`，并按模型真实 `context_length` 下发 `num_ctx`（Ollama 缺省 4096，会把长长的系统提示悄悄截掉）。
 
 `backend/ai/providers/registry.py` 是唯一目录，行分析器 `analyzers/llm_client.py` 也读它。
 Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-Provider-Key` 请求头，绝不进 URL——反代的访问日志会记整行请求），服务端仅在本次调用持有；`ai.db` 与日志绝不写入 Key。

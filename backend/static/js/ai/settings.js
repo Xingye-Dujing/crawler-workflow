@@ -17,6 +17,9 @@ const AISettings = {
         open: false,
         full: false,
         sessionsOpen: false,
+        /* The conversation the panel had open. Without it a reload opened a NEW empty chat and the
+           previous turn looked deleted; only the session list still knew it existed. */
+        conversation: '',
     },
 
     load() {

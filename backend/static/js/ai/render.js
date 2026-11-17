@@ -142,7 +142,9 @@ const AIRender = {
                 '</button>'
             );
         }).join('');
-        const custom = answered ? '' : '<textarea class="ai-answer-custom" data-ai-custom="' + this.escape(question.id) + '" rows="2" placeholder="' + this.escape(I18n.t('ai.customAnswer')) + '"></textarea>';
+        const custom = answered ? '' :
+            '<div class="ai-question-refs" data-ai-question-refs="' + this.escape(question.id) + '"></div>' +
+            '<textarea class="ai-answer-custom" data-ai-custom="' + this.escape(question.id) + '" rows="2" placeholder="' + this.escape(I18n.t('ai.customAnswerRefs')) + '"></textarea>';
         const customButton = answered ? '' : '<button type="button" class="ai-ghost" data-ai-send-custom="' + this.escape(question.id) + '">' + this.escape(I18n.t('ai.answer')) + '</button>';
         return (
             '<section class="ai-question' + (approval ? ' ai-question-approval' : '') + '" data-ai-question-card="' + this.escape(question.id) + '">' +

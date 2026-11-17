@@ -147,6 +147,38 @@ def test_ask_user_pauses_and_answer_resumes(client, fake_ai, clean_ai):
     assert any(event['type'] == 'text' and 'Dataset A' in event.get('text', '') for event in resumed_events)
 
 
+def test_an_answer_can_reference_a_file_and_the_model_sees_it(client, fake_ai, clean_ai, monkeypatch):
+    """The question card's answer box takes `@`: the server resolves it into the resumed turn.
+
+    Resolved server-side and bounded, exactly like the composer's references — the browser sends
+    ids it already has, never a path or a whole table.
+    """
+    from ai import agent as agent_module
+
+    monkeypatch.setattr(agent_module.references, 'resolve', lambda refs: ('<ref: 语料 120 行>', []))
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'message_id': question['message_id'],
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A'], 'custom': '用这个'}],
+        'references': [{'kind': 'dataset', 'id': 'd1'}],
+        'api_key': 'secret-key',
+    }
+    resumed = client.post('/api/ai/answer?stream=0', json=answer)
+    assert resumed.status_code == 200, resumed.get_json()
+    stored = client.get('/api/ai/conversations/' + meta['conversation_id']).get_json()
+    tool_row = next(
+        message
+        for message in stored['messages']
+        if message['role'] == 'tool' and 'answer_to_pending_question' in str(message.get('content') or '')
+    )
+    assert '语料 120 行' in tool_row['content']
+
+
 def test_asking_web_search_of_go_refuses_by_name(client, monkeypatch):
     from ai.providers import PROVIDERS
     from ai.providers.opencode_go import OpenCodeGoProvider
@@ -535,6 +567,47 @@ def test_a_tool_call_left_without_a_result_is_repaired_before_replay():
     synthetic = next(message for message in repaired if message.get('tool_call_id') == 'call_b')
     assert synthetic['is_error'] is True
     assert synthetic['role'] == 'tool'
+
+
+class RepeatingDraftProvider(FakeProvider):
+    """Sends the same illegal draft twice in one turn, then answers."""
+
+    def __init__(self):
+        super().__init__('fake_repeat_draft')
+
+    def stream(self, request):
+        seen = sum(1 for message in request.get('messages', []) if message.get('role') == 'tool')
+        if seen < 2:
+            yield {
+                'type': 'tool_call',
+                'id': f'call_draft_{seen}',
+                'name': 'present_artifact',
+                'arguments': {
+                    'title': 'Bad draft',
+                    'kind': 'workflow',
+                    'payload': {'nodes': [{'id': 'n1', 'type': '分析'}]},
+                },
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'text_delta', 'text': 'I cannot build that without a dataset.'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
+def test_the_same_refused_draft_twice_is_told_to_stop_resending(client, monkeypatch, clean_ai):
+    """A small model looped five identical submissions in one live turn.
+
+    The second refusal of the SAME draft (same problems) carries no new information, so it now says
+    so: change it, or ask the user for the missing data.
+    """
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_repeat_draft', RepeatingDraftProvider())
+    data = _chat(client, provider='fake_repeat_draft', model='fake-model', text='build it').get_json()
+    refused = [event for event in data['events'] if event['type'] == 'tool_result']
+    assert len(refused) == 2, refused
+    assert refused[0]['ok'] is False and '分析' in refused[0]['error']
+    assert 'Do not send it again' in refused[1]['error'], refused[1]['error']
 
 
 def test_retry_reruns_the_last_turn_without_a_second_user_message(client, fake_ai, clean_ai):

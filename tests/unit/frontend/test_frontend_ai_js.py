@@ -176,3 +176,36 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['native'] is True, 'the system dialog button is missing'
         assert out['opened'] == ['D:/'], out['opened']
         assert out['picked'] == ['pick'], out['picked']
+
+    def test_a_local_daemons_real_models_replace_the_static_one(self):
+        out = _run_workspace()['localModels']
+        assert out['ids'] == ['qwen3.5:4b', 'qwen3.5:9b'], out['ids']
+        assert out['model'] == 'qwen3.5:4b', 'a stored choice the daemon still has was rewritten'
+        assert out['missingFallsBackTo'] == 'qwen3.5:4b', 'a model the daemon no longer has stayed selected'
+
+    def test_an_older_bootstrap_answer_cannot_revert_the_picker(self):
+        """Switching provider/model refetches; the older answer must lose the race, or the chip and
+        the request name different models (and a local turn opened the key prompt)."""
+        out = _run_workspace()['staleBootstrap']
+        assert out == 'ollama', out
+
+    def test_one_turn_with_a_tool_round_shows_one_skill_row_and_one_bubble(self):
+        """Each provider round opens with its own meta (and the skill it used). Pushing that row per
+        round printed the skill twice and made one answer read as two."""
+        out = _run_workspace()['twoRounds']
+        assert out['bubbles'] == 1, out
+        assert out['skills'] == 1, out
+        assert out['tools'] == 1, out
+
+    def test_a_reload_reopens_the_conversation_that_was_open(self):
+        out = _run_workspace()
+        assert out['restoreConversation'] == 'c-saved', out['restoreConversation']
+        assert out['clearedAfterNewChat'] == '', 'a new chat kept the old conversation id'
+
+    def test_an_answer_box_can_reference_a_file_too(self):
+        """The question card's own answer box takes `@`: menu, chip, and the reference in the answer."""
+        out = _run_workspace()['answerRefs']
+        assert out['targetOk'] is True, 'the @ menu did not attach to the answer box'
+        assert out['chips'] == ['Corpus'], out['chips']
+        assert out['custom'] == '用这个', out['custom']
+        assert out['refs'] == [{'kind': 'dataset', 'id': 'd1'}], out['refs']

@@ -852,6 +852,7 @@ def ai_answer():
     message_id = str(data.get('message_id') or '')
     question_id = str(data.get('question_id') or '')
     answers = data.get('answers') if isinstance(data.get('answers'), list) else []
+    refs = data.get('references') if isinstance(data.get('references'), list) else []
     account = account_context.current()
     lang = get_lang()
     assistant = store.get_message(message_id)
@@ -864,6 +865,7 @@ def ai_answer():
             question_id,
             answers,
             str(data.get('api_key') or ''),
+            refs=refs,
         )
     except AIError as exc:
         return _error(exc)

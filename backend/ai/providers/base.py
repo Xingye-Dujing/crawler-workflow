@@ -172,4 +172,5 @@ class Provider:
         return self.spec.supports(capability, model)
 
     def public(self) -> dict:
+        """The catalog row for this provider."""
         return self.spec.to_public()

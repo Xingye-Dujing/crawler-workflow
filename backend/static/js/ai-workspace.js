@@ -130,11 +130,20 @@ const AIWorkspace = {
             this._dom.root.addEventListener('click', (event) => this._onClick(event));
             this._dom.root.addEventListener('change', (event) => this._onChange(event));
             if (this._dom.chat) this._dom.chat.addEventListener('scroll', () => this._onChatScroll());
+            /* An answer box takes `@` too: its textarea announces its own key/input events, and the
+               menu must open for THAT box (see `_onRefInput`). */
+            this._dom.root.addEventListener('input', (event) => {
+                const target = event.target;
+                if (target && target.hasAttribute && target.hasAttribute('data-ai-custom')) this._onRefInput(event);
+            });
             this._dom.root.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter' && !event.shiftKey && event.target && event.target.matches('textarea[data-ai-custom]')) {
+                const target = event.target;
+                if (!target || !target.matches || !target.matches('textarea[data-ai-custom]')) return;
+                const composing = event.isComposing === true || event.keyCode === 229;
+                if (this._refOpen && this._onRefKey(event, composing)) return;
+                if (event.key === 'Enter' && !event.shiftKey && !composing) {
                     event.preventDefault();
-                    const questionId = event.target.getAttribute('data-ai-custom');
-                    this._answerCustom(questionId, event.target.value);
+                    this._answerCustom(target.getAttribute('data-ai-custom'), target.value);
                 }
             });
         }
@@ -287,13 +296,44 @@ const AIWorkspace = {
         if (opts && opts.skill) this._skill = opts.skill;
         if (opts && opts.prompt) this._dom.input.value = opts.prompt;
         if (opts && opts.context) AIContext.setManual(opts.context);
+        this._restoreConversation();
         this._loadBootstrap().then(() => {
             this._renderComposer();
             this._renderContextBar();
+            /* A local daemon's real models are a live fact: the bootstrap row carries one static
+               name, so the picker would offer a model the user may not even have. One silent read
+               replaces it — no toast, and a daemon that is down keeps the static list. */
+            this._refreshLocalModels();
             if (this._conversationId) this.selectConversation(this._conversationId);
             else this._renderWelcome();
             if (opts && opts.prompt && this._dom.input) this._dom.input.focus();
         });
+    },
+
+    async _refreshLocalModels() {
+        const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        if (!provider || !provider.local_only || provider.requires_key) return;
+        try {
+            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/models');
+            const data = await response.json();
+            const models = Array.isArray(data.models) ? data.models : [];
+            if (!data.ok || !models.length) return;
+            provider.models = models.map((item) => ({
+                id: item.id,
+                label: item.label || item.id,
+                capabilities: provider.capabilities || [],
+            }));
+            /* A stored choice is KEPT while the daemon still has that model; an id the daemon no
+               longer serves falls back to its first model, because a <select> whose value is not
+               in its options shows blank and the next send would name a model that is gone. */
+            const stored = AISettings.modelFor(this._provider, this._bootstrap.providers);
+            const known = provider.models.some((row) => row.id === stored);
+            this._model = known ? stored : provider.models[0].id;
+            this._renderModelOptions();
+            this._renderToggles();
+        } catch (error) {
+            /* The daemon may not be running: the static list stays, and sending says so. */
+        }
     },
 
     close() {
@@ -332,9 +372,16 @@ const AIWorkspace = {
         const settings = AISettings.load();
         const provider = this._provider || settings.provider;
         const model = this._model || AISettings.modelFor(provider, null);
+        /* Switching provider/model calls this again while the previous answer is still in flight.
+           Without a sequence, the OLDER answer landed last and reset `_provider`/`_model` to what
+           the user had just moved away from — the chip said one model while the request, and the
+           key check, used another. Only the newest call may write the state. */
+        this._bootstrapSeq = (this._bootstrapSeq || 0) + 1;
+        const seq = this._bootstrapSeq;
         try {
             const response = await fetch('/api/ai/bootstrap?provider=' + encodeURIComponent(provider) + '&model=' + encodeURIComponent(model));
             const data = await response.json();
+            if (seq !== this._bootstrapSeq) return;
             this._bootstrap = data;
             const ids = (data.providers || []).map((item) => item.id);
             this._provider = ids.includes(provider) ? provider : (ids[0] || 'deepseek');
@@ -573,13 +620,20 @@ const AIWorkspace = {
         this._onRefInput();
     },
 
-    _onRefInput() {
-        if (!this._dom.input) return;
-        const match = /(?:^|[\s(])@([^\s@]{0,60})$/.exec(this._dom.input.value);
+    _onRefInput(event) {
+        /* Two places accept `@`: the composer and an answer box on a question card. The menu
+           belongs to whichever one owns the caret, so a reference picked for an answer lands in
+           the answer — never in the composer the user is not looking at. */
+        const el = (event && event.target) || this._dom.input;
+        if (!el) return;
+        const isAnswer = !!(el.hasAttribute && el.hasAttribute('data-ai-custom'));
+        if (el !== this._dom.input && !isAnswer) return;
+        const match = /(?:^|[\s(])@([^\s@]{0,60})$/.exec(el.value || '');
         if (!match) {
-            this._closeRefs();
+            if (this._refTarget === el) this._closeRefs();
             return;
         }
+        this._refTarget = el;
         this._refQuery = match[1];
         this._refOpen = true;
         if (this._dom.refMenu) this._dom.refMenu.hidden = false;
@@ -622,7 +676,30 @@ const AIWorkspace = {
         this._dom.refMenu.innerHTML =
             '<div class="ai-ref-head">' + AIRender.escape(I18n.t('ai.refsTitle')) + '</div>' +
             (rows || '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.refsEmpty')) + '</div>');
+        this._placeRefMenu();
         this._dom.refMenu.hidden = false;
+    },
+
+    /* The menu's CSS home is above the composer. An answer box can be anywhere in the transcript,
+       so the menu is placed against THAT box's rectangle instead of opening far away at the bottom. */
+    _placeRefMenu() {
+        const menu = this._dom.refMenu;
+        if (!menu || !menu.style) return;
+        const target = this._refTarget;
+        if (!target || target === this._dom.input || typeof target.getBoundingClientRect !== 'function') {
+            menu.style.position = '';
+            menu.style.left = '';
+            menu.style.right = '';
+            menu.style.bottom = '';
+            menu.style.width = '';
+            return;
+        }
+        const rect = target.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.left = Math.max(8, rect.left) + 'px';
+        menu.style.right = 'auto';
+        menu.style.width = Math.max(240, Math.min(rect.width || 320, 420)) + 'px';
+        menu.style.bottom = Math.max(8, (window.innerHeight || 800) - rect.top + 6) + 'px';
     },
 
     /* The menu owns Enter/Arrows/Escape while it is open; true means "handled, do not send". */
@@ -653,14 +730,45 @@ const AIWorkspace = {
 
     _pickRef(kind, id, label) {
         if (!kind || !id) return;
-        const value = String(this._dom.input.value || '').replace(/@[^\s@]{0,60}$/, '').replace(/\s+$/, '');
-        this._dom.input.value = value ? value + ' ' : '';
-        if (!this._refs.some((row) => row.kind === kind && row.id === id)) {
+        const target = this._refTarget || this._dom.input;
+        if (!target) return;
+        const value = String(target.value || '').replace(/@[^\s@]{0,60}$/, '').replace(/\s+$/, '');
+        target.value = value ? value + ' ' : '';
+        const questionId = target.getAttribute ? target.getAttribute('data-ai-custom') : null;
+        const isAnswer = questionId !== null;
+        if (isAnswer) {
+            const rows = this._answerRefs(questionId);
+            if (!rows.some((row) => row.kind === kind && row.id === id)) {
+                rows.push({ kind: kind, id: id, label: label || id });
+            }
+            this._renderAnswerRefs(questionId);
+        } else if (!this._refs.some((row) => row.kind === kind && row.id === id)) {
             this._refs.push({kind: kind, id: id, label: label || id});
             this._renderRefs();
         }
         this._closeRefs();
-        if (this._dom.input.focus) this._dom.input.focus();
+        if (target.focus) target.focus();
+    },
+
+    /* The refs a question's answer box carries, keyed by the QUESTION (one card may hold several). */
+    _answerRefs(questionId) {
+        if (!this._current) return [];
+        this._current.answerRefs = this._current.answerRefs || {};
+        const key = String(questionId || '');
+        this._current.answerRefs[key] = this._current.answerRefs[key] || [];
+        return this._current.answerRefs[key];
+    },
+
+    _renderAnswerRefs(questionId) {
+        const card = this._dom.chat && this._dom.chat.querySelector('[data-ai-question-card="' + String(questionId) + '"]');
+        const host = card && card.querySelector('[data-ai-question-refs]');
+        if (!host) return;
+        const rows = this._answerRefs(questionId);
+        host.innerHTML = rows.map((row) =>
+            '<span class="ai-ref-chip"><span class="ai-ref-kind">' + AIRender.escape(this._refKindLabel(row.kind)) + '</span>' +
+            '<span class="ai-ref-label">' + AIRender.escape(row.label || row.id) + '</span>' +
+            '<button type="button" class="ai-ref-x" data-ai-remove-answer-ref="' + AIRender.escape(row.kind + '|' + row.id + '|' + questionId) + '" aria-label="remove">×</button></span>'
+        ).join('');
     },
 
     _removeRef(kind, id) {
@@ -678,7 +786,17 @@ const AIWorkspace = {
         if (this._dom.refMenu) {
             this._dom.refMenu.hidden = true;
             this._dom.refMenu.innerHTML = '';
+            /* Back to the stylesheet's own position, so the composer's menu is not stuck at an
+               answer box's coordinates. */
+            if (this._dom.refMenu.style) {
+                this._dom.refMenu.style.position = '';
+                this._dom.refMenu.style.left = '';
+                this._dom.refMenu.style.right = '';
+                this._dom.refMenu.style.bottom = '';
+                this._dom.refMenu.style.width = '';
+            }
         }
+        this._refTarget = null;
     },
 
     _renderRefs() {
@@ -1274,7 +1392,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1418,6 +1536,13 @@ const AIWorkspace = {
         if (target.hasAttribute('data-ai-remove-ref')) {
             const [kind, id] = String(target.getAttribute('data-ai-remove-ref') || '').split('|');
             this._removeRef(kind, id);
+            return;
+        }
+        if (target.hasAttribute('data-ai-remove-answer-ref')) {
+            const [kind, id, questionId] = String(target.getAttribute('data-ai-remove-answer-ref') || '').split('|');
+            const rows = this._answerRefs(questionId).filter((row) => !(row.kind === kind && row.id === id));
+            if (this._current && this._current.answerRefs) this._current.answerRefs[String(questionId)] = rows;
+            this._renderAnswerRefs(questionId);
             return;
         }
         if (target.hasAttribute('data-ai-rerun-node')) {
@@ -1597,9 +1722,20 @@ const AIWorkspace = {
         try {
             const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id));
             const data = await response.json();
-            if (!data.ok) throw new Error(data.error || 'not found');
+            if (!data.ok) {
+                /* A conversation deleted here or in another tab: forget it instead of reopening a
+                   chat that no longer exists on every reload. */
+                if (response.status === 404) {
+                    this._conversationId = '';
+                    this._rememberConversation('');
+                    this._renderWelcome();
+                    return;
+                }
+                throw new Error(data.error || 'not found');
+            }
             this._messages = data.messages || [];
             this._conversationId = data.conversation.id;
+            this._rememberConversation(this._conversationId);
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
             this._renderSide();
@@ -1614,6 +1750,21 @@ const AIWorkspace = {
         if (!input) return;
         input.style.height = 'auto';
         input.style.height = Math.min(input.scrollHeight || 0, 220) + 'px';
+    },
+
+    /* The transcript the user was reading survives a reload: the id is browser-local state, the
+       messages stay on the server. A conversation deleted elsewhere is cleared when its fetch 404s
+       (``selectConversation``), not silently reopened forever. */
+    _restoreConversation() {
+        if (!this._conversationId) {
+            const saved = String(AISettings.load().conversation || '');
+            if (saved) this._conversationId = saved;
+        }
+        return this._conversationId;
+    },
+
+    _rememberConversation(id) {
+        AISettings.save({ conversation: String(id || '') });
     },
 
     _showChat() {
@@ -1942,12 +2093,18 @@ const AIWorkspace = {
         const type = event.type;
         if (type === 'meta') {
             this._conversationId = event.conversation_id || this._conversationId;
+            /* The first turn of a new chat learns its id here; remember it so a reload reopens THIS
+               transcript instead of an empty page. */
+            if (event.conversation_id) this._rememberConversation(this._conversationId);
             this._current = this._ensureAssistant();
             this._current.messageId = event.message_id;
             this._current.turnId = event.turn_id;
             this._current.runId = event.run_id;
             this._contextMeta = event.context || {};
-            if (event.skill) {
+            /* The server opens EVERY provider round with a meta event, and all rounds of one turn
+               share the turn_id. The skill row describes the TURN, so pushing it per round printed
+               “技能 · 画布建构师” twice in one answer. */
+            if (event.skill && !this._current.blocks.some((block) => block.type === 'skill')) {
                 this._current.blocks.push({ type: 'skill', name: String(event.skill), reason: String(event.skill_reason || '') });
             }
             this._renderSide();
@@ -2147,8 +2304,14 @@ const AIWorkspace = {
         if (!current) return;
         const text = String(value || '').trim();
         const selected = this._selectedLabels(questionId);
-        if (!text && !selected.length) return;
-        current.answers[questionId] = { id: questionId, selected, ...(text ? { custom: text } : {}) };
+        const refs = this._answerRefs(questionId).map((row) => ({ kind: row.kind, id: row.id }));
+        if (!text && !selected.length && !refs.length) return;
+        current.answers[questionId] = {
+            id: questionId,
+            selected,
+            ...(text ? { custom: text } : {}),
+            ...(refs.length ? { references: refs } : {}),
+        };
         this._maybeAnswer();
     },
 
@@ -2157,6 +2320,10 @@ const AIWorkspace = {
         if (!current || !current.questions) return;
         if (!current.questions.every((item) => current.answers[item.id])) return;
         const answers = current.questions.map((item) => current.answers[item.id]);
+        /* One flat list for the server: the answer that named them may be the custom box of any
+           card, and the resumed turn resolves each reference the same bounded way the composer's
+           `@` does. */
+        const references = answers.flatMap((item) => (item && item.references) || []);
         const approval = current.questions.some((item) => item.kind === 'approval');
         if (approval) {
             /* The decision stays visible in the turn: an approval card that vanished into
@@ -2183,6 +2350,7 @@ const AIWorkspace = {
                 message_id: current.messageId,
                 question_id: current.questionId,
                 answers,
+                references,
                 api_key: AISettings.keyFor(this._provider),
             });
         } catch (error) {
@@ -2206,6 +2374,7 @@ const AIWorkspace = {
 
     async newChat() {
         this._conversationId = '';
+        this._rememberConversation('');
         this._messages = [];
         this._current = null;
         this._plan = [];

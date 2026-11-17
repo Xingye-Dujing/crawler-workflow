@@ -79,6 +79,10 @@ ZH = {
     'ai.workspaceParseFailed': '无法解析 {name}：{detail}',
     'ai.workspaceMultiSheet': '“{name}”有多个工作表（{sheets}），请指明要哪一个，或先另存为单表。',
     'ai.workspace.pickTitle': '选择 AI 工作文件夹',
+    'ai.draftRefusedAgain': (
+        '这份草稿和上次被拒绝的完全一样，问题没有变化，原样重发不可能通过。请按上面的问题修改草稿，'
+        '或者用 ask_user_question 问用户缺的东西（数据集、平台/账号、关键词）。'
+    ),
     'ai.pickUnavailable': (
         '这台机器没有可用的系统文件夹窗口（Windows 用 PowerShell，macOS 用 osascript，'
         'Linux 用 zenity 或 kdialog）。请在上方列表里逐层选择。'
@@ -258,6 +262,11 @@ EN = {
     'ai.workspaceParseFailed': 'Could not parse {name}: {detail}',
     'ai.workspaceMultiSheet': '“{name}” has several sheets ({sheets}). Name the one to import, or save it as one.',
     'ai.workspace.pickTitle': 'Choose the AI working folder',
+    'ai.draftRefusedAgain': (
+        'This is the SAME draft with the SAME problems, and nothing was changed. Do not send it again: '
+        'change the draft to fix them, or use ask_user_question to get what is missing (a dataset, a '
+        'platform/account, a keyword). A second identical attempt cannot succeed.'
+    ),
     'ai.pickUnavailable': (
         'This machine has no usable system folder window (PowerShell on Windows, osascript on macOS, '
         'zenity or kdialog on Linux). Walk the list above instead.'
