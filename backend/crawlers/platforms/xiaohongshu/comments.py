@@ -27,7 +27,7 @@ import re
 from selenium.webdriver.common.action_chains import ActionChains
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
-from crawlers.commenting.walks import register
+from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine import times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.wall import classify
@@ -229,12 +229,16 @@ def _identity(card: dict) -> str:
     return 'text:' + '\x1e'.join(str(part or '') for part in parts)
 
 
-def _absorb(panel: dict, threads: dict) -> int:
+def _absorb(panel: dict, threads: dict, with_replies: bool = True) -> int:
     """Fold one screen's cards into the ordered thread map; return how many rows were new.
 
     Keyed by the site's comment id, so a screen re-read (a panel that re-mounts the same cards after
     a scroll) adds nothing, while two identical bodies from one author stay two rows — the previous
     ``(author, body)`` key collapsed exactly the "谢谢！" chains 楼中楼 is made of.
+
+    ``with_replies=False`` is the node's 爬楼中楼 switch off: the parent still lands (with the
+    site's own reply count in ``declared``), but neither the one reply each parent mounts by
+    default nor anything behind an opener is filed.
     """
     added = 0
     for card in panel.get('cards') or []:
@@ -250,6 +254,8 @@ def _absorb(panel: dict, threads: dict) -> int:
         elif declared > slot['declared']:
             # A pre-hydration read can answer a smaller number; the largest one seen is the site's.
             slot['declared'] = declared
+        if not with_replies:
+            continue
         known = {_identity(sub) for sub in slot['subs']}
         for sub in card.get('subs') or []:
             if not isinstance(sub, dict) or not str(sub.get('body') or '').strip():
@@ -482,6 +488,7 @@ def walk(session, url: str, limit: int) -> tuple:
         return [], DEAD
     _dismiss_login(session)
 
+    with_replies = replies_wanted(session)
     threads: dict = {}
     expand = {'done': set(), 'fails': {}, 'gated': False, 'idle': False}
     panel: dict = {}
@@ -502,7 +509,7 @@ def walk(session, url: str, limit: int) -> tuple:
         if panel.get('login_modal'):
             # A dialog the page raised on its own covers the panel; the site's own control closes it.
             _dismiss_login(session)
-        fresh = _absorb(panel, threads)
+        fresh = _absorb(panel, threads, with_replies)
         if panel.get('login_gate'):
             # The site's own "登录查看全部评论内容" element: a wall, not a note with zero comments.
             session.mark_login_wall()
@@ -517,7 +524,7 @@ def walk(session, url: str, limit: int) -> tuple:
         if limit and _row_count(threads) >= limit:
             exit_reason = 'target'
             break
-        clicked, gated = (0, False) if expand['gated'] else _expand_threads(session, panel, expand)
+        clicked, gated = (0, False) if not with_replies or expand['gated'] else _expand_threads(session, panel, expand)
         if gated and not expand['gated']:
             expand['gated'] = True
             # A refusal is said out loud the moment it happens: the alternative is a table whose
@@ -556,7 +563,25 @@ def walk(session, url: str, limit: int) -> tuple:
     # rather than treating "0 new" as the answer.
     reconciled = bool(declared) and len(rows) + nested >= declared
     licensed = bool((panel or {}).get('ended')) or asked or reconciled
-    if declared and len(rows) + nested < declared and not asked:
+    if not with_replies:
+        # 爬楼中楼 is off: the missing replies are the node's own choice, so only a hole in the
+        # TOP-LEVEL comments is a shortfall — said with arithmetic, never as "could not open".
+        top_gap = max(declared - len(rows) - nested, 0) if declared else 0
+        if declared and top_gap and not asked:
+            session.log(
+                t(
+                    'comment.topLevelShort',
+                    platform='xiaohongshu',
+                    url=url,
+                    declared=declared,
+                    rows=len(rows),
+                    skipped=nested,
+                    gap=top_gap,
+                )
+            )
+        elif nested and not asked:
+            session.log(t('comment.repliesSkipped', platform='xiaohongshu', url=url, rows=len(rows), skipped=nested))
+    elif declared and len(rows) + nested < declared and not asked:
         session.log(
             t(
                 'comment.xhsShort',

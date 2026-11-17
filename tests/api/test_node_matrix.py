@@ -1306,12 +1306,14 @@ class TestCommentNodeFilesAndLimits:
     def _two_url_session():
         class _Session:
             seen = []
+            include_replies = None
 
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 # The real session's signature: `abort` is the 停止 predicate, and a
                 # double that silently dropped it would let a comment walk keep
                 # reading pages behind a run the user had already ended.
                 assert callable(abort), 'the comment engine was never given a stop check'
+                type(self).include_replies = include_replies
 
             def walk(self, platform, url, limit):
                 type(self).seen.append((url, limit))
@@ -1338,6 +1340,16 @@ class TestCommentNodeFilesAndLimits:
         urls = 'https://www.zhihu.com/question/1/answer/1'
         self._run(client, app_module, {'urls': urls, 'comment_limit': '5'}, session, name='cmt-five')
         assert session.seen == [('https://www.zhihu.com/question/1/answer/1', 5)]
+
+    def test_the_reply_switch_reaches_the_browser_session_and_defaults_to_on(self, client, app_module, monkeypatch):
+        """爬楼中楼 is a node choice: absent means ON (the historical walk), an explicit false is false."""
+        session = self._two_url_session()
+        self._install(app_module, monkeypatch, session)
+        urls = 'https://www.zhihu.com/question/1/answer/1'
+        self._run(client, app_module, {'urls': urls}, session, name='cmt-replies-default')
+        assert session.include_replies is True, 'a node that never opened its panel lost the replies'
+        self._run(client, app_module, {'urls': urls, 'include_replies': False}, session, name='cmt-replies-off')
+        assert session.include_replies is False, 'the checkbox never reached the walk'
 
     @pytest.mark.parametrize('raw', ['-3', 'abc', ''])
     def test_an_unusable_limit_becomes_no_limit_not_a_negative_fetch(self, client, app_module, monkeypatch, raw):
@@ -1410,7 +1422,7 @@ class TestCommentNodeRecrawl:
         class _Session:
             calls = 0
 
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 pass
 
             def walk(self, platform, url, limit):

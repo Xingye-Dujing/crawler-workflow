@@ -423,7 +423,7 @@ class TestNoFurtherWork:
         gate = {'inside': threading.Event(), 'release': threading.Event()}
 
         class _Session:
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 # The stop predicate must reach the engine that reads hundreds of
                 # pages, not only the crawler that owns the browser — and so must the
                 # crawler itself, or a reap cannot be seen from inside the walk.
@@ -480,7 +480,7 @@ class TestNoFurtherWork:
         gate = {'inside': threading.Event(), 'release': threading.Event()}
 
         class _Session:
-            def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+            def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
                 self.read = 0
 
             def walk(self, platform, url, limit):

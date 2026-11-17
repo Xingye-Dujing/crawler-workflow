@@ -28,6 +28,6 @@ CAPABILITY = Capability(
         # ignores limit/offset/page/cursor — 30 is the whole board, so the target
         # box has a ceiling the handler states rather than loops against.
         hot_mode(target=ZHIHU_HOT_ROWS, board=False),
-        comment_mode('zhihu', 'https://www.zhihu.com/question/...', collects='dom_scroll'),
+        comment_mode('zhihu', 'https://www.zhihu.com/question/...', collects='dom_scroll', replies=True),
     ),
 )

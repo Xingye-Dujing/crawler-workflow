@@ -19,7 +19,7 @@ import contextlib
 import re
 
 from crawlers.commenting.protocol import BLOCKED, OK
-from crawlers.commenting.walks import register
+from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine import times
 from crawlers.engine.wall import looks_blocked
 from i18n import t
@@ -203,6 +203,7 @@ def walk(session, url: str, limit: int) -> tuple:
         return [], BLOCKED
     opened = 0
     rows = []
+    with_replies = replies_wanted(session)
     for btn in list(session.driver.find_elements('css selector', 'button')):
         text = session.safe_text(btn)
         match = re.search(r'(\d+)\s*条评论', text)
@@ -217,7 +218,7 @@ def walk(session, url: str, limit: int) -> tuple:
             btn.click()
             opened += 1
             session.expand_nap(2)
-            rows.extend(_drain_panel(session, url, limit, declared))
+            rows.extend(_drain_panel(session, url, limit, declared, with_replies))
         if limit and len(rows) >= limit:
             break
     if not opened and rows == []:
@@ -252,7 +253,7 @@ def _click_reply_threads(session) -> int:
     return clicked
 
 
-def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
+def _drain_panel(session, url: str, limit: int, declared: int = 0, with_replies: bool = True) -> list:
     collected, seen = [], set()
     quiet = 0
     rounds = 0
@@ -260,7 +261,9 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
         rounds += 1
         session.driver.execute_script(PUMP_JS)
         session.scroll_nap(0.6)
-        threads = _click_reply_threads(session)
+        # 爬楼中楼 off: no opener is clicked, so the panel stays at its top-level comments and
+        # the walk ends on the same quiet-round evidence — there is no thread left to open.
+        threads = _click_reply_threads(session) if with_replies else 0
         batch = session.driver.execute_script(PANEL_JS) or []
         fresh = []
         for row in parse_zhihu_comments(url, batch):
@@ -294,11 +297,25 @@ def _drain_panel(session, url: str, limit: int, declared: int = 0) -> list:
         else:
             quiet = 0
     if declared and len(collected) < declared:
-        # The site's own number is the denominator the user reads off the page; anything short
-        # of it is said out loud, because "the panel had 12" and "we stopped at 12 of 261" are
-        # two different reports and only one of them is checkable.
-        session.log(t('comment.zhihuPanelShort', declared=declared, rows=len(collected)))
-        # Named as unproven for the same reason: the cursor must not advance over a panel that
-        # came home short of the count the page printed.
-        session.mark_unproven(url)
+        if with_replies:
+            # The site's own number is the denominator the user reads off the page; anything short
+            # of it is said out loud, because "the panel had 12" and "we stopped at 12 of 261" are
+            # two different reports and only one of them is checkable.
+            session.log(t('comment.zhihuPanelShort', declared=declared, rows=len(collected)))
+            # Named as unproven for the same reason: the cursor must not advance over a panel that
+            # came home short of the count the page printed.
+            session.mark_unproven(url)
+        else:
+            # 爬楼中楼 is off, so the replies behind the openers were skipped on purpose. Saying
+            # so with both numbers keeps the short table explainable without convicting a session
+            # that did what the node asked.
+            session.log(
+                t(
+                    'comment.repliesSkipped',
+                    platform='zhihu',
+                    url=url,
+                    rows=len(collected),
+                    skipped=declared - len(collected),
+                )
+            )
     return collected

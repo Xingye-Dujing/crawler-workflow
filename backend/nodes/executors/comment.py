@@ -190,6 +190,10 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         raise ValueError(t('comment.no_urls', platforms=_COMMENT_PLATFORMS))
 
     limit = _safe_int(params.get('comment_limit'), 0, minimum=0)  # 0 = every comment
+    # 爬楼中楼: the node's own choice, defaulting ON (the historical walk). Read here, once,
+    # and handed to every browser session this node opens — including one rebuilt by a pool
+    # rotation — so all links of the batch collect the same kind of table.
+    include_replies = as_bool(params.get('include_replies'), True)
     part_size = _safe_int(params.get('part_size'), 0, minimum=0)  # 0 = single final file only
     per_article = as_bool(params.get('per_article_file'))
     keep_parts = as_bool(params.get('keep_parts'), True)
@@ -273,6 +277,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 log=lambda m: add_log(f'{t("comment.prefix")} {m}'),
                 abort=stop_requested,
                 owner=crawler,
+                include_replies=include_replies,
             ),
         )
         # Last, so a refusal while building the session cannot leave a registered browser

@@ -53,6 +53,9 @@ class WalkContext(Protocol):
     """
 
     driver: Any
+    #: Whether this node's table may hold 楼中楼 rows (the comment form's 爬楼中楼 switch).
+    #: A walk that files replies must ask this instead of assuming a reply is free.
+    include_replies: bool
 
     def log(self, message: str) -> None: ...
 
@@ -105,6 +108,16 @@ def walk_for(platform: str) -> Walk | None:
     return _WALKS.get(str(platform or '').strip())
 
 
+def replies_wanted(session) -> bool:
+    """Whether *session*'s node asked for 楼中楼 rows (``True`` when it never said).
+
+    One shared question, so every walk answers the same switch the same way. A session
+    without the attribute is the historical crawl — a live probe or a harness built before
+    the switch existed — and keeps opening replies; only the node's own form can turn it off.
+    """
+    return bool(getattr(session, 'include_replies', True))
+
+
 def platforms() -> frozenset[str]:
     load_builtin_walks()
     return frozenset(_WALKS)
@@ -136,6 +149,7 @@ __all__ = [
     'load_builtin_walks',
     'platforms',
     'register',
+    'replies_wanted',
     'reset_for_tests',
     'walk_for',
 ]

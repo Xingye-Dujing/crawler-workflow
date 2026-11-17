@@ -63,7 +63,7 @@ class NavigationTimeout(WebDriverException):
 class CommentSession:
     """One browser session per platform; the node handler owns lifecycle."""
 
-    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
         self._driver = driver
         # The crawler whose browser this is, when there is one. Held rather than flattened
         # into the snapshot above because 停止 may *replace* the session under the crawl:
@@ -83,6 +83,12 @@ class CommentSession:
         self.click_nap = pacing.click_nap if nap is None else nap
         self.arrival_nap = pacing.arrival_nap if nap is None else nap
         self.wait_nap = pacing.wait_nap if nap is None else nap
+        # Whether this node's table may hold 楼中楼 rows at all (the 爬楼中楼 switch on the
+        # comment form). Read by each platform's walk, because only that walk knows whether
+        # replies cost a click (xiaohongshu/zhihu/douyin) or ride along in the payload
+        # (weibo/bilibili). True is the historical behaviour, so a caller that never heard
+        # of the switch — a live probe, a harness — keeps walking every reply.
+        self.include_replies = bool(include_replies)
         # "May I stop?" — the same predicate the crawlers carry, because a comment
         # node reads hundreds of pages and the node handler only asks between URLs.
         self._abort = abort

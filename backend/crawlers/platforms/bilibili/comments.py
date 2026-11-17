@@ -7,12 +7,12 @@ blame (the link or the session).
 """
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK, _json_or_none, _stamp, as_count
-from crawlers.commenting.walks import register
+from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine.wall import looks_blocked
 from i18n import t
 
 
-def parse_bilibili_comments(items, article_url: str, floor: int = 0) -> list:
+def parse_bilibili_comments(items, article_url: str, floor: int = 0, include_replies: bool = True) -> list:
     """``x/v2/reply/main`` rows → comment rows, sub-replies flattened in place.
 
     ``floor`` continues the numbering across pages, so 楼层 stays a position in
@@ -20,9 +20,13 @@ def parse_bilibili_comments(items, article_url: str, floor: int = 0) -> list:
 
     A carried ``replies`` list is NOT the whole thread: measured on a hot page,
     a comment with ``rcount=11`` carries 2 sub-replies. They are stored with
-    their parent's id so a reader can tell a reply-from-a-reply from a top-level
+    their parent's id so a re∥ader can tell a reply-from-a-reply from a top-level
     comment, and ``子回复数`` keeps the unexpanded remainder visible instead of
     letting the count read as "this thread has 2 replies".
+
+    ``include_replies=False`` is the node's 爬楼中楼 switch: the carried sub-replies are
+    not filed (``子回复数`` still reports the site's own count), so the table is main-floor
+    comments only.
     """
     rows = []
     for item in items or []:
@@ -30,6 +34,8 @@ def parse_bilibili_comments(items, article_url: str, floor: int = 0) -> list:
             continue
         floor += 1
         rows.append(_bili_comment_row(item, article_url, floor, parent=''))
+        if not include_replies:
+            continue
         for sub in item.get('replies') or []:
             if isinstance(sub, dict):
                 floor += 1
@@ -167,6 +173,7 @@ def walk(session, url: str, limit: int) -> tuple:
         session.log(t('comment.commentsClosed', url=url))
         return [], OK
     rows, cursor, seen = [], 0, set()
+    with_replies = replies_wanted(session)
     # Did the walk stop because the SESSION was refused (must back off + 继续), or because a slow
     # link never answered (keep what was read, do not latch the session)? Neither is "the thread ended".
     session_stop = False
@@ -195,7 +202,7 @@ def walk(session, url: str, limit: int) -> tuple:
             break
         for item in page.get('replies') or []:
             seen.add(str(item.get('rpid')))
-        rows.extend(parse_bilibili_comments(items, url, floor=len(rows)))
+        rows.extend(parse_bilibili_comments(items, url, floor=len(rows), include_replies=with_replies))
         if session.may_stop():
             # 停止 must end the walk: with the page budget gone this loop only ends on the site's own
             # ``is_end``, an empty page or the user's 评论上限, so the stop has to be asked here.
@@ -222,8 +229,16 @@ def walk(session, url: str, limit: int) -> tuple:
     # really holds that many (rows==declared) or that met the user's ask says nothing (two-sided).
     met_ask = bool(limit) and len(rows) >= limit
     if not met_ask and len(rows) < declared:
-        session.log(t('comment.biliShort', url=url, rows=len(rows), declared=declared))
-        # A clean end far under the site's OWN denominator is a hole, not an answer: pin the
-        # cursor on this link so 继续 re-walks it (the executor reads ``skipped_targets``).
-        session.mark_unproven(url)
+        if with_replies:
+            session.log(t('comment.biliShort', url=url, rows=len(rows), declared=declared))
+            # A clean end far under the site's OWN denominator is a hole, not an answer: pin the
+            # cursor on this link so 继续 re-walks it (the executor reads ``skipped_targets``).
+            session.mark_unproven(url)
+        else:
+            # 爬楼中楼 off: the missing rows are the replies the node chose not to take, so the
+            # short table is explained instead of convicting the session (no 继续 entry for a
+            # shape the user asked for).
+            session.log(
+                t('comment.repliesSkipped', platform='bilibili', url=url, rows=len(rows), skipped=declared - len(rows))
+            )
     return (rows[:limit] if limit else rows), OK

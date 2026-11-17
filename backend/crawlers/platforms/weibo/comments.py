@@ -4,7 +4,7 @@ import json
 import re
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK, _strip_tags, as_count
-from crawlers.commenting.walks import register
+from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine import times
 from crawlers.engine.wall import looks_blocked, looks_like_login_page
 from i18n import t
@@ -134,7 +134,7 @@ def _one_row(item: dict, article_url: str, fallback_floor: int, parent_floor: in
     }
 
 
-def parse_weibo_comments(payload: dict, article_url: str) -> list:
+def parse_weibo_comments(payload: dict, article_url: str, include_replies: bool = True) -> list:
     """buildComments JSON → rows, **including the nested replies the envelope hides**.
 
     ``fetch_level=0`` returns top-level comments only: measured, a thread whose own envelope says
@@ -144,6 +144,10 @@ def parse_weibo_comments(payload: dict, article_url: str) -> list:
     previews are harvested here (they cost nothing and were being thrown away), each tagged with the
     parent's 楼层 so a reader can see what it replies to; the rest of the gap is named by the walker, never
     silently dropped.
+
+    ``include_replies=False`` is the node's 爬楼中楼 switch: the parent rows still land, their preview
+    children do not, so the table holds main-floor comments only (the gap the walker names is then the
+    user's own choice, not a refusal).
     """
     rows = []
     for i, item in enumerate(payload.get('data') or [], 1):
@@ -151,6 +155,8 @@ def parse_weibo_comments(payload: dict, article_url: str) -> list:
         if not row:
             continue
         rows.append(row)
+        if not include_replies:
+            continue
         children = item.get('comments')
         if not isinstance(children, list):
             continue
@@ -234,6 +240,7 @@ def walk(session, url: str, limit: int) -> tuple:
     # it. ``trendsText`` also says “已加载全部评论” on a 22-of-30 walk, so that sentence is not a
     # verdict and is never consulted.
     declared = as_count(show.get('comments_count'))
+    with_replies = replies_wanted(session)
     rows, seen, max_id, page, empty_rounds = [], set(), 0, 0, 0
     # Which exit ended the walk decides what may be SAID about its length. Three of these endings are
     # this code's own doing or the user's ask, and none of them is a statement about the thread: the
@@ -253,7 +260,7 @@ def walk(session, url: str, limit: int) -> tuple:
             break
         items = batch.get('data') or []
         before = len(rows)
-        for row in parse_weibo_comments({'data': items}, url):
+        for row in parse_weibo_comments({'data': items}, url, include_replies=with_replies):
             key = str(row.get('评论ID') or '')
             if key and key in seen:
                 continue
@@ -297,7 +304,14 @@ def walk(session, url: str, limit: int) -> tuple:
     # "did the site give less than it said"; when the user's limit then shortens the table, that is
     # not a gap and nothing is said about it.
     if ended == 'cursor' and declared and len(rows) < declared:
-        session.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
+        if with_replies:
+            session.log(t('comment.weiboShort', declared=declared, rows=len(rows), gap=declared - len(rows)))
+        else:
+            # 爬楼中楼 off: the preview replies a parent carries were intentionally left out, so the
+            # gap is named as the node's choice instead of the endpoint's refusal.
+            session.log(
+                t('comment.repliesSkipped', platform='weibo', url=url, rows=len(rows), skipped=declared - len(rows))
+            )
     if ended == 'fetch':
         # The one exit of this walk that used to say nothing at all. Every other ending is either the
         # site's answer (the cursor ran out, and ``comment.weiboShort`` names the gap against its own

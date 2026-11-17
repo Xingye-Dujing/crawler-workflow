@@ -11,6 +11,38 @@ Rules loaded into **every** session. Each rule is bare; the **why/evidence** is 
 采析绘 (crawler_workflow): Flask + zero-build vanilla-JS; crawls 9 social platforms + CNKI export (instagram
 cookie-capture only) via Selenium, cleans/analyzes text with local Ollama LLMs + scikit-learn, drag-drop workflow canvas.
 
+## Architecture: plugin seams — know the seam before editing
+
+**Read the seam before you change it, and extend it instead of bypassing it.** Every extension point below is a
+registry plus **one file per entry**. A new platform, node type, op, chart, source, provider or skill is a new file and
+one registration line — never a new `if` in shared code. A change that adds an entry-specific branch to shared code is
+a defect, not a shortcut.
+
+- **Platform crawlers are plugins.** `backend/crawlers/platforms/<id>/` (`crawler.py`, `comments.py`, `rows.py`, …)
+  and `backend/capabilities/platforms/<id>.py` (that platform's modes, fields, advice, region) are the ONLY homes for
+  site facts: selectors, endpoints, in-page JS, column names, pacing baselines, which field a form offers. Shared
+  modules (`crawlers/engine/`, `crawlers/core/`, `crawlers/commenting/`, `capabilities/fields.py`,
+  `capabilities/model.py`, `nodes/executors/comment.py`) never branch on, or hardcode, a platform. A shared factory
+  may accept a generic parameter; the platform file passes its own answer (`comment_mode(..., replies=True)`).
+- **Crawl backends**: `crawlers/backends/` + the adapter's own `capabilities` manifest; never copy cells, columns or
+  identity keys into a Python table. Ledger, cursor and login are keyed per backend.
+- **Node types**: one `NodePlugin` in `backend/nodes/catalog.py` + one `nodes/executors/<type>.py` registered in
+  `nodes/registry.py`; the browser reads the server's `node-types.js`, never a second list.
+- **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same
+  change (`contracts.py`, `validate_step`, the gate tests).
+- **Chart types**: one builder in `services/charts/options/` registered in `BUILDERS`; there is no
+  `if chart_type == …` chain and must not become one.
+- **Bibliographic sources/formats**: `services/biblio/sources.py` + `services/biblio/formats/`; a format's readable
+  columns are its own module's answer.
+- **AI extensions**: typed contributions through `extensions/` (`ExtensionRegistry`), providers in
+  `ai/providers/registry.py`, skills/tools in `ai/skills.py`/`ai/tools.py`; manifests are data, local code plugins are
+  local/admin only, cloud refuses them by name.
+- **Frontend panels**: a panel is a `static/js/panels/*.js` split registered in `tests/frontend/splits.json` and
+  `companions.mjs`; the no-build load order and the one-global rule are the seam. Never add a second list.
+- **Do not restructure a seam to fit one entry.** If the new entry does not fit the seam's vocabulary, add the missing
+  generic capability to the shared layer (one field, one flag, one hook) and let each entry answer it — the shared
+  layer stays ignorant of who answers what.
+
 ## Cross-platform (MANDATORY on every change)
 
 **Windows (dev), Linux (cloud), macOS.** Nothing in `backend/`, `tools/`, `ml_train/`, `tests/` or docs may hardcode a

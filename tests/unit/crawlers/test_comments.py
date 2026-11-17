@@ -338,6 +338,25 @@ class TestHelpers:
         assert rows[1]['楼层'] == '', rows
         assert rows[1]['点赞数'] == 9
 
+    def test_the_reply_switch_leaves_the_preview_children_out(self):
+        """爬楼中楼 off keeps the parent rows and drops the preview child the envelope carries."""
+        payload = {
+            'data': [
+                {
+                    'id': 1,
+                    'floor_number': 254,
+                    'rootid': 1,
+                    'text': '父',
+                    'user': {'screen_name': '甲', 'profile_url': '/u/1'},
+                    'comments': [
+                        {'id': 2, 'floor_number': 0, 'rootid': 1, 'text': '子', 'user': {'screen_name': '乙'}}
+                    ],
+                }
+            ]
+        }
+        rows = parse_weibo_comments(payload, 'https://weibo.com/1/a', include_replies=False)
+        assert [row['评论内容'] for row in rows] == ['父'], rows
+
 
 # ─── weibo adapter (in-page ajax) ───────────────────────────────────────
 
@@ -696,12 +715,17 @@ class _XhsOwner:
         self._is_walled = lambda: False
 
 
-def _xhs_walk(panel, *, limit=0, log=None, abort=None, **kwargs):
+def _xhs_walk(panel, *, limit=0, log=None, abort=None, include_replies=True, **kwargs):
     owner = _XhsOwner(None)
     driver = _XhsDriver(panel, owner=owner, **kwargs)
     owner.driver = driver
     session = CommentSession(
-        driver, log=log or (lambda message: None), nap=lambda seconds: None, abort=abort, owner=owner
+        driver,
+        log=log or (lambda message: None),
+        nap=lambda seconds: None,
+        abort=abort,
+        owner=owner,
+        include_replies=include_replies,
     )
     return session.walk('xiaohongshu', XHS_NOTE, limit), driver
 
@@ -918,6 +942,27 @@ class TestXhsAdapter:
         (rows, status), _driver = _xhs_walk(panel, log=said.append)
         assert status == OK and len(rows) == 1
         assert said == [], 'one comment, one row, and the site said so — nothing to report'
+
+    def test_replies_off_keeps_only_top_level_rows(self, xhs_chains):
+        """爬楼中楼 off: no opener is clicked, the mounted reply is not filed, and the count stays."""
+        said = []
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='2'),
+                    'subs': [_xhs_comment('a2', '乙', '站点默认渲染的那条回复')],
+                    'hidden': [_xhs_comment('a3', '丙', '展开后才出现的回复')],
+                }
+            ],
+            total='共 3 条评论',
+        )
+        (rows, status), driver = _xhs_walk(panel, include_replies=False, log=said.append)
+        assert status == OK
+        assert [row['评论内容'] for row in rows] == ['主评论'], rows
+        assert rows[0]['子回复数'] == 2, "the site's own reply count still travels with the parent"
+        assert driver.clicks == [], 'no 展开 may be clicked when the node asked for main comments only'
+        assert i18n.t('comment.repliesSkipped', platform='xiaohongshu', url=XHS_NOTE, rows=1, skipped=2) in said, said
+        assert driver.owner.skipped_targets == [], 'a shape the user asked for is not a hole to resume'
 
     def test_a_thread_the_site_already_shows_whole_is_not_clicked(self, xhs_chains):
         """When the mounted replies already meet the site's own count and it is not asking for more,
@@ -1209,6 +1254,31 @@ class TestZhihuAdapter:
         rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
         assert getattr(opener, 'clicked', False), 'the reply thread was never opened'
         assert [row['父楼层'] for row in rows] == ['', 1], rows
+
+    def test_the_reply_switch_never_clicks_an_opener(self):
+        """爬楼中楼 off: the reply thread stays shut, and the shortfall is the node's own choice."""
+        opener = El('展开其中 2 条回复')
+        said = []
+        driver = FakeDriver(
+            body='正常',
+            pages={'button': [El('44 条评论')], 'button, a': [opener]},
+            panel_pages=[[_zh_row('甲', '顶层一条')]],
+        )
+        session = CommentSession(driver, log=said.append, nap=lambda s: None, include_replies=False)
+        rows, _ = session.walk('zhihu', 'https://www.zhihu.com/question/1/answer/2', 0)
+        assert len(rows) == 1
+        assert not getattr(opener, 'clicked', False), 'the opener was clicked although 爬楼中楼 is off'
+        assert i18n.t('comment.zhihuPanelShort', declared=44, rows=1) not in said
+        assert (
+            i18n.t(
+                'comment.repliesSkipped',
+                platform='zhihu',
+                url='https://www.zhihu.com/question/1/answer/2',
+                rows=1,
+                skipped=43,
+            )
+            in said
+        ), said
 
     def test_a_shortfall_against_the_pages_own_number_is_said(self):
         """The button says 261. If the walk files 3, the console must hold both numbers — “面板就这些”
@@ -1604,6 +1674,12 @@ class TestBilibiliParser:
     def test_malformed_items_are_skipped_not_raised(self):
         rows = parse_bilibili_comments(['not-a-dict', None, _bili_reply('100', '甲', '好')], 'u')
         assert [r['评论者'] for r in rows] == ['甲']
+
+    def test_the_reply_switch_leaves_carried_sub_replies_out(self):
+        item = _bili_reply('100', '甲', '主楼', subs=[('101', '乙', '子回复')], rcount=1)
+        rows = parse_bilibili_comments([item], 'u', include_replies=False)
+        assert [row['评论者'] for row in rows] == ['甲'], rows
+        assert rows[0]['子回复数'] == 1, "the site's own reply count is still reported"
 
     def test_bilibili_links_route_to_the_bilibili_adapter(self):
         assert platform_for('https://www.bilibili.com/video/BV1atCRYsE7x/') == 'bilibili'

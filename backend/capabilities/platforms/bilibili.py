@@ -16,6 +16,6 @@ CAPABILITY = Capability(
             hint_key='settings.authorHintBili',
         ),
         hot_mode(),
-        comment_mode('bilibili', 'https://www.bilibili.com/video/BV...'),
+        comment_mode('bilibili', 'https://www.bilibili.com/video/BV...', replies=True),
     ),
 )

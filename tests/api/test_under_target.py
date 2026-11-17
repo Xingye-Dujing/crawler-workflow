@@ -402,7 +402,7 @@ class _FakeCommentCrawler:
 class _BlockingSession:
     """Stand-in for CommentSession: the douyin panel adapter answers BLOCKED for every URL."""
 
-    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
         self._owner = owner
 
     def walk(self, platform, url, limit):
@@ -469,7 +469,7 @@ class _RecordingSession:
     boom: str | None = None
     fault: Exception | None = None
 
-    def __init__(self, driver, log=None, nap=None, abort=None, owner=None):
+    def __init__(self, driver, log=None, nap=None, abort=None, owner=None, include_replies=True):
         self._owner = owner
         self.walked = []
         _RecordingSession.instances.append(self)

@@ -161,6 +161,24 @@ COMMENT_LIMIT = Field(
     minimum=0,
     coerce='number',
 )
+#: Whether a comment walk also opens each comment's 楼中楼 (nested replies).
+#:
+#: A shared SWITCH, never a shared platform rule: which platforms really have replies to take
+#: is decided by that platform's own declaration (``capabilities/platforms/<id>.py`` passes
+#: ``replies=True`` when its walk can file them — by clicking the site's 展开 control or by
+#: reading the replies the endpoint carries). Offering it where the table can never hold a
+#: reply would be a control that changes nothing. Off means "top-level comments only": the
+#: walk neither clicks an opener nor files a reply row, and `子回复数` keeps the site's own
+#: count so a reader can still see that replies exist. It chooses DATA, so it stays in the
+#: node fingerprint (unlike `recrawl`/file switches).
+INCLUDE_REPLIES = Field(
+    key='include_replies',
+    control='checkbox',
+    label_key='settings.includeReplies',
+    default=True,
+    hint_key='settings.includeRepliesHint',
+    coerce='bool',
+)
 #: A table-side range over 评论时间, run by ``_filter_comments_by_time`` after the
 #: comments are crawled — deliberately NOT the crawl node's ``start_time``/``end_time``
 #: (which decide how far back to CRAWL). The comment node reads ``comment_start`` /
@@ -282,7 +300,7 @@ def hot_mode(
     )
 
 
-def comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
+def comment_mode(platform: str, example: str, collects: str = 'fetch', replies: bool = False) -> Mode:
     """The 评论 form, which is the same on every platform except the link shape.
 
     The example URL is the only per-platform part besides the ownership rule, and
@@ -292,6 +310,11 @@ def comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
     per platform because the comment engine is where the platforms genuinely differ:
     weibo/bilibili/YouTube read a JSON answer (nothing on screen moves), while
     zhihu/xiaohongshu have to be scrolled and douyin/X are answered a captcha headless.
+
+    ``replies`` says this platform's comment table can hold 楼中楼 rows, so the form
+    offers the 爬楼中楼 switch. Each platform file answers that from its own walk; it is
+    False wherever a reply can never be filed, because a checkbox that cannot change
+    the table is a promise the walk never keeps.
     """
     return Mode(
         key='comments',
@@ -312,6 +335,7 @@ def comment_mode(platform: str, example: str, collects: str = 'fetch') -> Mode:
             ),
             INPUT_COLUMN,
             COMMENT_LIMIT,
+            *((INCLUDE_REPLIES,) if replies else ()),
             *COMMENT_TIMES,
             PER_ARTICLE,
             # The comment walk keeps the same ledger a source crawl does — an

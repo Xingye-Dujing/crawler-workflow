@@ -998,3 +998,56 @@ class TestWhichLinesAreNames:
     def test_a_mode_without_a_link_list_never_claims_to_take_names(self):
         assert names_also_accepted(mode_for('hongguo', 'hot_drama')) is False
         assert names_also_accepted(None) is False
+
+
+class TestTheNestedReplySwitch:
+    """楼中楼 is a property of the platform's comment walk, so the switch is declared by the matrix.
+
+    A checkbox on a platform whose table can never hold a reply is a control that changes nothing;
+    a declared switch no walk reads is a promise the run breaks silently. Both halves are pinned
+    here — the declared set, and the source of each walker that must honour it.
+    """
+
+    #: Every platform whose comment table really can hold reply rows today. 红果 uses its own
+    #: ``include_replies`` over the client harvest; the other five are browser walks.
+    DECLARED = {'zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin', 'hongguo'}
+    BROWSER_WALKS = {'zhihu', 'weibo', 'xiaohongshu', 'bilibili', 'douyin'}
+
+    def test_only_a_platform_that_can_file_a_reply_offers_the_switch(self):
+        declared = {
+            cap.platform
+            for cap in CAPABILITIES
+            if any('include_replies' in {f.key for f in mode.fields} for mode in cap.modes)
+        }
+        assert declared == self.DECLARED, f'the switch moved: {declared ^ self.DECLARED}'
+
+    def test_the_switch_is_the_same_word_everywhere_and_defaults_to_on(self):
+        for platform in self.DECLARED:
+            field = next(f for f in mode_for(platform, 'comments').fields if f.key == 'include_replies')
+            assert field.control == 'checkbox' and field.coerce == 'bool', platform
+            assert field.default is True, f'{platform} turned replies off for everyone by default'
+            if platform == 'hongguo':
+                # 红果's form is the client harvest: same key and default, its own measured hint.
+                assert field.label_key == 'settings.hgIncludeReplies'
+                continue
+            assert field.label_key == 'settings.includeReplies'
+            assert field.hint_key == 'settings.includeRepliesHint'
+
+    def test_every_browser_walk_reads_the_switch_it_offers(self):
+        from crawlers.commenting import walks
+
+        missing = []
+        for platform in self.BROWSER_WALKS:
+            walker = walks.walk_for(platform)
+            assert walker is not None, platform
+            source = inspect.getsource(inspect.getmodule(walker))
+            if 'replies_wanted' not in source:
+                missing.append(platform)
+        assert missing == [], f'walks that never ask whether replies were wanted: {missing}'
+
+    def test_the_comment_executor_hands_the_switch_to_every_session_it_opens(self):
+        from nodes.executors import comment as comment_exec
+
+        body = inspect.getsource(comment_exec.execute_comment_node)
+        assert "params.get('include_replies')" in body, 'the comment node never reads 爬楼中楼'
+        assert 'include_replies=include_replies' in body, 'a pool rotation would rebuild a session without it'

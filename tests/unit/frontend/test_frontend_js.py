@@ -761,6 +761,19 @@ class TestSettingsPanel:
         assert 'zhihu.com' not in html
         assert 'weibo.com' not in html
 
+    def test_the_comment_form_renders_the_nested_reply_switch_as_a_checkbox(self, results):
+        """A platform whose walk opens 楼中楼 must offer the switch, drawn by the shared renderer
+        (the same ``settings-group`` checkbox every other boolean field uses)."""
+        html = results['settings']['panel_xhs_comments']
+        assert 'type="checkbox"' in html
+        assert "updateParam('n1','include_replies',this.checked)" in html, html
+        assert 'settings.includeReplies' in html
+
+    def test_a_platform_without_replies_shows_no_switch(self, results):
+        # wechat has no comment crawl at all, so the capability carries no such field.
+        html = results['settings']['panel_wechat_stale']
+        assert 'include_replies' not in html
+
     def test_wechat_ignores_a_stale_comments_flag_and_keeps_article_links(self, results):
         html = results['settings']['panel_wechat_stale']
         # no collect selector at all for WeChat, no comments textarea

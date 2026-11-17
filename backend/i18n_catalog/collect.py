@@ -83,10 +83,18 @@ ZH = {
     'comment.no_urls': '评论节点没有可抓取的链接（支持：{platforms}）',
     'comment.platformMismatch': '已忽略 {n} 个与所选平台（{platform}）不符的链接',
     'comment.prefix': '[评论]',
+    'comment.repliesSkipped': (
+        '[{platform}评论] {url}：节点关闭了“爬楼中楼”，本次只采主评论（本表 {rows} 条）；'
+        '站点计数里另有 {skipped} 条未采。'
+    ),
     'comment.status.blocked': '被登录墙/风控拦截',
     'comment.status.dead': '链接不可读',
     'comment.status.ok': '正常',
     'comment.time_filtered': '节点 {nid}：按评论时间 {start} ~ {end} 筛选，保留 {kept} 条、丢弃 {dropped} 条',
+    'comment.topLevelShort': (
+        '[{platform}评论] {url}：站点计 {declared} 条，本次关闭了爬楼中楼：主评论 {rows} 条'
+        ' + 未采子回复 {skipped} 条，仍差 {gap} 条主评论未采到。'
+    ),
     'comment.unsupported': '评论节点忽略了 {n} 个不支持的链接（仅支持：{platforms}）',
     # Named because a count of dropped "links" sends the user hunting for a typo in a URL,
     # when what the node actually lacks is the platform that declared it takes plain names.
@@ -316,10 +324,18 @@ EN = {
     'comment.no_urls': 'comment node has no crawlable URLs (supported: {platforms})',
     'comment.platformMismatch': 'skipped {n} link(s) that do not match the selected platform ({platform})',
     'comment.prefix': '[comments]',
+    'comment.repliesSkipped': (
+        '[{platform} comments] {url}: 楼中楼 is off for this node, so only top-level comments were '
+        'read ({rows} rows); the site’s own count carries {skipped} more that were not taken.'
+    ),
     'comment.status.blocked': 'login/risk-control wall',
     'comment.status.dead': 'link unreadable',
     'comment.status.ok': 'ok',
     'comment.time_filtered': 'Node {nid}: filtered comments by time {start} ~ {end}: kept {kept}, dropped {dropped}',
+    'comment.topLevelShort': (
+        '[{platform} comments] {url}: the site counts {declared}; 楼中楼 is off, so this table holds '
+        '{rows} main comments + {skipped} replies not taken, and {gap} MAIN comments are still missing.'
+    ),
     'comment.unsupported': 'comment node ignored {n} unsupported link(s) (supported: {platforms})',
     # Named because a count of dropped "links" sends the user hunting for a typo in a URL,
     # when what the node actually lacks is the platform that declared it takes plain names.

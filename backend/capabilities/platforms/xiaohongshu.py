@@ -22,6 +22,6 @@ CAPABILITY = Capability(
             ),
             collects='dom_scroll',
         ),
-        comment_mode('xiaohongshu', 'https://www.xiaohongshu.com/explore/...', collects='dom_scroll'),
+        comment_mode('xiaohongshu', 'https://www.xiaohongshu.com/explore/...', collects='dom_scroll', replies=True),
     ),
 )

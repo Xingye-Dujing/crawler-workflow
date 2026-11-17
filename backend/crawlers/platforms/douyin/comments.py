@@ -12,7 +12,7 @@ from selenium.common.exceptions import JavascriptException
 from selenium.webdriver.common.action_chains import ActionChains
 
 from crawlers.commenting.protocol import BLOCKED, DEAD, OK
-from crawlers.commenting.walks import register
+from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine import feed, pacing, times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.pacing import throttled_sleep
@@ -317,11 +317,14 @@ def walk(session, url: str, limit: int) -> tuple:
     reply_seen: set = set()
     prev_count = 0
     exit_reason = 'stuck'
+    # 爬楼中楼 off: no 展开 is clicked and no reply row is filed. The walk then ends on the panel's
+    # own growth evidence alone — a collapsed opener is only "more to read" when we mean to open it.
+    with_replies = replies_wanted(session)
     while True:
-        opened = _expand_reply_threads(session)
+        opened = _expand_reply_threads(session) if with_replies else 0
         items = session.driver.find_elements('css selector', '[data-e2e="comment-item"]')
         count = len(items)
-        _absorb_threads(_read_threads(session), threads, reply_seen, seen_identity)
+        _absorb_threads(_read_threads(session), threads, reply_seen, seen_identity, with_replies)
         if session.may_stop():
             exit_reason = 'stopped'
             break
@@ -330,13 +333,13 @@ def walk(session, url: str, limit: int) -> tuple:
             break
         # The panel is drained only when nothing new mounted AND no thread was left to open. An
         # opener is proof there is more to read, so the walk must not stop while one remains.
-        if count == prev_count and not opened and not _has_collapsed_opener(session):
+        if count == prev_count and not opened and not (with_replies and _has_collapsed_opener(session)):
             exit_reason = 'no_new'
             break
         prev_count = count
         # Stopped growing, but a thread openable by a further scroll means there is still more to read;
         # give up only when the scroll moved nothing AND nothing is openable.
-        if not _scroll_panel(session) and not opened and not _has_collapsed_opener(session):
+        if not _scroll_panel(session) and not opened and not (with_replies and _has_collapsed_opener(session)):
             exit_reason = 'stuck'
             break
         # A pacing pause between scrolled screens, so gentle crawl may stretch THIS one. The
@@ -366,7 +369,26 @@ def walk(session, url: str, limit: int) -> tuple:
     # only thing still owed to the denominator is what could not be expanded. The gap therefore says
     # "the site counted this many and the table + unexpandable replies still fall short" — never
     # “这条视频就这么多” when it is not, and the exit reason keeps a user 停止 off the site's head.
-    if declared and len(rows) + nested < declared and not (limit and len(rows) >= limit):
+    asked = bool(limit and len(rows) >= limit)
+    if not with_replies:
+        # The replies are the node's own omission, so only a hole in the TOP-LEVEL comments is a
+        # shortfall; a table of parents is exactly what 爬楼中楼 off promised.
+        top_gap = max(declared - len(rows) - nested, 0) if declared else 0
+        if declared and top_gap and not asked:
+            session.log(
+                t(
+                    'comment.topLevelShort',
+                    platform='douyin',
+                    url=target,
+                    declared=declared,
+                    rows=len(rows),
+                    skipped=nested,
+                    gap=top_gap,
+                )
+            )
+        elif nested and not asked:
+            session.log(t('comment.repliesSkipped', platform='douyin', url=target, rows=len(rows), skipped=nested))
+    elif declared and len(rows) + nested < declared and not asked:
         session.log(
             t(
                 'comment.dyShort',
@@ -427,7 +449,7 @@ def _read_threads(session) -> list:
     return []
 
 
-def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set) -> None:
+def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set, with_replies: bool = True) -> None:
     """Fold one round's mounted readings into the ordered thread map, filing each identity ONCE.
 
     The panel virtualises: a parent re-read each round it re-mounts (key makes it idempotent), and — the
@@ -436,6 +458,9 @@ def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set
     parents and replies, so over-collection is impossible: a comment that is really someone's reply, but
     that douyin also mounts as a top-level item, is skipped as a parent if its reply already landed.
     ``subs`` keeps the largest declared count seen (an early read can be pre-hydration).
+
+    ``with_replies=False`` is 爬楼中楼 off: the parent keeps its declared reply count (the row's
+    ``子回复数``) but its mounted replies are not filed, so no reply row reaches the table.
     """
     for one in readings or []:
         author, content, when, region, likes, subs = douyin_comment_fields(one.get('own'))
@@ -465,6 +490,8 @@ def _absorb_threads(readings, threads: dict, reply_seen: set, seen_identity: set
                 'replies': {},
             }
         slot = threads[key]
+        if not with_replies:
+            continue
         for reply in one.get('replies') or []:
             # The newer reader answers ``{text, id}``; a plain string is still accepted so a probe
             # or an older fixture keeps working (and simply has no id).

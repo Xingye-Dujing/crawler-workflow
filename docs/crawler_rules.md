@@ -13,6 +13,10 @@
   `engine/workflow.py::validate` 拒绝；`GET /api/capabilities` 把同一份描述交给面板。新平台/模式是**一条矩阵项**，
   不是四个文件里的 `if platform == …`。字段标签是前端键、必填名是后端键（`field.*`），由
   `test_frontend_contract.py::TestCrawlMatrixParity` 对齐；字段名会进内联处理器，不匹配 `/^[\w.-]{1,64}$/` 的整项丢弃。
+- **平台是插件，共享层不认识任何一个站。** `crawlers/platforms/<id>/` 与 `capabilities/platforms/<id>.py` 是站点
+  事实的唯一住处（选择器、端点、页面内 JS、列名、节奏基线、表单给哪个开关）；`crawlers/engine/`、`crawlers/core/`、
+  `crawlers/commenting/`、`capabilities/fields.py` 里不得出现按平台名分支的代码。共享工厂可以收一个通用参数，由
+  平台文件传自己的答案（如 `comment_mode(..., replies=True)`）；平台专属逻辑出现在共享模块就是架构缺陷。
 - **没有平台自己的用户旋钮。** 站点基线（卡片等待、滚动预算、卡住轮数）可以放在平台旁边，但必须经
   `crawlers/engine/pacing.py` 消费（`pace_scale`/`scroll_scale`/`expand_scale`/`click_scale`/`wait_scale`/
   `arrival_scale`/`patience_scale` 与 `*_nap`/`*_wait`）。平台模块不得 `get_setting` 读采集行为，不得手写 `time.sleep`；
@@ -96,6 +100,10 @@
   （抖音粉丝/获赞、知乎点赞、红果空计数）；`parse_count` 把万/K/M 标签折成整数。评论台账键是站点身份
   （`平台`+`评论ID`），不是整行哈希（后者含会重编的 `楼层`）；`文章URL` 是八张评论表共用的 join 键，红果的剧集语义进
   `剧名`/`集序号`/`分集ID`，不改它。
+- **楼中楼是节点自己的选择，不是平台的默认。** `include_replies` 只在真有子回复可采的评论表单上声明（知乎、微博、
+  小红书、哔哩哔哩、抖音、红果；X/YouTube 的评论本身就是整张回复表，不声明）。关掉后必须三件事一起成立：不点
+  “展开 N 条回复”一类开器、不把接口随行带回的子回复入表、父行 `子回复数` 保留站点自己的计数。短表的原因也要分开说：
+  关闭导致的差额是用户的形状（不钉游标），**开器点了却没展开**才是由站点作证的缺口（钉游标、可继续）。
 
 ## §5 平台红线（机制与数字见 `docs/crawler_notes.md`）
 - **抖音**：无头可用；搜索模式与“筛选”菜单已删除（`search()`、`_SORT_FIELD`/`SORTS` 与真站用例一并删）；**没有播放数列**；

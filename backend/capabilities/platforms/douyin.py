@@ -28,6 +28,6 @@ CAPABILITY = Capability(
         # interstitial while a cookie-planted throwaway browser read the board, so
         # 需要登录 here is the truth rather than a hedge.
         hot_mode(board=False),
-        comment_mode('douyin', 'https://www.douyin.com/video/...', collects='dom_scroll'),
+        comment_mode('douyin', 'https://www.douyin.com/video/...', collects='dom_scroll', replies=True),
     ),
 )

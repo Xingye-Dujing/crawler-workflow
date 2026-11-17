@@ -30,6 +30,6 @@ CAPABILITY = Capability(
         # and because an anonymous browser is served too, this is the one crawl in
         # the matrix that must not make the canvas ask for a login.
         hot_mode(board=False, session_required=False),
-        comment_mode('weibo', 'https://weibo.com/...'),
+        comment_mode('weibo', 'https://weibo.com/...', replies=True),
     ),
 )

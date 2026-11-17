@@ -1000,6 +1000,21 @@ class TestComments:
         assert rows[0]['子回复数'] == 1 and rows[0]['评论内容'] == '主评论'
         assert rows[1]['评论内容'] == '子回复' and rows[1]['评论地区'] == '上海'
 
+    def test_the_reply_switch_never_expands_or_files_a_reply(self, make_crawler, monkeypatch):
+        """爬楼中楼 off: the panel is read for main comments only — no 展开 click, no reply row."""
+        monkeypatch.setattr('crawlers.platforms.douyin.comments.ActionChains', _FakeActionChains)
+        parent = El(
+            '路人甲\n主评论\n1天前·北京\n1\n展开1条回复',
+            replies=['路人乙\n子回复\n1天前·上海\n0'],
+        )
+        _crawler, driver = make_crawler(cards=[], comment_items=[parent], comment_count='2')
+        session = CommentSession(driver, log=lambda m: None, nap=lambda s: None, include_replies=False)
+        rows, status = session.walk('douyin', f'https://www.douyin.com/video/{ID}', 0)
+        assert status == OK, status
+        assert [r['评论者'] for r in rows] == ['路人甲'], rows
+        assert rows[0]['子回复数'] == 1, "the site's own count stays on the parent row"
+        assert getattr(parent, '_tries', 0) == 0, 'an opener was clicked although 爬楼中楼 is off'
+
     def test_a_failed_expand_is_tried_once_then_skipped_not_retried(self, make_crawler, monkeypatch):
         """A thread that only pops “评论已删除 / 不可见” is uncrawlable — tried ONCE, never re-clicked.
 
