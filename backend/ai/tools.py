@@ -455,6 +455,51 @@ def _files_ready() -> None:
         raise AIError('ai.workspaceCloud', kind='capability')
 
 
+#: Tools whose effect is a change on the user's machine or their run records. With
+#: ``ai_auto_approve`` off, one of these runs only after the user answered a ``request_approval``
+#: question with the EXACT arguments it is about to use (see ``ai.approvals``). ``workspace_set``
+#: is deliberately absent: choosing a folder is a setting the panel offers, not a per-call act.
+APPROVAL_TOOLS = ('run_cmd', 'workspace_write', 'workspace_import', 'rerun_node')
+
+
+def require_approval(name: str, args: dict, ctx: dict) -> None:
+    """Refuse a mutating call the user has not approved in this conversation.
+
+    The refusal NAMES the tool and tells the model to call ``request_approval`` first; the grant
+    is keyed by the exact arguments, so an approval for one command cannot spend itself on another.
+    """
+    if get_setting('ai_auto_approve'):
+        return
+    if name in APPROVAL_TOOLS:
+        from ai import approvals
+
+        conversation_id = str((ctx or {}).get('conversation_id') or '')
+        if approvals.consume(conversation_id, name, args or {}):
+            return
+    raise AIError('ai.approvalRequired', kind='capability', tool=name)
+
+
+#: A rerun refusal names the ENGINE's i18n key; the workspace answers its own sentence, because the
+#: model's next step differs: "the canvas changed" is not "the run record is missing".
+RERUN_REFUSAL_KEYS = {
+    'api.rerunFingerprintMismatch': 'ai.rerunCanvasChanged',
+    'api.rerunNoNode': 'ai.rerunNoNode',
+    'api.rerunNoRun': 'ai.rerunNoRun',
+    'api.resumeMissing': 'ai.rerunNoRun',
+    'api.rerunRunLive': 'ai.rerunRunLive',
+    'api.rerunBusy': 'ai.rerunRunLive',
+    'api.rerunNoRows': 'ai.rerunNoRows',
+}
+
+
+def rerun_refusal_message(exc) -> str:
+    """The sentence both the agent and the HTTP route tell the user for a refused rerun."""
+    from i18n import t
+
+    key = RERUN_REFUSAL_KEYS.get(getattr(exc, 'key', ''))
+    return t(key, **exc.params) if key and exc.params else t(key) if key else exc.localized()
+
+
 def tool_workflow_schema(_args: dict, _ctx: dict) -> dict:
     """The whole legal vocabulary: node types with seed params, the file shape and the rules."""
     from ai import vocabulary
@@ -606,11 +651,13 @@ ASK_USER_SCHEMA = {
                             'properties': {
                                 'label': {'type': 'string'},
                                 'description': {'type': 'string'},
+                                'value': {'type': 'string', 'description': 'Optional stable id echoed back.'},
                             },
                             'required': ['label'],
                         },
                     },
                     'multi_select': {'type': 'boolean'},
+                    'kind': {'type': 'string', 'description': 'Optional marker; "approval" renders a danger card.'},
                 },
                 'required': ['id', 'question'],
             },
@@ -674,6 +721,35 @@ APPLY_WORKFLOW_SCHEMA = {
         'summary': {'type': 'string'},
     },
     'required': ['workflow'],
+}
+
+
+RERUN_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'run_id': {'type': 'string', 'description': 'The failed run whose subtree should run again.'},
+        'workflow_name': {
+            'type': 'string',
+            'description': 'The SAVED workflow file that produced the run. Never load it onto the canvas; the file '
+            'must still match the run record.',
+        },
+        'node_id': {'type': 'string', 'description': 'The failed node; its downstream runs again too.'},
+    },
+    'required': ['run_id', 'workflow_name', 'node_id'],
+}
+
+APPROVAL_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'action': {'type': 'string', 'description': 'The tool name you are about to call.'},
+        'summary': {'type': 'string', 'description': 'One sentence the user reads: what it will do.'},
+        'detail': {
+            'type': 'object',
+            'description': 'The EXACT arguments you will pass to that tool, as a JSON object. After approval, '
+            'repeat the identical call.',
+        },
+    },
+    'required': ['action', 'summary', 'detail'],
 }
 
 
@@ -1047,6 +1123,25 @@ TOOLS = {
             permission='artifact',
             control=True,
         ),
+        ToolSpec(
+            'rerun_node',
+            'Re-run ONE failed node and everything downstream of it, as a resume of the run that produced it. '
+            'It does NOT load or replace the canvas: the SAVED workflow file is read, must still match the run '
+            'record, and the kept upstream rows are reused. Refuses by name when the file is missing, the canvas '
+            'changed, the node is unknown or the run is live.',
+            RERUN_SCHEMA,
+            permission='artifact',
+            control=True,
+        ),
+        ToolSpec(
+            'request_approval',
+            'Ask the user to allow one exact mutating call (run_cmd / workspace_write / workspace_import / '
+            'rerun_node) when automatic approval is off. Answer 允许一次 / 本次会话允许 / 拒绝; after an approval, '
+            'repeat the identical tool call. Denial or cancel grants nothing.',
+            APPROVAL_SCHEMA,
+            permission='ask',
+            control=True,
+        ),
     )
 }
 
@@ -1107,6 +1202,7 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
         if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
             raise AIError('ai.workspaceCloud', kind='capability')
         # The user's own safety switch: with it off, touching the machine is a request, not an act.
-        if tool.permission in ('write:files', 'exec:cmd') and not get_setting('ai_auto_approve'):
-            raise AIError('ai.approvalRequired', kind='capability', tool=name)
+        # The grant is per exact call (``ai.approvals``), never per tool name.
+        if tool.permission in ('write:files', 'exec:cmd'):
+            require_approval(name, args or {}, ctx or {})
     return tool.handler(args or {}, ctx or {})

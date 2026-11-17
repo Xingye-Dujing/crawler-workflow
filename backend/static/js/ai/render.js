@@ -130,6 +130,9 @@ const AIRender = {
     },
 
     questionCard(question, answered) {
+        /* An approval question is the same card with a danger tone: the runtime marks it with
+           ``kind`` (and the stable id ``approval``), never with a translated sentence. */
+        const approval = String(question.kind || '') === 'approval' || String(question.id || '') === 'approval';
         const options = (question.options || []).map((option, index) => {
             const description = option.description ? '<span class="ai-option-desc">' + this.escape(option.description) + '</span>' : '';
             return (
@@ -142,12 +145,45 @@ const AIRender = {
         const custom = answered ? '' : '<textarea class="ai-answer-custom" data-ai-custom="' + this.escape(question.id) + '" rows="2" placeholder="' + this.escape(I18n.t('ai.customAnswer')) + '"></textarea>';
         const customButton = answered ? '' : '<button type="button" class="ai-ghost" data-ai-send-custom="' + this.escape(question.id) + '">' + this.escape(I18n.t('ai.answer')) + '</button>';
         return (
-            '<section class="ai-question" data-ai-question-card="' + this.escape(question.id) + '">' +
-            '<div class="ai-question-head"><span class="ai-dot"></span>' + this.escape(question.header || I18n.t('ai.questionTitle')) + '</div>' +
+            '<section class="ai-question' + (approval ? ' ai-question-approval' : '') + '" data-ai-question-card="' + this.escape(question.id) + '">' +
+            '<div class="ai-question-head"><span class="ai-dot"></span>' + this.escape(question.header || I18n.t('ai.questionTitle')) +
+            (approval ? '<span class="ai-chip ai-chip-danger">' + this.escape(I18n.t('ai.approvalBadge')) + '</span>' : '') +
+            '</div>' +
             '<p class="ai-question-text">' + this.inline(question.question) + '</p>' +
             '<div class="ai-options">' + options + '</div>' +
             custom + customButton +
             (answered ? '<div class="ai-question-answered">' + this.escape(I18n.t('ai.questionAnswered')) + '</div>' : '') +
+            '</section>'
+        );
+    },
+
+    failedNodesCard(block) {
+        /* A monitor's failure answer names the nodes it could rerun; the button calls the same
+           server decision as the canvas's 重跑节点 and never loads the canvas here. */
+        const nodes = Array.isArray(block && block.nodes) ? block.nodes : [];
+        if (!nodes.length) return '';
+        const runId = String(block.run_id || '');
+        const workflow = String(block.workflow_name || '');
+        const rows = nodes.map((node) => {
+            const nid = String(node.node || node.id || '');
+            const error = String(node.error || '') || I18n.t('ai.failedNodeNoError');
+            const action = runId
+                ? '<button type="button" class="ai-ghost" data-ai-rerun-run="' + this.escape(runId) + '" data-ai-rerun-workflow="' + this.escape(workflow) + '" data-ai-rerun-node="' + this.escape(nid) + '">' + this.escape(I18n.t('ai.rerunNode')) + '</button>'
+                : '<span class="ai-hint">' + this.escape(I18n.t('ai.rerunNoWorkflowHint')) + '</span>';
+            return (
+                '<li class="ai-failed-node">' +
+                '<span class="ai-failed-node-id">' + this.escape(nid) + '</span>' +
+                '<span class="ai-failed-node-error">' + this.escape(error) + '</span>' +
+                action +
+                '</li>'
+            );
+        }).join('');
+        const started = String(block.started || '');
+        return (
+            '<section class="ai-failed-nodes' + (started ? ' is-started' : '') + '">' +
+            '<div class="ai-question-head"><span class="ai-dot"></span>' + this.escape(I18n.t('ai.failedNodesTitle')) + '</div>' +
+            '<ul>' + rows + '</ul>' +
+            (started ? '<div class="ai-question-answered">' + this.escape(I18n.t('ai.rerunStarted', { node: started })) + '</div>' : '') +
             '</section>'
         );
     },
@@ -328,6 +364,12 @@ const AIRender = {
                     }).join('') +
                     '</ol></div>'
                 );
+                continue;
+            }
+            if (type === 'failed_nodes') {
+                flush();
+                const card = this.failedNodesCard(block);
+                if (card) parts.push(card);
                 continue;
             }
             if (type === 'text') {

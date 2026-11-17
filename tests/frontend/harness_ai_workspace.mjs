@@ -182,4 +182,64 @@ out.commands = {
     closed: workspace._dom.cmdMenu.hidden === true,
 };
 
+/* Failed-node card and approval card: the button must name run + workflow + node, reach the
+   delegated handler, and the answered card must keep the decision visible. The approval card is
+   the same shell with a danger tone and all three choices. */
+workspace._conversationId = 'c-cards';
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+const cardTurn = workspace._ensureAssistant();
+cardTurn.blocks = [{ type: 'failed_nodes', run_id: 'r1', workflow_name: 'wf', nodes: [{ node: 'n2', error: 'boom' }] }];
+workspace._paintAssistant();
+const rerunButton = workspace._dom.chat.querySelectorAll('[data-ai-rerun-node]')[0];
+const rerunCalls = [];
+const realRerun = workspace._rerunFailedNode;
+workspace._rerunFailedNode = async (run, node, name) => rerunCalls.push([run, node, name]);
+if (rerunButton) dispatchOn(workspace._dom.root, 'click', { target: rerunButton });
+workspace._rerunFailedNode = realRerun;
+workspace._markRerunStarted('r1', 'n2', 'wf', cardTurn);
+workspace._paintAssistant();
+const failedSection = workspace._dom.chat.querySelectorAll('.ai-failed-nodes')[0];
+const startedNode = workspace._dom.chat.querySelectorAll('.ai-question-answered')[0];
+
+const approvalHtml = sandbox.AIRender.questionCard(
+    {
+        id: 'approval',
+        kind: 'approval',
+        header: 'Permission needed',
+        question: 'Allow run_cmd?',
+        options: [
+            { label: 'Allow once', value: 'once' },
+            { label: 'Allow for this session', value: 'session' },
+            { label: 'Deny', value: 'deny' },
+        ],
+    },
+    false
+);
+const approvalCard = sandbox.document.createElement('div');
+approvalCard.innerHTML = approvalHtml;
+workspace._ingestRunNodes(
+    { run: { id: 'r2', workflow_name: 'wf2' }, nodes: { n9: { status: 'failed', error: 'bad' } } },
+    cardTurn
+);
+workspace._paintAssistant();
+const failingNodes = workspace._dom.chat.querySelectorAll('.ai-failed-node-id').map((el) => String(el.textContent));
+out.cards = {
+    runStatus: failingNodes,
+    rerun: {
+        button: !!rerunButton,
+        run: rerunButton && rerunButton.getAttribute('data-ai-rerun-run'),
+        workflow: rerunButton && rerunButton.getAttribute('data-ai-rerun-workflow'),
+        clicked: rerunCalls,
+        startedText: !!failedSection && failedSection.classList.contains('is-started') && !!startedNode && String(startedNode.textContent || '').includes(
+            vm.runInContext("I18n.t('ai.rerunStarted', { node: 'n2' })", sandbox)
+        ),
+    },
+    approval: {
+        danger: approvalHtml.includes('ai-question-approval'),
+        options: approvalCard.querySelectorAll('[data-ai-answer]').map((el) => el.getAttribute('data-ai-answer')),
+        badge: approvalHtml.includes(vm.runInContext("I18n.t('ai.approvalBadge')", sandbox)),
+    },
+};
+
 fs.writeFileSync(1, JSON.stringify(out));

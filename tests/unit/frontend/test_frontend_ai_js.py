@@ -147,3 +147,18 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['pickOptions'] == [''], 'the placeholder sentence became an option VALUE (and a script_id)'
         assert out['manage'] is True
         assert out['manageTarget'] == "AIWorkspace.openStudio('python')", out['manageTarget']
+
+    def test_the_failed_node_and_approval_cards_carry_their_actions(self):
+        """A monitor's failure answer offers the rerun, and an approval question shows all three
+        choices in the danger card. The session grant itself is reused server-side
+        (tests/api/test_ai_approval_turn.py::test_a_session_approval_is_reused_by_the_resumed_turn)."""
+        out = _run_workspace()['cards']
+        assert out['rerun']['button'] is True, 'the failed-node card has no rerun button'
+        assert out['rerun']['run'] == 'r1'
+        assert out['rerun']['workflow'] == 'wf'
+        assert out['rerun']['clicked'] == [['r1', 'n2', 'wf']], out['rerun']['clicked']
+        assert out['rerun']['startedText'] is True, 'a started rerun is not marked on the card'
+        assert out['approval']['danger'] is True
+        assert out['approval']['options'] == ['Allow once', 'Allow for this session', 'Deny']
+        assert out['approval']['badge'] is True
+        assert out['runStatus'] == ['n2', 'n9'], 'a run_status answer did not name its failed node'

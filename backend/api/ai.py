@@ -599,6 +599,57 @@ def ai_workflow_validate():
     return jsonify({'ok': True, 'report': workflow_draft.validate(payload)})
 
 
+@bp.route('/api/ai/rerun', methods=['POST'])
+def ai_rerun():
+    """Rerun ONE failed node (and its downstream) from the monitor card.
+
+    The user pressed a button and confirmed, so this is not a tool call: it reads the SAVED workflow
+    file and goes through the same ``rerun_node`` decision as the canvas's own 重跑节点. It never
+    loads the workflow onto the canvas — the page keeps whatever the user is drawing.
+    """
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    conversation_id = str(data.get('conversation_id') or '')
+    if store.get_conversation(conversation_id) is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    run_id = str(data.get('run_id') or '').strip()
+    workflow_name = str(data.get('workflow_name') or '').strip()
+    node_id = str(data.get('node_id') or '').strip()
+    if not run_id or not node_id:
+        return _error(AIError('ai.rerunArgs', kind='bad_request'))
+    if not workflow_name:
+        return _error(AIError('ai.rerunUnsaved', kind='bad_request'), 400)
+    from runtime.stores import get_workflow_manager
+
+    try:
+        workflow = get_workflow_manager().load(workflow_name)
+    except OSError:
+        return _error(AIError('ai.rerunNoWorkflow', kind='not_found', name=workflow_name), 404)
+    if not workflow:
+        return _error(AIError('ai.rerunNoWorkflow', kind='not_found', name=workflow_name), 404)
+    from engine.workflow_rerun import RerunRefusalError, rerun_node
+
+    try:
+        answer = rerun_node(workflow, node_id, run_id, workflow_name=workflow_name, lang=get_lang())
+    except RerunRefusalError as exc:
+        return jsonify({'ok': False, 'key': exc.key, 'error': tools.rerun_refusal_message(exc)}), exc.status
+    body = answer.get('body') or {}
+    if not body.get('ok'):
+        return jsonify({'ok': False, 'error': body.get('error') or t('ai.rerunNoRun')}), answer.get('status') or 409
+    return jsonify(
+        {
+            'ok': True,
+            'run_id': run_id,
+            'node_id': node_id,
+            'workflow_name': workflow_name,
+            'invalidated': list(body.get('invalidated') or []),
+            'queued': bool(body.get('queued')),
+            'message': t('ai.rerunStarted', node=node_id),
+        }
+    )
+
+
 @bp.route('/api/ai/conversations/<conversation_id>/files', methods=['GET'])
 def ai_file_list(conversation_id: str):
     if store.get_conversation(conversation_id) is None:

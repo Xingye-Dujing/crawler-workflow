@@ -37,9 +37,33 @@ ZH = {
     'ai.datasetTooBig': '数据超过单表上限，未导入：{detail}',
     'ai.workspaceCloud': '云端模式没有用户本机文件系统，工作文件夹、导入和命令都不可用。',
     'ai.approvalRequired': (
-        '“{tool}”会改动本机，但“自动同意 AI 的本机操作”是关闭的。'
-        '先用 ask_user_question 请用户确认并开启该设置，或改为只读操作。'
+        '“{tool}”会改动本机或运行记录，但“自动同意 AI 的本机操作”是关闭的。'
+        '先用 request_approval 提出这次调用的确切参数；用户同意后再原样重试那个工具。'
     ),
+    'ai.approvalHeader': '需要你允许：{tool}',
+    'ai.approvalQuestion': 'AI 想执行“{tool}”：{summary} 允许这次操作吗？',
+    'ai.approvalOnce': '允许一次',
+    'ai.approvalSession': '本次会话允许',
+    'ai.approvalDeny': '拒绝',
+    'ai.approvalOnceHint': '只为这一次、这份完全相同的参数放行。',
+    'ai.approvalSessionHint': '在本次会话里，这份完全相同的参数不必再问。',
+    'ai.approvalDenyHint': '不执行；AI 会说明它没有做这一步。',
+    'ai.approvalNoArgs': (
+        'request_approval 需要把将要执行的确切参数作为 JSON 对象写进 detail，例如把 command 写成 “python x.py”。'
+    ),
+    'ai.approvalDenied': '你拒绝了这次操作，它没有被执行。',
+    'ai.rerunArgs': '重跑需要 run_id、workflow_name 和 node_id 三个参数。',
+    'ai.rerunNoWorkflow': '找不到这次运行对应的已保存工作流：{name}。它可能从未保存，或文件已被删除、改名。',
+    'ai.rerunUnsaved': '这条运行没有对应的已保存工作流，无法从文件重跑；请先保存画布。',
+    'ai.rerunCanvasChanged': (
+        '已保存的画布与这条运行的记录不一致（文件或画布改过了），不能在这条运行上重跑；'
+        '请用“继续”运行当前画布，或打开当时的工作流。'
+    ),
+    'ai.rerunNoNode': '这条运行里没有这个节点：{node}',
+    'ai.rerunNoRun': '找不到可重跑的运行记录。',
+    'ai.rerunRunLive': '这条运行还在进行中，不能重跑它的节点；先停止或等它结束。',
+    'ai.rerunNoRows': '该节点没有可重跑的结果：{node}',
+    'ai.rerunStarted': '已开始重跑节点 {node}',
     'ai.workspaceNoApp': '这个宿主没有本地安装目录，命令只能在已选择的工作文件夹里运行。',
     'ai.workspaceMissing': '还没有选择工作文件夹：请先在 AI 工作区顶部选择本地文件夹。',
     'ai.workspaceGone': '工作文件夹已不存在：{path}；请重新选择。',
@@ -180,9 +204,36 @@ EN = {
         'A cloud host has no user filesystem, so the working folder, local imports and commands are unavailable.'
     ),
     'ai.approvalRequired': (
-        '“{tool}” changes the machine, but “Approve AI machine actions automatically” is off. Ask the user with '
-        'ask_user_question and let them enable it, or do a read-only step instead.'
+        '“{tool}” changes the machine or the run records, but “Approve AI machine actions automatically” is off. '
+        'Call request_approval with the exact arguments first; after the user allows it, retry the same tool call.'
     ),
+    'ai.approvalHeader': 'Your permission is needed: {tool}',
+    'ai.approvalQuestion': 'The assistant wants to run “{tool}”: {summary} Allow this call?',
+    'ai.approvalOnce': 'Allow once',
+    'ai.approvalSession': 'Allow for this session',
+    'ai.approvalDeny': 'Deny',
+    'ai.approvalOnceHint': 'Only this one call, with exactly these arguments.',
+    'ai.approvalSessionHint': 'In this conversation, these exact arguments will not ask again.',
+    'ai.approvalDenyHint': 'Nothing runs; the assistant will say the step was not done.',
+    'ai.approvalNoArgs': (
+        'request_approval needs the exact arguments you will pass as a JSON object in detail, '
+        'for example the command “python x.py”.'
+    ),
+    'ai.approvalDenied': 'You denied this call; nothing ran.',
+    'ai.rerunArgs': 'A rerun needs all three: run_id, workflow_name and node_id.',
+    'ai.rerunNoWorkflow': (
+        'No saved workflow matches this run: {name}. It may never have been saved, or the file was deleted or renamed.'
+    ),
+    'ai.rerunUnsaved': 'This run has no saved workflow to rerun from; save the canvas first.',
+    'ai.rerunCanvasChanged': (
+        'The saved canvas no longer matches this run (the file or the canvas changed), so it cannot be rerun '
+        'there. Use 继续 on the current canvas, or open the workflow as it was.'
+    ),
+    'ai.rerunNoNode': 'This run has no such node: {node}',
+    'ai.rerunNoRun': 'No rerunnable run record was found.',
+    'ai.rerunRunLive': 'This run is still going, so its nodes cannot be rerun; stop it or wait for it to finish.',
+    'ai.rerunNoRows': 'That node has no stored result to rerun: {node}',
+    'ai.rerunStarted': 'Started rerunning node {node}',
     'ai.workspaceNoApp': 'This host has no local install folder; a command needs a chosen working folder.',
     'ai.workspaceMissing': 'No working folder is chosen yet. Pick a local folder at the top of the AI workspace.',
     'ai.workspaceGone': 'The working folder no longer exists: {path}. Choose it again.',

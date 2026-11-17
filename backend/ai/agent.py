@@ -18,12 +18,12 @@ from datetime import datetime
 from runtime import account_context
 from runtime.settings import get_setting
 
+from ai import approvals, environment, references, skills, store, tools, vocabulary, workflow_draft
 from ai import context as context_builder
-from ai import environment, references, skills, store, tools, vocabulary, workflow_draft
 from ai.errors import AIError
 from ai.providers import get_provider
 from ai.types import new_id, usage_totals
-from i18n import t
+from i18n import get_lang, t
 
 ACTIVE_STREAMS: dict[str, threading.Event] = {}
 _STREAM_LOCK = threading.RLock()
@@ -96,8 +96,12 @@ def _system_prompt(skill, provider, model: str, agent_mode: str = 'build') -> st
         f'{skills.GLOBAL_POLICY}\n\n'
         f'{vocabulary.prompt_block()}\n\n'
         f'你与采析绘的应用是双向的：工作流草案可以用 apply_workflow 直接校验、保存并载入画布（用户要求运行时再加 '
-        f'run=true）；本地文件可以用 workspace_* 读取、写回、导入为数据集；run_cmd 在你的工作文件夹里执行一个白名单'
-        f'程序（不是 shell）；app_errors 读后端日志与最近失败运行。做完一件事就调用一个工具，不要只描述。\n\n'
+        f'run=true）；失败的运行可以用 rerun_node 只重跑那个失败节点及其下游'
+        f'（读已保存的工作流文件，不替换用户的画布）；'
+        f'本地文件可以用 workspace_* 读取、写回、导入为数据集；run_cmd 在你的工作文件夹里执行一个白名单'
+        f'程序（不是 shell）；app_errors 读后端日志与最近失败运行。做完一件事就调用一个工具，不要只描述。'
+        f'“自动同意本机操作”关闭时，run_cmd / workspace_write / workspace_import / rerun_node 会先被拒绝：'
+        f'用 request_approval 提出同样的确切参数，用户同意后再原样重试那个调用。\n\n'
         f'Active skill: {skill.id}\n{skill.prompt}\n\n'
         f'Provider: {provider.spec.id} / {model}. Declared capabilities: {capability_words}.\n'
         f'{environment.prompt_line()}\n'
@@ -351,6 +355,13 @@ class AgentService:
         answered = store.answer_question(question_id, {'answers': answers})
         if answered is None:
             raise AIError('ai.apiAlreadyAnswered', kind='bad_request')
+        # An approval question becomes a grant (or not) BEFORE the turn resumes. ``settle`` only
+        # matches the two allow labels, so a denial, a cancel and a custom answer grant nothing.
+        custom = next(
+            (str(item.get('custom') or '') for item in answers or () if isinstance(item, dict) and item.get('custom')),
+            '',
+        )
+        approvals.settle(conversation_id, str(question.get('tool_use_id') or ''), answers, custom=custom)
         assistant = store.get_message(message_id)
         if assistant is None:
             raise AIError('ai.apiNoMessage', kind='bad_request', message=message_id)
@@ -445,6 +456,8 @@ class AgentService:
                 'update_plan',
                 'present_artifact',
                 'apply_workflow',
+                'rerun_node',
+                'request_approval',
                 'workflow_schema',
                 'workflow_validate',
                 'app_errors',
@@ -462,6 +475,7 @@ class AgentService:
             # not offered, so `tools.execute` refuses a replayed call for the same reason.
             blocked = {
                 'apply_workflow',
+                'rerun_node',
                 'workspace_set',
                 'workspace_write',
                 'workspace_import',
@@ -529,6 +543,7 @@ class AgentService:
                     }
                     return
                 rounds += 1
+                paused_for_approval = False
                 if any(call['name'] == 'ask_user_question' for call in calls):
                     waiting = self._ask_user(conversation, state, calls, run_id)
                     yield waiting['event']
@@ -546,9 +561,21 @@ class AgentService:
                     if call['name'] == 'apply_workflow':
                         yield from self._apply_workflow_event(conversation, state, call, run_id)
                         continue
+                    if call['name'] == 'rerun_node':
+                        yield from self._rerun_event(conversation, state, call, run_id)
+                        continue
+                    if call['name'] == 'request_approval':
+                        # The turn pauses on the question; the answer resumes it exactly like the tool
+                        # budget's. Finishing the loop first keeps every other tool_use paired.
+                        asked = yield from self._approval_event(conversation, state, call, run_id)
+                        paused_for_approval = paused_for_approval or asked
+                        continue
                     yield from self._tool_event(
                         conversation, state, call, turn_id, api_key, provider.spec.id, model, offered
                     )
+                if paused_for_approval:
+                    yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'awaiting_approval'}
+                    return
         finally:
             clear_active(conversation['id'])
 
@@ -740,15 +767,23 @@ class AgentService:
                 ]
             },
         }
+        waiting = self._attach_question(conversation, state, call, run_id)
+        yield waiting['event']
+        return True
+
+    def _attach_question(self, conversation: dict, state: dict, call: dict, run_id: str) -> dict:
+        """Add a synthesized ``ask_user_question`` tool_use to the finished round and ask it.
+
+        Shared by the tool budget and the approval card: both pause a turn that already produced its
+        answer blocks, and the provider requires that every ``tool_use`` block has a tool result.
+        """
         message = store.get_message(state['message']['id']) or state['message']
         blocks = list(message.get('blocks') or [])
         blocks.append({'type': 'tool_use', 'id': call['id'], 'name': 'ask_user_question', 'input': call['arguments']})
         meta = dict(message.get('meta') or {})
         meta['tool_calls'] = list(meta.get('tool_calls') or []) + [call]
         store.update_message(message['id'], blocks=blocks, meta=meta)
-        waiting = self._ask_user(conversation, {'message': {**message, 'blocks': blocks, 'meta': meta}}, [call], run_id)
-        yield waiting['event']
-        return True
+        return self._ask_user(conversation, {'message': {**message, 'blocks': blocks, 'meta': meta}}, [call], run_id)
 
     def _ask_user(self, conversation: dict, state: dict, calls: list, run_id: str) -> dict:
         call = next((item for item in calls if item['name'] == 'ask_user_question'), None)
@@ -767,11 +802,20 @@ class AgentService:
                     'question': str(item.get('question') or ''),
                     'header': str(item.get('header') or ''),
                     'options': [
-                        {'label': str(option.get('label') or ''), 'description': str(option.get('description') or '')}
+                        {
+                            'label': str(option.get('label') or ''),
+                            'description': str(option.get('description') or ''),
+                            # A runtime-synthesized choice may name itself stably ('once'/'session'/
+                            # 'deny') so the browser can style a denial without matching a sentence.
+                            'value': str(option.get('value') or ''),
+                        }
                         for option in item.get('options') or []
                         if isinstance(option, dict) and option.get('label')
                     ],
                     'multi_select': bool(item.get('multi_select')),
+                    # An approval question is painted as a danger-toned card; the browser keys on
+                    # this token, never on a translated sentence.
+                    'kind': str(item.get('kind') or ''),
                 }
             )
         if not normalized:
@@ -915,6 +959,141 @@ class AgentService:
         yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': True, 'result': result}
         yield {'type': 'workflow_apply', 'workflow': payload, 'name': saved['name'], 'run': bool(args.get('run'))}
 
+    def _rerun_event(self, conversation: dict, state: dict, call: dict, run_id: str):
+        """Re-run one failed subtree from the SAVED workflow file — never from a canvas load.
+
+        A monitor's failure answer should be able to fix the run the user is looking at without the
+        assistant replacing what is on their canvas. The file is the authority: it must still match
+        the run record's fingerprint, or the rerun would mix two canvases under one run id.
+        """
+        args = call.get('arguments') if isinstance(call.get('arguments'), dict) else {}
+        meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
+        failed_run = str(args.get('run_id') or '').strip()
+        workflow_name = str(args.get('workflow_name') or '').strip()
+        node_id = str(args.get('node_id') or '').strip()
+
+        def refuse(message: str, name: str = 'rerun_node'):
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': name},
+            )
+            store.add_step(run_id, t('ai.stepTool', tool=name), tool=name, status='failed')
+            return {'type': 'tool_result', 'id': call['id'], 'name': name, 'ok': False, 'error': message}
+
+        if not failed_run or not workflow_name or not node_id:
+            yield refuse(t('ai.rerunArgs'))
+            return
+        try:
+            tools.require_approval('rerun_node', args, {'conversation_id': conversation['id']})
+        except AIError as exc:
+            yield refuse(exc.localized())
+            return
+        from runtime.stores import get_workflow_manager
+
+        try:
+            workflow = get_workflow_manager().load(workflow_name)
+        except OSError as exc:  # a disk that cannot read is a named refusal, not a traceback
+            yield refuse(t('ai.rerunNoWorkflow', name=workflow_name) + ' ' + str(exc)[:160])
+            return
+        if not workflow:
+            yield refuse(t('ai.rerunNoWorkflow', name=workflow_name))
+            return
+        from engine.workflow_rerun import RerunRefusalError, rerun_node
+
+        try:
+            answer = rerun_node(workflow, node_id, failed_run, workflow_name=workflow_name, lang=get_lang())
+        except RerunRefusalError as exc:
+            yield refuse(tools.rerun_refusal_message(exc))
+            return
+        body = answer.get('body') or {}
+        if not body.get('ok'):
+            yield refuse(str(body.get('error') or t('ai.toolFailed', detail='rerun refused')))
+            return
+        result = {
+            'ok': True,
+            'run_id': failed_run,
+            'node_id': node_id,
+            'workflow_name': workflow_name,
+            'invalidated': list(body.get('invalidated') or []),
+            'queued': bool(body.get('queued')),
+        }
+        store.append_message(
+            conversation['id'],
+            'tool',
+            json.dumps(result, ensure_ascii=False),
+            status='done',
+            meta={**meta, 'name': 'rerun_node'},
+        )
+        store.add_step(run_id, t('ai.stepTool', tool='rerun_node'), tool='rerun_node', args=result, status='done')
+        yield {'type': 'tool_result', 'id': call['id'], 'name': 'rerun_node', 'ok': True, 'result': result}
+        yield {
+            'type': 'rerun_started',
+            'run_id': failed_run,
+            'node_id': node_id,
+            'workflow_name': workflow_name,
+            'invalidated': result['invalidated'],
+        }
+
+    def _approval_event(self, conversation: dict, state: dict, call: dict, run_id: str):
+        """Ask 允许一次 / 本次会话允许 / 拒绝 before a mutating tool runs.
+
+        The question is a normal ``ask_user_question`` card (so the answer resumes the turn the same
+        way the tool budget's does), and the answer is turned into a grant by ``ai.approvals`` at
+        resume time. Its id, header and ``kind`` mark it for the danger-toned card in the browser.
+        """
+        args = call.get('arguments') if isinstance(call.get('arguments'), dict) else {}
+        meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
+        action = str(args.get('action') or '').strip()
+        detail = args.get('detail')
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except ValueError:
+                detail = None
+        if not action or not isinstance(detail, dict):
+            message = t('ai.approvalNoArgs')
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'request_approval'},
+            )
+            yield {'type': 'tool_result', 'id': call['id'], 'name': 'request_approval', 'ok': False, 'error': message}
+            return False
+        labels = {'once': t('ai.approvalOnce'), 'session': t('ai.approvalSession'), 'deny': t('ai.approvalDeny')}
+        summary = str(args.get('summary') or '').strip()
+        ask = {
+            'id': new_id('call'),
+            'name': 'ask_user_question',
+            'arguments': {
+                'questions': [
+                    {
+                        'id': 'approval',
+                        'kind': 'approval',
+                        'header': t('ai.approvalHeader', tool=action),
+                        'question': t('ai.approvalQuestion', tool=action, summary=summary),
+                        'options': [
+                            {'label': labels['once'], 'value': 'once', 'description': t('ai.approvalOnceHint')},
+                            {
+                                'label': labels['session'],
+                                'value': 'session',
+                                'description': t('ai.approvalSessionHint'),
+                            },
+                            {'label': labels['deny'], 'value': 'deny', 'description': t('ai.approvalDenyHint')},
+                        ],
+                    }
+                ]
+            },
+        }
+        approvals.request(conversation['id'], action, detail, ask['id'], labels)
+        waiting = self._attach_question(conversation, state, ask, run_id)
+        yield waiting['event']
+        return True
+
     def _tool_event(
         self,
         conversation: dict,
@@ -945,7 +1124,13 @@ class AgentService:
             result = tools.execute(
                 name,
                 call.get('arguments') or {},
-                {'turn_id': turn_id, 'api_key': api_key, 'provider': provider, 'model': model},
+                {
+                    'turn_id': turn_id,
+                    'conversation_id': conversation['id'],
+                    'api_key': api_key,
+                    'provider': provider,
+                    'model': model,
+                },
                 offered,
             )
             text = json.dumps(result, ensure_ascii=False, default=str)
@@ -1028,6 +1213,11 @@ def _turn_user(conversation_id: str, turn_id: str) -> dict | None:
 
 
 def _abandon_pending(conversation_id: str) -> None:
+    """A new user message takes the transcript back, so the old question cannot be answered.
+
+    Its approval request must go with it: otherwise a grant nobody chose would survive in memory.
+    """
+    approvals.revoke(conversation_id)
     pending = store.pending_questions(conversation_id)
     if not pending:
         return

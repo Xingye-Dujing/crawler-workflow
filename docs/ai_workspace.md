@@ -121,9 +121,19 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   运行监控可把结果作为新一轮消息送回。
 - **工具预算不是硬墙**：默认 24 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
   `ask_user_question` 通道询问“继续/到此为止”，回答即续跑一轮，按钮/选项照常进入历史。
-- **Plan / Build 与安全开关**：`agent_mode=plan` 时变更类工具不下发（`apply_workflow`、`workspace_write`、
-  `workspace_import`、`run_cmd`、Python 写入/运行）；`ai_auto_approve` 关闭时 `run_cmd`/`workspace_write`
-  按名拒绝并让 AI 先问你。单次工具结果上限 `ai_max_tool_result_chars` 默认 12000，可调。
+- **Plan / Build 与安全开关**：`agent_mode=plan` 时变更类工具不下发（`apply_workflow`、`rerun_node`、
+  `workspace_write`、`workspace_import`、`run_cmd`、Python 写入/运行）；`ai_auto_approve` 关闭时
+  `run_cmd`/`workspace_write`/`workspace_import`/`rerun_node` 按名拒绝并让 AI 先走 `request_approval`
+  （见下一节）。单次工具结果上限 `ai_max_tool_result_chars` 默认 12000，可调。
+- **失败节点重跑**：监控的自动分析回答用 `app_errors` 拿到失败节点，卡片列出节点 id + 错误，按钮
+  “重跑此节点及其下游”调 `POST /api/ai/rerun`；`ai/agent.py` 的 `rerun_node` 工具走同一个决定
+  （`engine/workflow_rerun.rerun_node`，路由 `/api/workflow/rerun-node` 也只剩薄壳）。它只读本账号
+  `data/workflows/` 里的**已保存文件**，指纹与运行记录不一致、文件缺失、节点未知、运行未结束都按名拒绝；
+  永不把工作流载回画布——页面只标一张“已开始重跑”的卡片并发 `rerun_started` 事件。
+- **逐次审批**：`ai/approvals.py` 在进程内按 `(会话, 工具, 参数的 SHA-256)` 记住授权，不落盘、不存密钥。
+  `request_approval` 复用 `ask_user_question` 的可恢复暂停（合成 assistant `tool_use`，供应商配对规则仍成立），
+  选项为 允许一次 / 本次会话允许 / 拒绝；`once` 用掉即失效，`session` 对同一份确切参数可重复使用，
+  拒绝/取消/换一份参数都不授权。`request_approval` 的 `detail` 必须是将要执行的**确切参数对象**。
 - **@ 运行记录**：`references.KINDS` 增加 `run`，展开为状态、节点错误与控制台尾部（20 行、整块受引用预算限制）。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
@@ -177,6 +187,7 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | GET/POST | `/api/ai/workspace` | 工作文件夹状态 / 设置 |
 | GET | `/api/ai/workspace/browse` | 目录选择器（只列目录） |
 | POST | `/api/ai/workflow/validate` | 工作流草案的结构 + 引擎校验 |
+| POST | `/api/ai/rerun` | 从已保存文件重跑一个失败节点及其下游（失败节点卡片的按钮） |
 | GET | `/api/ai/usage` | 本账号 token 汇总 |
 | GET/POST | `/api/ai/skills` | 技能列表 / 保存 |
 | POST | `/api/ai/skills/<id>/fork` | Fork 内置技能 |
@@ -203,6 +214,10 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 
 - `tests/unit/ai/test_ai_core.py`：目录、序列化、脱敏、技能、运行时矩阵。
 - `tests/api/test_ai_workflow.py`：脚本化供应商、SSE、提问/恢复、能力拒绝、技能与插件。
+- `tests/unit/ai/test_ai_approvals.py` + `tests/api/test_ai_approval_turn.py`：授权键（确切参数、
+  一次/会话、跨会话与换参数不命中）、拒绝/取消不授权、云端仍按名拒绝、`request_approval` 的暂停与恢复。
+- `tests/api/test_ai_rerun.py`：重跑决定（画布改过、运行缺失、节点未知、运行进行中、成功路径）与
+  `/api/ai/rerun` 的具名拒绝；agent 的 `rerun_node` 只发 `rerun_started`，不载入画布。
 - `tests/api/test_ai_files.py`：上传分片顺序、本地副本、删除、搜索/抓页与凭据 URL 拒绝。
 - `tests/api/test_ai_monitors.py`：监控匹配/投递/确认、`run.log` 关键字拒绝、脚本库往返与真实 Python 样本。
 - `tests/unit/ai/test_python_node.py`：Python 节点契约、云端拒绝、受限数据读取。

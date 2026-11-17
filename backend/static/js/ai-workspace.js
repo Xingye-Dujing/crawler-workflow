@@ -991,6 +991,110 @@ const AIWorkspace = {
         return true;
     },
 
+    /* ─── Failed nodes and rerun ─── */
+
+    /* ``app_errors`` is the evidence the model reads after a monitor fires; its failed nodes become
+       one card with a button that reruns that subtree from the SAVED file. */
+    _ingestFailedNodes(result, current) {
+        const runs = Array.isArray(result && result.runs) ? result.runs : [];
+        if (!runs.length) return;
+        const wanted = String((this._monitorFailed && this._monitorFailed.run_id) || '');
+        const run = runs.find((row) => String(row.run_id || '') === wanted) || runs[0];
+        const nodes = (Array.isArray(run.nodes) ? run.nodes : [])
+            .filter((node) => ['failed', 'partial'].includes(String(node.status || '')) || node.error)
+            .map((node) => ({ node: String(node.node || node.node_id || ''), error: String(node.error || '') }))
+            .filter((node) => node.node);
+        const runId = String(run.run_id || wanted || '');
+        const workflowName = String(run.workflow || (this._monitorFailed && this._monitorFailed.workflow_name) || '');
+        this._pushFailedCard(runId, workflowName, nodes, current);
+    },
+
+    /* ``run_status`` is the other reader a monitor turn uses; it answers one run with a node map. */
+    _ingestRunNodes(result, current) {
+        const run = (result && result.run) || {};
+        const nodes = result && result.nodes;
+        if (!nodes || typeof nodes !== 'object') return;
+        const rows = Object.entries(nodes)
+            .filter(([, row]) => row && (['failed', 'partial'].includes(String(row.status || '')) || row.error))
+            .map(([id, row]) => ({ node: String(id), error: String((row && row.error) || '') }));
+        const runId = String(run.id || run.run_id || '');
+        if (!runId) return;
+        this._pushFailedCard(runId, String(run.workflow_name || ''), rows, current);
+    },
+
+    _pushFailedCard(runId, workflowName, nodes, current) {
+        if (!nodes.length) return;
+        const existing = (current.blocks || []).find((row) => row.type === 'failed_nodes' && String(row.run_id || '') === runId);
+        if (existing) {
+            existing.nodes = nodes;
+            existing.workflow_name = workflowName || existing.workflow_name || '';
+        } else {
+            current.blocks.push({ type: 'failed_nodes', run_id: runId, workflow_name: workflowName, nodes: nodes });
+        }
+        this._schedulePaint(current);
+    },
+
+    _markRerunStarted(runId, nodeId, workflowName, current) {
+        const turn = current || this._current || this._ensureAssistant();
+        const block = (turn.blocks || []).find((row) => row.type === 'failed_nodes' && String(row.run_id || '') === String(runId || ''));
+        if (block) {
+            block.started = nodeId;
+            if (workflowName) block.workflow_name = workflowName;
+            if (!(block.nodes || []).some((node) => String(node.node || '') === String(nodeId || ''))) {
+                block.nodes = (block.nodes || []).concat([{ node: nodeId, error: '' }]);
+            }
+            return;
+        }
+        turn.blocks.push({
+            type: 'failed_nodes',
+            run_id: String(runId || ''),
+            workflow_name: String(workflowName || ''),
+            nodes: [{ node: String(nodeId || ''), error: '' }],
+            started: String(nodeId || ''),
+        });
+    },
+
+    async _rerunFailedNode(runId, nodeId, workflowName) {
+        if (!runId || !nodeId) {
+            this._toast(I18n.t('ai.rerunNoWorkflowHint'));
+            return false;
+        }
+        if (typeof showDialog !== 'function') return false;
+        const answer = await showDialog({
+            message: I18n.t('ai.rerunConfirm', { run: runId, node: nodeId }),
+            buttons: [
+                { label: I18n.t('ai.rerunNode'), value: true, primary: true },
+                { label: I18n.t('ai.close'), value: false },
+            ],
+            cancelValue: false,
+        });
+        if (answer !== true) return false;
+        try {
+            const response = await fetch('/api/ai/rerun', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversation_id: this._conversationId,
+                    run_id: runId,
+                    workflow_name: workflowName,
+                    node_id: nodeId,
+                }),
+            });
+            const data = await response.json();
+            if (!data.ok) {
+                this._toast(I18n.t('ai.rerunFailed', { detail: data.error || I18n.t('ai.error') }));
+                return false;
+            }
+            this._markRerunStarted(data.run_id || runId, data.node_id || nodeId, data.workflow_name || workflowName);
+            this._paintAssistant();
+            this._toast(data.message || I18n.t('ai.rerunStarted', { node: nodeId }));
+            return true;
+        } catch (error) {
+            this._toast(I18n.t('ai.rerunFailed', { detail: error.message }));
+            return false;
+        }
+    },
+
     /* The skill row expands into what the skill ACTUALLY carries: its prompt, context sources and
        tools. Fetched on first open, so a long prompt costs nothing until it is asked for. */
     async _loadSkillDetail(el) {
@@ -1132,7 +1236,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1268,6 +1372,14 @@ const AIWorkspace = {
         if (target.hasAttribute('data-ai-remove-ref')) {
             const [kind, id] = String(target.getAttribute('data-ai-remove-ref') || '').split('|');
             this._removeRef(kind, id);
+            return;
+        }
+        if (target.hasAttribute('data-ai-rerun-node')) {
+            this._rerunFailedNode(
+                target.getAttribute('data-ai-rerun-run'),
+                target.getAttribute('data-ai-rerun-node'),
+                target.getAttribute('data-ai-rerun-workflow')
+            );
             return;
         }
         if (target.hasAttribute('data-ai-python-new')) {
@@ -1516,6 +1628,24 @@ const AIWorkspace = {
         } catch (e) {
             /* plain text tool output is shown verbatim */
         }
+        /* An answered question is its own row: the choice is part of the transcript, not only of
+           a request that already finished. */
+        const answers = payload && Array.isArray(payload.answers) ? payload.answers : null;
+        if (answers && payload.tool === 'ask_user_question') {
+            const chosen = answers.flatMap((item) => (item && item.selected) || []).filter(Boolean).join(', ');
+            if (chosen) {
+                const question = (payload.questions || []).find((item) => item && item.kind === 'approval') || {};
+                const picked = (question.options || []).find((option) => option && option.label === chosen) || {};
+                const approval = !!question.kind;
+                const el = document.createElement('div');
+                el.className = 'ai-question-answered';
+                el.textContent = String(picked.value || '') === 'deny'
+                    ? I18n.t('ai.approvalDenied')
+                    : (approval ? I18n.t('ai.approvalAnswered') : I18n.t('ai.questionAnswered')) + ': ' + chosen;
+                this._dom.chat.appendChild(el);
+                return;
+            }
+        }
         const artifact = payload && payload.artifact;
         if (artifact) {
             const holder = document.createElement('div');
@@ -1558,6 +1688,9 @@ const AIWorkspace = {
             return false;
         }
         if (!opts.monitor && !opts.feedback) this._feedbackCount = 0;
+        /* A failed-node card belongs to the monitor turn that named the run; a user's own message
+           starts a new turn and must not inherit the previous run's nodes. */
+        if (!opts.monitor) this._monitorFailed = null;
         const pendingAttachments = opts.monitor ? [] : this._attachments.slice();
         const pendingRefs = opts.monitor ? [] : this._refs.slice();
         if (!text && !pendingAttachments.length && !pendingRefs.length) {
@@ -1668,6 +1801,19 @@ const AIWorkspace = {
         }
         const facts = JSON.stringify(event.payload || {}, null, 2);
         const failed = ['failed', 'partial', 'stopped'].includes(String((event.payload || {}).outcome || (event.payload || {}).status || ''));
+        if (failed) {
+            // The card is built from the run this event names, not from whatever app_errors returns
+            // first: a conversation may know about several runs.
+            const payload = event.payload || {};
+            this._monitorFailed = {
+                run_id: String(payload.run_id || ''),
+                workflow_name: String(payload.workflow || payload.workflow_name || ''),
+                node_id: String(payload.node_id || ''),
+                label: String(payload.label || ''),
+            };
+        } else {
+            this._monitorFailed = null;
+        }
         const tail = failed
             ? I18n.t('ai.monitor.promptFailure')
             : I18n.t('ai.monitor.promptAsk');
@@ -1798,6 +1944,24 @@ const AIWorkspace = {
                 block.endedAt = Date.now();
                 this._schedulePaint(current);
             }
+            if (event.ok && event.result) {
+                const name = String(event.name || '');
+                if (name === 'app_errors') this._ingestFailedNodes(event.result, current);
+                else if (name === 'run_status') this._ingestRunNodes(event.result, current);
+            }
+            return;
+        }
+        if (type === 'rerun_started') {
+            /* The model reran a node with the tool (not the card's button): the card is the run's
+               mark either way, so the same node is shown as started. */
+            const current = this._ensureAssistant();
+            this._markRerunStarted(
+                String(event.run_id || ''),
+                String(event.node_id || ''),
+                String(event.workflow_name || ''),
+                current
+            );
+            this._schedulePaint(current);
             return;
         }
         if (type === 'plan') {
@@ -1922,7 +2086,24 @@ const AIWorkspace = {
         if (!current || !current.questions) return;
         if (!current.questions.every((item) => current.answers[item.id])) return;
         const answers = current.questions.map((item) => current.answers[item.id]);
-        current.questionEl.innerHTML = '<div class="ai-question-answered">' + AIRender.escape(I18n.t('ai.questionAnswered')) + '</div>';
+        const approval = current.questions.some((item) => item.kind === 'approval');
+        if (approval) {
+            /* The decision stays visible in the turn: an approval card that vanished into
+               "已回答" left the user unable to see whether they allowed or denied this call. */
+            const chosen = answers.flatMap((item) => item.selected || []).filter(Boolean).join(', ');
+            const question = current.questions.find((item) => item.kind === 'approval') || {};
+            const picked = (question.options || []).find((option) => option.label === chosen) || {};
+            current.questionEl.innerHTML =
+                '<div class="ai-question-answered">' +
+                AIRender.escape(
+                    String(picked.value || '') === 'deny'
+                        ? I18n.t('ai.approvalDenied')
+                        : I18n.t('ai.approvalAnswered') + (chosen ? ': ' + chosen : '')
+                ) +
+                '</div>';
+        } else {
+            current.questionEl.innerHTML = '<div class="ai-question-answered">' + AIRender.escape(I18n.t('ai.questionAnswered')) + '</div>';
+        }
         this._sending = true;
         this._setSending(true);
         try {

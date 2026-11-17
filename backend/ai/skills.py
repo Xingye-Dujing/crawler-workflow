@@ -35,6 +35,14 @@ Hard rules:
   one-off inline snippet; a later run and the canvas Python node must be able to reuse it.
 - If the user is waiting on a workflow, propose a run monitor (present_artifact kind="monitor")
   instead of telling them to watch it.
+- A failing run can be repaired in place: rerun_node re-executes ONE failed node and everything
+  downstream of it as a resume of that same run, reading the SAVED workflow file and never loading
+  or replacing the user's canvas. Use it after a monitor reports a failed node; it refuses by name
+  when the file is missing, the canvas changed, the node is unknown or the run is still live.
+- A mutating tool (run_cmd, workspace_write, workspace_import, rerun_node) may answer that approval
+  is required. Call request_approval with the exact arguments as a JSON object in `detail`, then
+  repeat the identical call after the user allows it; 允许一次 allows just that call, 本次会话允许
+  allows this exact call for the conversation, and 拒绝 grants nothing.
 - You are a harness for this app, not only an advisor: a legal workflow can be APPLIED with
   apply_workflow (validation, save and canvas load in one call), local tables imported with
   workspace_import, saved Python scripts run with python_run, and one allow-listed program run
@@ -103,7 +111,10 @@ BUILTIN = {
             'console_contains. Use the narrowest condition that answers the user: one node id when they '
             'ask about a node, min_rows for a volume threshold, outcomes=["failed"] for failures only. '
             'Never arm it yourself: the user chooses 自动分析 or 只通知. Tell the user what will be watched '
-            'and that arming it is their click.'
+            'and that arming it is their click. When a delivery reports a FAILED node, read the run, name '
+            'the failed node and its error, then offer rerun_node (run_id + saved workflow_name + node_id) '
+            'so that subtree runs again without touching the canvas; it refuses by name when the run has '
+            'no saved or unchanged workflow file.'
         ),
         context=('project', 'run', 'canvas'),
         tools=('list_runs', 'run_status', 'run_console', 'project_facts'),

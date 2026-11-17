@@ -20,7 +20,6 @@ import os
 import threading
 
 from flask import Blueprint, jsonify, request
-from nodes.labels import node_label
 from runtime import account_context
 from runtime.state import (
     LOG_KEEP,
@@ -43,8 +42,8 @@ from runtime.stores import (
 from api.auth import is_admin
 from api.http import _bad_body, _bad_param, _json_body, _optional_int
 from engine import run as run_engine
-from engine.plan import downstream_closure
 from engine.workflow import effective_workflow
+from engine.workflow_rerun import RerunRefusalError, rerun_node
 from i18n import get_lang, set_lang, t
 from services import lock_store
 from services.accounts.service import accounts_mode
@@ -61,10 +60,6 @@ from services.runs.settlement import (
     mark_records_stopping,
 )
 from services.runs.store import (
-    NODE_DONE,
-    NODE_RESTORED,
-    RUN_RUNNING,
-    RUN_STOPPING,
     workflow_fingerprint,
 )
 from services.workflows.manager import WorkflowManager
@@ -783,71 +778,23 @@ def workflow_rerun_node():
     then the SAME run is started with ``resume_run_id``. The existing reuse predicate then
     finds those nodes with no stored row (so it executes them) while every upstream node
     still holds its ``done``/``restored`` rows (so it is reused, never re-crawled or
-    re-paid) — one paste path, one resume path, no second engine."""
+    re-paid) — one paste path, one resume path, no second engine.
+
+    The decision lives in :func:`engine.workflow_rerun.rerun_node`, because the AI workspace
+    reruns the same subtree; this route only reads the request and renders the answer.
+    """
     data = _json_body()
     if data is None:
         return _bad_body()
-    node_id = data.get('node_id')
-    if not isinstance(node_id, str) or not node_id.strip():
-        return _bad_param('node_id')
-    node_id = node_id.strip()
-    workflow = data.get('workflow')
-    if not isinstance(workflow, dict) or not workflow.get('nodes'):
-        return jsonify({'ok': False, 'error': t('api.workflowShapeInvalid')}), 400
-
-    effective = effective_workflow(workflow)
-    fingerprint = workflow_fingerprint(effective)
-    store = get_run_store()
-
-    run_id = str(data.get('resume_run_id') or '').strip()
-    if run_id:
-        run = store.get_run(run_id)
-        if run is None:
-            return jsonify({'ok': False, 'error': t('api.resumeMissing', rid=run_id)}), 400
-        if run.get('workflow_fingerprint') != fingerprint:
-            # Reusing this run would mix two different workflows' rows under one id; refuse by name.
-            return jsonify({'ok': False, 'error': t('api.rerunFingerprintMismatch')}), 409
-    else:
-        candidates = store.list_resumable(fingerprint, limit=1, include_finished=True)
-        if not candidates:
-            return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
-        run_id = candidates[0]['run_id']
-
-    # A run that is still executing is not a rerun target: erasing its subtree would pull the rows
-    # out from under a thread that is still writing them, and the 继续 it leaves behind re-crawls and
-    # re-pays work that had already landed. Refuse by name, keeping the rows.
-    target_run = store.get_run(run_id)
-    if target_run is None:
-        return jsonify({'ok': False, 'error': t('api.rerunNoRun')}), 404
-    if target_run.get('status') in (RUN_RUNNING, RUN_STOPPING):
-        return jsonify({'ok': False, 'error': t('api.rerunRunLive')}), 409
-
-    target = next((n for n in effective['nodes'] if n.get('id') == node_id), None)
-    if target is None:
-        return jsonify({'ok': False, 'error': t('api.rerunNoNode', node=node_id)}), 400
-    status = store.get_node_status(run_id, node_id)
-    if status not in (NODE_DONE, NODE_RESTORED):
-        return jsonify({'ok': False, 'error': t('api.rerunNoRows', node=node_label(target, node_id))}), 409
-    # A rerun is never parked, so a slot that is busy now refuses this press rather than queueing a
-    # wipe for later: by the time a queued rerun drained, the canvas the user pressed on has moved
-    # on and the rows it deletes belong to a decision nobody is watching. (The claim itself is what
-    # protects the data — the erase now happens inside the worker, never here.)
-    live_thread = execution_state.get('thread')
-    if execution_state.get('running') or (live_thread is not None and live_thread.is_alive()):
-        return jsonify({'ok': False, 'error': t('api.rerunBusy')}), 409
-
-    invalidated = downstream_closure(effective, node_id)
-
-    # Replay through the ordinary start path as a resume of that very run.
-    # Never park it: a queued rerun would wipe its subtree at drain time, minutes later, when the
-    # canvas the user is looking at has moved on — so a busy server refuses this press by name.
-    # The erase itself is NOT done here: it travels in the payload and the worker performs it once
-    # the slot is genuinely ours (see :func:`engine.run._rerun_request`).
-    data['resume_run_id'] = run_id
-    data['rerun_invalidate'] = {'run_id': run_id, 'node_ids': list(invalidated)}
-    data['queue'] = False
-    answer = run_engine.begin_run(data, request.headers.get('X-Lang') or '')
-    body = dict(answer['body'])
-    body['rerun_from'] = node_id
-    body['invalidated'] = invalidated
-    return jsonify(body), answer['status']
+    try:
+        answer = rerun_node(
+            data.get('workflow'),
+            data.get('node_id'),
+            str(data.get('resume_run_id') or ''),
+            workflow_name=str(data.get('workflow_name') or ''),
+            lang=request.headers.get('X-Lang') or '',
+            llm=data.get('llm') if isinstance(data.get('llm'), dict) else None,
+        )
+    except RerunRefusalError as exc:
+        return jsonify({'ok': False, 'error': exc.localized()}), exc.status
+    return jsonify(answer['body']), answer['status']

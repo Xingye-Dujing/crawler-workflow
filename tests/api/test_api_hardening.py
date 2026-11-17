@@ -46,6 +46,7 @@ BODY_ROUTES = [
     '/api/ai/chat',
     '/api/ai/context',
     '/api/ai/retry',
+    '/api/ai/rerun',
     '/api/ai/workflow/validate',
     '/api/ai/workspace',
     '/api/ai/monitors',
