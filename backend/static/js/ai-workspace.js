@@ -102,6 +102,7 @@ const AIWorkspace = {
             this._dom.input.addEventListener('input', () => {
                 this._onRefInput();
                 this._onCmdInput();
+                this._autoGrow();
             });
             this._dom.input.addEventListener('keydown', (event) => {
                 /* `nativeEvent` is a jQuery field; a DOM KeyboardEvent has none, so the old guard
@@ -1450,6 +1451,13 @@ const AIWorkspace = {
         }
     },
 
+    _autoGrow() {
+        const input = this._dom.input;
+        if (!input) return;
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight || 0, 220) + 'px';
+    },
+
     _showChat() {
         /* Settings and the studio paint into the same column as the transcript. Sending while one
            of them is up used to look inerta: the click ran, the panel stayed on settings, and the
@@ -1580,6 +1588,7 @@ const AIWorkspace = {
         const context = opts.monitor ? {} : AIContext.collect();
         if (!opts.monitor) {
             this._dom.input.value = '';
+            this._autoGrow();
             this._appendUser(text, context, pendingAttachments, { feedback: !!opts.feedback });
             this._attachments = [];
             this._renderAttachments();
