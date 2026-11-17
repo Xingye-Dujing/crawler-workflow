@@ -50,7 +50,8 @@
       "type": "name",
       "title": "工作流命名",
       "params": {
-        "workflow_name": "红果真人剧热播榜"
+        "workflow_name": "红果真人剧热播榜",
+        "enabled": false
       },
       "x": 0,
       "y": 170,
@@ -95,7 +96,8 @@
       "type": "name",
       "title": "工作流命名",
       "params": {
-        "workflow_name": "红果AI剧热播榜"
+        "workflow_name": "红果AI剧热播榜",
+        "enabled": false
       },
       "x": 0,
       "y": 323,
@@ -140,7 +142,8 @@
       "type": "name",
       "title": "工作流命名",
       "params": {
-        "workflow_name": "红果漫剧热播榜"
+        "workflow_name": "红果漫剧热播榜",
+        "enabled": false
       },
       "x": 0,
       "y": 476,
@@ -216,14 +219,13 @@
     }
   ],
   "settings": {
-    "mode": "parallel",
-    "headless": true,
-    "max_workers": 4,
+    "mode": "serial",
+    "headless": false,
     "disabledTypes": [],
     "view": {
-      "panX": 403.5,
-      "panY": 204,
-      "zoom": 1
+      "panX": 405.8717115949047,
+      "panY": 206.72700297456373,
+      "zoom": 1.0000000000000002
     }
   },
   "name": "红果短剧-四个热播榜"
