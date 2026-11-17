@@ -40,6 +40,7 @@ PLATFORM = 'xiaohongshu'
 SLOW = {
     'crawl_pace_scale': 4.0,
     'crawl_scroll_scale': 3.0,
+    'crawl_scroll_interval': 3.0,
     'crawl_expand_scale': 3.0,
     'crawl_click_scale': 3.0,
     'crawl_wait_scale': 2.0,
@@ -116,7 +117,7 @@ class TestThePresetReachesTheCrawl:
         pacing.click_nap(1.0)
         pacing.arrival_nap(1.0)
         pacing.page_nap(1.0)
-        assert slept == [4.0, 3.0, 3.0, 3.0, 1.6, 3.0], slept
+        assert slept == [4.0, 6.0, 3.0, 3.0, 1.6, 3.0], slept
         assert pacing.scroll_wait(1.0) == 3.0
         assert pacing.expand_wait(1.0) == 3.0
         assert pacing.wait(1.0) == 2.0

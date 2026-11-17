@@ -227,7 +227,21 @@ SETTINGS = (
         minimum=0.25,
         maximum=10.0,
         presets=('standard', 'slow', 'night'),
-        baseline=1.2,
+    ),
+    Setting(
+        # Seconds, not a multiplier: the pause between one scroll and the next is a number
+        # a user can state outright, and it is paid by EVERY scroll (see
+        # ``pacing.scroll_nap``), so a round of three scrolls is three intervals instead of
+        # one. No ``baseline``: the value is the seconds, nothing multiplies it.
+        'crawl_scroll_interval',
+        'float',
+        1.2,
+        'pace',
+        'set.crawlScrollInterval',
+        hint='set.crawlScrollIntervalHint',
+        minimum=0.0,
+        maximum=20.0,
+        presets=('standard', 'slow', 'night'),
     ),
     Setting(
         'crawl_expand_scale',
@@ -967,6 +981,7 @@ PRESETS = {
         'values': {
             'crawl_pace_scale': 1.0,
             'crawl_scroll_scale': 1.0,
+            'crawl_scroll_interval': 1.2,
             'crawl_expand_scale': 1.0,
             'crawl_click_scale': 1.0,
             'crawl_wait_scale': 1.0,
@@ -986,6 +1001,7 @@ PRESETS = {
         'values': {
             'crawl_pace_scale': 4.0,
             'crawl_scroll_scale': 3.0,
+            'crawl_scroll_interval': 3.0,
             'crawl_expand_scale': 3.0,
             'crawl_click_scale': 3.0,
             'crawl_wait_scale': 2.0,
@@ -1005,6 +1021,7 @@ PRESETS = {
         'values': {
             'crawl_pace_scale': 6.0,
             'crawl_scroll_scale': 5.0,
+            'crawl_scroll_interval': 5.0,
             'crawl_expand_scale': 5.0,
             'crawl_click_scale': 5.0,
             'crawl_wait_scale': 3.0,

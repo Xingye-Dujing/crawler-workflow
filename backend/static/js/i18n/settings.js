@@ -621,9 +621,14 @@
         'set.crawlPaceScale': 'Pacing multiplier',
         'set.crawlPaceScaleHint':
             'Multiplies the polite pauses between network rounds and the in-walk naps. 1 = the measured baseline.',
-        'set.crawlScrollScale': 'Scroll interval multiplier',
+        'set.crawlScrollScale': 'Scroll landing wait multiplier',
         'set.crawlScrollScaleHint':
-            'Multiplies the pause after each scroll and how long a scroll may take to land. 1 = the measured baseline.',
+            'Multiplies how long one scroll may take for its content to land before the page is read. ' +
+            '1 = the measured baseline; the interval between scrolls is its own setting.',
+        'set.crawlScrollInterval': 'Interval between scrolls (s)',
+        'set.crawlScrollIntervalHint':
+            'How long to wait between one scroll and the next. Every scroll pays it — three scrolls are ' +
+            'three intervals, never one pause after a batch. 0 = no extra wait.',
         'set.crawlExpandScale': 'Expand interval multiplier',
         'set.crawlExpandScaleHint':
             'Multiplies the pause after 展开/更多 and how long a reply batch may take to mount. 1 = the measured baseline.',
@@ -1331,8 +1336,12 @@
         'set.maxHeadlessHint': '无头运行时最多同时开几个浏览器。',
         'set.crawlPaceScale': '礼貌停顿倍数',
         'set.crawlPaceScaleHint': '放大每轮网络请求之间的礼貌停顿与采集途中的 nap。1 = 各平台实测基线。',
-        'set.crawlScrollScale': '滚动间隔倍数',
-        'set.crawlScrollScaleHint': '放大每次滚动后的停顿，以及滚动后等新内容挂上的时间。1 = 实测基线。',
+        'set.crawlScrollScale': '滚动后等内容落地的等待倍数',
+        'set.crawlScrollScaleHint':
+            '放大“一下滚动之后，页面允许多久把新内容挂上”的等待。1 = 实测基线；两次滚动之间的间隔是单独一项。',
+        'set.crawlScrollInterval': '两次滚动之间的间隔（秒）',
+        'set.crawlScrollIntervalHint':
+            '每滚一下就等这么久再滚下一下——滚三次就是三个间隔，不再是一批滚完才停一次。0 = 不额外等待。',
         'set.crawlExpandScale': '展开间隔倍数',
         'set.crawlExpandScaleHint': '放大点“展开/更多”后的停顿，以及等这一批回复挂上的时间。1 = 实测基线。',
         'set.crawlClickScale': '点击后稳定倍数',

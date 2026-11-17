@@ -18,15 +18,21 @@
   `crawlers/commenting/`、`capabilities/fields.py` 里不得出现按平台名分支的代码。共享工厂可以收一个通用参数，由
   平台文件传自己的答案（如 `comment_mode(..., replies=True)`）；平台专属逻辑出现在共享模块就是架构缺陷。
 - **没有平台自己的用户旋钮。** 站点基线（卡片等待、滚动预算、卡住轮数）可以放在平台旁边，但必须经
-  `crawlers/engine/pacing.py` 消费（`pace_scale`/`scroll_scale`/`expand_scale`/`click_scale`/`wait_scale`/
-  `arrival_scale`/`patience_scale` 与 `*_nap`/`*_wait`）。平台模块不得 `get_setting` 读采集行为，不得手写 `time.sleep`；
-  `tests/unit/gates/test_settings_schema.py` 两条都拒。用户选择只在 `runtime/settings_schema.py` 声明一次。
+  `crawlers/engine/pacing.py` 消费（`pace_scale`/`scroll_scale`/`scroll_interval`/`expand_scale`/`click_scale`/
+  `wait_scale`/`arrival_scale`/`patience_scale` 与 `*_nap`/`*_wait`）。平台模块不得 `get_setting` 读采集行为，不得手写
+  `time.sleep`；`tests/unit/gates/test_settings_schema.py` 两条都拒。用户选择只在 `runtime/settings_schema.py` 声明一次。
 - **一个间隔一个旋钮。** 每个停顿按动作命名：`scroll_*` 滚动、`expand_*` 展开/更多、`click_*` 其它点击、`arrival_*`
   页面到达、`between_pages`/`page_nap` 两页之间、`wait`/`wait_nap` 元素注水、`nap` 礼貌、`rounds` 重试。
   `poll_tick` 故意不缩放（循环次数来自固定预算）。**`crawl_jitter` 抖动节奏、不抖动预算**：滚动/展开/点击/翻页乘
   `1 ± jitter`，元素等待与到达预算是承诺，不是节奏。
-- **慢速采集是预设，不是第二乘数。** `PRESETS` 三档（`standard` 基线、`slow` 4/3/3/3/2/1.6/3/30%/2、
-  `night` 6/5/5/5/3/2/6/50%/3）各写具体值加队列/预检/上限，并快照被替换的值；恢复精确，切换保留最初快照。
+- **滚动是“一下一间隔”，不是“一批一间隔”。** `scroll_nap` 一次付两笔：这一下滚动的挂载时间（乘
+  `crawl_scroll_scale`）加上用户自己填的 `crawl_scroll_interval` 秒（**不乘倍数**，两笔不叠）。所以
+  `scroll_down(steps=3)` 是 3 个间隔 + 落地那一下的间隔，不是 0.12 秒连发三下再停一次；步数是站点事实，
+  **绝不随 `patience` 变大**（`pacing.rounds(SCROLL_STEPS)` 曾让慢速采集把一批滚得更长，而不是更慢）。
+  付这一笔的是走 `scroll_nap` 的滚动：知乎/小红书搜索与作者、公众号正文、知乎/小红书/X/抖音评论面板、红果播放器；
+  X 时间线与抖音作品网格每轮只滚一次、本来就有自己的礼貌停顿（`pace`），不叠这一项。
+- **慢速采集是预设，不是第二乘数。** `PRESETS` 三档（`standard` 1.2 秒、`slow` 4/3/**3 秒**/3/3/2/1.6/3/30%/2、
+  `night` 6/5/**5 秒**/5/5/3/2/6/50%/3）各写具体值加队列/预检/上限，并快照被替换的值；恢复精确，切换保留最初快照。
   绝不叠一个全局因子。
 - **一个 worker 已消失的记录由面板收尾。** `/api/runs/list` 结算“本进程开过、从未关闭、已无 worker”的行。加一个运行
   状态要同时改 `RESUMABLE_RUN_STATUS`、`purge` 的保护、面板 `known` 与两份 app.js 词表。

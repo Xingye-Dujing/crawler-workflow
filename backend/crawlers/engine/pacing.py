@@ -9,7 +9,9 @@ baselines, **one dimension at a time** so a slow scroll can be separated from a 
 expand:
 
 * ``crawl_pace_scale``     — polite pauses between network rounds, and in-walk naps;
-* ``crawl_scroll_scale``   — the pause after a scroll, and the wait for it to land;
+* ``crawl_scroll_scale``   — how long a scroll's content may take to land before it is read;
+* ``crawl_scroll_interval``— the pause between one scroll and the next, in **seconds**
+  (paid by every scroll, never once per batch of three);
 * ``crawl_expand_scale``   — the pause after 展开/更多 and the wait for it to mount;
 * ``crawl_click_scale``    — the pause after any other UI click (tab, dismiss, dialog);
 * ``crawl_wait_scale``     — card / panel / detail element waits;
@@ -24,6 +26,11 @@ scroll interval paid the same multiplier on every reply expansion and every poli
 round; the split is what lets “scroll slowly, expand normally” be one settings page
 instead of one compromise. Each dimension is still applied exactly once, and the
 preset writes concrete values for every dimension, so no multiplier stacks.
+
+``crawl_scroll_interval`` is the one entry stated in **seconds**, not as a multiplier:
+it is the beat itself (how far apart two scrolls are), not a stretch of a measured
+number, so nothing multiplies it — see :func:`scroll_nap` for how it sits beside the
+mount time instead of replacing it.
 """
 
 import random
@@ -82,7 +89,7 @@ def pace_scale() -> float:
 
 
 def scroll_scale() -> float:
-    """How much to stretch the pause/wait that belongs to scrolling."""
+    """How much to stretch how long a scroll's content may take to land (and its mount time)."""
     return _scale('scroll')
 
 
@@ -94,6 +101,21 @@ def expand_scale() -> float:
 def click_scale() -> float:
     """How much to stretch the settle that follows a plain UI click."""
     return _scale('click')
+
+
+def scroll_interval() -> float:
+    """The user's pause between one scroll and the next, in seconds.
+
+    A plain number rather than a multiplier: "how far apart are my scrolls" is something a
+    user can state, and the measured baselines it used to ride (0.12 s of mount time, which
+    exists so intersection observers fire) were never a politeness interval at all — a
+    three-scroll round therefore read as one burst. A missing or unparsable value is no
+    extra wait, never a raise.
+    """
+    try:
+        return max(0.0, float(get_setting('crawl_scroll_interval')))
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def wait_scale() -> float:
@@ -175,8 +197,21 @@ def nap(seconds: float) -> None:
 
 
 def scroll_nap(seconds: float) -> None:
-    """The pause that lets one scroll's content mount before the next read."""
-    _sleep_scaled(seconds, 'scroll')
+    """One scroll's own beat: its mount time, then the interval before the next scroll.
+
+    Two different quantities, each paid once, which is why this is not ``_sleep_scaled``:
+    *seconds* is how long this site's content needs to mount (0.12 s for a viewport step,
+    a longer figure where a comment panel is slower), scaled by ``crawl_scroll_scale``; the
+    interval is the user's seconds between scrolls and is deliberately **not** multiplied,
+    or a 3× preset would turn their 1.2 s into 3.6 s of arithmetic they never asked for.
+    The jitter covers the whole beat — one scroll is one human pause.
+    """
+    delay = max(0.0, float(seconds)) * _scale('scroll') + scroll_interval()
+    amount = jitter()
+    if amount:
+        delay *= random.uniform(1.0 - amount, 1.0 + amount)
+    if delay > 0:
+        time.sleep(delay)
 
 
 def expand_nap(seconds: float) -> None:

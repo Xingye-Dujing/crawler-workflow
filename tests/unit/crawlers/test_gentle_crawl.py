@@ -1,7 +1,7 @@
 """The 慢速采集 preset's pacing contract — one knob per interval, never the browser's identity.
 
-The preset writes ``crawl_pace_scale`` / ``crawl_scroll_scale`` / ``crawl_expand_scale`` /
-``crawl_click_scale`` / ``crawl_wait_scale`` / ``crawl_arrival_scale`` /
+The preset writes ``crawl_pace_scale`` / ``crawl_scroll_scale`` / ``crawl_scroll_interval`` /
+``crawl_expand_scale`` / ``crawl_click_scale`` / ``crawl_wait_scale`` / ``crawl_arrival_scale`` /
 ``crawl_patience_scale`` as concrete values (see ``runtime.settings_schema.PRESETS``);
 these tests prove the one consumer, :mod:`crawlers.engine.pacing`, applies each of them
 exactly once, to its own dimension, and leaves a default install at the measured
@@ -12,6 +12,9 @@ Pacing is pure enough to test without a browser: sleep is patched on the module 
 owns it.
 """
 
+import ast
+from pathlib import Path
+
 import pytest
 
 import crawlers.engine.pacing as pacing_module
@@ -20,6 +23,8 @@ from crawlers.engine.pacing import rounds, throttled_sleep, wait
 from crawlers.platforms.douyin.crawler import DouyinCrawler
 
 pytestmark = pytest.mark.unit
+
+BACKEND = Path(__file__).resolve().parents[3] / 'backend'
 
 
 @pytest.fixture
@@ -41,6 +46,7 @@ def _configure(
     *,
     pace=1.0,
     scroll=1.0,
+    scroll_interval=0.0,
     expand=1.0,
     click=1.0,
     wait_scale=1.0,
@@ -52,6 +58,7 @@ def _configure(
     values = {
         'crawl_pace_scale': pace,
         'crawl_scroll_scale': scroll,
+        'crawl_scroll_interval': scroll_interval,
         'crawl_expand_scale': expand,
         'crawl_click_scale': click,
         'crawl_wait_scale': wait_scale,
@@ -182,6 +189,75 @@ class TestEachDimensionIsItsOwnKnob:
         slept.clear()
         pacing_module.wait(2.0)  # returns, never sleeps: a budget is not a beat
         assert slept == []
+
+
+class _ScrollOnly:
+    """Just enough receiver for the unbound :meth:`Crawler.scroll_down`."""
+
+    class _Driver:
+        def __init__(self):
+            self.scripts: list[str] = []
+
+        def execute_script(self, script, *args):
+            self.scripts.append(script)
+
+    def __init__(self):
+        self.driver = self._Driver()
+
+
+def _called_name(node: ast.Call) -> str:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id
+    return func.attr if isinstance(func, ast.Attribute) else ''
+
+
+class TestEveryScrollPaysItsOwnInterval:
+    """A scroll is one beat, not a batch: three steps are three intervals.
+
+    The complaint this answers: 知乎/小红书/公众号 used to scroll three to nine viewport
+    steps 0.12 s apart and pay one real pause after the whole batch, so the batch read as
+    a machine burst and a pacing change read as "nothing happened".
+    """
+
+    def test_the_interval_is_added_once_per_scroll_and_never_multiplied(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=3.0, scroll_interval=2.0)
+        pacing_module.scroll_nap(1.0)
+        assert slept == [5.0], "the mount time rides its multiplier; the user's seconds are added as given"
+
+    def test_zero_interval_leaves_the_measured_beat(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=2.0, scroll_interval=0.0)
+        pacing_module.scroll_nap(1.0)
+        assert slept == [2.0]
+
+    def test_jitter_covers_the_whole_beat(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll=1.0, scroll_interval=1.0, jitter=50.0)
+        monkeypatch.setattr(pacing_module.random, 'uniform', lambda _a, b: b)
+        pacing_module.scroll_nap(1.0)
+        assert slept == [3.0], 'one scroll is one human pause: mount time and interval stray together'
+
+    def test_a_whole_round_of_steps_is_one_interval_each(self, monkeypatch, slept):
+        _configure(monkeypatch, scroll_interval=1.2, patience=3.0)
+        receiver = _ScrollOnly()
+        Crawler.scroll_down(receiver, steps=3)
+        assert len(receiver.driver.scripts) == 4, 'three viewport steps, then the landing jump'
+        assert [round(value, 2) for value in slept] == [1.32] * 4, (
+            'each scroll pays its own interval, and patience never widens the batch'
+        )
+
+
+class TestTheBatchWidthIsASiteFact:
+    """A slow crawl spaces its scrolls further apart; it does not scroll more of them per burst."""
+
+    def test_no_platform_scales_its_scroll_step_count_by_patience(self):
+        for module in ('zhihu', 'xiaohongshu'):
+            path = BACKEND / 'crawlers' / 'platforms' / module / 'crawler.py'
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or _called_name(node) != 'scroll_down':
+                    continue
+                inner = {_called_name(child) for child in ast.walk(node) if isinstance(child, ast.Call)}
+                assert 'rounds' not in inner, f'{module}: scroll_down still widens its step count with patience'
 
 
 def test_rounds_never_reaches_zero(monkeypatch):

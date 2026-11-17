@@ -126,7 +126,7 @@ class XiaohongshuCrawler(Crawler):
             self._mounted_cards,
             lambda card, index: self._note_row(card, seen),
             self._emit_note,
-            scroll=lambda: self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS)),
+            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
             target=target_count,
             collected=self.collected,
             window=self._window_key,

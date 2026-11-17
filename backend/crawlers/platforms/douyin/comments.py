@@ -15,7 +15,6 @@ from crawlers.commenting.protocol import BLOCKED, DEAD, OK
 from crawlers.commenting.walks import register, replies_wanted
 from crawlers.engine import feed, pacing, times
 from crawlers.engine.counters import parse_count
-from crawlers.engine.pacing import throttled_sleep
 from crawlers.engine.wall import looks_blocked
 from crawlers.platforms.douyin.rows import video_id
 from i18n import stop_reason_label, t
@@ -342,11 +341,13 @@ def walk(session, url: str, limit: int) -> tuple:
         if not _scroll_panel(session) and not opened and not (with_replies and _has_collapsed_opener(session)):
             exit_reason = 'stuck'
             break
-        # A pacing pause between scrolled screens, so gentle crawl may stretch THIS one. The
-        # other ``session.nap`` calls in this engine are page-arrival budgets (render waits), not
-        # politeness, and must stay unscaled — which is why pacing is a direct
-        # :func:`throttled_sleep`, not the session's ``nap`` knob.
-        throttled_sleep(1.5)
+        # One scroll is one beat: the panel's own mount time plus the interval the user
+        # set between scrolls — this is the shared scroll pause, so 慢速采集 and a longer
+        # scroll interval both reach THIS screen, the one after it, and so on. The other
+        # ``session.nap`` calls in this engine are page-arrival budgets (render waits), not
+        # politeness, and must stay unscaled — which is why this is the module-level
+        # :func:`pacing.scroll_nap`, not the session's ``nap`` knob.
+        pacing.scroll_nap(1.5)
     # Numbered once, over the whole thread (parent then its replies), because 楼层 is a continuous
     # floor across the panel and a reply's 父楼层 points back at that number — so it is assigned after
     # the walk, never per screen (AGENTS: a list is a document).

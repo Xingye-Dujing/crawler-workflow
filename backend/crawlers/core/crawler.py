@@ -1134,6 +1134,14 @@ class Crawler(ABC):
         A single jump to ``scrollHeight`` skips the intersection observers hung
         off the intermediate sections of an infinite list, so nothing new is
         requested and the round is wasted; stepping feeds them.
+
+        **Every scroll here pays its own beat** (``pacing.scroll_nap``): the
+        step's mount time plus the user's ``crawl_scroll_interval``. That is the
+        point — a round of three steps used to be three script calls 0.12 s
+        apart followed by one real pause, which reads as a batch, not a person.
+        ``steps`` is the caller's site fact and is never scaled by patience: a
+        "slow" crawl must space its scrolls further apart, not scroll more of
+        them in one burst.
         """
         for _ in range(max(1, steps)):
             self.driver.execute_script('window.scrollBy(0, Math.max(400, window.innerHeight * 0.9));')

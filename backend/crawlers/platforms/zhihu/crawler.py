@@ -243,7 +243,7 @@ class ZhihuCrawler(Crawler):
             if self.may_stop():
                 raise CrawlerStopped(t('crawl.stopped'))
             rounds += 1
-            self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS))
+            self.scroll_down(steps=self.SCROLL_STEPS)
             # Adaptive wait: a screen that already grew costs one poll, a slow
             # one still gets its 1.5 s.
             before = cursor['total']
@@ -281,7 +281,7 @@ class ZhihuCrawler(Crawler):
                         ended = 'under'
                         break
                     logger.info(t('crawl.zhihu.no_growth', n=stuck))
-                self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS))
+                self.scroll_down(steps=self.SCROLL_STEPS)
                 cursor['total'] = self._wait_for_count(self._card_count, before + 1, timeout=self.CARD_WAIT)
                 self._harvest(cursor, target_count, expand)
                 if cursor['total'] > before:
@@ -507,7 +507,7 @@ class ZhihuCrawler(Crawler):
             items,
             self._profile_card,
             self.emit,
-            scroll=lambda: self.scroll_down(steps=pacing.rounds(self.SCROLL_STEPS)),
+            scroll=lambda: self.scroll_down(steps=self.SCROLL_STEPS),
             target=target_count,
             collected=self.collected,
             mark=mark,

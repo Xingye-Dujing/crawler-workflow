@@ -41,7 +41,7 @@
 | `driver_path` · `browser_binary` · `latex_binary` · `window_size` · `page_load_timeout` · `element_timeout` · `ollama_host` | 驱动、浏览器、`xelatex`、窗口尺寸（`960x920`）、页面/元素超时（40/15 秒）、Ollama 地址 |
 | `component_source` · `catbus_cli` · `catbus_node` | 组件来源（重启生效）；CatBus 适配器与 Node 的本机路径，留空按系统查找 |
 | `use_browser_profile` · `browser_profile_dir` · `max_visible_browsers` · `max_headless_browsers` | 每平台持久 Profile（默认开）与其根目录；窗口/无头并行浏览器上限（默认 4） |
-| `crawl_pace_scale` · `crawl_scroll_scale` · `crawl_expand_scale` · `crawl_click_scale` · `crawl_wait_scale` · `crawl_arrival_scale` · `crawl_page_scale` · `crawl_jitter` · `crawl_patience_scale` | 九个独立速度倍数：礼貌停顿、滚动、展开、点击、元素等待、页面到达、页面间隔、像人抖动（%）、耐心重试；默认 1（抖动 0） |
+| `crawl_pace_scale` · `crawl_scroll_scale` · `crawl_scroll_interval` · `crawl_expand_scale` · `crawl_click_scale` · `crawl_wait_scale` · `crawl_arrival_scale` · `crawl_page_scale` · `crawl_jitter` · `crawl_patience_scale` | 九个速度倍数（礼貌停顿、滚动落地、展开、点击、元素等待、页面到达、页面间隔、像人抖动（%）、耐心重试；默认 1，抖动 0）+ 一个秒数：`crawl_scroll_interval` 是两次滚动之间的间隔（默认 1.2 秒，每滚一下付一次） |
 | `page_wait_timeout` · `same_platform_stagger` · `same_platform_queue` · `cookie_preflight_before_run` · `ask_overseas_network` · `clear_console_before_run` | 首屏预算（300 秒）、同平台错峰秒数、真排队（默认关）、跑前 Cookie 验证（默认关）、海外平台前询问（默认开）、开跑清控制台（默认开） |
 | `wall_retry_backoff` · `wall_proofs` · `wall_poll` · `nav_retry` · `nav_settle` · `max_pending_waits` | 首行前撞墙的退避、读墙次数与间隔；导航重试与未到达页面的熔断 |
 | `profile_lock_timeout` · `platform_gate_timeout` · `renderer_probe_timeout` · `renderer_close_timeout` | Profile 锁、同平台排队、渲染器健康检查与关闭宽限（秒） |
@@ -55,7 +55,7 @@
 | `hongguo_player_path` · `mitmdump_path` · `harvest_proxy_port` · `harvest_auto_install_ca` | 红果短剧评论收割的播放器、`mitmdump`、代理端口（8860）与自动安装抓包证书；Windows 桌面专属 |
 | `ai_context_scope` · `ai_web_search_default` · `ai_safety_level` · `ai_max_context_chars` · `ai_max_tool_rounds` · `ai_request_timeout` · `ai_allow_code_context` · `ai_allow_python` · `ai_python_path` | AI 工作区的数据范围、默认联网、安全等级、上下文与工具轮次预算、请求超时、源码读取、Python 扩展与解释器路径 |
 
-**预设**（`PRESETS`）把九个倍数、同平台排队、跑前验证与并发写成具体值：`standard` 全部回基线；`slow` 为 4/3/3/3/2/1.6/3/30/2，开启排队与验证，窗口/无头并发 1/2；`night` 为 6/5/5/5/3/2/6/50/3，并发 1/1。应用任一档都保存启用前的值，`restore` 原样退回。保存即生效；`component_source`、`log_max_mb`、`log_backup_count` 标 `restart`。
+**预设**（`PRESETS`）把九个倍数加滚动间隔（秒）、同平台排队、跑前验证与并发写成具体值：`standard` 全部回基线（滚动间隔 1.2 秒）；`slow` 为 4/3/3 秒/3/3/2/1.6/3/30/2，开启排队与验证，窗口/无头并发 1/2；`night` 为 6/5/5 秒/5/5/3/2/6/50/3，并发 1/1。应用任一档都保存启用前的值，`restore` 原样退回。保存即生效；`component_source`、`log_max_mb`、`log_backup_count` 标 `restart`。
 
 ## 常量（`core/config.py`）
 
