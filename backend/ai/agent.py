@@ -26,6 +26,10 @@ from ai.types import new_id, usage_totals
 from i18n import get_lang, t
 
 ACTIVE_STREAMS: dict[str, threading.Event] = {}
+
+#: How many questions one ``ask_user_question`` call may carry. More than this is refused by name —
+#: the old code kept the first five silently, so a sixth question (and its answer) never existed.
+MAX_QUESTIONS = 5
 _STREAM_LOCK = threading.RLock()
 
 
@@ -832,14 +836,27 @@ class AgentService:
         questions = call['arguments'].get('questions') if isinstance(call.get('arguments'), dict) else None
         if not isinstance(questions, list) or not questions:
             raise AIError('ai.toolRefused', kind='bad_request', tool='ask_user_question', reason='questions is missing')
+        # A question card the user cannot finish is worse than a refusal: more than five questions
+        # is refused BY NAME (the old code silently kept the first five, so a sixth answer never
+        # existed), and two questions with one id would overwrite each other's answer.
+        if len(questions) > MAX_QUESTIONS:
+            raise AIError('ai.questionTooMany', kind='bad_request', limit=MAX_QUESTIONS)
         normalized = []
-        for item in questions[:5]:
+        seen_ids: set[str] = set()
+        for index, item in enumerate(questions, 1):
             if not isinstance(item, dict):
                 continue
+            question_id = str(item.get('id') or new_id('q'))
+            if question_id in seen_ids:
+                raise AIError('ai.questionDuplicate', kind='bad_request', question=question_id)
+            seen_ids.add(question_id)
+            body = str(item.get('question') or '').strip()
+            if not body:
+                raise AIError('ai.questionBlank', kind='bad_request', index=index)
             normalized.append(
                 {
-                    'id': str(item.get('id') or new_id('q')),
-                    'question': str(item.get('question') or ''),
+                    'id': question_id,
+                    'question': body,
                     'header': str(item.get('header') or ''),
                     'options': [
                         {

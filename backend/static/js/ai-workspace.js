@@ -550,7 +550,7 @@ const AIWorkspace = {
         this._renderAgentMode();
         const provider = (this._bootstrap?.providers || []).find((item) => item.id === this._provider);
         const capabilities = provider?.capabilities || [];
-        const thinking = !!AISettings.load().thinking && capabilities.includes('thinking');
+        const thinking = this._thinkingOn();
         const search = !!AISettings.load().search && capabilities.includes('web_search');
         if (this._dom.thinking) {
             this._dom.thinking.classList.toggle('selected', thinking);
@@ -2362,7 +2362,7 @@ const AIWorkspace = {
             provider: this._provider,
             model: this._model,
             api_key: key,
-            thinking: !!AISettings.load().thinking && (provider?.capabilities || []).includes('thinking'),
+            thinking: this._thinkingOn(),
             web_search: !!AISettings.load().search && (provider?.capabilities || []).includes('web_search'),
             skill: this._skill || 'auto',
             locale: (typeof I18n !== 'undefined' && I18n.lang) || 'zh',
@@ -2719,7 +2719,43 @@ const AIWorkspace = {
             return;
         }
         current.answers[questionId] = { id: questionId, selected: [label] };
+        /* The click must SHOW that it registered: one visible choice per question, and a line that
+           says how many answers are still missing (a card with three questions submitted only when
+           all three were answered, so a first click looked like a dead button). */
+        this._markAnswer(questionId, label);
         this._maybeAnswer();
+    },
+
+    _markAnswer(questionId, label) {
+        const card = this._dom.chat ? this._dom.chat.querySelector('[data-ai-question-card="' + String(questionId) + '"]') : null;
+        if (card) {
+            for (const el of card.querySelectorAll('[data-ai-answer]')) {
+                el.classList.toggle('selected', String(el.getAttribute('data-ai-answer')) === String(label));
+            }
+        }
+        this._renderAnswerProgress();
+    },
+
+    _renderAnswerProgress() {
+        const current = this._current;
+        if (!current || !current.questions || !this._dom.chat) return;
+        const missing = current.questions.filter((item) => !current.answers[item.id]).length;
+        for (const item of current.questions) {
+            const card = this._dom.chat.querySelector('[data-ai-question-card="' + String(item.id) + '"]');
+            if (!card) continue;
+            let hint = card.querySelector('.ai-question-pending');
+            const answered = !!current.answers[item.id];
+            if (answered && missing) {
+                if (!hint) {
+                    hint = document.createElement('div');
+                    hint.className = 'ai-question-pending';
+                    card.appendChild(hint);
+                }
+                hint.textContent = I18n.t('ai.answersWaiting', { n: missing });
+            } else if (hint) {
+                hint.remove();
+            }
+        }
     },
 
     _answerCustom(questionId, value) {
@@ -2735,6 +2771,7 @@ const AIWorkspace = {
             ...(text ? { custom: text } : {}),
             ...(refs.length ? { references: refs } : {}),
         };
+        this._renderAnswerProgress();
         this._maybeAnswer();
     },
 
@@ -3174,9 +3211,21 @@ const AIWorkspace = {
         AISettings.save({ skill: value });
     },
 
-    toggleThinking() {
+    /* The local daemon is its own choice: qwen3.5 thinks by default, which doubles a batch call's
+       wall time, so a local turn stays non-thinking unless this switch says otherwise. */
+    _thinkingOn() {
         const settings = AISettings.load();
-        AISettings.save({ thinking: !settings.thinking });
+        const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        const caps = (provider && provider.capabilities) || [];
+        const wanted = provider && provider.local_only ? settings.thinkingLocal : settings.thinking;
+        return !!wanted && caps.includes('thinking');
+    },
+
+    toggleThinking() {
+        const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        const local = !!(provider && provider.local_only);
+        const settings = AISettings.load();
+        AISettings.save(local ? { thinkingLocal: !settings.thinkingLocal } : { thinking: !settings.thinking });
         this._renderToggles();
     },
 

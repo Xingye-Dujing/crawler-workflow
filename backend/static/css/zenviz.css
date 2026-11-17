@@ -280,7 +280,8 @@ body.submenu-open #top-menu {
 .dropdown {
   display: none;
   position: fixed;
-  z-index: 1800;
+  /* Same layer as the menu dropdown: above the AI dock (7000). */
+  z-index: 7500;
   background: var(--bg);
   border: 1px solid var(--ink);
   min-width: 220px;

@@ -619,3 +619,62 @@ def test_retry_reruns_the_last_turn_without_a_second_user_message(client, fake_a
     assert 'text' in types and 'done' in types
     detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
     assert sum(1 for message in detail['messages'] if message['role'] == 'user') == 1
+
+
+class ManyQuestionsProvider(FakeProvider):
+    """Asks one question too many, or two questions with the same id."""
+
+    def __init__(self, provider_id: str, questions: list):
+        super().__init__(provider_id)
+        self._questions = questions
+
+    def stream(self, request):
+        yield {
+            'type': 'tool_call',
+            'id': 'call_q',
+            'name': 'ask_user_question',
+            'arguments': {'questions': self._questions},
+        }
+        yield {'type': 'done', 'stop_reason': 'tool_calls'}
+
+
+def _turn_errors(data: dict) -> list[str]:
+    """The reason a turn refused, whether the API answered as an event stream or as one refusal."""
+    if isinstance(data.get('events'), list):
+        return [str(event.get('error') or '') for event in data['events'] if event.get('type') == 'error']
+    return [str(data.get('error') or '')]
+
+
+def test_a_question_card_over_the_limit_is_refused_by_name(client, monkeypatch, clean_ai):
+    """The old code kept the first five SILENTLY, so a sixth question (and its answer) never existed."""
+    from ai.providers import PROVIDERS
+
+    questions = [{'id': f'q{i}', 'question': f'question {i}', 'options': [{'label': 'yes'}]} for i in range(6)]
+    monkeypatch.setitem(PROVIDERS, 'fake_many_q', ManyQuestionsProvider('fake_many_q', questions))
+    data = _chat(client, provider='fake_many_q', model='fake-model', text='ask me').get_json()
+    errors = _turn_errors(data)
+    assert errors, data
+    assert '5' in errors[0], errors[0]
+
+
+def test_two_questions_with_one_id_are_refused(client, monkeypatch, clean_ai):
+    from ai.providers import PROVIDERS
+
+    questions = [
+        {'id': 'same', 'question': 'first', 'options': [{'label': 'a'}]},
+        {'id': 'same', 'question': 'second', 'options': [{'label': 'b'}]},
+    ]
+    monkeypatch.setitem(PROVIDERS, 'fake_dup_q', ManyQuestionsProvider('fake_dup_q', questions))
+    data = _chat(client, provider='fake_dup_q', model='fake-model', text='ask me').get_json()
+    errors = _turn_errors(data)
+    assert errors and 'same' in errors[0], data
+
+
+def test_a_question_with_no_text_is_refused(client, monkeypatch, clean_ai):
+    from ai.providers import PROVIDERS
+
+    questions = [{'id': 'blank', 'question': '   ', 'options': [{'label': 'a'}]}]
+    monkeypatch.setitem(PROVIDERS, 'fake_blank_q', ManyQuestionsProvider('fake_blank_q', questions))
+    data = _chat(client, provider='fake_blank_q', model='fake-model', text='ask me').get_json()
+    errors = _turn_errors(data)
+    assert errors and '1' in errors[0], data

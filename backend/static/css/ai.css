@@ -2043,3 +2043,12 @@
 .ai-table td {
   border-radius: 0;
 }
+
+
+/* A selected choice on a question card must look selected, and a card that is waiting for other
+   questions must say so — otherwise the first click reads as a dead button. */
+.ai-question-pending {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-faint);
+}

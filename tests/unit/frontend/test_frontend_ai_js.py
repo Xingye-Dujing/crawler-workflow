@@ -226,6 +226,24 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['refused'] is True, out
         assert 'Ollama' in out['toast'] or '本机' in out['toast'] or 'Local' in out['toast'], out
 
+    def test_a_local_turn_does_not_think_unless_the_switch_is_on(self):
+        """qwen3.5 thinks by default; a batch call must not pay for a thought trace it never asked
+        for. A paid provider keeps its own choice."""
+        out = _run_workspace()['thinking']
+        assert out['localDefault'] is False, out
+        assert out['localOn'] is True, 'the local switch did not turn thinking on'
+        assert out['paidDefault'] is True, out
+
+    def test_choosing_an_option_on_a_multi_question_card_shows_it(self):
+        """The card submits only when every question is answered; the first click must still show
+        that it registered (selected style + how many are left), or it reads as a dead button."""
+        out = _run_workspace()['answerClick']
+        assert out['selected'] is True, out
+        assert '2' in out['hint'], out
+        # `_maybeAnswer` is CALLED on every click; it must not have replaced the card with the
+        # “answered” row while two questions are still open (the hint proves the card is still there).
+        assert out['submitted'] <= 1, out
+
     def test_a_plan_artifact_offers_an_action_too(self):
         """Only workflow drafts had a button, so a plan or chart spec card looked dead. Its button
         hands the proposal back to the assistant (which has the validated tools)."""

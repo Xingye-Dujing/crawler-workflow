@@ -99,6 +99,11 @@ ZH = {
     'ai.noKey': '这个供应商需要 API Key，先在 AI 设置里填写。',
     'ai.capabilityRefused': '{provider} 的 {model} 不支持“{capability}”；没有静默降级。',
     'ai.toolFailed': '工具执行失败：{detail}',
+    'ai.questionTooMany': (
+        '助手在一个卡片里提了超过 {limit} 个问题（上限 {limit}），已按名拒绝，不会静默丢掉后面的问题。'
+    ),
+    'ai.questionDuplicate': '两个问题的 id 都是“{question}”，答案会互相覆盖，卡片已按名拒绝。',
+    'ai.questionBlank': '第 {index} 个问题没有文字，卡片会是一块空白，已按名拒绝。',
     'ai.toolUnanswered': (
         '这次工具调用没有执行完（会话被停止、刷新或服务中断），没有结果。请重新调用，或告诉我该怎么做。'
     ),
@@ -287,6 +292,14 @@ EN = {
         '{provider} model {model} does not support “{capability}”; nothing was silently downgraded.'
     ),
     'ai.toolFailed': 'The tool failed: {detail}',
+    'ai.questionTooMany': (
+        'The assistant asked more than {limit} questions in one card (the limit is {limit}); '
+        'the card was refused instead of silently dropping the rest.'
+    ),
+    'ai.questionDuplicate': (
+        'Two questions share the id “{question}”, so one answer would overwrite the other; the card was refused.'
+    ),
+    'ai.questionBlank': 'Question #{index} has no text, so the card would be an empty box; it was refused.',
     'ai.toolUnanswered': (
         'This tool call never finished (the turn was stopped, the page reloaded or the server '
         'restarted), so it has no result. Call it again, or tell me what to do instead.'

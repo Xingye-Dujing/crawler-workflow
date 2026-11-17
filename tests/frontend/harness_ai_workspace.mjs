@@ -657,5 +657,55 @@ out.artifactAction = {
     asked: implementAsk.includes('执行计划 (S0-S7)'),
 };
 
+
+/* A three-question card submits only when all three are answered, so the FIRST click must show that
+   it registered: the chosen option is marked and the card says how many are still missing. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._sending = false;
+workspace._appendQuestion({
+    id: 'q3',
+    message_id: 'm3',
+    questions: [
+        { id: 'model', header: 'Model', question: 'Which model?', options: [{ label: 'A' }, { label: 'B' }] },
+        { id: 'data', header: 'Data', question: 'Which data?', options: [{ label: 'C' }, { label: 'D' }] },
+        { id: 'task', header: 'Task', question: 'Which task?', options: [{ label: 'E' }] },
+    ],
+});
+let submitted = 0;
+workspace._maybeAnswer = async () => {
+    submitted += 1;
+};
+/* The stub's selector engine has no descendant combinators: find the card, then its options. */
+const card = workspace._dom.chat.querySelector('[data-ai-question-card="model"]');
+const firstOption = card ? card.querySelector('[data-ai-answer]') : null;
+dispatchOn(workspace._dom.root, 'click', { target: firstOption });
+const hint = card ? card.querySelector('.ai-question-pending') : null;
+out.answerClick = {
+    selected: !!firstOption && firstOption.classList.contains('selected'),
+    hint: hint ? String(hint.textContent) : '',
+    submitted: submitted,
+};
+
+
+/* Local turns do not think unless the switch says so: qwen3.5 thinks by default, which doubles a
+   batch call's wall time. A paid provider keeps its own (on-by-default) choice. */
+sandbox.AISettings.save({ thinkingLocal: false, thinking: true });
+workspace._bootstrap.providers = [
+    { id: 'ollama', local_only: true, requires_key: false, capabilities: ['thinking'], models: [{ id: 'qwen3.5:4b' }] },
+    { id: 'deepseek', local_only: false, requires_key: true, capabilities: ['thinking'], models: [{ id: 'deepseek-flash' }] },
+];
+workspace._provider = 'ollama';
+const localDefault = workspace._thinkingOn();
+workspace.toggleThinking();
+const localOn = workspace._thinkingOn();
+workspace._provider = 'deepseek';
+const paidDefault = workspace._thinkingOn();
+sandbox.AISettings.save({ thinkingLocal: false });
+out.thinking = { localDefault: localDefault, localOn: localOn, paidDefault: paidDefault };
+
 fs.writeFileSync(1, JSON.stringify(out));
+
+
 

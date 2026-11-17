@@ -10,6 +10,10 @@ const AISettings = {
         models: {},
         keys: {},
         thinking: true,
+        /* A local qwen3.5 model THINKS by default, and a thought trace can double the time a
+           batch call takes. Local turns therefore default to no thinking; the toolbar switch
+           turns it on per browser. */
+        thinkingLocal: false,
         search: true,
         skill: 'auto',
         scope: 'summary',

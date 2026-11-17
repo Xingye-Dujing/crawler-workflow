@@ -23,7 +23,9 @@
   white-space: pre-line;
   max-width: min(80vw, 520px);
   text-align: left;
-  z-index: 2000;
+  /* Above the AI dock (7000): a toast about the very request the panel is running must not be
+     painted behind it. Still below the dialog layer (9999). */
+  z-index: 7600;
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;
