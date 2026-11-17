@@ -12,7 +12,7 @@ import logging
 import os
 import time
 
-from ai import agent, context, environment, files, monitors, plugins, skills, store, tools
+from ai import agent, context, environment, files, monitors, plugins, references, skills, store, tools
 from ai.errors import AIError
 from ai.providers import get_provider, list_models, public_catalog
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -57,6 +57,16 @@ def _public_attachment(row: dict) -> dict:
 
 def _sse(payload: dict) -> str:
     return 'data: ' + json.dumps(payload, ensure_ascii=False, default=str) + '\n\n'
+
+
+def _workspace_state() -> dict:
+    """The working-folder state the page renders; a broken pref must not take bootstrap down."""
+    from ai import workspace
+
+    try:
+        return workspace.describe()
+    except Exception:  # a store that cannot open is reported as "not chosen"
+        return {'folder': '', 'folder_exists': False, 'cloud': bool(environment.capabilities()['cloud'])}
 
 
 def _stream(generator, account, lang: str):
@@ -190,6 +200,7 @@ def ai_bootstrap():
             ],
             'context_sources': sorted(skills.CONTEXT_SOURCES),
             'runtime': environment.capabilities(),
+            'workspace': _workspace_state(),
             'monitors': store.list_monitors(active_only=True),
             'monitor_pending': store.pending_monitor_count(),
         }
@@ -327,10 +338,26 @@ def ai_file_upload():
     if provider != 'deepseek':
         return _error(AIError('ai.fileUnsupported', kind='capability'))
     data = upload.read()
+    name = upload.filename or 'file'
+    # Token budget: a big table becomes a dataset the assistant reads in slices, and an oversized
+    # document is refused by name instead of spending the whole context window on it.
+    dataset = files.tabular_dataset(name, data)
+    if dataset:
+        return jsonify({'ok': True, 'dataset': dataset})
+    if len(data) > files.ATTACH_MAX_BYTES:
+        return _error(
+            AIError(
+                'ai.attachTooLarge',
+                kind='bad_request',
+                name=name,
+                mb=len(data) / (1024 * 1024),
+                limit=files.ATTACH_MAX_BYTES // (1024 * 1024),
+            )
+        )
     try:
         row = files.upload_file(
             conversation_id,
-            upload.filename or 'file',
+            name,
             upload.mimetype or '',
             data,
             str(request.form.get('api_key') or ''),
@@ -527,6 +554,51 @@ def ai_python_file_write():
         return _error(exc)
 
 
+@bp.route('/api/ai/workspace', methods=['GET'])
+def ai_workspace_get():
+    from ai import workspace
+
+    return jsonify({'ok': True, 'workspace': workspace.describe()})
+
+
+@bp.route('/api/ai/workspace', methods=['POST'])
+def ai_workspace_set():
+    from ai import workspace
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        state = workspace.set_folder(str(data.get('path') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'workspace': state})
+
+
+@bp.route('/api/ai/workspace/browse', methods=['GET'])
+def ai_workspace_browse():
+    from ai import workspace
+
+    try:
+        listing = workspace.browse(str(request.args.get('path') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, **listing})
+
+
+@bp.route('/api/ai/workflow/validate', methods=['POST'])
+def ai_workflow_validate():
+    from ai import workflow_draft
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    payload = data.get('workflow') if isinstance(data.get('workflow'), dict) else data
+    if not isinstance(payload, dict):
+        return _error(AIError('ai.workflowDraftInvalid', kind='bad_request', detail='workflow is missing'))
+    return jsonify({'ok': True, 'report': workflow_draft.validate(payload)})
+
+
 @bp.route('/api/ai/conversations/<conversation_id>/files', methods=['GET'])
 def ai_file_list(conversation_id: str):
     if store.get_conversation(conversation_id) is None:
@@ -647,6 +719,16 @@ def ai_conversation_delete(conversation_id: str):
     return jsonify({'ok': True, 'deleted': deleted})
 
 
+@bp.route('/api/ai/references', methods=['GET'])
+def ai_references():
+    """The composer's @ picker: this account's datasets, exports, workflows and earlier uploads."""
+    try:
+        rows = references.options(str(request.args.get('q') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'references': rows})
+
+
 @bp.route('/api/ai/context', methods=['POST'])
 def ai_context():
     data = _json_body()
@@ -713,6 +795,31 @@ def ai_answer():
             answers,
             str(data.get('api_key') or ''),
         )
+    except AIError as exc:
+        return _error(exc)
+    if request.args.get('stream') == '0':
+        events = []
+        try:
+            with account_context.use(account):
+                set_lang(lang)
+                for event in generator:
+                    events.append(event)
+        except AIError as exc:
+            return _error(exc)
+        return jsonify({'ok': True, 'events': events})
+    return _stream(generator, account, lang)
+
+
+@bp.route('/api/ai/retry', methods=['POST'])
+def ai_retry():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    conversation_id = str(data.get('conversation_id') or '')
+    account = account_context.current()
+    lang = get_lang()
+    try:
+        generator = agent.AgentService().retry(conversation_id, str(data.get('api_key') or ''))
     except AIError as exc:
         return _error(exc)
     if request.args.get('stream') == '0':

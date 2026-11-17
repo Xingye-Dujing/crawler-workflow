@@ -34,6 +34,13 @@ const AIStudio = {
             '</section>';
     },
 
+    /* One label per server-side context source id; an id this build has no row for shows as
+       itself (the server may offer a source a newer UI knows how to name). */
+    contextLabel(source) {
+        const key = 'ai.contextSource.' + String(source || '');
+        return I18n.has(key) ? I18n.t(key) : String(source || '');
+    },
+
     skills(skills, host) {
         const editor = host._editingSkill;
         const cards = skills.map((skill) => {
@@ -46,7 +53,7 @@ const AIStudio = {
                 '<article class="ai-skill-card ' + (unavailable ? 'is-unavailable' : '') + '">' +
                 '<div class="ai-skill-head"><strong>' + AIRender.escape(name) + '</strong><span class="ai-tag">' + AIRender.escape(badge) + '</span></div>' +
                 '<p class="ai-skill-desc">' + AIRender.escape(description) + '</p>' +
-                '<div class="ai-skill-meta">' + (skill.context || []).map((item) => '<span class="ai-chip">' + AIRender.escape(item) + '</span>').join('') + '</div>' +
+                '<div class="ai-skill-meta">' + (skill.context || []).map((item) => '<span class="ai-chip">' + AIRender.escape(this.contextLabel(item)) + '</span>').join('') + '</div>' +
                 (unavailable ? '<p class="ai-error-text">' + AIRender.escape(skill.why_not_text || I18n.t('ai.skillUnavailable')) + '</p>' : '') +
                 '<div class="ai-skill-actions">' +
                 (builtin ? '<button type="button" class="ai-ghost" data-ai-fork="' + AIRender.escape(skill.id) + '">' + AIRender.escape(I18n.t('ai.fork')) + '</button>' : '') +
@@ -73,7 +80,7 @@ const AIStudio = {
         const selectedContext = new Set(skill.context || []);
         const selectedTools = new Set(skill.tools || []);
         const contextChecks = contextSources.map((source) =>
-            '<label class="ai-check"><input type="checkbox" data-ai-skill-context="' + source + '"' + (selectedContext.has(source) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(source) + '</label>'
+            '<label class="ai-check"><input type="checkbox" data-ai-skill-context="' + source + '"' + (selectedContext.has(source) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(this.contextLabel(source)) + '</label>'
         ).join('');
         const toolChecks = toolList.map((tool) =>
             '<label class="ai-check"><input type="checkbox" data-ai-skill-tool="' + AIRender.escape(tool) + '"' + (selectedTools.has(tool) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(tool) + '</label>'

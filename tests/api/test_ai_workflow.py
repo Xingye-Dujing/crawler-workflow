@@ -369,3 +369,99 @@ def test_a_provider_pack_is_invisible_to_another_account(client, clean_ai):
     finally:
         with account_context.use(alice):
             plugins.uninstall('demo.provider')
+
+
+class LoopProvider(FakeProvider):
+    """Calls the cheapest read tool forever, so the budget is the only thing that can stop it."""
+
+    def __init__(self):
+        super().__init__('fake_loop')
+        self.calls = 0
+
+    def stream(self, request):
+        self.calls += 1
+        yield {'type': 'tool_call', 'id': f'call_{self.calls}', 'name': 'project_facts', 'arguments': {}}
+        yield {'type': 'done', 'stop_reason': 'tool_calls'}
+
+
+def test_the_tool_budget_asks_the_user_instead_of_failing(client, monkeypatch, clean_ai):
+    """A soft limit: the turn pauses on a question whose answer resumes it with a fresh budget."""
+    from ai import agent
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_loop', LoopProvider())
+    real_get = agent.get_setting
+    monkeypatch.setattr(
+        agent, 'get_setting', lambda key, *a, **k: 1 if key == 'ai_max_tool_rounds' else real_get(key, *a, **k)
+    )
+    response = _chat(client, provider='fake_loop', model='fake-model', text='poke the project')
+    data = response.get_json()
+    assert data['ok'] is True
+    events = data['events']
+    question = next(event for event in events if event['type'] == 'question')
+    assert question['questions'][0]['id'] == 'tool_budget'
+    assert any(event['type'] == 'paused' and event.get('reason') == 'tool_budget' for event in events)
+    conversation_id = events[0]['conversation_id']
+    stored = client.get('/api/ai/conversations/' + conversation_id).get_json()
+    assert any(block.get('type') == 'skill' for message in stored['messages'] for block in message.get('blocks') or [])
+
+
+class ApplyProvider(FakeProvider):
+    """Calls apply_workflow once, then answers."""
+
+    def __init__(self):
+        super().__init__('fake_apply')
+
+    def stream(self, request):
+        answered = any(message.get('role') == 'tool' for message in request.get('messages', []))
+        if not answered:
+            yield {
+                'type': 'tool_call',
+                'id': 'call_apply',
+                'name': 'apply_workflow',
+                'arguments': {
+                    'name': 'AI 合法流程',
+                    'workflow': {
+                        'nodes': [
+                            {'id': 'n1', 'type': 'upload', 'x': 0, 'y': 0, 'params': {'dataset_id': 'ds1'}},
+                            {
+                                'id': 'n2',
+                                'type': 'output',
+                                'x': 200,
+                                'y': 0,
+                                'params': {'operation': 'save', 'format': 'csv', 'filename': 'x.csv'},
+                            },
+                        ],
+                        'connections': [{'from': 'n1', 'to': 'n2'}],
+                    },
+                },
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'text_delta', 'text': 'Loaded.'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
+def test_apply_workflow_validates_saves_and_asks_the_page_to_load(client, monkeypatch, clean_ai):
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_apply', ApplyProvider())
+    response = _chat(client, provider='fake_apply', model='fake-model', text='build it')
+    data = response.get_json()
+    assert data['ok'] is True
+    applied = [event for event in data['events'] if event['type'] == 'workflow_apply']
+    assert len(applied) == 1
+    assert applied[0]['name'] == 'AI 合法流程'
+    assert applied[0]['workflow']['connections'] == [{'from': 'n1', 'to': 'n2'}]
+    assert client.get('/api/workflow/list').get_json()['workflows']
+
+
+def test_retry_reruns_the_last_turn_without_a_second_user_message(client, fake_ai, clean_ai):
+    response = _chat(client, text='try this again')
+    conversation_id = response.get_json()['events'][0]['conversation_id']
+    retried = client.post('/api/ai/retry?stream=0', json={'conversation_id': conversation_id, 'api_key': 'secret-key'})
+    assert retried.status_code == 200, retried.get_json()
+    types = [event['type'] for event in retried.get_json()['events']]
+    assert 'text' in types and 'done' in types
+    detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
+    assert sum(1 for message in detail['messages'] if message['role'] == 'user') == 1

@@ -2089,8 +2089,8 @@
         </span>
       </div>
       <div class="dd-divider"></div>
-      <div class="ai-hint">
-        <div class="ai-hint-title" data-i18n="ai.hintTitle">调用方式说明</div>
+      <div class="menu-hint">
+        <div class="menu-hint-title" data-i18n="ai.hintTitle">调用方式说明</div>
         <div data-i18n="ai.hint1">
           每条数据 =
           一次询问（一条消息一次调用），逐行处理。数据多时比较耗时，也比较耗
@@ -2102,10 +2102,10 @@
         <div data-i18n="ai.hint3">
           结果分批保存：中途出错或停止时，已得到的结果不会丢失；修复后重新执行会从断点续跑。
         </div>
-        <div class="ai-hint-note ai-only-ollama" data-i18n="ai.ollamaNote">
+        <div class="menu-hint-note ai-only-ollama" data-i18n="ai.ollamaNote">
           Ollama：模型名必须是本地已拉取的名称（可点“刷新”读取）；服务地址在“设置”面板修改。两个供应商的模型各自独立保存，互不影响。
         </div>
-        <div class="ai-hint-note ai-only-openrouter" data-i18n="ai.keyNote">
+        <div class="menu-hint-note ai-only-openrouter" data-i18n="ai.keyNote">
           API Key 仅保存在本浏览器 Local Storage，不会写入服务器文件。
         </div>
       </div>
@@ -2592,6 +2592,7 @@
       <header class="ai-head">
         <button type="button" class="ai-icon-btn" id="ai-history-btn" onclick="AIWorkspace.toggleSessions()" data-i18n-aria-label="ai.sessions" aria-label="Conversations" title="Conversations"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
         <div class="ai-head-title" id="ai-title" data-i18n="ai.title">AI Workspace</div>
+        <button type="button" class="ai-chip ai-workspace-chip" id="ai-workspace-btn" onclick="AIWorkspace.toggleFolder()" data-i18n-aria-label="ai.workspace.title" aria-label="Working folder">—</button>
         <span class="ai-chip ai-model-chip" id="ai-model-chip">—</span>
         <button type="button" class="ai-icon-btn" onclick="AIWorkspace.newChat()" data-i18n-aria-label="ai.newChat" aria-label="New conversation" title="New conversation"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
         <button type="button" class="ai-icon-btn" onclick="AIWorkspace.openStudio()" data-i18n-aria-label="ai.studioTitle" aria-label="Skills and plugins" title="Skills and plugins"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg></button>
@@ -2599,15 +2600,21 @@
         <button type="button" class="ai-icon-btn" id="ai-full-btn" onclick="AIWorkspace.toggleFull()" data-i18n-aria-label="ai.fullscreen" aria-label="Full screen" title="Full screen"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <button type="button" class="ai-icon-btn" onclick="AIWorkspace.close()" data-i18n-aria-label="ai.close" aria-label="Close AI workspace" title="Close AI workspace"><svg class="ai-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
       </header>
+      <div class="ai-folder-dialog" id="ai-folder-dialog" hidden></div>
       <div class="ai-body">
         <aside id="ai-sessions" class="ai-sessions" data-i18n-aria-label="ai.sessions" aria-label="Conversations"></aside>
+        <div class="ai-col-grip" data-ai-resize="sessions" data-i18n-aria-label="ai.resizeSessions" aria-label="Resize conversations" role="separator" tabindex="0"></div>
         <main id="ai-chat" class="ai-chat" aria-live="polite"></main>
+        <button type="button" class="ai-jump" id="ai-jump" onclick="AIWorkspace.jumpLatest()" data-i18n="ai.jumpLatest" hidden>↓</button>
+        <div class="ai-col-grip" data-ai-resize="side" data-i18n-aria-label="ai.resizeSide" aria-label="Resize context" role="separator" tabindex="0"></div>
         <aside id="ai-side" class="ai-side" data-i18n-aria-label="ai.side" aria-label="Context and agent trace"></aside>
       </div>
       <footer class="ai-composer">
         <div class="ai-context-bar" id="ai-context-bar"></div>
         <div class="ai-input-wrap">
           <div class="ai-attachments" id="ai-attachments"></div>
+          <div class="ai-refs" id="ai-refs"></div>
+          <div class="ai-ref-menu" id="ai-ref-menu" hidden></div>
           <textarea id="ai-input" class="ai-input" rows="2" placeholder="Ask about the project, a run, a dataset…" data-i18n-placeholder="ai.placeholder" data-i18n-aria-label="ai.message" aria-label="Message"></textarea>
           <div class="ai-composer-row">
             <div class="ai-toggles">

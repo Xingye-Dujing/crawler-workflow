@@ -528,9 +528,16 @@ table.data-preview-table tr:hover td {
 .runs-mgr-wf {
   /* A record of a parallel run carries every workflow's name, so the cell needs
      more room than one label ever needed; the text wraps rather than widening the
-     panel, which is what keeps the page free of a horizontal scrollbar. */
+     panel, which is what keeps the page free of a horizontal scrollbar.
+     `table.data-preview-table td` also says `white-space: nowrap` and is MORE specific
+     than a bare class, so the wrap has to be restated with that selector's weight —
+     otherwise the name could not break and the “当前/open” chip after it was pushed
+     11px outside the cell (measured in the browser tier; English only, where it is wider). */
   max-width: 168px;
   overflow-wrap: anywhere;
+}
+table.data-preview-table td.runs-mgr-wf {
+  white-space: normal;
 }
 .runs-mgr-tag {
   display: inline-block;

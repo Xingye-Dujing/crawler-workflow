@@ -66,7 +66,7 @@ def project_facts() -> str:
 
         lines.append('## 节点')
         for plugin in PLUGINS.values():
-            lines.append(f'- {plugin.type}（{plugin.label_key}，{plugin.category}）')
+            lines.append(f'- {plugin.type}：显示名键 {plugin.label_key}，分类 {plugin.category}')
     except Exception:  # a partial install must not take the whole context down
         pass
     try:
@@ -75,8 +75,27 @@ def project_facts() -> str:
         payload = capabilities.as_dict()
         lines.append('## 采集平台')
         for platform in payload.get('platforms', []):
-            modes = ', '.join(str(mode.get('mode') or '') for mode in platform.get('modes', []))
-            lines.append(f'- {platform.get("platform")}: {modes}')
+            modes = platform.get('modes') or []
+            names = [str(mode.get('key') or '') for mode in modes if isinstance(mode, dict) and mode.get('key')]
+            engines = sorted(
+                {
+                    str(engine.get('key') or '')
+                    for engine in platform.get('engines') or []
+                    if isinstance(engine, dict) and engine.get('available') and engine.get('key')
+                }
+            )
+            session_modes = sum(1 for mode in modes if isinstance(mode, dict) and mode.get('needsSession'))
+            # Only facts that exist: the old line joined `mode` keys that this payload stopped
+            # carrying, so every platform printed as a row of empty commas.
+            facts = []
+            if names:
+                facts.append('模式 ' + '/'.join(names))
+            else:
+                facts.append('当前没有可用模式')
+            facts.append('引擎 ' + '/'.join(engines) if engines else '引擎不可用')
+            if session_modes:
+                facts.append(f'其中 {session_modes} 个模式需要登录')
+            lines.append(f'- {platform.get("platform") or "?"}：' + '；'.join(facts))
     except Exception:
         pass
     try:
@@ -247,6 +266,14 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
     canvas = payload.get('canvas') if isinstance(payload.get('canvas'), dict) else None
     if canvas:
         parts.append(('画布', _canvas_context(canvas)))
+    try:
+        from ai import workspace
+
+        folder = workspace.snapshot()
+    except Exception:  # a store that cannot open must not take the whole context down
+        folder = ''
+    if folder:
+        parts.append(('工作文件夹', folder))
     if payload.get('dataset_id'):
         parts.append(('数据集', _dataset_context(str(payload['dataset_id']), scope)))
     if payload.get('run_id'):

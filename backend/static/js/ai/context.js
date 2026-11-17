@@ -12,11 +12,19 @@ const AIContext = {
             if (typeof canvas !== 'undefined' && canvas && typeof canvas.serializeDraft === 'function') {
                 const draft = canvas.serializeDraft();
                 if (draft && typeof draft === 'object') {
+                    /* ``getState()`` keys nodes BY ID (``{node-1: {...}}``) while the server's
+                       context builder takes a LIST and refuses anything else by name — the map
+                       was sent as-is, so the canvas section of the context was dropped and the
+                       bar read “节点 undefined” (an object has no ``.length``). Unwrap it here,
+                       where the page's model is known, and send the shape the contract names. */
+                    const raw = draft.nodes && typeof draft.nodes === 'object' ? draft.nodes : {};
+                    const nodes = Array.isArray(raw) ? raw : Object.values(raw);
+                    const sel = canvas.selectedNode;
                     return {
                         unsaved: true,
-                        nodes: draft.nodes || [],
-                        connections: draft.connections || draft.edges || [],
-                        selectedNode: canvas.selectedNode ? String(canvas.selectedNode.id || '') : '',
+                        nodes: nodes,
+                        connections: Array.isArray(draft.connections) ? draft.connections : [],
+                        selectedNode: (sel && typeof sel === 'object') ? String(sel.id || '') : String(sel || ''),
                     };
                 }
             }

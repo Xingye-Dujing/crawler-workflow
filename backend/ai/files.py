@@ -37,6 +37,71 @@ def purpose_for(filename: str, mime: str = '') -> str:
     return 'user_data'
 
 
+# ─── token budget: a big table is a dataset, not a prompt ───────────────
+
+#: A table at least this large is registered as a DATASET and referenced with `@`, never sent as a
+#: document: the parsed text would be billed as input on every turn that names it, while the
+#: dataset tools read a bounded slice (names + five rows; ≤50 rows on a page).
+TABULAR_DATASET_BYTES = 128 * 1024
+#: …and so is a table with more rows than this, however small its bytes (a 4,000-row CSV of two
+#: short columns is only ~50 KB but still tens of thousands of prompt tokens).
+TABULAR_ATTACH_ROWS = 200
+#: Above this the file is not parsed here at all: it is a dataset or it is refused, and reading a
+#: 100 MB CSV into memory to decide would be its own bug.
+TABULAR_PARSE_MAX_BYTES = 20 * 1024 * 1024
+TABULAR_SUFFIXES = ('.csv', '.tsv', '.xlsx', '.xls')
+#: One attachment's ceiling. DeepSeek parses documents server-side, but the parsed text rides in
+#: every request that references it and an over-long context is refused with 400, never truncated —
+#: so an over-size upload is refused here, by name, with the way out.
+ATTACH_MAX_BYTES = 4 * 1024 * 1024
+
+
+def _read_table(name: str, data: bytes):
+    """The uploaded bytes as a DataFrame, or None when this is not a table we can read."""
+    import io
+
+    import pandas as pd
+
+    lowered = str(name or '').lower()
+    buffer = io.BytesIO(data)
+    try:
+        if lowered.endswith(('.xlsx', '.xls')):
+            return pd.read_excel(buffer)
+        if lowered.endswith('.tsv'):
+            return pd.read_csv(buffer, sep='\t')
+        return pd.read_csv(buffer)
+    except Exception:
+        return None
+
+
+def tabular_dataset(name: str, data: bytes) -> dict | None:
+    """Register a big table as a dataset and return what the composer shows instead of a file.
+
+    ``None`` means "send it as an attachment as before": small tables are cheap enough that the
+    model may read them directly, and an unreadable table is the provider's to parse.
+    """
+    lowered = str(name or '').lower()
+    if not lowered.endswith(TABULAR_SUFFIXES) or len(data) > TABULAR_PARSE_MAX_BYTES:
+        return None
+    frame = _read_table(name, data)
+    if frame is None:
+        return None
+    if len(frame) <= TABULAR_ATTACH_ROWS and len(data) < TABULAR_DATASET_BYTES:
+        # Small enough to read directly: a handful of rows costs less than a library entry.
+        return None
+    from runtime.stores import _register_dataset
+
+    from services.datasets.store import SOURCE_UPLOAD
+
+    dataset_id = _register_dataset(frame, name=name, source=SOURCE_UPLOAD)
+    return {
+        'dataset_id': dataset_id,
+        'name': name,
+        'rows': int(len(frame)),
+        'columns': [str(column) for column in list(frame.columns)[:24]],
+    }
+
+
 def _guess_mime(filename: str, mime: str) -> str:
     return str(mime or '').strip() or mimetypes.guess_type(filename)[0] or 'application/octet-stream'
 
@@ -87,6 +152,24 @@ def upload_file(
     if chosen_purpose not in ('user_data', 'text_recognition', 'rich_layout_recognition'):
         raise AIError('ai.fileUnsupported', kind='bad_request')
     digest = hashlib.sha256(data).hexdigest()
+    # Uploading identical bytes again is the same provider file: the same conversation file, a
+    # parse fee already paid, and a second copy on disk. A second conversation gets its own
+    # attachment row pointing at that upload instead.
+    existing = store.find_attachment_by_digest(digest)
+    if existing is not None and str(existing.get('file_id') or ''):
+        local_path = str(existing.get('path') or '')
+        if not local_path or not os.path.exists(local_path):
+            local_path, digest = save_local(data, name)
+        return store.add_attachment(
+            conversation_id,
+            name,
+            _guess_mime(name, mime),
+            len(data),
+            digest,
+            str(existing.get('purpose') or chosen_purpose),
+            str(existing['file_id']),
+            local_path,
+        )
     try:
         response = requests.post(
             DEEPSEEK_BASE + '/files',

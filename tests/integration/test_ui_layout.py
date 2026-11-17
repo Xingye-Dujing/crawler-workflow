@@ -2027,7 +2027,9 @@ canvas.nodes[a].params.keyword = wide;
 canvas.nodes[a].title = wide;
 canvas.updateNodeDisplay(a);
 const b = canvas.addNode('output', 400, 20);
-const el = document.getElementById(a);
+/* The DOM id is namespaced (``cxi-node-<key>``) so a workflow file cannot shadow a page
+   element; the storage key lives on ``dataset.nodeId``. Ask the canvas for the box. */
+const el = canvas._nodeEl(a);
 const title = el.querySelector('.node-title');
 return {
     a, b,
@@ -2095,7 +2097,7 @@ canvas.autoLayout();
 canvas.updateConnections();
 const rects = {};
 [a, b].forEach((id) => {
-    const r = document.getElementById(id).getBoundingClientRect();
+    const r = canvas._nodeEl(id).getBoundingClientRect();
     rects[id] = [r.left, r.top, r.right, r.bottom];
 });
 const paths = Array.from(document.querySelectorAll('.conn-line:not(.temp)'))
@@ -2185,7 +2187,7 @@ const measure = (which, ids) => {
     const cx = (r.left + r.right) / 2;
     const cy = (r.top + r.bottom) / 2;
     const box = svg.getBoundingClientRect();
-    const nodeA = document.getElementById(ids.a);
+    const nodeA = canvas._nodeEl(ids.a);
     return {
         d: line ? (line.getAttribute('d') || '') : '',
         // The canvas-space coordinate of the node that owns this wire's out-port.
@@ -2307,7 +2309,7 @@ canvas.autoLayout();
 const work = document.getElementById('workspace').getBoundingClientRect();
 const boxes = {};
 ids.forEach((id) => {
-    const r = document.getElementById(id).getBoundingClientRect();
+    const r = canvas._nodeEl(id).getBoundingClientRect();
     boxes[id] = [r.left, r.top, r.right, r.bottom];
 });
 return { zoom: canvas.zoom, boxes,
@@ -2349,7 +2351,7 @@ canvas.resetView();
 const work = document.getElementById('workspace').getBoundingClientRect();
 const boxes = {};
 [a, b].forEach((id) => {
-    const r = document.getElementById(id).getBoundingClientRect();
+    const r = canvas._nodeEl(id).getBoundingClientRect();
     boxes[id] = [r.left, r.top, r.right, r.bottom];
 });
 return { a, b, boxes, zoom: canvas.zoom,
@@ -3022,6 +3024,24 @@ def _wait_for_id(driver, node_id, timeout=20.0):
     pytest.fail(f'#{node_id} never appeared within {timeout}s')
 
 
+def _wait_for_node(driver, node_id, timeout=20.0):
+    """Poll for a NODE's box: its DOM id is namespaced, so ``getElementById(<key>)`` is
+    the wrong question — ``canvas._nodeEl`` is the documented reader of that mapping."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if driver.execute_script('return typeof canvas !== "undefined" && !!canvas._nodeEl(arguments[0]);', [node_id]):
+            return
+        time.sleep(0.2)
+    seen = driver.execute_script(
+        """
+        const keys = typeof canvas !== 'undefined' ? Object.keys(canvas.nodes) : null;
+        const draft = JSON.parse(localStorage.getItem('crawler_canvas') || 'null');
+        return {keys: keys, draft: draft ? Object.keys(draft.nodes || {}) : null};
+        """
+    )
+    pytest.fail(f'node {node_id} never appeared within {timeout}s; canvas has {seen}')
+
+
 def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
     """The user's report, measured the only way it can be: a refresh boots the
     page in the fallback font and with a node <select> still an EXPANDED list;
@@ -3034,7 +3054,7 @@ def test_a_wire_ends_on_its_port_after_a_bare_refresh(app_url, driver):
     _wait_for_id(driver, 'workspace')
     driver.execute_script(REFRESH_ALIGN_DRAFT, [])
     _reload_app(driver)
-    _wait_for_id(driver, 'node-1')
+    _wait_for_node(driver, 'node-1')
     # Settle: the webfont's repaint and CustomSelect's collapse both land well
     # inside this window; the assertion is about the END state, not the race.
     time.sleep(3.0)
@@ -3071,7 +3091,7 @@ def test_the_delegated_node_buttons_still_act_on_their_own_node(app_url, driver)
     made = driver.execute_script(NODE_JS, [])
     edit, delete = driver.execute_script(
         """
-        const el = document.getElementById(arguments[0]);
+        const el = canvas._nodeEl(arguments[0]);
         const btns = el.querySelectorAll('.node-action-btn');
         btns[0].click();
         const opened = canvas._settingsNodeId;
@@ -3093,7 +3113,7 @@ def test_double_click_on_a_title_opens_the_rename_dialog(app_url, driver):
         let asked = null;
         const original = window.showDialog;
         window.showDialog = (spec) => { asked = spec.message; return Promise.resolve(null); };
-        document.getElementById(arguments[0]).querySelector('.node-title')
+        canvas._nodeEl(arguments[0]).querySelector('.node-title')
             .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
         window.showDialog = original;
         return asked;
@@ -3143,7 +3163,7 @@ def test_undo_and_redo_keep_the_ids_and_the_titles(app_url, driver):
         canvas.undo();
         const back = Object.keys(canvas.nodes);
         const title = back.length ? canvas.nodes[back[0]].title : null;
-        const stamped = back.length ? document.getElementById(back[0]).querySelector('.node-title').textContent : null;
+        const stamped = back.length ? canvas._nodeEl(back[0]).querySelector('.node-title').textContent : null;
         canvas.redo();
         return {afterDelete, back, title, stamped, afterRedo: Object.keys(canvas.nodes).length, sameId: back[0] === a};
         """,
@@ -3238,14 +3258,14 @@ def test_language_switch_around_a_visible_run_state(app_url, driver):
            updateNodeDisplay decides whether to re-stamp by reading the element, so
            a bare `nodes[x].title = …` is a state no user action produces. */
         canvas.nodes[named].title = '我自己起的';
-        document.getElementById(named).querySelector('.node-title').textContent = '我自己起的';
+        canvas._nodeEl(named).querySelector('.node-title').textContent = '我自己起的';
         const plain = canvas.addNode('source', 300, 10);
         document.body.dataset.lang = 'zh';
         setLang('zh');
         return {
             named: canvas.nodes[named].title,
-            namedShown: document.getElementById(named).querySelector('.node-title').textContent,
-            plainShown: document.getElementById(plain).querySelector('.node-title').textContent,
+            namedShown: canvas._nodeEl(named).querySelector('.node-title').textContent,
+            plainShown: canvas._nodeEl(plain).querySelector('.node-title').textContent,
             buttons: document.getElementById('btn-execute').textContent,
         };
         """,
@@ -3542,6 +3562,11 @@ def test_the_empty_history_sentence_wraps_inside_the_chart(app_url, driver):
     _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
+    # The sentence this asserts on is the Chinese one, and the language lives in
+    # localStorage: a case that ran before this one in English left the page English, so the
+    # overlay's wording (not its layout) decided the result. Pin the language the assertion
+    # is written for instead of reading whichever one the previous test happened to set.
+    driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();", [])
     driver.execute_script(
         """
         window.fetch = function (url) {
@@ -4325,7 +4350,8 @@ def test_multi_select_marks_real_boxes_and_batch_delete_removes_them_from_the_do
         canvas.panY = 0;
         canvas.zoom = 1;
         canvas._marqueeSelect({x: 0, y: 0, w: 300, h: 300}, {left: 0, top: 0});
-        const selectedAfterMarquee = Array.from(document.querySelectorAll('.node.selected')).map((el) => el.id).sort();
+        const selectedAfterMarquee = Array.from(document.querySelectorAll('.node.selected'))
+            .map((el) => el.dataset.nodeId).sort();
         const marqueeSet = canvas.selectedNodes.slice().sort();
         // One batch delete removes both from the model AND the real DOM.
         const domBefore = document.querySelectorAll('#nodes-container .node').length;
@@ -5912,3 +5938,443 @@ def test_the_crawl_panel_offers_platform_then_engine_then_function(app_url, driv
             assert row['modeKeys'] == row['expectedModes'], (
                 f"{row['platform']}: the function list is not the new engine's list: {row}"
             )
+
+
+# ─── the AI workspace's three columns ──────────────────────────────────
+
+AI_COLUMNS_JS = """
+const root = document.querySelector('.ai-workspace');
+const body = root && root.querySelector('.ai-body');
+const widthOf = (sel) => {
+    const el = root && root.querySelector(sel);
+    return el ? Math.round(el.getBoundingClientRect().width) : -1;
+};
+const bar = document.getElementById('ai-context-bar');
+const ctx = (() => {
+    try {
+        const got = AIContext.collect();
+        if (!got || !got.canvas) return {none: true};
+        return {isList: Array.isArray(got.canvas.nodes), nodes: got.canvas.nodes.length,
+                selected: typeof got.canvas.selectedNode};
+    } catch (e) { return {error: String(e)}; }
+})();
+return {cls: root ? root.className : '', chat: widthOf('.ai-chat'),
+        sessions: widthOf('.ai-sessions'), side: widthOf('.ai-side'),
+        bodyWidth: body ? Math.round(body.getBoundingClientRect().width) : -1,
+        bar: bar ? bar.textContent : '', ctx: ctx};
+"""
+
+
+AI_BOOTSTRAP_STUB = """
+/* The UI tier performs no server writes (AGENTS), and the answers a panel draws are the test's
+   to state: one provider, one skill whose context chip is the label the case asserts on. */
+window.fetch = function (url) {
+    const path = String(url).split('?')[0];
+    let payload = {ok: true};
+    if (path === '/api/ai/bootstrap') {
+        payload = {
+            ok: true,
+            providers: [{id: 'deepseek', label_key: 'ai.provider.deepseek',
+                         models: [{id: 'deepseek-flash', label: 'flash'}], capabilities: ['thinking'],
+                         local_available: true}],
+            skills: [{id: 'demo', name: 'Demo', builtin: true, context: ['canvas'], tools: [],
+                      available: true, suggested: []}],
+            conversations: [], monitors: [], usage: {},
+            settings: {context_scope: 'summary'},
+            context_sources: ['project', 'canvas'], tools: [],
+            runtime: {kind: 'desktop', label_key: 'ai.runtime.desktop'},
+        };
+    } else if (path === '/api/ai/context' || path.endsWith('/context')) {
+        payload = {
+            ok: true,
+            meta: {scope: 'summary', tokens: 20, chars: 80, items: [{title: '项目事实', chars: 80}]},
+            context: '## 项目事实\\n产品：Flask。',
+        };
+    }
+    return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(payload),
+        text: () => Promise.resolve(JSON.stringify(payload)),
+    });
+};
+"""
+
+
+def test_the_ai_workspace_gives_its_columns_to_the_visible_panes_only(app_url, driver):
+    """The docked panel reserved a 236px column for a sidebar that only exists in `full`, and a
+    hidden `display:none` child left the grid, so the chat slid into the 0px track — measured:
+    36px wide, one character per line. The hamburger also has to REMOVE the sessions column in
+    full mode instead of only making it narrower.
+
+    Everything here is a rendered box width, and the context payload is asked for its shape: a
+    canvas sent as a map is dropped by the server's list-only reader, which is what the bar
+    showed as “节点 undefined” (an object has no ``.length``).
+    """
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();", [])
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.5)
+    # A remembered full/sessions state from an earlier case must not decide this one.
+    state = driver.execute_script(AI_COLUMNS_JS)
+    if 'full' in state['cls'].split():
+        driver.execute_script('AIWorkspace.toggleFull();')
+    if 'sessions-open' in state['cls'].split():
+        driver.execute_script('AIWorkspace.toggleSessions();')
+    time.sleep(0.6)
+
+    docked = driver.execute_script(AI_COLUMNS_JS)
+    assert docked['sessions'] == 0 and docked['side'] == 0, f'a docked pane drew without being open: {docked}'
+    assert docked['chat'] >= docked['bodyWidth'] - 2, f'the chat did not take the whole docked body: {docked}'
+    assert docked['chat'] >= 480, f'the docked chat collapsed to {docked["chat"]}px: {docked}'
+
+    driver.execute_script('AIWorkspace.toggleSessions();')
+    time.sleep(0.6)
+    with_sessions = driver.execute_script(AI_COLUMNS_JS)
+    assert with_sessions['sessions'] >= 150, with_sessions
+    assert with_sessions['side'] == 0, f'docked mode reserved the full-only side column: {with_sessions}'
+    assert with_sessions['chat'] >= with_sessions['bodyWidth'] - with_sessions['sessions'] - 2, with_sessions
+
+    long_title = driver.execute_script(
+        """
+        AIWorkspace._bootstrap.conversations = [
+            {id: 'c-long', title: '请你分析这篇论文的内容，并结合我们的数据说明它的贡献与局限', message_count: 3},
+        ];
+        AIWorkspace._renderSessions();
+        const panel = document.querySelector('.ai-sessions');
+        const title = document.querySelector('.ai-session-title');
+        const row = title ? title.closest('.ai-session-row') : null;
+        return {
+            overflow: panel.scrollWidth - panel.clientWidth,
+            clipped: title ? title.scrollWidth > title.clientWidth : null,
+            ellipsis: title ? getComputedStyle(title).textOverflow : null,
+            rowRight: row ? Math.round(row.getBoundingClientRect().right) : null,
+            panelRight: Math.round(panel.getBoundingClientRect().right),
+        };
+        """
+    )
+    assert long_title['overflow'] <= 1, f'the sessions column scrolls sideways: {long_title}'
+    assert long_title['clipped'] is True, f'the title was not cut, so the row grew: {long_title}'
+    assert long_title['ellipsis'] == 'ellipsis', long_title
+    assert long_title['rowRight'] <= long_title['panelRight'] + 1, long_title
+
+    driver.execute_script('AIWorkspace.toggleFull();')
+    time.sleep(0.7)
+    full = driver.execute_script(AI_COLUMNS_JS)
+    assert full['side'] >= 200, f'full mode did not show the context pane: {full}'
+    assert full['sessions'] >= 150, f'full mode lost the sessions pane: {full}'
+
+    driver.execute_script('AIWorkspace.toggleSessions();')
+    time.sleep(0.7)
+    closed = driver.execute_script(AI_COLUMNS_JS)
+    assert 'sessions-open' not in closed['cls'].split(), closed
+    assert closed['sessions'] == 0, f'the hamburger only narrowed the session column: {closed}'
+    assert closed['side'] == 0, f'the unticked hamburger left the context pane on screen: {closed}'
+    assert closed['chat'] >= closed['bodyWidth'] - 2, f'the chat did not take the room back: {closed}'
+    assert closed['chat'] >= full['chat'] + 200, f'the chat did not take the room back: {closed} vs {full}'
+
+    assert closed['ctx'].get('isList') is True, f'the canvas sent a map where the server takes a list: {closed["ctx"]}'
+    assert closed['ctx'].get('selected') == 'string', closed['ctx']
+    assert 'undefined' not in closed['bar'], f'the context bar printed an undefined id: {closed["bar"]!r}'
+
+    driver.execute_script('AIWorkspace.openStudio("skills");')
+    time.sleep(0.7)
+    chips = driver.execute_script(
+        "return Array.from(document.querySelectorAll('.ai-skill-card .ai-chip')).map((c) => c.textContent.trim());"
+    )
+    assert chips, 'no skill card rendered a context chip, so the label check would be vacuous'
+    expected = driver.execute_script("return I18n.t('ai.contextSource.canvas');")
+    assert expected in chips, f'a context source id reached the screen untranslated: {chips}'
+    raw = [chip for chip in chips if chip in ('project', 'canvas', 'dataset', 'run', 'docs', 'code')]
+    assert not raw, f'a raw context source id is on screen: {raw}'
+    auto = driver.execute_script("return I18n.t('ai.skillAuto');")
+    options = driver.execute_script(
+        "return Array.from(document.querySelectorAll('#ai-skill option')).map((o) => o.textContent);"
+    )
+    assert any(auto in option for option in options), f'the auto skill is not localized: {options}'
+
+
+def test_the_composer_can_reference_a_dataset_instead_of_uploading_it(app_url, driver):
+    """`@` names what this account already has. The menu is filled by the server, a pick becomes a
+    chip, and the turn carries IDS — the server resolves them (a dataset is read in slices)."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();", [])
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script(
+        """
+        const real = window.fetch;
+        window.__chatBodies = [];
+        window.fetch = function (url, opts) {
+            const path = String(url).split('?')[0];
+            if (path === '/api/ai/references') {
+                const payload = {ok: true, references: [
+                    {kind: 'dataset', id: 'ds-1', label: '2026-11 语料', detail: '12,345 行'},
+                    {kind: 'export', id: 'r.csv', label: 'r.csv', detail: '3 KB'},
+                ]};
+                return Promise.resolve({ok: true, json: () => Promise.resolve(payload),
+                                        text: () => Promise.resolve(JSON.stringify(payload))});
+            }
+            if (path === '/api/ai/chat' && opts && opts.body) window.__chatBodies.push(String(opts.body));
+            return real(url, opts);
+        };
+        """
+    )
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.8)
+    facts = driver.execute_script(
+        """
+        const input = document.getElementById('ai-input');
+        input.value = '看这个 @';
+        input.dispatchEvent(new Event('input', {bubbles: true}));
+        return true;
+        """
+    )
+    assert facts is True
+    time.sleep(0.6)
+    menu = driver.execute_script(
+        """
+        const menu = document.getElementById('ai-ref-menu');
+        return {hidden: menu.hidden, rows: menu.querySelectorAll('[data-ai-ref]').length,
+                text: menu.textContent};
+        """
+    )
+    assert menu['rows'] == 2, f'the @ menu did not offer the server list: {menu}'
+    picked = driver.execute_script(
+        """
+        const row = document.querySelector('#ai-ref-menu [data-ai-ref]');
+        row.click();
+        return {chip: (document.getElementById('ai-refs').textContent || '').trim(),
+                input: document.getElementById('ai-input').value,
+                kind: (document.querySelector('#ai-refs .ai-ref-kind') || {}).textContent || ''};
+        """
+    )
+    assert '2026-11 语料' in picked['chip'], picked
+    assert picked['kind'] == '数据集', f'the chip shows the raw kind: {picked}'
+    assert '@' not in picked['input'], f'the @token stayed in the draft: {picked}'
+
+    driver.execute_script(
+        """
+        const input = document.getElementById('ai-input');
+        input.value = '分析一下';
+        AIWorkspace._sendText('分析一下', {});
+        """
+    )
+    time.sleep(1.2)
+    bodies = driver.execute_script('return window.__chatBodies;')
+    assert bodies, 'the turn was never sent'
+    body = json.loads(bodies[0])
+    assert body['references'] == [{'kind': 'dataset', 'id': 'ds-1'}], body.get('references')
+    assert body['attachments'] == [], body.get('attachments')
+    assert driver.execute_script("return (document.getElementById('ai-refs').textContent || '').trim();") == '', (
+        'the chip survived the send, so the next turn would repeat the reference'
+    )
+
+
+def test_the_two_sidebars_can_be_resized_and_stay_inside_their_range(app_url, driver):
+    """Each sidebar has a grip; dragging it changes that column (and only that one), the width is
+    remembered, and the range keeps the content readable."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.6)
+    driver.execute_script('AIWorkspace.toggleFull();')
+    time.sleep(0.5)
+    if 'sessions-open' not in driver.execute_script("return document.querySelector('.ai-workspace').className;"):
+        driver.execute_script('AIWorkspace.toggleSessions();')
+    time.sleep(0.6)
+    before = driver.execute_script(
+        "const r = document.querySelector('.ai-workspace');"
+        "return [parseInt(getComputedStyle(r).getPropertyValue('--ai-sessions-w'), 10),"
+        " parseInt(getComputedStyle(r).getPropertyValue('--ai-side-w'), 10)];"
+    )
+    geometry = driver.execute_script(
+        """
+        const root = document.querySelector('.ai-workspace');
+        const body = root.querySelector('.ai-body');
+        const sessions = root.querySelector('.ai-sessions');
+        const grip = root.querySelector("[data-ai-resize='sessions']");
+        const b = body.getBoundingClientRect();
+        const s = sessions.getBoundingClientRect();
+        const g = grip.getBoundingClientRect();
+        /* The hit test is the proof a user can grab it: a handle that is painted but covered by
+           the column beside it is not draggable, and a synthetic dispatch cannot see that. */
+        const hit = document.elementFromPoint(Math.round(g.left + g.width / 2), Math.round(g.top + g.height / 2));
+        return {bodyTop: Math.round(b.top), sessionsTop: Math.round(s.top),
+                grip: [Math.round(g.left), Math.round(g.width), Math.round(g.height)],
+                boundary: Math.round(s.right),
+                hitIsGrip: !!(hit && hit.closest && hit.closest("[data-ai-resize='sessions']"))};
+        """
+    )
+    assert abs(geometry['sessionsTop'] - geometry['bodyTop']) <= 1, f'an empty row sits above the columns: {geometry}'
+    assert geometry['grip'][2] > 100, f'the grip is not a full-height handle: {geometry}'
+    assert abs(geometry['grip'][0] - geometry['boundary']) <= 10, f'the grip is not on the boundary: {geometry}'
+    assert geometry['hitIsGrip'], f'the grip is covered by another element: {geometry}'
+
+    after = driver.execute_script(
+        """
+        const root = document.querySelector('.ai-workspace');
+        const grab = root.querySelector("[data-ai-resize='sessions']").getBoundingClientRect();
+        const x = Math.round(grab.left + grab.width / 2);
+        const y = Math.round(grab.top + grab.height / 2);
+        const grip = document.elementFromPoint(x, y);
+        grip.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, clientX: x, clientY: y}));
+        document.dispatchEvent(new PointerEvent('pointermove', {bubbles: true, clientX: x + 60, clientY: y}));
+        document.dispatchEvent(new PointerEvent('pointerup', {bubbles: true, clientX: x + 60, clientY: y}));
+        return [parseInt(getComputedStyle(root).getPropertyValue('--ai-sessions-w'), 10),
+                parseInt(getComputedStyle(root).getPropertyValue('--ai-side-w'), 10),
+                AISettings.load().sessionsWidth];
+        """
+    )
+    assert after[0] > before[0], f'dragging the sessions grip changed nothing: {before} -> {after}'
+    assert after[1] == before[1], f'the other sidebar moved too: {before} -> {after}'
+    assert abs(after[0] - after[2]) < 2, f'the width was not remembered: {after}'
+
+    capped = driver.execute_script(
+        """
+        const root = document.querySelector('.ai-workspace');
+        const grip = root.querySelector("[data-ai-resize='side']");
+        const at = grip.getBoundingClientRect();
+        grip.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true, clientX: at.left}));
+        document.dispatchEvent(new PointerEvent('pointermove', {bubbles: true, clientX: -4000}));
+        document.dispatchEvent(new PointerEvent('pointerup', {bubbles: true}));
+        return parseInt(getComputedStyle(root).getPropertyValue('--ai-side-w'), 10);
+        """
+    )
+    assert capped <= 440, f'the context column grew past its range: {capped}'
+    assert capped >= 200, f'the context column collapsed past its range: {capped}'
+
+
+def test_the_context_preview_is_one_block_that_toggles(app_url, driver):
+    """Each click used to PREPEND another copy of the same preview, so the panel filled with
+    duplicates and the button never became “hide”."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();", [])
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.8)
+    driver.execute_script('AIWorkspace.toggleFull();')
+    time.sleep(0.4)
+    if 'sessions-open' not in driver.execute_script("return document.querySelector('.ai-workspace').className;"):
+        driver.execute_script('AIWorkspace.toggleSessions();')
+    time.sleep(0.4)
+
+    first = driver.execute_script(
+        """
+        AIWorkspace._previewContext();
+        return true;
+        """
+    )
+    assert first is True
+    time.sleep(0.8)
+    shown = driver.execute_script(
+        """
+        const menu = Array.from(document.querySelectorAll('#ai-side [data-ai-context-preview]'));
+        return {blocks: document.querySelectorAll('#ai-side .ai-context-preview').length,
+                labels: menu.map((b) => b.textContent.trim()),
+                text: (document.querySelector('#ai-side .ai-context-preview') || {}).textContent || ''};
+        """
+    )
+    assert shown['blocks'] == 1, f'the preview was drawn {shown["blocks"]} times: {shown}'
+    assert shown['text'].startswith('## 项目事实'), shown
+    expected_hide = driver.execute_script("return I18n.t('ai.contextHide');")
+    assert expected_hide in shown['labels'], f'the button still offers to show it: {shown}'
+
+    driver.execute_script('AIWorkspace._previewContext();')
+    time.sleep(0.4)
+    hidden = driver.execute_script(
+        """
+        return {blocks: document.querySelectorAll('#ai-side .ai-context-preview').length,
+                labels: Array.from(document.querySelectorAll('#ai-side [data-ai-context-preview]'))
+                    .map((b) => b.textContent.trim())};
+        """
+    )
+    assert hidden['blocks'] == 0, f'the preview did not close: {hidden}'
+    show_again = driver.execute_script("return I18n.t('ai.contextPreview');")
+    assert show_again in hidden['labels'], hidden
+
+
+def test_a_press_outside_the_ai_workspace_gives_the_page_back(app_url, driver):
+    """The workspace is a side dock: a press on the page closes it, a press inside it does not,
+    and answering a dialog is not a press on the page (the panel must survive a modal)."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.6)
+    hidden = "return document.getElementById('ai-workspace').hidden;"
+    assert driver.execute_script(hidden) is False, 'the panel did not open'
+
+    inside = driver.execute_script(
+        """
+        const chat = document.getElementById('ai-chat');
+        chat.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        return document.getElementById('ai-workspace').hidden;
+        """
+    )
+    assert inside is False, 'a press inside the panel closed it'
+
+    assert (
+        driver.execute_script(
+            """
+        showDialog({message: 'x', buttons: [{label: 'ok', value: 'ok'}]});
+        document.getElementById('dialog-box').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        return document.getElementById('ai-workspace').hidden;
+        """
+        )
+        is False
+    ), 'answering a dialog closed the panel behind it'
+
+    outside = driver.execute_script(
+        """
+        document.getElementById('dialog-close')?.click?.();
+        if (window.Dialog && Dialog.close) Dialog.close(null);
+        document.getElementById('canvas-inner').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        return document.getElementById('ai-workspace').hidden;
+        """
+    )
+    assert outside is True, 'a press on the page left the workspace open'
+
+
+def test_a_press_inside_a_dropdown_the_workspace_opened_keeps_it_open(app_url, driver):
+    """The select popups are painted into <body>, so a DOM-level "outside" test closed the panel
+    while the user was picking a skill or a provider."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.7)
+    opened = driver.execute_script(
+        """
+        const select = document.getElementById('ai-skill');
+        const wrap = select.closest('.cselect');
+        const trigger = wrap ? wrap.querySelector('.cselect-trigger') : null;
+        if (!trigger) return {trigger: false};
+        trigger.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+        trigger.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+        return {trigger: true};
+        """
+    )
+    time.sleep(0.4)
+    facts = driver.execute_script(
+        """
+        const menu = document.querySelector('.cselect-menu.open') ||
+                     Array.from(document.querySelectorAll('.cselect-menu')).find((m) => m.offsetHeight > 0);
+        const option = menu ? menu.querySelector('.cselect-option') : null;
+        if (option) option.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+        return {menu: !!menu, option: !!option,
+                hidden: document.getElementById('ai-workspace').hidden};
+        """
+    )
+    assert opened['trigger'], 'the composer rendered no skill select'
+    assert facts['menu'] and facts['option'], f'no dropdown to press: {facts}'
+    assert facts['hidden'] is False, 'picking an option in the workspace closed the workspace'

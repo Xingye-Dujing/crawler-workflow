@@ -44,6 +44,9 @@ class TestTheHeaderSaysSomething:
         claims to be a translation; printing the type is the file's own answer."""
         assert panel['unknown_type_shows'] == 'time_machine'
         assert panel['unknown_raw_key'] is False
+        assert panel['unknown_missing'] == [], (
+            f'an unknown type was logged as a missing translation: {panel["unknown_missing"]}'
+        )
 
 
 class TestThePanelEditsWhatItShows:

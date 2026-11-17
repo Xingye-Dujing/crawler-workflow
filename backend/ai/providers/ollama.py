@@ -10,7 +10,7 @@ import json
 import requests
 
 from ai.errors import AIProviderError
-from ai.providers.base import Provider, check_cancel, event
+from ai.providers.base import Provider, event, stream_lines
 from ai.types import ModelSpec, ProviderSpec
 
 SPEC = ProviderSpec(
@@ -65,11 +65,9 @@ class OllamaProvider(Provider):
             response.close()
             raise AIProviderError('ai.http', kind='error', status=response.status_code, detail=response.text[:300])
         try:
-            for raw in response.iter_lines(decode_unicode=True, chunk_size=1024):
-                check_cancel(request.get('cancel_event'))
-                if not raw:
+            for line in stream_lines(response, request.get('cancel_event')):
+                if not line:
                     continue
-                line = raw if isinstance(raw, str) else raw.decode('utf-8', 'replace')
                 try:
                     frame = json.loads(line)
                 except ValueError as exc:

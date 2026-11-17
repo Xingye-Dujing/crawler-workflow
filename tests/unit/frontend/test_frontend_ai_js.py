@@ -61,6 +61,13 @@ class TestRuntimeSurfaces:
         assert 'code plugins' in out['runtimeTitle']
         assert 'repository source' not in out['runtimeTitle']
 
+    def test_a_turn_renders_skill_thinking_tools_plan_then_the_answer(self):
+        out = _run()
+        flow = out['turnFlow']
+        assert flow['ordered'] is True
+        assert flow['skill'] >= 0 and flow['plan'] >= 0
+        assert flow['working'] is True
+
     def test_i18n_answers_whether_a_key_exists(self):
         out = _run()
         assert out['hasKnown'] is True
@@ -111,6 +118,21 @@ class TestWorkspaceRepaintAndDelegation:
     def test_a_saved_provider_id_is_not_rewritten_in_the_browser(self):
         out = _run_workspace()['provider']
         assert out['stored'] == 'custom_provider'
+
+    def test_the_provider_settings_buttons_reach_their_handlers(self):
+        """保存 had no branch in the delegated handler, so typing an API key and clicking it did
+        nothing — no toast, no request, no error. The same for 刷新模型 and 测试连接."""
+        out = _run_workspace()['settings']
+        assert out['found'] == 3, 'the settings page did not render all three buttons'
+        assert out['calls'] == ['save', 'models', 'test'], out['calls']
+
+    def test_opening_the_studio_from_outside_opens_the_panel(self):
+        """The Python node's 管理脚本 lives outside the aside; opening the studio used to leave the
+        panel hidden, so the button looked dead. `_mode` alone is not "open"."""
+        out = _run_workspace()['studioOpensPanel']
+        assert out['open'] is True, 'openStudio left the workspace closed'
+        assert out['hidden'] is False, 'openStudio left the aside hidden'
+        assert out['mode'] == 'studio'
 
     def test_the_python_node_picker_offers_one_empty_placeholder(self):
         out = _run_workspace()['pythonPanel']

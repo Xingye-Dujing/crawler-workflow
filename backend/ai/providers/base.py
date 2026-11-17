@@ -1,5 +1,6 @@
 """Shared transport plumbing: HTTP, SSE framing, cancellation and error mapping."""
 
+import codecs
 import json
 import time
 
@@ -16,6 +17,35 @@ def event(kind: str, **data) -> dict:
 def check_cancel(cancel_event) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise AIError('ai.cancelled', kind='cancelled')
+
+
+def stream_lines(response, cancel_event):
+    """Yield UTF-8 text lines from a streaming response, decoded incrementally.
+
+    ``iter_lines(decode_unicode=True)`` decodes each chunk with ``response.encoding``, which is
+    ISO-8859-1 for an event-stream with no charset parameter: Chinese text arrived as mojibake
+    (``å¾…``), a multi-byte character split across two chunks became garbage, and a frame cut
+    mid-string failed ``json.loads`` — the panel then reported 供应商返回了无法解析的数据 with the
+    mojibake inside the quote. An incremental UTF-8 decoder never splits a character, so the
+    bytes are decoded once, here, by the side that knows the stream is UTF-8.
+    """
+    decoder = codecs.getincrementaldecoder('utf-8')('replace')
+    buffer = ''
+    for chunk in response.iter_content(chunk_size=1024):
+        check_cancel(cancel_event)
+        if not chunk:
+            continue
+        buffer += decoder.decode(chunk)
+        while True:
+            index = buffer.find('\n')
+            if index < 0:
+                break
+            line = buffer[:index]
+            buffer = buffer[index + 1 :]
+            yield line[:-1] if line.endswith('\r') else line
+    tail = buffer + decoder.decode(b'', final=True)
+    if tail:
+        yield tail[:-1] if tail.endswith('\r') else tail
 
 
 def http_error(status: int, body: str = '') -> AIProviderError:
@@ -92,31 +122,25 @@ def _nap(cancel_event, seconds: float) -> bool:
     return False
 
 
-def sse_events(response, cancel_event):
-    """Yield ``(event_name, payload)`` from a text/event-stream response.
+def data_frames(response, cancel_event):
+    """Yield ``('message', payload)`` for each SSE data frame; ``[DONE]`` ends the stream.
 
-    The parser follows the WHATWG rules the page's own decoder follows: multi-line ``data`` is
-    joined with a newline, comments (``: keep-alive``) are ignored, and an event is dispatched on
-    a blank line. A malformed JSON frame is a provider failure, never a silently skipped answer.
+    The Chat Completions wire both DeepSeek and the OpenAI-compatible providers speak: blank line
+    dispatches a frame, ``:`` starts a comment (keep-alive), and multi-line ``data`` is joined.
     """
     data_lines: list[str] = []
-    event_name = ''
-    for raw in response.iter_lines(decode_unicode=True, chunk_size=1024):
-        check_cancel(cancel_event)
-        if raw is None:
-            continue
-        line = raw if isinstance(raw, str) else raw.decode('utf-8', 'replace')
+    for line in stream_lines(response, cancel_event):
         if line == '':
-            if data_lines:
-                payload = '\n'.join(data_lines)
-                data_lines = []
-                name = event_name or 'message'
-                event_name = ''
-                try:
-                    decoded = json.loads(payload)
-                except ValueError as exc:
-                    raise AIProviderError('ai.badResponse', kind='bad_response', detail=payload[:200]) from exc
-                yield name, decoded
+            if not data_lines:
+                continue
+            payload = '\n'.join(data_lines)
+            data_lines = []
+            if payload.strip() == '[DONE]':
+                return
+            try:
+                yield 'message', json.loads(payload)
+            except ValueError as exc:
+                raise AIProviderError('ai.badResponse', kind='bad_response', detail=payload[:200]) from exc
             continue
         if line.startswith(':'):
             continue
@@ -124,15 +148,13 @@ def sse_events(response, cancel_event):
         value = value[1:] if value.startswith(' ') else value
         if field == 'data':
             data_lines.append(value)
-        elif field == 'event':
-            event_name = value
     if data_lines:
         payload = '\n'.join(data_lines)
-        try:
-            decoded = json.loads(payload)
-        except ValueError as exc:
-            raise AIProviderError('ai.badResponse', kind='bad_response', detail=payload[:200]) from exc
-        yield event_name or 'message', decoded
+        if payload.strip() != '[DONE]':
+            try:
+                yield 'message', json.loads(payload)
+            except ValueError as exc:
+                raise AIProviderError('ai.badResponse', kind='bad_response', detail=payload[:200]) from exc
 
 
 class Provider:

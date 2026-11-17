@@ -138,6 +138,11 @@ CREATE TABLE IF NOT EXISTS memories (
     text TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS prefs (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS monitors (
     id TEXT PRIMARY KEY,
     conversation_id TEXT NOT NULL,
@@ -481,6 +486,34 @@ def list_attachments(conversation_id: str) -> list:
     return [_row(row) for row in rows]
 
 
+def find_attachment_by_digest(sha256: str) -> dict | None:
+    """The newest uploaded copy of these exact bytes, from any conversation.
+
+    Uploading the same file in a second conversation used to send the bytes again, parse them
+    again and pay again. The provider already holds this ``file_id``, so the second conversation
+    gets its own attachment row pointing at the same upload.
+    """
+    text = str(sha256 or '')
+    if not text:
+        return None
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM attachments WHERE sha256 = ? AND file_id != '' ORDER BY created_at DESC LIMIT 1",
+            (text,),
+        ).fetchone()
+    return _row(row)
+
+
+def list_attachments_everywhere(limit: int = 60) -> list:
+    """The newest file uploads across every conversation, one row per distinct content."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM attachments WHERE file_id != '' GROUP BY sha256 ORDER BY MAX(created_at) DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+    return [_row(row) for row in rows]
+
+
 def delete_attachment(attachment_id: str) -> dict | None:
     row = get_attachment(attachment_id)
     if row is None:
@@ -727,6 +760,27 @@ def delete_memory(memory_id: str) -> bool:
     with connect() as conn:
         cur = conn.execute('DELETE FROM memories WHERE id = ?', (memory_id,))
     return cur.rowcount > 0
+
+
+def get_pref(key: str, default: str = '') -> str:
+    """One per-account preference (``ai.db`` follows the signed-in account's tree).
+
+    Used for facts that are the USER's machine, not the server's policy — the working folder is one
+    of those, so it cannot live in the system-level settings file.
+    """
+    with connect() as conn:
+        row = conn.execute('SELECT value FROM prefs WHERE key = ?', (str(key),)).fetchone()
+    return str(row['value']) if row is not None else default
+
+
+def set_pref(key: str, value: str) -> str:
+    with connect() as conn:
+        conn.execute(
+            'INSERT INTO prefs (key, value, updated_at) VALUES (?, ?, ?) '
+            'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+            (str(key), str(value or ''), now()),
+        )
+    return str(value or '')
 
 
 def mark_interrupted() -> int:

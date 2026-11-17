@@ -2090,6 +2090,11 @@ function profileCollisions(nodes, connections) {
 function nodeTypeWord(type) {
     if (!type) return '';
     var key = 'nodeType.' + type;
+    /* `I18n.has` first: `t()` on a missing key records a warning ("missing zh string: nodeType.可视化")
+       for a type that is already a human label the file carried — noise in the console for an
+       answer the fallback below already gives. A canvas-only harness may stub `I18n` without
+       `has`, so the old comparison stays as the fallback. */
+    if (typeof I18n.has === 'function') return I18n.has(key) ? I18n.t(key) : type;
     var word = I18n.t(key);
     return word === key ? type : word;
 }

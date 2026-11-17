@@ -80,5 +80,27 @@ const out = {
     providerOptions,
     hasKnown: I18n.has('ai.title'),
     hasUnknown: I18n.has('ai.notAKey'),
+    turnFlow: (() => {
+        /* One turn is a SEQUENCE: the skill that answered, its reasoning, its tools, its plan, the
+           answer. The live view and a reopened one read the same blocks, so this text is the
+           definition of "the order the model produced" for the whole workspace. */
+        const html = sandbox.AIRender.assistantFlow([
+            { type: 'skill', name: 'workflow', reason: 'auto' },
+            { type: 'thinking', thinking: 'read the canvas first' },
+            { type: 'tool_use', id: 't1', name: 'project_facts', input: {}, status: 'done', result: { ok: true } },
+            { type: 'plan', steps: [{ title: '读画布', status: 'done' }, { title: '写草案', status: 'pending' }] },
+            { type: 'text', text: 'done' },
+        ]);
+        const at = (needle) => html.indexOf(needle);
+        return {
+            skill: at('ai-skill-row'),
+            thinking: at('ai-thinking'),
+            tool: at('ai-tool'),
+            plan: at('ai-plan-step'),
+            text: at('ai-text'),
+            ordered: at('ai-skill-row') < at('ai-thinking') && at('ai-thinking') < at('ai-tool') && at('ai-tool') < at('ai-plan-step') && at('ai-plan-step') < at('ai-text'),
+            working: sandbox.AIRender.workingRow('waiting').includes('ai-working-dot'),
+        };
+    })(),
 };
 process.stdout.write(JSON.stringify(out));

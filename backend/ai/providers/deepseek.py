@@ -1,12 +1,26 @@
-"""DeepSeek Messages API transport.
+"""DeepSeek Chat Completions transport.
 
-The Messages API is the one DeepSeek surface that carries every block the workspace renders:
-thinking, text with citations, server-side search/fetch results and client tool calls. Chat
-Completions is still used by the row analyzers, where a single prompt has no use for blocks.
+This is DeepSeek's own API (``POST /chat/completions`` on ``https://api.deepseek.com``), not the
+Anthropic-compatible shim: the shim is a compatibility layer whose stream frames (``message_start``,
+``content_block_delta``, ``signature_delta``) we had to re-derive, and a frame we did not recognise
+ended the turn with “供应商返回了无法解析的数据”. The native protocol is documented field by field
+and is what the platform, the SDK examples and the row analyzers all speak.
 
-The serializer follows the replay rules in the API docs: a client tool call is followed by its
-result before the next user turn, thinking blocks are replayed when tools are present, and a
-``read_link`` result keeps its signature so the page can be restored on later turns.
+The wire rules that matter here, all from the API reference and the thinking-mode guide:
+
+* ``thinking``: ``{"type": "enabled" | "disabled"}``; the strength is ``reasoning_effort``
+  (``low``/``high``/``max``). Thinking is ON by default when neither field is sent, so a disabled
+  turn says so explicitly.
+* Thinking text arrives as ``delta.reasoning_content``, the answer as ``delta.content``; token
+  counts arrive in the last chunk when ``stream_options.include_usage`` is set.
+* Client tool calls arrive as ``delta.tool_calls[]`` (partial ``function.arguments`` per index).
+  With ``tools`` present, every earlier assistant ``reasoning_content`` must be sent back or the API
+  answers 400 — ``_assistant_message`` does that.
+* DeepSeek's own web tools are declared as ``{"type": "deepseek_web_search"}`` /
+  ``{"type": "deepseek_read_url"}``; the model runs them server-side, reports steps through
+  ``choice.server_tool_event`` and sends the complete ``server_tool_calls`` (with the encrypted
+  ``signature`` that restores a fetched page next turn) in the final delta.
+* Files are referenced by ``{"type": "file", "file_id": …}`` inside the user content parts.
 """
 
 import json
@@ -14,8 +28,8 @@ import json
 import requests
 
 from ai.errors import AIError, AIProviderError
-from ai.providers.base import Provider, event, http_error, open_stream, sse_events
-from ai.types import ModelSpec, ProviderSpec, text_block
+from ai.providers.base import Provider, data_frames, event, http_error, open_stream
+from ai.types import ModelSpec, ProviderSpec
 
 DEEPSEEK_CAPABILITIES = frozenset(
     {
@@ -38,8 +52,8 @@ SPEC = ProviderSpec(
     id='deepseek',
     label_key='ai.provider.deepseek',
     notes_key='ai.providerNote.deepseek',
-    protocol='messages',
-    base_url='https://api.deepseek.com/anthropic/v1/messages',
+    protocol='chat',
+    base_url='https://api.deepseek.com/chat/completions',
     models=(
         ModelSpec('deepseek-flash', 'DeepSeek V4.1 Flash', 512000, DEEPSEEK_CAPABILITIES),
         ModelSpec('deepseek-v4-pro', 'DeepSeek V4 Pro', 512000, V4_PRO_CAPABILITIES),
@@ -48,162 +62,277 @@ SPEC = ProviderSpec(
     models_url='https://api.deepseek.com/models',
 )
 
+#: ``reasoning_effort`` values the API accepts. ``medium``/``xhigh``/``minimal`` are mapped by the
+#: service, so this side only ever sends a canonical value.
+EFFORTS = {'low': 'low', 'medium': 'high', 'high': 'high', 'max': 'max', 'xhigh': 'high', 'minimal': 'low'}
 
-def _wire_content(blocks: list, *, allow_server_replay: bool = True) -> list:
-    content = []
-    for block in blocks or ():
-        kind = block.get('type')
-        if kind == 'text':
-            text = str(block.get('text') or '')
-            if text:
-                content.append({'type': 'text', 'text': text})
-        elif kind == 'thinking':
-            thinking = str(block.get('thinking') or '')
-            if thinking:
-                payload = {'type': 'thinking', 'thinking': thinking}
-                if block.get('signature'):
-                    payload['signature'] = str(block['signature'])
-                content.append(payload)
-        elif kind == 'tool_use':
-            content.append(
-                {
-                    'type': 'tool_use',
-                    'id': str(block.get('id') or ''),
-                    'name': str(block.get('name') or ''),
-                    'input': block.get('input') if isinstance(block.get('input'), dict) else {},
-                }
-            )
-        elif (
-            allow_server_replay
-            and kind == 'server_tool_use'
-            and block.get('kind') == 'read_link'
-            or allow_server_replay
-            and kind == 'web_fetch_tool_result'
-            and block.get('kind') == 'read_link'
-        ):
-            content.append(block)
-    return content
+#: ``finish_reason`` → the canonical reason the transcript shows.
+STOP_REASONS = {
+    'stop': 'end_turn',
+    'length': 'max_tokens',
+    'content_filter': 'refusal',
+    'tool_calls': 'tool_use',
+    'insufficient_system_resource': 'max_tokens',
+    'aborted': 'aborted',
+}
 
 
-def _tool_result_message(message: dict) -> dict:
-    content = str(message.get('content') or '')
-    return {
-        'role': 'user',
-        'content': [
-            {
-                'type': 'tool_result',
-                'tool_use_id': str(message.get('tool_call_id') or ''),
-                'content': [{'type': 'text', 'text': content}] if content else [],
-                **({'is_error': True} if message.get('is_error') else {}),
+def _assistant_message(message: dict) -> dict:
+    blocks = message.get('blocks') or []
+    text = ''.join(str(block.get('text') or '') for block in blocks if block.get('type') == 'text')
+    thinking = ''.join(str(block.get('thinking') or '') for block in blocks if block.get('type') == 'thinking')
+    calls = [
+        {
+            'id': str(block.get('id') or ''),
+            'type': 'function',
+            'function': {
+                'name': str(block.get('name') or ''),
+                'arguments': json.dumps(block.get('input') or {}, ensure_ascii=False),
+            },
+        }
+        for block in blocks
+        if block.get('type') == 'tool_use'
+    ]
+    payload = {'role': 'assistant', 'content': text}
+    if thinking:
+        # Replayed only when the turn carries tools (the guide: a tools request must return every
+        # earlier reasoning_content or the API refuses with 400); a turn without tools ignores it.
+        payload['reasoning_content'] = thinking
+    if calls:
+        payload['tool_calls'] = calls
+    steps = _server_tool_steps(blocks)
+    if steps:
+        payload['server_tool_calls'] = steps
+    return payload
+
+
+def _server_tool_steps(blocks: list) -> list:
+    """Rebuild ``server_tool_calls`` from the stored blocks, one step per call, in call order.
+
+    The read-link page body lives in the result block's ``signature``; sending it back is what puts
+    the page into the next turn's context (the guide calls that out explicitly).
+    """
+    results = {}
+    for block in blocks:
+        if block.get('type') in ('web_search_tool_result', 'web_fetch_tool_result'):
+            results[str(block.get('tool_use_id') or '')] = block
+    steps = []
+    for block in blocks:
+        if block.get('type') != 'server_tool_use':
+            continue
+        tool_id = str(block.get('id') or '')
+        result = results.get(tool_id) or {}
+        call = {
+            'index': 0,
+            'id': tool_id,
+            'type': str(block.get('name') or ''),
+            'kind': str(block.get('kind') or 'search'),
+            'action': block.get('input') if isinstance(block.get('input'), dict) else {},
+            'status': 'failed' if result.get('type', '').endswith('_error') else 'completed',
+        }
+        content = result.get('content')
+        if block.get('kind') == 'read_link':
+            call['page'] = {
+                'url': str(((content or {}).get('url') if isinstance(content, dict) else '') or ''),
+                'title': str(((content or {}).get('content') or {}).get('title') or '')
+                if isinstance(content, dict)
+                else '',
             }
-        ],
-    }
+            if result.get('signature'):
+                call['signature'] = str(result['signature'])
+        elif isinstance(content, list):
+            call['sources'] = [
+                {
+                    'type': 'url',
+                    'url': str(row.get('url') or ''),
+                    'title': str(row.get('title') or ''),
+                    'snippet': str(row.get('snippet') or ''),
+                    'site_name': row.get('site_name'),
+                    'site_icon': row.get('site_icon'),
+                    'published_at': row.get('page_age'),
+                }
+                for row in content
+                if isinstance(row, dict) and row.get('type') == 'web_search_result'
+            ]
+        steps.append({'index': len(steps), 'reasoning_content': '', 'calls': [call]})
+    return steps
 
 
-def to_wire_messages(messages: list, *, context_text: str = '') -> list:
-    """Turn canonical messages into Messages API turns, merging adjacent same-role turns."""
+def _user_content(message: dict, *, context_text: str = '', is_last_user: bool = False):
+    text = str(message.get('content') or '')
+    meta = message.get('meta') or {}
+    if context_text and is_last_user:
+        text = f'<cai_xi_hui_context>\n{context_text}\n</cai_xi_hui_context>\n\n{text}'
+    parts = []
+    for attachment in meta.get('attachments') or ():
+        file_id = str(attachment.get('file_id') or '')
+        if file_id:
+            parts.append({'type': 'file', 'file_id': file_id})
+    if not parts:
+        return text
+    if text:
+        parts.append({'type': 'text', 'text': text})
+    return parts
+
+
+def to_messages(messages: list, *, context_text: str = '') -> list:
+    """Turn canonical messages into Chat Completions messages (system turn excluded)."""
     out: list[dict] = []
-    last_user_index = max(
+    last_user = max(
         (index for index, message in enumerate(messages) if str(message.get('role') or '') == 'user'),
         default=-1,
     )
     for index, message in enumerate(messages):
         role = str(message.get('role') or '')
         if role == 'assistant':
-            content = _wire_content(message.get('blocks') or [])
-            if content:
-                out.append({'role': 'assistant', 'content': content})
+            out.append(_assistant_message(message))
             continue
         if role == 'tool':
-            out.append(_tool_result_message(message))
+            out.append(
+                {
+                    'role': 'tool',
+                    'tool_call_id': str(message.get('tool_call_id') or ''),
+                    'content': str(message.get('content') or ''),
+                }
+            )
             continue
         reminder = str((message.get('meta') or {}).get('latest_reminder') or '')
         if reminder:
+            # DeepSeek's own message type: it marks the newest user turn for its cache and the
+            # model reads it as instructions, not as something the user said.
             out.append({'role': 'latest_reminder', 'content': reminder})
-        content = str(message.get('content') or '')
-        if context_text and index == last_user_index:
-            content = f'<cai_xi_hui_context>\n{context_text}\n</cai_xi_hui_context>\n\n{content}'
-        blocks = []
-        for attachment in (message.get('meta') or {}).get('attachments') or ():
-            file_id = str(attachment.get('file_id') or '')
-            if not file_id:
-                continue
-            block_type = 'image' if attachment.get('kind') == 'image' else 'document'
-            blocks.append({'type': block_type, 'source': {'type': 'file', 'file_id': file_id}})
-        if content:
-            blocks.append(text_block(content))
-        out.append({'role': 'user', 'content': blocks})
-    # Anthropic accepts adjacent same-role turns, but the API's replay checks and the cache
-    # behave better with alternation. Merge text/tool-result user turns; never merge an
-    # assistant turn into a user turn.
-    merged: list[dict] = []
-    for turn in out:
-        previous = merged[-1] if merged else None
-        if previous is not None and previous.get('role') == turn['role'] == 'user':
-            merged[-1]['content'] = list(merged[-1].get('content') or []) + list(turn.get('content') or [])
-        else:
-            merged.append(turn)
-    _validate_tool_pairs(merged)
-    return merged
+        out.append(
+            {
+                'role': 'user',
+                'content': _user_content(message, context_text=context_text, is_last_user=index == last_user),
+            }
+        )
+    _validate_tool_pairs(out)
+    return out
 
 
 def _validate_tool_pairs(messages: list) -> None:
     pending = set()
     for turn in messages:
         if turn.get('role') == 'assistant':
-            calls = [block.get('id') for block in turn.get('content') or [] if block.get('type') == 'tool_use']
+            calls = [str(call.get('id') or '') for call in turn.get('tool_calls') or ()]
             if calls:
                 if pending:
                     raise AIError('ai.badRequest', kind='bad_request', detail='tool call without result')
                 pending = set(calls)
-        elif turn.get('role') == 'user':
-            results = [
-                block.get('tool_use_id') for block in turn.get('content') or [] if block.get('type') == 'tool_result'
-            ]
-            for result in results:
-                pending.discard(result)
+        elif turn.get('role') == 'tool':
+            pending.discard(str(turn.get('tool_call_id') or ''))
     if pending:
         raise AIError('ai.badRequest', kind='bad_request', detail='unresolved tool call')
+
+
+def _function_tools(tools: list) -> list:
+    return [
+        {
+            'type': 'function',
+            'function': {
+                'name': tool['name'],
+                'description': tool.get('description') or '',
+                'parameters': tool.get('input_schema') or {'type': 'object', 'properties': {}},
+            },
+        }
+        for tool in tools or ()
+    ]
+
+
+def _server_tool_blocks(call: dict) -> list:
+    """One ``server_tool_calls`` entry → the call block plus its result block."""
+    tool_id = str(call.get('id') or '')
+    kind = str(call.get('kind') or 'search')
+    action = call.get('action') if isinstance(call.get('action'), dict) else {}
+    use = {
+        'type': 'server_tool_use',
+        'id': tool_id,
+        'name': str(call.get('type') or ''),
+        'input': action,
+        'kind': kind,
+    }
+    error = call.get('error') if isinstance(call.get('error'), dict) else None
+    if kind == 'read_link':
+        page = call.get('page') if isinstance(call.get('page'), dict) else {}
+        result = {
+            'type': 'web_fetch_tool_result',
+            'tool_use_id': tool_id,
+            'kind': kind,
+            'content': {
+                'type': 'web_fetch_tool_result_error' if error else 'web_fetch_result',
+                'url': str(page.get('url') or action.get('url') or ''),
+                'content': {
+                    'type': 'document',
+                    'source': {'type': 'text', 'media_type': 'text/plain', 'data': ''},
+                    'title': str(page.get('title') or ''),
+                },
+                'published_at': page.get('published_at'),
+            },
+        }
+        if error:
+            result['content']['error_code'] = str(error.get('code') or '')
+        elif call.get('signature'):
+            result['signature'] = str(call['signature'])
+        return [use, result]
+    sources = call.get('sources') if isinstance(call.get('sources'), list) else []
+    content = [
+        {
+            'type': 'web_search_result',
+            'url': str(row.get('url') or ''),
+            'title': str(row.get('title') or ''),
+            'snippet': str(row.get('snippet') or ''),
+            'site_name': row.get('site_name'),
+            'site_icon': row.get('site_icon'),
+            'page_age': row.get('published_at'),
+        }
+        for row in sources
+        if isinstance(row, dict)
+    ]
+    if error:
+        content = [{'type': 'web_search_tool_result_error', 'error_code': str(error.get('code') or '')}]
+    return [use, {'type': 'web_search_tool_result', 'tool_use_id': tool_id, 'content': content, 'kind': kind}]
 
 
 class DeepSeekProvider(Provider):
     spec = SPEC
 
     def _payload(self, request: dict) -> dict:
-        model = str(request.get('model') or 'deepseek-flash')
+        model = str(request.get('model') or self.spec.models[0].id)
         thinking = bool(request.get('thinking')) and self.spec.supports('thinking', model)
         payload = {
             'model': model,
             'stream': True,
-            'messages': to_wire_messages(request.get('messages') or [], context_text=request.get('context_text') or ''),
+            'stream_options': {'include_usage': True},
+            'messages': to_messages(request.get('messages') or [], context_text=request.get('context_text') or ''),
             'max_tokens': int(request.get('max_tokens') or 8192),
+            # Sent explicitly both ways: omitted, DeepSeek turns thinking ON by default.
             'thinking': {'type': 'enabled' if thinking else 'disabled'},
         }
+        if thinking:
+            payload['reasoning_effort'] = EFFORTS.get(str(request.get('reasoning_effort') or 'high').lower(), 'high')
+        temperature = request.get('temperature')
+        if temperature is not None and not thinking:
+            # The guide: thinking mode ignores it, so sending it there would only mislead.
+            payload['temperature'] = max(0.0, min(2.0, float(temperature)))
         system = str(request.get('system') or '')
         if system:
-            payload['system'] = system
-        if thinking:
-            payload['output_config'] = {'effort': str(request.get('reasoning_effort') or 'high')}
-        tools = []
-        for tool in request.get('tools') or ():
-            tools.append(
-                {
-                    'name': tool['name'],
-                    'description': tool.get('description') or '',
-                    'input_schema': tool.get('input_schema') or {'type': 'object', 'properties': {}},
-                }
-            )
-        server_tools = []
+            payload['messages'] = [{'role': 'system', 'content': system}, *payload['messages']]
+        tools = _function_tools(request.get('tools') or ())
+        server = []
         if request.get('web_search') and self.spec.supports('web_search', model):
-            server_tools.append({'type': 'deepseek_web_search', 'name': 'deepseek_web_search'})
-        if request.get('web_search') and self.spec.supports('read_url', model):
+            server.append({'type': 'deepseek_web_search'})
             # Fetch is part of what the search toggle promises; sending it while the user turned
             # search off would hand the provider a capability the turn did not request.
-            server_tools.append({'type': 'deepseek_read_url', 'name': 'deepseek_read_url'})
-        if server_tools:
-            tools.extend(server_tools)
+            if self.spec.supports('read_url', model):
+                server.append({'type': 'deepseek_read_url'})
         if tools:
             payload['tools'] = tools
+            payload['tool_choice'] = 'auto'
+        if server:
+            payload['tools'] = list(payload.get('tools') or []) + server
+            # `required` and a named tool are refused in thinking mode; `auto` lets the model choose.
+            payload.setdefault('tool_choice', 'auto')
         if request.get('safety') and self.spec.supports('safety', model):
             payload['safety_check'] = {'level': str(request.get('safety') or 'high')}
         if request.get('title') and self.spec.supports('title', model):
@@ -218,7 +347,6 @@ class DeepSeekProvider(Provider):
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {request.get("api_key") or ""}',
             'User-Agent': 'CaiXiHui-AI/1.0',
-            'anthropic-beta': 'files-api-2025-04-14',
         }
 
     def stream(self, request: dict):
@@ -230,88 +358,101 @@ class DeepSeekProvider(Provider):
             int(request.get('timeout') or 180),
             request.get('cancel_event'),
         )
-        tool_slots: dict[int, dict] = {}
-        stop_reason = ''
+        tool_calls: dict[int, dict] = {}
+        server_calls: list = []
+        annotations: list = []
+        finish_reason = ''
         try:
-            for name, frame in sse_events(response, request.get('cancel_event')):
-                if name == 'error' or frame.get('type') == 'error':
-                    detail = frame.get('error') if isinstance(frame, dict) else frame
-                    raise AIProviderError('ai.server', kind='network', detail=str(detail)[:300])
-                kind = str(frame.get('type') or '')
-                if kind == 'ping':
+            for _name, frame in data_frames(response, request.get('cancel_event')):
+                if not isinstance(frame, dict):
                     continue
-                if kind == 'message_start':
-                    continue
-                if kind == 'content_block_start':
-                    index = int(frame.get('index') or 0)
-                    block = frame.get('content_block') or {}
-                    block_type = block.get('type')
-                    if block_type == 'thinking':
-                        if block.get('thinking'):
-                            yield event('thinking_delta', text=str(block['thinking']))
-                    elif block_type == 'text':
-                        if block.get('text'):
-                            yield event('text_delta', text=str(block['text']))
-                    elif block_type in ('server_tool_use', 'web_search_tool_result', 'web_fetch_tool_result'):
-                        yield event('server_tool', block=block)
-                    elif block_type == 'tool_use':
-                        tool_slots[index] = {
-                            'id': str(block.get('id') or ''),
-                            'name': str(block.get('name') or ''),
-                            'input': block.get('input') if isinstance(block.get('input'), dict) else {},
-                            'arguments': '',
-                        }
-                    continue
-                if kind == 'content_block_delta':
-                    index = int(frame.get('index') or 0)
-                    delta = frame.get('delta') or {}
-                    delta_type = delta.get('type')
-                    if delta_type == 'thinking_delta':
-                        yield event('thinking_delta', text=str(delta.get('thinking') or ''))
-                    elif delta_type == 'text_delta':
-                        yield event('text_delta', text=str(delta.get('text') or ''))
-                    elif delta_type == 'signature_delta':
-                        yield event('thinking_signature', signature=str(delta.get('signature') or ''))
-                    elif delta_type == 'citations_delta':
-                        yield event('citation', citation=delta.get('citation') or {})
-                    elif delta_type == 'input_json_delta' and index in tool_slots:
-                        tool_slots[index]['arguments'] += str(delta.get('partial_json') or '')
-                    continue
-                if kind == 'content_block_stop':
-                    index = int(frame.get('index') or 0)
-                    slot = tool_slots.pop(index, None)
-                    if slot is not None:
-                        arguments = slot.get('input') or {}
-                        if slot.get('arguments'):
-                            try:
-                                parsed = json.loads(slot['arguments'])
-                            except ValueError:
-                                parsed = {}
-                            if isinstance(parsed, dict):
-                                arguments = parsed
-                        yield event(
-                            'tool_call',
-                            id=slot['id'],
-                            name=slot['name'],
-                            arguments=arguments,
-                            raw_arguments=slot.get('arguments') or '',
-                        )
-                    continue
-                if kind == 'message_delta':
-                    delta = frame.get('delta') or {}
-                    stop_reason = str(delta.get('stop_reason') or '')
-                    if frame.get('usage'):
-                        yield event('usage', usage=frame['usage'])
+                error = frame.get('error')
+                if error:
+                    # A generation that fails after the first byte still answers 200, then ends with
+                    # a chunk that carries `error` and no choices, and never sends [DONE].
+                    detail = error.get('message') if isinstance(error, dict) else str(error)
+                    raise AIProviderError('ai.server', kind='network', detail=str(detail or error)[:300])
+                if frame.get('usage'):
+                    yield event('usage', usage=frame['usage'])
+                for choice in frame.get('choices') or ():
+                    delta = choice.get('delta') or {}
+                    reasoning = delta.get('reasoning_content')
+                    if reasoning:
+                        yield event('thinking_delta', text=str(reasoning))
+                    content = delta.get('content')
+                    if content:
+                        yield event('text_delta', text=str(content))
+                    for call in delta.get('tool_calls') or ():
+                        index = int(call.get('index') or 0)
+                        slot = tool_calls.setdefault(index, {'id': '', 'name': '', 'arguments': ''})
+                        if call.get('id'):
+                            slot['id'] = str(call['id'])
+                        function = call.get('function') or {}
+                        if function.get('name'):
+                            slot['name'] += str(function['name'])
+                        if function.get('arguments'):
+                            slot['arguments'] += str(function['arguments'])
+                    # The complete server-tool history and the citations are sent once, with the
+                    # chunk that carries `finish_reason`.
+                    if delta.get('server_tool_calls'):
+                        server_calls = list(delta['server_tool_calls'])
+                    if delta.get('annotations'):
+                        annotations = list(delta['annotations'])
                     if delta.get('title'):
                         yield event('title', title=str(delta['title']))
-                    if stop_reason == 'refusal':
-                        yield event('refusal', reason=str(delta.get('stop_details') or ''))
+                    if choice.get('finish_reason'):
+                        finish_reason = str(choice['finish_reason'])
+            for block in self._replay_blocks(server_calls):
+                yield event('server_tool', block=block)
+            for slot in (tool_calls[index] for index in sorted(tool_calls)):
+                if not slot['name']:
                     continue
-                if kind == 'message_stop':
-                    break
-            yield event('done', stop_reason=stop_reason or 'end_turn')
+                try:
+                    arguments = json.loads(slot['arguments'] or '{}')
+                except ValueError:
+                    arguments = {}
+                yield event(
+                    'tool_call',
+                    id=slot['id'] or '',
+                    name=slot['name'],
+                    arguments=arguments if isinstance(arguments, dict) else {},
+                    raw_arguments=slot['arguments'],
+                )
+            for citation in self._citations(annotations):
+                yield event('citation', citation=citation)
+            yield event('done', stop_reason=STOP_REASONS.get(finish_reason, 'end_turn'))
         finally:
             response.close()
+
+    @staticmethod
+    def _replay_blocks(server_calls: list) -> list:
+        """Flatten the final ``server_tool_calls`` (steps of calls) into our block vocabulary."""
+        blocks = []
+        for step in server_calls or ():
+            for call in (step or {}).get('calls') or ():
+                blocks.extend(_server_tool_blocks(call))
+        return blocks
+
+    @staticmethod
+    def _citations(annotations: list) -> list:
+        out = []
+        for row in annotations or ():
+            if not isinstance(row, dict) or row.get('type') != 'url_citation':
+                continue
+            data = row.get('url_citation') or {}
+            url = str(data.get('url') or '')
+            if not url:
+                continue
+            out.append(
+                {
+                    'type': 'web_search_result_location',
+                    'url': url,
+                    'title': str(data.get('title') or url),
+                    'start_index': data.get('start_index'),
+                    'end_index': data.get('end_index'),
+                }
+            )
+        return out
 
     def list_models(self, api_key: str = '', host: str = '') -> list:
         if not api_key:
@@ -334,8 +475,12 @@ class DeepSeekProvider(Provider):
         except ValueError as exc:
             raise AIProviderError('ai.badResponse', kind='bad_response', detail=response.text[:200]) from exc
         rows = payload.get('data') if isinstance(payload, dict) else payload
+        labels = {model.id: model.label for model in self.spec.models}
         return [
-            {'id': str(row['id']), 'label': str(row.get('label') or row['id'])}
+            {
+                'id': str(row['id']),
+                'label': str(row.get('label') or row.get('name') or labels.get(str(row['id'])) or row['id']),
+            }
             for row in rows or ()
             if isinstance(row, dict) and row.get('id')
         ]

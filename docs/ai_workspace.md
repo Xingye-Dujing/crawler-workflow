@@ -31,10 +31,22 @@ POST /api/ai/chat → AgentService
 
 | id | 协议 | 能力 |
 |---|---|---|
-| `deepseek` | Messages API | thinking、web search、读链接、安全、标题、文件、工具、提问 |
+| `deepseek` | 原生 Chat Completions（`api.deepseek.com/chat/completions`） | thinking、web search、读链接、安全、标题、文件、工具、提问 |
 | `opencode_go` | OpenAI Chat Completions | thinking、工具、提问、视觉；无服务端联网/文件 |
 | `openrouter` | OpenAI Chat Completions | 视模型而定；无服务端工具 |
 | `ollama` | 本机 `/api/chat` | 仅聊天；云端按名字拒绝 |
+
+DeepSeek 走它自己的原生协议，不走 Anthropic 兼容层：`thinking` 显式给 `enabled/disabled`（缺省即开启），强度用
+`reasoning_effort`，思考文本在 `delta.reasoning_content`，用量随最后一个 chunk（`stream_options.include_usage`）。
+带 `tools` 的轮次必须回传此前每一步的 `reasoning_content`，否则 API 返回 400；联网工具 `deepseek_web_search` /
+`deepseek_read_url` 是服务端工具，步骤通过 `choice.server_tool_event` 下发，完整的 `server_tool_calls`（含还原网页的
+`signature`）在最后一个 chunk 里一次给全。流式按 UTF-8 **增量**解码（`stream_lines`）：按 chunk 用 `iter_lines` 解会用
+ISO-8859-1，中文变火星文、跨 chunk 的多字节字符把 JSON 截断（这就是曾经那句“供应商返回了无法解析的数据”）。
+
+**省 token 的三条规矩**：大表格（≥128 KB 或超过 200 行）上传时直接进数据集，前端得到一个 `@` 数据集引用——AI 用
+`dataset_peek` 只读前几行，绝不把整张表塞进提示词；单个附件超过 4 MB 按名字拒绝，并提示改走数据集或拆分；`@` 引用
+的导出文件/工作流只在服务端展开有界文本（每项 1200 字符、整轮 6000 字符）。同一份文件在不同会话里上传时按 sha256
+复用已上传的 `file_id`，不重复上传、不重复解析计费。
 
 `backend/ai/providers/registry.py` 是唯一目录，行分析器 `analyzers/llm_client.py` 也读它。
 Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-Provider-Key` 请求头，绝不进 URL——反代的访问日志会记整行请求），服务端仅在本次调用持有；`ai.db` 与日志绝不写入 Key。
@@ -88,6 +100,30 @@ AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分�
   桌面版没有解释器时先给出下载计划，用户同意后仅 Windows 下载官方嵌入式包；其他系统按名字拒绝。
 - **门槛**：仅本地/桌面；`ai_allow_python` 关闭时工具与节点都拒绝；云端按名字拒绝。
 
+## 5.5 本机 Harness：工作文件夹、命令、工作流直载
+
+AI 工作区是采析绘自己的 agent/harness，不只是问答：
+
+- **合法词汇进提示词**：`backend/ai/vocabulary.py` 从 `nodes/catalog.py`+`nodes/defaults.py`、
+  `services.analysis.contracts.STEP_PARAMS`、`services.charts.registry.SPECS`、`capabilities.registry`
+  生成一份稳定文本（节点类型与参数种子、平台模式必填字段、算子契约、图表必需列、工作流文件形状），
+  进系统提示词前缀（可被 DeepSeek 前缀缓存命中）。`workflow_schema`/`workflow_validate` 工具给出同一份答案。
+- **草案先验证再落地**：`ai/workflow_draft.py` 的结构检查 + `WorkflowEngine.validate()` 的运行时检查
+  合成一个答案；`present_artifact`/`apply_workflow` 不合法就按名字拒绝并列出节点。
+- **直接载入/运行**：`apply_workflow` 校验 → 写进本账号 `data/workflows/`（重名加序号，不覆盖）→ 发
+  `workflow_apply` 事件给页面；页面用真实 `workflow.loadFromJSON()` 载入，`run=true` 时接着走正常 Run 通道。
+  失败时页面把原因作为“自动反馈”消息送回 AI，让它改完再试。
+- **工作文件夹**：`ai/workspace.py`，每账号存在 `ai.db` 的 `prefs` 表；所有路径解析后必须留在根内，
+  `..`/绝对路径/越界符号链接按名字拒绝。页面顶栏 chip 打开目录选择器（服务端 `/api/ai/workspace/browse`）。
+- **本地文件 → 数据集 / Python / 命令**：`workspace_import` 走上传面板同一套解析器；`run_cmd` 不是 shell，
+  只接受白名单可执行文件、无管道/重定向、超时与输出上限，工作目录为所选文件夹（未选时用仓库根/安装根）。
+- **反馈闭环**：`app_errors` 读后端 `logs/app.log` 尾部 + 最近失败/部分完成运行的节点错误与控制台；
+  运行监控可把结果作为新一轮消息送回。
+- **工具预算不是硬墙**：默认 24 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
+  `ask_user_question` 通道询问“继续/到此为止”，回答即续跑一轮，按钮/选项照常进入历史。
+- **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
+  参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
+
 ## 6. 桌面版、网页版与云端
 
 | 能力 | 桌面版 | 本地网页版 | 云端网页版 |
@@ -95,6 +131,7 @@ AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分�
 | 会话、技能、声明式插件、文件上传、搜索/抓页、监控 | ✅ | ✅ | ✅ |
 | DeepSeek / OpenCode Go / OpenRouter | ✅ | ✅ | ✅ |
 | 本机 Ollama、用户本机文件 | ✅ | ✅ | ❌ 按名字拒绝 |
+| 工作文件夹（读/写/导入数据集）、白名单命令 | ✅ | ✅ | ❌ 按名字拒绝 |
 | Python 库 / 执行 / 节点（需 `ai_allow_python`） | ✅ | ✅ | ❌ 按名字拒绝 |
 | 读仓库源码（`developer`） | 只读 `source/` 快照（若构建携带） | ✅（需 `ai_allow_code_context`） | ❌ 按名字拒绝 |
 | 本地代码插件 | ✅ | ✅ | ❌ 按名字拒绝 |
@@ -133,12 +170,16 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | POST | `/api/ai/answer` | 恢复暂停的问题 |
 | POST | `/api/ai/stop` | 取消事件 |
 | POST | `/api/ai/context` | 上下文预览 |
+| GET/POST | `/api/ai/workspace` | 工作文件夹状态 / 设置 |
+| GET | `/api/ai/workspace/browse` | 目录选择器（只列目录） |
+| POST | `/api/ai/workflow/validate` | 工作流草案的结构 + 引擎校验 |
 | GET | `/api/ai/usage` | 本账号 token 汇总 |
 | GET/POST | `/api/ai/skills` | 技能列表 / 保存 |
 | POST | `/api/ai/skills/<id>/fork` | Fork 内置技能 |
 | GET/POST | `/api/ai/plugins` | 插件列表 / 安装 |
 | POST | `/api/ai/plugins/<id>/enable` | 启用/禁用 |
-| POST | `/api/ai/files` | 上传文件（DeepSeek Files API） |
+| POST | `/api/ai/files` | 上传文件（DeepSeek Files API）；大表格改登记为数据集并回 `dataset` |
+| GET | `/api/ai/references` | `@` 引用候选：数据集 / 导出产物 / 工作流文件 / 之前上传的文件 |
 | GET | `/api/ai/conversations/<id>/files` | 会话附件 |
 | DELETE | `/api/ai/files/<id>` | 删除远端文件、本地副本与行 |
 | POST | `/api/ai/search` / `/api/ai/fetch` | 独立搜索 / 抓页 |

@@ -218,6 +218,7 @@ def tool_run_console(args: dict, _ctx: dict) -> dict:
 
 
 def tool_chart_catalog(_args: dict, _ctx: dict) -> dict:
+    from ai import vocabulary
     from services.charts.registry import SPECS
 
     return {
@@ -230,14 +231,16 @@ def tool_chart_catalog(_args: dict, _ctx: dict) -> dict:
                 'latex_buildable': spec.latex_buildable,
             }
             for spec in SPECS
-        ]
+        ],
+        'contracts': vocabulary.chart_catalog(),
     }
 
 
 def tool_analysis_catalog(_args: dict, _ctx: dict) -> dict:
+    from ai import vocabulary
     from services.analysis.ops import OPS
 
-    return {'ops': sorted(OPS), 'count': len(OPS)}
+    return {'ops': sorted(OPS), 'count': len(OPS), 'contracts': vocabulary.analysis_catalog()}
 
 
 def tool_list_runs(_args: dict, _ctx: dict) -> dict:
@@ -444,6 +447,146 @@ def tool_python_write(args: dict, _ctx: dict) -> dict:
     return python_runtime.write_file(str(args.get('path') or ''), str(args.get('content') or ''))
 
 
+def _files_ready() -> None:
+    """The Harness tools exist only where the server can reach the user's machine."""
+    from ai import environment
+
+    if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
+        raise AIError('ai.workspaceCloud', kind='capability')
+
+
+def tool_workflow_schema(_args: dict, _ctx: dict) -> dict:
+    """The whole legal vocabulary: node types with seed params, the file shape and the rules."""
+    from ai import vocabulary
+
+    return vocabulary.workflow_schema()
+
+
+def tool_workspace_info(_args: dict, _ctx: dict) -> dict:
+    from ai import workspace
+
+    return workspace.describe()
+
+
+def tool_workspace_set(args: dict, _ctx: dict) -> dict:
+    from ai import workspace
+
+    return workspace.set_folder(str(args.get('path') or ''))
+
+
+def tool_workspace_list(args: dict, _ctx: dict) -> dict:
+    from ai import workspace
+
+    return workspace.list_dir(
+        str(args.get('path') or ''),
+        kind=str(args.get('root') or 'folder'),
+        limit=_int_arg(args.get('limit'), 200, 1, 500),
+    )
+
+
+def tool_workspace_read(args: dict, _ctx: dict) -> dict:
+    from ai import workspace
+
+    return workspace.read_text(
+        str(args.get('path') or ''),
+        kind=str(args.get('root') or 'folder'),
+        max_bytes=_int_arg(args.get('max_bytes'), workspace.MAX_READ_BYTES, 200, workspace.MAX_READ_BYTES),
+    )
+
+
+def tool_workspace_write(args: dict, _ctx: dict) -> dict:
+    _files_ready()
+    from ai import workspace
+
+    return workspace.write_text(str(args.get('path') or ''), str(args.get('content') or ''))
+
+
+def tool_workspace_import(args: dict, _ctx: dict) -> dict:
+    """A local table file → a dataset this account owns, parsed by the upload panel's parsers."""
+    _files_ready()
+    from ai import workspace
+
+    return workspace.import_table(str(args.get('path') or ''), str(args.get('name') or ''))
+
+
+def tool_run_command(args: dict, _ctx: dict) -> dict:
+    _files_ready()
+    from ai import workspace
+
+    return workspace.run_command(
+        str(args.get('command') or ''),
+        cwd=str(args.get('cwd') or ''),
+        timeout=_int_arg(args.get('timeout'), 120, 1, workspace.MAX_TIMEOUT),
+    )
+
+
+def tool_workflow_validate(args: dict, _ctx: dict) -> dict:
+    from ai import workflow_draft
+
+    payload = args.get('workflow') if isinstance(args.get('workflow'), dict) else args.get('payload')
+    if not isinstance(payload, dict):
+        raise AIError('ai.toolRefused', kind='bad_request', tool='workflow_validate', reason='workflow is missing')
+    return workflow_draft.validate(payload)
+
+
+def tool_app_errors(args: dict, _ctx: dict) -> dict:
+    """The last thing the app said: backend log tail, failed runs and their console lines.
+
+    This is the feedback half of the harness. A run that fails leaves a per-node error and console
+    lines in ``runs.db``; a backend bug leaves a traceback in ``logs/app.log``. Both are read here,
+    bounded, so the assistant can fix its own proposal without the user copying a stack trace.
+    """
+    import os
+
+    limit = _int_arg(args.get('lines'), 80, 10, 300)
+    report: dict = {'log_tail': [], 'runs': [], 'log_path': ''}
+    try:
+        log_path = os.path.join(Config.LOG_DIR, 'app.log')
+        report['log_path'] = log_path
+        if os.path.isfile(log_path):
+            with open(log_path, encoding='utf-8', errors='replace') as handle:
+                rows = handle.readlines()[-limit * 3 :]
+            report['log_tail'] = [line.rstrip()[-400:] for line in rows if line.strip()][-limit:]
+    except OSError as exc:
+        report['log_error'] = str(exc)[:200]
+    try:
+        from runtime.stores import get_run_store
+
+        run_store = get_run_store()
+        rows = run_store.run_ledger()[:12]
+        for run in rows:
+            status = str(run.get('status') or '')
+            if status not in ('failed', 'partial', 'stopped', 'error', 'cancelled'):
+                continue
+            entry = {
+                'run_id': run.get('id'),
+                'workflow': run.get('workflow_name') or '',
+                'status': status,
+                'finished_at': run.get('finished_at') or '',
+                'nodes': [],
+                'console': [],
+            }
+            try:
+                statuses = run_store.node_statuses(str(run.get('id') or ''))
+                entry['nodes'] = [
+                    {'node': node_id, 'status': node.get('status'), 'error': str(node.get('error') or '')[:300]}
+                    for node_id, node in statuses.items()
+                    if str(node.get('status') or '') in ('failed', 'partial') or node.get('error')
+                ][:12]
+                entry['console'] = [
+                    str(row.get('line') or '')[:300]
+                    for row in (run_store.read_log(str(run.get('id')), limit=20).get('rows') or [])
+                ]
+            except Exception as exc:  # a run without a console is still a failed run
+                entry['console'] = [f'（无法读取控制台：{str(exc)[:120]}）']
+            report['runs'].append(entry)
+            if len(report['runs']) >= 4:
+                break
+    except Exception as exc:
+        report['runs_error'] = str(exc)[:200]
+    return report
+
+
 ASK_USER_SCHEMA = {
     'type': 'object',
     'properties': {
@@ -515,6 +658,22 @@ PRESENT_SCHEMA = {
         'summary': {'type': 'string'},
     },
     'required': ['title', 'kind'],
+}
+
+
+APPLY_WORKFLOW_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'name': {'type': 'string', 'description': 'Saved workflow name. A clash gets a numeric suffix.'},
+        'workflow': {
+            'type': 'object',
+            'description': 'The workflow file: {nodes:[{id,type,x,y,title,params}], connections:[{from,to}], '
+            'settings:{mode,headless,disabledTypes}}. Read workflow_schema first.',
+        },
+        'run': {'type': 'boolean', 'description': 'Start the run right after it loads. Only when the user asked.'},
+        'summary': {'type': 'string'},
+    },
+    'required': ['workflow'],
 }
 
 
@@ -760,6 +919,126 @@ TOOLS = {
             permission='write:python',
         ),
         ToolSpec(
+            'workflow_schema',
+            'Read the complete legal vocabulary: every node type with its seed parameters, the workflow '
+            'file shape and the rules. Call this before writing a workflow draft.',
+            {'type': 'object', 'properties': {}},
+            handler=tool_workflow_schema,
+            permission='read:project',
+        ),
+        ToolSpec(
+            'workflow_validate',
+            'Check a workflow draft before presenting it: node types, params shape, wires and the '
+            'engine’s own run-time validation. Returns every problem by name.',
+            {
+                'type': 'object',
+                'properties': {'workflow': {'type': 'object'}},
+                'required': ['workflow'],
+            },
+            handler=tool_workflow_validate,
+            permission='read:project',
+        ),
+        ToolSpec(
+            'workspace_info',
+            'Read the working folder this account chose, the app root commands default to, and the '
+            'allowed executables.',
+            {'type': 'object', 'properties': {}},
+            handler=tool_workspace_info,
+            permission='read:files',
+        ),
+        ToolSpec(
+            'workspace_set',
+            'Set this account’s working folder. Absolute path to an existing directory; "" clears it.',
+            {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path']},
+            handler=tool_workspace_set,
+            permission='write:files',
+        ),
+        ToolSpec(
+            'workspace_list',
+            'List one directory inside the working folder (or the app root with root="app").',
+            {
+                'type': 'object',
+                'properties': {
+                    'path': {'type': 'string'},
+                    'root': {'type': 'string', 'enum': ['folder', 'app']},
+                    'limit': {'type': 'integer'},
+                },
+            },
+            handler=tool_workspace_list,
+            permission='read:files',
+        ),
+        ToolSpec(
+            'workspace_read',
+            'Read one text file inside the working folder or the app root. Bounded and reports truncation.',
+            {
+                'type': 'object',
+                'properties': {
+                    'path': {'type': 'string'},
+                    'root': {'type': 'string', 'enum': ['folder', 'app']},
+                    'max_bytes': {'type': 'integer'},
+                },
+                'required': ['path'],
+            },
+            handler=tool_workspace_read,
+            permission='read:files',
+        ),
+        ToolSpec(
+            'workspace_write',
+            'Write a UTF-8 text file inside the working folder (the app tree is read-only).',
+            {
+                'type': 'object',
+                'properties': {'path': {'type': 'string'}, 'content': {'type': 'string'}},
+                'required': ['path', 'content'],
+            },
+            handler=tool_workspace_write,
+            permission='write:files',
+        ),
+        ToolSpec(
+            'workspace_import',
+            'Import a local CSV/TSV/Excel/JSON/bibliographic file from the working folder as a dataset '
+            'this account owns. Returns the dataset_id and columns.',
+            {
+                'type': 'object',
+                'properties': {'path': {'type': 'string'}, 'name': {'type': 'string'}},
+                'required': ['path'],
+            },
+            handler=tool_workspace_import,
+            permission='write:files',
+        ),
+        ToolSpec(
+            'run_cmd',
+            'Run ONE allow-listed executable in the working folder (or the app root when no folder is '
+            'chosen). No shell, no pipes, no chaining; args are passed as a list. Returns exit code, '
+            'stdout and stderr — use it to run a saved script, git status or a test.',
+            {
+                'type': 'object',
+                'properties': {
+                    'command': {'type': 'string'},
+                    'cwd': {'type': 'string'},
+                    'timeout': {'type': 'integer'},
+                },
+                'required': ['command'],
+            },
+            handler=tool_run_command,
+            permission='exec:cmd',
+        ),
+        ToolSpec(
+            'app_errors',
+            'Read the app’s own feedback: the backend log tail and the most recent failed/partial runs '
+            'with their node errors and console lines. Use it before diagnosing or re-proposing.',
+            {'type': 'object', 'properties': {'lines': {'type': 'integer'}}},
+            handler=tool_app_errors,
+            permission='read:project',
+        ),
+        ToolSpec(
+            'apply_workflow',
+            'Validate a workflow draft, SAVE it as this account’s workflow file and load it onto the '
+            'canvas (optionally starting a run). Every problem is refused by name before anything loads.',
+            APPLY_WORKFLOW_SCHEMA,
+            permission='artifact',
+            control=True,
+        ),
+        ToolSpec(
             'present_artifact',
             'Present a workflow draft, analysis plan, chart spec, report, skill draft, plugin manifest or a '
             'run monitor. The user applies it; kind="monitor" payload = {run_id, events, node_ids, statuses, '
@@ -772,7 +1051,7 @@ TOOLS = {
 }
 
 
-def schemas(allow_code: bool = False, allow_python: bool = False) -> list:
+def schemas(allow_code: bool = False, allow_python: bool = False, allow_files: bool = False) -> list:
     out = []
     scope = account_context.scope_key()
     for tool in TOOLS.values():
@@ -782,6 +1061,8 @@ def schemas(allow_code: bool = False, allow_python: bool = False) -> list:
         if tool.permission == 'read:code' and not allow_code:
             continue
         if tool.permission in ('read:python', 'write:python', 'exec:python') and not allow_python:
+            continue
+        if tool.permission in ('read:files', 'write:files', 'exec:cmd') and not allow_files:
             continue
         out.append(tool.schema())
     return out
@@ -820,4 +1101,9 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
             raise AIError('ai.pythonCloud', kind='capability')
         if not (get_setting('ai_allow_python') and environment.capabilities()['code_plugins']):
             raise AIError('ai.pythonDisabled', kind='capability')
+    if tool.permission in ('read:files', 'write:files', 'exec:cmd'):
+        from ai import environment
+
+        if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
+            raise AIError('ai.workspaceCloud', kind='capability')
     return tool.handler(args or {}, ctx or {})

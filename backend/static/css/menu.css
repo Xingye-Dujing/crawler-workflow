@@ -469,7 +469,11 @@ body.style-menu-open #top-menu {
 .profile-item > .profile-state:first-child {
   flex-basis: 100%;
 }
-.ai-hint {
+/* The 调用方式说明 block inside the settings menu. Its own class name: `.ai-hint` is the AI
+   workspace's plain note, and sharing the name made every hint there inherit this dashed box
+   (border, 8px padding and a 4px top margin are separate properties, so a later plain
+   `.ai-hint { color; font-size }` does not undo them — measured in the side panel). */
+.menu-hint {
   margin-top: 4px;
   padding: 8px;
   border: 1px dashed var(--line);
@@ -478,14 +482,14 @@ body.style-menu-open #top-menu {
   line-height: 1.55;
   color: var(--text-dim);
 }
-.ai-hint > div {
+.menu-hint > div {
   margin-bottom: 5px;
 }
-.ai-hint-title {
+.menu-hint-title {
   font-weight: 600;
   color: var(--text);
 }
-.ai-hint-note {
+.menu-hint-note {
   margin-bottom: 0 !important;
   font-size: 10px;
   color: var(--text-dim);

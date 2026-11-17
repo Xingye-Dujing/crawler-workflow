@@ -153,6 +153,11 @@ const seeded = {
     out.unknown_type_shows = w.x.nodeTypeWord('time_machine');
     out.unknown_raw_key = html.includes('nodeType.time_machine');
     out.unknown_lineage = html.includes('node-output-cols');
+    /* An unknown type must not be reported as a missing translation: `t()` logs one per key, and
+       a title like 可视化 (a name, not a type id) produced “missing zh string: nodeType.可视化”. */
+    out.unknown_missing = w.x.I18n.missing().filter(function (key) {
+        return String(key).indexOf('nodeType.') === 0;
+    });
 }
 
 out.expected_columns = FUSE_COLUMNS.length;

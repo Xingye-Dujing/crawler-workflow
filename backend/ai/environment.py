@@ -78,6 +78,11 @@ def capabilities() -> dict:
         'user_files': local,
         'code_plugins': local,
         'python_exec': local,
+        # The harness powers: a chosen working folder, a local file → dataset import, and one
+        # allow-listed command in it. A cloud host has no user machine, so all three are false there.
+        'workspace_folder': local,
+        'local_datasets': local,
+        'cmd_exec': local,
         'local_source': bool(code_root()),
         # Shape flags for the page.
         'cloud': runtime == 'cloud',
@@ -100,13 +105,18 @@ def prompt_line() -> str:
             'is complete here: you may rely on local files the user attaches, a local Ollama daemon, '
             'local code plugins and a read-only source snapshot, plus the Python workspace when the '
             'user enabled it. You can read and cite the source snapshot, but you cannot change the '
-            'running program; a reusable Python script is the extension path.'
+            'running program; a reusable Python script is the extension path. A chosen working folder '
+            'is read/write; commands run in it or in the install folder, one allow-listed executable '
+            'at a time, never through a shell.'
         )
     if runtime == 'local_web':
         return (
             "Environment: the local web checkout, running on the user's machine. The AI workspace "
             'is complete here: you may rely on local files, a local Ollama daemon, local code '
-            'plugins and the repository source.'
+            'plugins and the repository source. You are a harness for 采析绘: the user can pick a '
+            'working folder, and you may list/read/write files there, import a local table as a '
+            'dataset, run the saved Python scripts, and run one allow-listed command in that folder '
+            '(no shell, no pip installs of unknown packages). Say what you touched.'
         )
     return (
         'Environment: a shared cloud host. The AI workspace is complete here through the provider '

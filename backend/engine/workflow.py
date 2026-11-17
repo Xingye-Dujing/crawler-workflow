@@ -21,6 +21,20 @@ from services.pool import selector
 logger = logging.getLogger(__name__)
 
 
+def node_params(node: dict) -> dict:
+    """A node's params as a mapping — the ONE reader, for a file whose params are not an object.
+
+    An AI-written or hand-edited workflow can carry ``"params": "去重，按评论内容"`` (a sentence,
+    not an object). Every caller here assumed a dict, so the first ``.get`` raised
+    ``AttributeError: 'str' object has no attribute 'get'`` inside
+    ``/api/workflow/diagnostics`` and ``/api/runs/resumable`` — a 500 every few seconds, with
+    nothing naming the file. Reading through this helper keeps the surface alive; the invalid
+    shape is refused WHERE IT IS REPORTED (``validate_workflow``) rather than mid-computation.
+    """
+    params = node.get('params') if isinstance(node, dict) else None
+    return params if isinstance(params, dict) else {}
+
+
 def is_effectively_enabled(node: dict, disabled_types: set) -> bool:
     """Whether *node* takes part in a run, or is treated as if it were not on the canvas.
 
@@ -29,7 +43,7 @@ def is_effectively_enabled(node: dict, disabled_types: set) -> bool:
     ``enabled`` reads as the default (on) through ``as_bool`` — never a ``== True`` test,
     which would flip a real ``False`` JSON value the wrong way (see the rule this honours).
     """
-    if not as_bool((node.get('params') or {}).get('enabled'), True):
+    if not as_bool(node_params(node).get('enabled'), True):
         return False
     return str(node.get('type') or '') not in (disabled_types or set())
 

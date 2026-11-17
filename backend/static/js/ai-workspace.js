@@ -32,6 +32,16 @@ const AIWorkspace = {
     _usage: null,
     _contextMeta: null,
     _attachments: [],
+    /* Things named with `@` in this draft: datasets, export files, workflow files and files
+       uploaded in an earlier conversation. Sent as ids; the server resolves them. */
+    _refs: [],
+    /* The "what will be sent" text while it is open; one preview, toggled by its own button. */
+    _contextPreview: '',
+    _refResults: [],
+    _refIndex: 0,
+    _refOpen: false,
+    _refQuery: '',
+    _refTimer: null,
     _uploading: false,
     _studioTab: 'skills',
     _editingSkill: null,
@@ -63,7 +73,12 @@ const AIWorkspace = {
             sessionsBtn: 'ai-history-btn',
             fullBtn: 'ai-full-btn',
             attachments: 'ai-attachments',
+            refs: 'ai-refs',
+            refMenu: 'ai-ref-menu',
             attachBtn: 'ai-attach-btn',
+            workspaceBtn: 'ai-workspace-btn',
+            folderDialog: 'ai-folder-dialog',
+            jump: 'ai-jump',
         };
         for (const [key, id] of Object.entries(ids)) this._dom[key] = document.getElementById(id);
         const root = this._dom.root;
@@ -80,8 +95,20 @@ const AIWorkspace = {
             this._dom.sessionsBtn.classList.toggle('active', this._sessionsOpen);
         }
         if (this._dom.input) {
+            this._dom.input.addEventListener('input', () => this._onRefInput());
             this._dom.input.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                /* `nativeEvent` is a jQuery field; a DOM KeyboardEvent has none, so the old guard
+                   threw on EVERY keypress in the composer (uncaught TypeError) and Enter never
+                   sent. An IME's composing Enter is `isComposing` (or keyCode 229 on older
+                   browsers) — that is the one this must not eat. */
+                const composing = event.isComposing === true || event.keyCode === 229;
+                if (this._refOpen && this._onRefKey(event, composing)) return;
+                if (event.key === 'Escape' && this._sending) {
+                    event.preventDefault();
+                    this.stop();
+                    return;
+                }
+                if (event.key === 'Enter' && !event.shiftKey && !composing) {
                     event.preventDefault();
                     this.send();
                 }
@@ -93,6 +120,7 @@ const AIWorkspace = {
                (switching conversations, refreshing context and stopping a monitor were inert). */
             this._dom.root.addEventListener('click', (event) => this._onClick(event));
             this._dom.root.addEventListener('change', (event) => this._onChange(event));
+            if (this._dom.chat) this._dom.chat.addEventListener('scroll', () => this._onChatScroll());
             this._dom.root.addEventListener('keydown', (event) => {
                 if (event.key === 'Enter' && !event.shiftKey && event.target && event.target.matches('textarea[data-ai-custom]')) {
                     event.preventDefault();
@@ -102,6 +130,7 @@ const AIWorkspace = {
             });
         }
         this._bindDock();
+        this._bindColumns();
         this._renderWelcome();
         this._renderComposer();
     },
@@ -118,6 +147,45 @@ const AIWorkspace = {
         if (!this._dom.root) return;
         this._dom.root.classList.toggle('narrow', !this._full && width < 480);
         this._dom.root.classList.toggle('tiny', !this._full && width < 390);
+    },
+
+    /* The two sidebars are draggable, each within a range that keeps its content readable. The
+       width lives in a CSS variable so the grid follows the pointer without a repaint rule, and
+       it is remembered per browser like the panel's own width. */
+    _bindColumns() {
+        const root = this._dom.root;
+        if (!root) return;
+        const saved = AISettings.load();
+        let sessions = Math.max(150, Math.min(360, Number(saved.sessionsWidth) || 190));
+        let side = Math.max(200, Math.min(440, Number(saved.sideWidth) || 260));
+        const apply = () => {
+            root.style.setProperty('--ai-sessions-w', sessions + 'px');
+            root.style.setProperty('--ai-side-w', side + 'px');
+        };
+        apply();
+        Array.from(root.querySelectorAll('[data-ai-resize]')).forEach((grip) => {
+            grip.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
+                const kind = String(grip.getAttribute('data-ai-resize') || '');
+                const startX = event.clientX;
+                const start = kind === 'sessions' ? sessions : side;
+                const move = (moveEvent) => {
+                    if (kind === 'sessions') {
+                        sessions = Math.max(150, Math.min(360, start + (moveEvent.clientX - startX)));
+                    } else {
+                        side = Math.max(200, Math.min(440, start + (startX - moveEvent.clientX)));
+                    }
+                    apply();
+                };
+                const up = () => {
+                    AISettings.save({ sessionsWidth: sessions, sideWidth: side });
+                    document.removeEventListener('pointermove', move);
+                    document.removeEventListener('pointerup', up);
+                };
+                document.addEventListener('pointermove', move);
+                document.addEventListener('pointerup', up);
+            });
+        });
     },
 
     _bindDock() {
@@ -170,6 +238,27 @@ const AIWorkspace = {
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && this._full) this.toggleFull();
         });
+        /* The workspace is a side dock, so a press anywhere else gives the page back. Registered
+           once, in the CAPTURE phase and on `pointerdown`: the click that opened the panel starts
+           on its own button (excluded below), and a drag that begins inside and ends outside must
+           not read as "outside" — a `click` listener would see exactly that. */
+        document.addEventListener('pointerdown', (event) => this._onOutsidePress(event), true);
+    },
+
+    /* True when a press lands outside every surface this panel owns. */
+    _onOutsidePress(event) {
+        if (!this._open || !this._dom.root) return;
+        const target = event && event.target;
+        if (!target || typeof target.closest !== 'function') return;
+        if (this._dom.root.contains(target)) return;
+        /* A CustomSelect/CustomCand popup is painted into <body>, so it is "outside" by DOM and
+           "inside" to the user — the guard the floating panels already use. */
+        if (typeof CustomSelect !== 'undefined' && CustomSelect.ownsPopup(target, this._dom.root)) return;
+        /* Its own toggle closes it; doing both would close and immediately reopen. */
+        if (target.closest('#btn-ai-workspace')) return;
+        /* A dialog sits ON TOP of the page: answering one is not a request to close the panel. */
+        if (target.closest('#dialog-overlay, #dialog-box')) return;
+        this.close();
     },
 
     toggle() {
@@ -247,6 +336,7 @@ const AIWorkspace = {
             this._renderSkillOptions();
             this._renderSessions();
             this._renderSide();
+            this._renderWorkspace();
         } catch (error) {
             this._toast(I18n.t('ai.error') + ': ' + error.message);
         }
@@ -286,7 +376,7 @@ const AIWorkspace = {
     _renderSkillOptions() {
         const skills = this._bootstrap?.skills || [];
         if (this._dom.skill) {
-            this._dom.skill.innerHTML = '<option value="auto">' + AIRender.escape(I18n.t('ai.skill')) + ': auto</option>' +
+            this._dom.skill.innerHTML = '<option value="auto">' + AIRender.escape(I18n.t('ai.skill') + ': ' + I18n.t('ai.skillAuto')) + '</option>' +
                 skills.map((skill) => {
                     const why = skill.available === false
                         ? (skill.why_not_text || I18n.t('ai.skillUnavailable'))
@@ -348,6 +438,128 @@ const AIWorkspace = {
         this._dom.attachments.innerHTML = this._attachments.map((row) =>
             '<span class="ai-attachment"><span>' + AIRender.escape(row.name || 'file') + '</span>' +
             '<button type="button" class="ai-attachment-x" data-ai-remove-attachment="' + AIRender.escape(row.id) + '" aria-label="Remove ' + AIRender.escape(row.name || 'file') + '">×</button></span>'
+        ).join('');
+    },
+
+    /* ── @ references ─────────────────────────────────────────────────
+       Typing `@` names something this account already has, so nothing is uploaded twice: the
+       server resolves a dataset/export/workflow into bounded text, and a file uploaded in an
+       earlier conversation into its existing file_id. */
+
+    _onRefInput() {
+        if (!this._dom.input) return;
+        const match = /(?:^|[\s(])@([^\s@]{0,60})$/.exec(this._dom.input.value);
+        if (!match) {
+            this._closeRefs();
+            return;
+        }
+        this._refQuery = match[1];
+        this._refOpen = true;
+        if (this._dom.refMenu) this._dom.refMenu.hidden = false;
+        if (this._refTimer) clearTimeout(this._refTimer);
+        this._refTimer = setTimeout(() => this._loadRefs(), 120);
+    },
+
+    async _loadRefs() {
+        this._refTimer = null;
+        try {
+            const response = await fetch('/api/ai/references?q=' + encodeURIComponent(this._refQuery || ''));
+            const data = await response.json();
+            this._refResults = data.ok ? (data.references || []) : [];
+        } catch (error) {
+            this._refResults = [];
+        }
+        this._refIndex = 0;
+        this._renderRefMenu();
+    },
+
+    _refKindLabel(kind) {
+        const key = 'ai.ref.' + String(kind || '');
+        return I18n.has(key) ? I18n.t(key) : String(kind || '');
+    },
+
+    _renderRefMenu() {
+        if (!this._dom.refMenu) return;
+        if (!this._refOpen) {
+            this._dom.refMenu.hidden = true;
+            this._dom.refMenu.innerHTML = '';
+            return;
+        }
+        const rows = this._refResults.map((row, index) =>
+            '<button type="button" class="ai-ref-row' + (index === this._refIndex ? ' active' : '') + '"' +
+            ' data-ai-ref="' + AIRender.escape(row.kind + '|' + row.id) + '">' +
+            '<span class="ai-ref-kind">' + AIRender.escape(this._refKindLabel(row.kind)) + '</span>' +
+            '<span class="ai-ref-label">' + AIRender.escape(row.label || row.id) + '</span>' +
+            '<span class="ai-hint">' + AIRender.escape(row.detail || '') + '</span></button>'
+        ).join('');
+        this._dom.refMenu.innerHTML =
+            '<div class="ai-ref-head">' + AIRender.escape(I18n.t('ai.refsTitle')) + '</div>' +
+            (rows || '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.refsEmpty')) + '</div>');
+        this._dom.refMenu.hidden = false;
+    },
+
+    /* The menu owns Enter/Arrows/Escape while it is open; true means "handled, do not send". */
+    _onRefKey(event, composing) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this._closeRefs();
+            return true;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            const total = this._refResults.length;
+            if (total) {
+                const step = event.key === 'ArrowDown' ? 1 : -1;
+                this._refIndex = (this._refIndex + step + total) % total;
+                this._renderRefMenu();
+            }
+            event.preventDefault();
+            return true;
+        }
+        if (event.key === 'Enter' && !event.shiftKey && !composing && this._refResults.length) {
+            const row = this._refResults[this._refIndex];
+            event.preventDefault();
+            if (row) this._pickRef(row.kind, row.id, row.label);
+            return true;
+        }
+        return false;
+    },
+
+    _pickRef(kind, id, label) {
+        if (!kind || !id) return;
+        const value = String(this._dom.input.value || '').replace(/@[^\s@]{0,60}$/, '').replace(/\s+$/, '');
+        this._dom.input.value = value ? value + ' ' : '';
+        if (!this._refs.some((row) => row.kind === kind && row.id === id)) {
+            this._refs.push({kind: kind, id: id, label: label || id});
+            this._renderRefs();
+        }
+        this._closeRefs();
+        if (this._dom.input.focus) this._dom.input.focus();
+    },
+
+    _removeRef(kind, id) {
+        this._refs = this._refs.filter((row) => !(row.kind === kind && row.id === id));
+        this._renderRefs();
+    },
+
+    _closeRefs() {
+        this._refOpen = false;
+        this._refQuery = '';
+        if (this._refTimer) {
+            clearTimeout(this._refTimer);
+            this._refTimer = null;
+        }
+        if (this._dom.refMenu) {
+            this._dom.refMenu.hidden = true;
+            this._dom.refMenu.innerHTML = '';
+        }
+    },
+
+    _renderRefs() {
+        if (!this._dom.refs) return;
+        this._dom.refs.innerHTML = this._refs.map((row) =>
+            '<span class="ai-ref-chip"><span class="ai-ref-kind">' + AIRender.escape(this._refKindLabel(row.kind)) + '</span>' +
+            '<span>' + AIRender.escape(row.label || row.id) + '</span>' +
+            '<button type="button" class="ai-attachment-x" data-ai-remove-ref="' + AIRender.escape(row.kind + '|' + row.id) + '" aria-label="Remove ' + AIRender.escape(row.label || row.id) + '">×</button></span>'
         ).join('');
     },
 
@@ -415,6 +627,14 @@ const AIWorkspace = {
     _renderSide() {
         if (!this._dom.side) return;
         const meta = this._contextMeta || {};
+        const preview = this._contextPreview
+            ? '<section class="ai-side-block ai-context-preview-block"><h3>' +
+              AIRender.escape(I18n.t('ai.contextPreview')) + '</h3>' +
+              '<button type="button" class="ai-ghost" data-ai-context-preview="1">' +
+              AIRender.escape(I18n.t('ai.contextHide')) + '</button>' +
+              '<pre class="ai-code ai-context-preview">' + AIRender.escape(this._contextPreview) + '</pre></section>'
+            : '';
+        const previewLabel = this._contextPreview ? 'ai.contextHide' : 'ai.contextPreview';
         const items = (meta.items || []).map((item) => '<li>' + AIRender.escape(item.title) + ' <span class="ai-hint">' + AIRender.escape(I18n.t('ai.chars', { n: item.chars || 0 })) + '</span></li>').join('');
         const plan = (this._plan || []).map((step) =>
             '<li class="ai-trace-step ' + (step.status || 'pending') + '"><span class="ai-trace-dot"></span>' + AIRender.escape(step.title) + '</li>'
@@ -430,10 +650,11 @@ const AIWorkspace = {
                 '<button type="button" class="ai-ghost" data-ai-disarm-monitor="' + AIRender.escape(item.id) + '">' + AIRender.escape(I18n.t('ai.monitor.disarm')) + '</button></li>';
         }).join('');
         this._dom.side.innerHTML =
+            preview +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.context')) + '</h3>' +
             (meta.scope ? '<div class="ai-chip-row"><span class="ai-chip">' + AIRender.escape(meta.scope) + '</span><span class="ai-chip">' + AIRender.escape(I18n.t('ai.contextTokens', { tokens: meta.tokens || 0, chars: meta.chars || 0 })) + '</span></div>' : '') +
             '<ul class="ai-context-list">' + (items || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</li>') + '</ul>' +
-            '<div class="ai-context-actions"><button type="button" class="ai-ghost" data-ai-context-preview="1">' + AIRender.escape(I18n.t('ai.contextPreview')) + '</button></div>' +
+            '<div class="ai-context-actions"><button type="button" class="ai-ghost" data-ai-context-preview="1">' + AIRender.escape(I18n.t(previewLabel)) + '</button></div>' +
             '<div class="ai-context-fields"><label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.datasetId')) + '</span><input class="ai-input" data-ai-manual="dataset_id" value="' + AIRender.escape(AIContext.manual.dataset_id || '') + '" /></label>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.runId')) + '</span><input class="ai-input" data-ai-manual="run_id" value="' + AIRender.escape(AIContext.manual.run_id || '') + '" /></label>' +
             '<button type="button" class="ai-ghost" data-ai-context-apply="1">' + AIRender.escape(I18n.t('ai.applyContext')) + '</button></div>' +
@@ -452,30 +673,45 @@ const AIWorkspace = {
             el.innerHTML =
                 '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div>' +
                 '<div class="ai-message-body">' +
-                '<details class="ai-thinking"><summary>' + AIRender.escape(I18n.t('ai.thinkingLabel')) + '</summary><pre class="ai-thinking-body"></pre></details>' +
-                '<div class="ai-text"></div>' +
-                '<div class="ai-sources"></div>' +
-                '<div class="ai-tools"></div>' +
+                '<div class="ai-flow"></div>' +
                 '<div class="ai-artifacts"></div>' +
                 '<div class="ai-question-slot"></div>' +
                 '<div class="ai-usage"></div>' +
+                '<div class="ai-message-actions">' +
+                '<button type="button" class="ai-ghost" data-ai-copy-answer="1">' + AIRender.escape(I18n.t('ai.copyAnswer')) + '</button>' +
+                '<button type="button" class="ai-ghost" data-ai-retry="1">' + AIRender.escape(I18n.t('ai.retry')) + '</button>' +
+                '</div>' +
                 '</div>';
             this._dom.chat.appendChild(el);
             this._current = { el };
-            this._current.thinking = el.querySelector('.ai-thinking');
-            this._current.thinkingBody = el.querySelector('.ai-thinking-body');
-            this._current.textEl = el.querySelector('.ai-text');
-            this._current.sourcesEl = el.querySelector('.ai-sources');
-            this._current.toolsEl = el.querySelector('.ai-tools');
+            this._current.flowEl = el.querySelector('.ai-flow');
             this._current.artifactsEl = el.querySelector('.ai-artifacts');
             this._current.questionEl = el.querySelector('.ai-question-slot');
             this._current.usageEl = el.querySelector('.ai-usage');
-            this._current.text = '';
             this._current.blocks = [];
             this._current.questions = [];
             this._current.answers = {};
         }
         return this._current;
+    },
+
+    /* Repaint the turn from its ordered blocks. The ONE writer for `.ai-flow`, shared with the
+       stored-message renderer, so a live turn and a reopened one cannot disagree. */
+    _paintAssistant() {
+        const current = this._current;
+        if (!current || !current.flowEl) return;
+        const chat = this._dom.chat;
+        const atBottom = chat ? chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80 : true;
+        const blocks = current.blocks || [];
+        const last = blocks[blocks.length - 1];
+        /* Between steps the model says nothing and the stream is silent: after a tool card there is
+           no sign of life until the app answers. A text block means the model IS visibly writing, so
+           the waiting line is for the other cases (turn just started, thinking, a running tool). */
+        const waiting = this._sending && (!last || String(last.type) !== 'text');
+        current.flowEl.innerHTML =
+            AIRender.assistantFlow(blocks) +
+            (waiting ? AIRender.workingRow(I18n.t(last && last.type === 'tool_use' && last.status === 'running' ? 'ai.waiting' : 'ai.working')) : '');
+        if (atBottom && chat) chat.scrollTop = chat.scrollHeight;
     },
 
     /* ``record`` is what separates a new turn from a repaint. ``_renderMessages`` replays stored
@@ -490,7 +726,10 @@ const AIWorkspace = {
         const monitor = extra?.monitor_event
             ? '<span class="ai-monitor-tag">' + AIRender.escape(I18n.t('ai.monitor.notice')) + '</span>'
             : '';
-        el.innerHTML = '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.you')) + monitor + '</div><div class="ai-message-body">' +
+        const feedback = extra?.feedback
+            ? '<span class="ai-monitor-tag">' + AIRender.escape(I18n.t('ai.feedback.tag')) + '</span>'
+            : '';
+        el.innerHTML = '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.you')) + monitor + feedback + '</div><div class="ai-message-body">' +
             (files ? '<div class="ai-attachments ai-message-files">' + files + '</div>' : '') +
             '<div class="ai-user-text">' + AIRender.escape(text) + '</div></div>';
         this._dom.chat.appendChild(el);
@@ -502,6 +741,210 @@ const AIWorkspace = {
             });
         }
         this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
+    },
+
+    /* ─── Working folder (the harness's one root) ─── */
+
+    _workspace() {
+        return this._bootstrap?.workspace || {};
+    },
+
+    _renderWorkspace() {
+        const button = this._dom.workspaceBtn;
+        if (!button) return;
+        const state = this._workspace();
+        button.hidden = !!state.cloud;
+        if (state.cloud) return;
+        const name = String(state.folder_name || '');
+        button.textContent = name || I18n.t('ai.workspace.choose');
+        button.title = state.folder
+            ? I18n.t('ai.workspace.current', { path: state.folder })
+            : I18n.t('ai.workspace.none');
+        button.classList.toggle('is-set', !!state.folder);
+    },
+
+    toggleFolder() {
+        if (!this._dom.folderDialog) return;
+        if (!this._dom.folderDialog.hidden) {
+            this._dom.folderDialog.hidden = true;
+            return;
+        }
+        this._openFolder(this._workspace().folder || '');
+    },
+
+    async _openFolder(path) {
+        const host = this._dom.folderDialog;
+        if (!host) return;
+        host.hidden = false;
+        host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.choose')) + '…</div>';
+        try {
+            const response = await fetch('/api/ai/workspace/browse?path=' + encodeURIComponent(path || ''));
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
+            this._folderState = data;
+            this._renderFolder();
+        } catch (error) {
+            host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.failed', { detail: error.message })) + '</div>';
+        }
+    },
+
+    _renderFolder() {
+        const host = this._dom.folderDialog;
+        const state = this._folderState;
+        if (!host || !state) return;
+        const rows = (state.entries || []).filter((row) => row.dir);
+        const list = rows.length
+            ? rows.map((row) =>
+                '<button type="button" class="ai-folder-row" data-ai-folder-open="' + AIRender.escape(row.path) + '">' +
+                '<span class="ai-folder-ico" aria-hidden="true">▸</span>' +
+                '<span class="ai-folder-name">' + AIRender.escape(row.name) + '</span></button>'
+            ).join('')
+            : '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.empty')) + '</div>';
+        host.innerHTML =
+            '<div class="ai-folder-head">' + AIRender.escape(I18n.t('ai.workspace.title')) + '</div>' +
+            '<div class="ai-folder-path" title="' + AIRender.escape(state.path) + '">' + AIRender.escape(state.path) + '</div>' +
+            '<div class="ai-folder-list">' + list + '</div>' +
+            '<div class="ai-folder-actions">' +
+            (state.parent ? '<button type="button" class="ai-ghost" data-ai-folder-open="' + AIRender.escape(state.parent) + '">' + AIRender.escape(I18n.t('ai.workspace.up')) + '</button>' : '') +
+            '<button type="button" class="ai-primary" data-ai-folder-use="' + AIRender.escape(state.path) + '">' + AIRender.escape(I18n.t('ai.workspace.use')) + '</button>' +
+            (this._workspace().folder ? '<button type="button" class="ai-ghost" data-ai-folder-clear="1">' + AIRender.escape(I18n.t('ai.workspace.clear')) + '</button>' : '') +
+            '<button type="button" class="ai-ghost" data-ai-folder-close="1">' + AIRender.escape(I18n.t('ai.workspace.close')) + '</button>' +
+            '</div>' +
+            '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.hint')) + '</div>';
+    },
+
+    async _setFolder(path) {
+        try {
+            const response = await fetch('/api/ai/workspace', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: path || '' }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
+            if (this._bootstrap) this._bootstrap.workspace = data.workspace;
+            this._renderWorkspace();
+            if (this._dom.folderDialog) this._dom.folderDialog.hidden = true;
+            this._toast(path
+                ? I18n.t('ai.workspace.changed', { path: data.workspace.folder || path })
+                : I18n.t('ai.workspace.none'));
+            this._renderSide();
+        } catch (error) {
+            this._toast(I18n.t('ai.workspace.failed', { detail: error.message }));
+        }
+    },
+
+    /* ─── Applying a workflow the assistant produced ─── */
+    async _applyWorkflowPayload(payload, run, title) {
+        if (typeof workflow === 'undefined' || !workflow || typeof workflow.loadFromJSON !== 'function') {
+            this._toast(I18n.t('toast.workflowFileInvalid'));
+            return false;
+        }
+        let ok = false;
+        let detail = '';
+        try {
+            ok = workflow.loadFromJSON(payload) !== false;
+            if (!ok) detail = 'loadFromJSON refused the file';
+        } catch (error) {
+            detail = String((error && error.message) || error);
+        }
+        if (!ok) {
+            this._workflowFeedback(title, detail);
+            return false;
+        }
+        this._toast(I18n.t('ai.workflowApplied', { name: title || '' }));
+        if (run) {
+            try {
+                await workflow.execute();
+            } catch (error) {
+                this._workflowFeedback(title, String((error && error.message) || error));
+                return false;
+            }
+        }
+        return true;
+    },
+
+    _copyAnswer(target) {
+        const message = target.closest('.ai-message');
+        const flow = message ? message.querySelector('.ai-flow') : null;
+        const text = flow ? String(flow.innerText || '').trim() : '';
+        if (!text) return;
+        const done = () => this._toast(I18n.t('ai.copied'));
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done).catch(() => this._copyFallback(text, done));
+            return;
+        }
+        this._copyFallback(text, done);
+    },
+
+    _copyFallback(text, done) {
+        /* A page served over plain HTTP has no Clipboard API; the old textarea path still works
+           and is the difference between "copy" and a button that silently does nothing. */
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'readonly');
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (error) {
+            copied = false;
+        }
+        document.body.removeChild(area);
+        if (copied) done();
+    },
+
+    async retry() {
+        if (this._sending || !this._conversationId) return;
+        const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        const key = AISettings.keyFor(this._provider);
+        if (provider?.requires_key && !key) {
+            this._toast(I18n.t('ai.keyMissing'));
+            this.openSettings();
+            return;
+        }
+        this._current = null;
+        this._sending = true;
+        this._setSending(true);
+        try {
+            await this._stream('/api/ai/retry', { conversation_id: this._conversationId, api_key: key });
+        } catch (error) {
+            if (error.name !== 'AbortError') this._renderError(error.message);
+        } finally {
+            this._sending = false;
+            this._setSending(false);
+            this._paintAssistant();
+        }
+    },
+
+    jumpLatest() {
+        if (!this._dom.chat) return;
+        this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
+        if (this._dom.jump) this._dom.jump.hidden = true;
+    },
+
+    _onChatScroll() {
+        const chat = this._dom.chat;
+        const jump = this._dom.jump;
+        if (!chat || !jump) return;
+        const away = chat.scrollHeight - chat.scrollTop - chat.clientHeight > 120;
+        jump.hidden = !away;
+    },
+
+    _workflowFeedback(title, detail) {
+        const turn = this._feedbackTurn || '';
+        if (this._sending || (turn && turn === (this._current && this._current.turnId))) return;
+        this._feedbackTurn = (this._current && this._current.turnId) || 'pending';
+        /* Three attempts is already a conversation about a broken draft, not a retry loop the user
+           did not ask for. After that the failure stays on screen for them to decide. */
+        this._feedbackCount = (this._feedbackCount || 0) + 1;
+        const text = I18n.t('ai.feedback.workflow', { name: title || 'AI', detail: detail || '—' });
+        this._renderError(text);
+        if (this._feedbackCount > 3) return;
+        this._sendText(text, { feedback: true });
     },
 
     _onChange(event) {
@@ -538,7 +981,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -604,8 +1047,42 @@ const AIWorkspace = {
             this._applyPluginArtifact(target.getAttribute('data-ai-apply-plugin'));
             return;
         }
+        if (target.hasAttribute('data-ai-apply-workflow') || target.hasAttribute('data-ai-run-workflow')) {
+            const run = target.hasAttribute('data-ai-run-workflow');
+            const id = target.getAttribute(run ? 'data-ai-run-workflow' : 'data-ai-apply-workflow');
+            const artifact = (this._artifactsById || {})[id] || (this._current?.artifacts || []).find((item) => item.id === id);
+            if (!artifact) {
+                this._toast(I18n.t('ai.error'));
+                return;
+            }
+            this._applyWorkflowPayload(artifact.payload || {}, run, artifact.title || '');
+            return;
+        }
+        if (target.hasAttribute('data-ai-copy-answer')) {
+            this._copyAnswer(target);
+            return;
+        }
+        if (target.hasAttribute('data-ai-retry')) {
+            this.retry();
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-open')) {
+            this._openFolder(target.getAttribute('data-ai-folder-open'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-use')) {
+            this._setFolder(target.getAttribute('data-ai-folder-use'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-clear')) {
+            this._setFolder('');
+            return;
+        }
+        if (target.hasAttribute('data-ai-folder-close')) {
+            if (this._dom.folderDialog) this._dom.folderDialog.hidden = true;
+            return;
+        }
         if (target.hasAttribute('data-ai-apply-monitor')) {
-            this._applyMonitor(target.getAttribute('data-ai-apply-monitor'), true);
             return;
         }
         if (target.hasAttribute('data-ai-watch-only')) {
@@ -618,6 +1095,17 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-remove-attachment')) {
             this._removeAttachment(target.getAttribute('data-ai-remove-attachment'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-ref')) {
+            const [kind, id] = String(target.getAttribute('data-ai-ref') || '').split('|');
+            const row = this._refResults.find((item) => item.kind === kind && item.id === id) || {};
+            this._pickRef(kind, id, row.label || id);
+            return;
+        }
+        if (target.hasAttribute('data-ai-remove-ref')) {
+            const [kind, id] = String(target.getAttribute('data-ai-remove-ref') || '').split('|');
+            this._removeRef(kind, id);
             return;
         }
         if (target.hasAttribute('data-ai-python-new')) {
@@ -736,9 +1224,32 @@ const AIWorkspace = {
             AISettings.save({ scope: this._scope });
             return;
         }
+        /* The settings page's three buttons. They were in the delegated selector above but had no
+           branch here, so clicking 保存 (the only place the API key is typed) did nothing at all —
+           no toast, no request, no error. Pinned by harness_ai_workspace.mjs. */
+        if (target.hasAttribute('data-ai-save-settings')) {
+            this._saveSettings();
+            return;
+        }
+        if (target.hasAttribute('data-ai-refresh-models')) {
+            this._refreshModels();
+            return;
+        }
+        if (target.hasAttribute('data-ai-test')) {
+            this._testProvider();
+            return;
+        }
     },
 
     async _previewContext() {
+        /* One preview, toggled: every click used to PREPEND another copy of the same section, so
+           the side panel filled with duplicates and the button never became "hide". The text is
+           kept here (not in the DOM) because `_renderSide` rebuilds the panel after every turn. */
+        if (this._contextPreview) {
+            this._contextPreview = '';
+            this._renderSide();
+            return;
+        }
         const query = this._dom.input?.value || '';
         const context = AIContext.collect();
         try {
@@ -751,7 +1262,8 @@ const AIWorkspace = {
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'context failed');
             this._contextMeta = data.meta || {};
-            this._dom.side.insertAdjacentHTML('afterbegin', '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.contextPreview')) + '</h3><pre class="ai-code ai-context-preview">' + AIRender.escape(data.context || '') + '</pre></section>');
+            this._contextPreview = String(data.context || '');
+            this._renderSide();
         } catch (error) {
             this._toast(I18n.t('ai.error') + ': ' + error.message);
         }
@@ -806,20 +1318,14 @@ const AIWorkspace = {
         const blocks = message.blocks || [];
         const el = document.createElement('article');
         el.className = 'ai-message assistant';
-        const thinking = blocks.filter((block) => block.type === 'thinking').map((block) => block.thinking || '').join('');
-        const text = blocks.filter((block) => block.type === 'text').map((block) => block.text || '').join('');
-        const toolBlocks = blocks.filter((block) => block.type === 'tool_use');
-        const sourceBlocks = blocks.filter((block) => ['server_tool_use', 'web_search_tool_result', 'web_fetch_tool_result'].includes(block.type));
-        let sources = '';
-        for (const block of sourceBlocks) sources += AIRender.sourceCard(block);
-        const tools = toolBlocks.map((block) => AIRender.toolCard(block.name || '', block.input || {}, 'done', null)).join('');
         el.innerHTML =
             '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div><div class="ai-message-body">' +
-            (thinking ? '<details class="ai-thinking"><summary>' + AIRender.escape(I18n.t('ai.thinkingLabel')) + '</summary><pre class="ai-thinking-body">' + AIRender.escape(thinking) + '</pre></details>' : '') +
-            '<div class="ai-text">' + AIRender.markdown(text) + '</div>' +
-            (sources ? '<div class="ai-sources">' + sources + '</div>' : '') +
-            (tools ? '<div class="ai-tools">' + tools + '</div>' : '') +
+            '<div class="ai-flow">' + AIRender.assistantFlow(blocks) + '</div>' +
             '<div class="ai-usage">' + AIRender.usage(message.usage || {}) + '</div>' +
+            '<div class="ai-message-actions">' +
+            '<button type="button" class="ai-ghost" data-ai-copy-answer="1">' + AIRender.escape(I18n.t('ai.copyAnswer')) + '</button>' +
+            '<button type="button" class="ai-ghost" data-ai-retry="1">' + AIRender.escape(I18n.t('ai.retry')) + '</button>' +
+            '</div>' +
             '</div>';
         this._dom.chat.appendChild(el);
     },
@@ -866,8 +1372,10 @@ const AIWorkspace = {
             if (!opts.monitor) this._toast(I18n.t('ai.busy'));
             return false;
         }
+        if (!opts.monitor && !opts.feedback) this._feedbackCount = 0;
         const pendingAttachments = opts.monitor ? [] : this._attachments.slice();
-        if (!text && !pendingAttachments.length) return false;
+        const pendingRefs = opts.monitor ? [] : this._refs.slice();
+        if (!text && !pendingAttachments.length && !pendingRefs.length) return false;
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         const key = AISettings.keyFor(this._provider);
         if (provider?.requires_key && !key) {
@@ -885,12 +1393,20 @@ const AIWorkspace = {
             this._toast(I18n.t('ai.fileUnsupported'));
             return false;
         }
+        if (pendingRefs.some((row) => row.kind === 'file') && !(provider?.capabilities || []).includes('files')) {
+            this._toast(I18n.t('ai.fileUnsupported'));
+            return false;
+        }
         const context = opts.monitor ? {} : AIContext.collect();
         if (!opts.monitor) {
             this._dom.input.value = '';
-            this._appendUser(text, context, pendingAttachments);
+            this._appendUser(text, context, pendingAttachments, { feedback: !!opts.feedback });
             this._attachments = [];
             this._renderAttachments();
+            this._refs = [];
+            this._renderRefs();
+            this._contextPreview = '';
+            this._renderSide();
         } else {
             this._appendUser(text, context, [], { monitor_event: opts.monitorEventId });
         }
@@ -910,7 +1426,9 @@ const AIWorkspace = {
             context,
             scope: this._scope,
             attachments: pendingAttachments.map((row) => row.id),
+            references: pendingRefs.map((row) => ({ kind: row.kind, id: row.id })),
             monitor_event_id: opts.monitorEventId || '',
+            feedback: !!opts.feedback,
         };
         try {
             await this._stream('/api/ai/chat', body);
@@ -1012,7 +1530,11 @@ const AIWorkspace = {
             this._current.turnId = event.turn_id;
             this._current.runId = event.run_id;
             this._contextMeta = event.context || {};
+            if (event.skill) {
+                this._current.blocks.push({ type: 'skill', name: String(event.skill), reason: String(event.skill_reason || '') });
+            }
             this._renderSide();
+            this._paintAssistant();
             if (event.skill_name_key) {
                 const chip = this._dom.modelChip;
                 if (chip) chip.title = I18n.has(event.skill_name_key) ? I18n.t(event.skill_name_key) : (event.skill || '');
@@ -1021,43 +1543,66 @@ const AIWorkspace = {
         }
         if (type === 'thinking') {
             const current = this._ensureAssistant();
-            current.thinking.hidden = false;
-            current.thinking.classList.add('is-live');
-            current.thinkingBody.textContent += event.text || '';
+            const text = event.text || '';
+            if (!text) return;
+            const last = current.blocks[current.blocks.length - 1];
+            if (last && last.type === 'thinking') last.thinking += text;
+            else current.blocks.push({ type: 'thinking', thinking: text });
+            this._schedulePaint(current);
             return;
         }
         if (type === 'text') {
             const current = this._ensureAssistant();
-            current.text += event.text || '';
-            this._scheduleText(current);
+            const text = event.text || '';
+            if (!text) return;
+            const last = current.blocks[current.blocks.length - 1];
+            if (last && last.type === 'text') last.text += text;
+            else current.blocks.push({ type: 'text', text: text });
+            this._schedulePaint(current);
             return;
         }
         if (type === 'citation') {
             const current = this._ensureAssistant();
-            current.sourcesEl.insertAdjacentHTML('beforeend', AIRender.sourceCard({ type: 'server_tool_use', input: { action: 'read_link', url: event.citation?.url || '' } }));
+            const url = event.citation?.url || '';
+            if (!url) return;
+            current.blocks.push({ type: 'server_tool_use', id: 'cite:' + url, input: { action: 'read_link', url: url } });
+            this._schedulePaint(current);
             return;
         }
         if (type === 'server_tool') {
             const current = this._ensureAssistant();
-            current.sourcesEl.insertAdjacentHTML('beforeend', AIRender.sourceCard(event.block || {}));
+            const block = event.block || {};
+            current.blocks.push(block);
+            this._schedulePaint(current);
             return;
         }
         if (type === 'tool_start') {
             const current = this._ensureAssistant();
-            const card = document.createElement('div');
-            card.setAttribute('data-ai-tool-id', event.id || '');
-            card.innerHTML = AIRender.toolCard(event.name || '', event.arguments || {}, 'running', null);
-            current.toolsEl.appendChild(card);
+            current.blocks.push({
+                type: 'tool_use',
+                id: String(event.id || ''),
+                name: String(event.name || ''),
+                input: event.arguments || {},
+                status: 'running',
+            });
+            this._schedulePaint(current);
             return;
         }
         if (type === 'tool_result') {
             const current = this._ensureAssistant();
-            const host = this._findByData(current.toolsEl, 'data-ai-tool-id', event.id || '');
-            if (host) host.innerHTML = AIRender.toolCard(event.name || '', {}, event.ok ? 'done' : 'failed', event.result || event.error);
+            const block = current.blocks.find((row) => row.type === 'tool_use' && String(row.id || '') === String(event.id || ''));
+            if (block) {
+                block.status = event.ok ? 'done' : 'failed';
+                block.result = event.ok ? (event.result || null) : (event.error || null);
+                this._schedulePaint(current);
+            }
             return;
         }
         if (type === 'plan') {
             this._plan = event.steps || [];
+            const current = this._ensureAssistant();
+            current.blocks.push({ type: 'plan', steps: this._plan });
+            this._schedulePaint(current);
             this._renderSide();
             return;
         }
@@ -1077,7 +1622,13 @@ const AIWorkspace = {
             const current = this._ensureAssistant();
             current.artifacts = current.artifacts || [];
             current.artifacts.push(event.artifact);
+            this._artifactsById = this._artifactsById || {};
+            if (event.artifact && event.artifact.id) this._artifactsById[event.artifact.id] = event.artifact;
             current.artifactsEl.insertAdjacentHTML('beforeend', AIRender.artifactCard(event.artifact));
+            return;
+        }
+        if (type === 'workflow_apply') {
+            this._applyWorkflowPayload(event.workflow || {}, !!event.run, String(event.name || ''));
             return;
         }
         if (type === 'usage') {
@@ -1101,6 +1652,7 @@ const AIWorkspace = {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
             this._sending = false;
             this._setSending(false);
+            this._paintAssistant();
             return;
         }
         if (type === 'error') {
@@ -1111,24 +1663,26 @@ const AIWorkspace = {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
             this._sending = false;
             this._setSending(false);
+            this._paintAssistant();
             this._refreshConversations();
             return;
         }
     },
 
-    _scheduleText(current) {
+    _schedulePaint(current) {
         if (this._renderTimer) return;
         this._renderTimer = setTimeout(() => {
             this._renderTimer = null;
-            if (current.textEl) current.textEl.innerHTML = AIRender.markdown(current.text);
-            if (this._dom.chat) this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
+            this._paintAssistant();
         }, 90);
     },
 
     _renderError(message) {
         const current = this._ensureAssistant();
-        if (current.thinking) current.thinking.classList.remove('is-live');
-        current.textEl.insertAdjacentHTML('beforeend', '<div class="ai-error-text">' + AIRender.escape(message) + '</div>');
+        /* The failure belongs at the END of whatever the turn already produced, in order. */
+        current.blocks.push({ type: 'text', text: '' });
+        current.blocks.push({ type: 'error', text: String(message || '') });
+        this._paintAssistant();
         this._toast(message);
     },
 
@@ -1389,6 +1943,11 @@ const AIWorkspace = {
 
     openStudio(tab) {
         if (tab) this._studioTab = tab;
+        /* The panel may be closed: a control OUTSIDE it (the Python node's 管理脚本) called this
+           and nothing appeared — `_mode` only decides what the transcript draws. Opening first is
+           what makes that button act; `_renderWelcome` then declines to paint over the studio
+           because the mode is no longer 'chat'. */
+        if (!this._open) this.open({ silent: true });
         this._mode = 'studio';
         AIStudio.render(this._dom.chat, this);
         if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') {
@@ -1606,6 +2165,13 @@ const AIWorkspace = {
                 const response = await fetch('/api/ai/files', { method: 'POST', body: form });
                 const data = await response.json();
                 if (!data.ok) throw new Error(data.error || 'upload failed');
+                if (data.dataset) {
+                    /* A big table: the server registered it as a dataset instead of sending every
+                       row to the model. Reference it, so the assistant reads a bounded slice. */
+                    this._pickRef('dataset', data.dataset.dataset_id, data.dataset.name);
+                    this._toast(I18n.t('ai.datasetFromUpload', { name: data.dataset.name, rows: data.dataset.rows }));
+                    return;
+                }
                 this._attachments.push(data.attachment);
                 this._renderAttachments();
                 this._toast(I18n.t('ai.saved'));

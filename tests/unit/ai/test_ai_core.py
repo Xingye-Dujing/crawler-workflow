@@ -44,7 +44,7 @@ def test_cloud_refuses_only_the_local_transport(monkeypatch):
 
 def test_deepseek_wire_keeps_thinking_and_tool_pairs():
     from ai.errors import AIError
-    from ai.providers.deepseek import to_wire_messages
+    from ai.providers.deepseek import to_messages
 
     messages = [
         {'role': 'user', 'content': 'which data?', 'meta': {}},
@@ -59,16 +59,18 @@ def test_deepseek_wire_keeps_thinking_and_tool_pairs():
         },
         {'role': 'tool', 'content': '{"answers":[]}', 'tool_call_id': 'call_1', 'meta': {}},
     ]
-    wire = to_wire_messages(messages)
-    assert wire[1]['content'][0]['type'] == 'thinking'
-    assert wire[1]['content'][1]['type'] == 'tool_use'
-    assert wire[2]['content'][0]['type'] == 'tool_result'
+    wire = to_messages(messages)
+    # The Chat Completions shape: reasoning is a sibling field it must be replayed in when the
+    # turn carries tools, and the call/result pair is ``tool_calls`` then a ``tool`` message.
+    assert wire[1]['reasoning_content'] == 'I should ask.'
+    assert wire[1]['tool_calls'][0]['function']['name'] == 'ask_user_question'
+    assert wire[2]['role'] == 'tool' and wire[2]['tool_call_id'] == 'call_1'
     with pytest.raises(AIError):
-        to_wire_messages(messages[:2])
+        to_messages(messages[:2])
 
 
 def test_deepseek_wire_includes_file_references():
-    from ai.providers.deepseek import to_wire_messages
+    from ai.providers.deepseek import to_messages
 
     messages = [
         {
@@ -77,24 +79,22 @@ def test_deepseek_wire_includes_file_references():
             'meta': {'attachments': [{'file_id': 'file-api-1', 'kind': 'image', 'name': 'a.png'}]},
         }
     ]
-    wire = to_wire_messages(messages)
-    assert wire[0]['content'][0] == {'type': 'image', 'source': {'type': 'file', 'file_id': 'file-api-1'}}
+    wire = to_messages(messages)
+    assert wire[0]['content'][0] == {'type': 'file', 'file_id': 'file-api-1'}
     assert wire[0]['content'][1]['type'] == 'text'
 
 
 def test_context_prefix_is_added_to_the_last_user_turn_only():
-    from ai.providers.deepseek import to_wire_messages
+    from ai.providers.deepseek import to_messages
 
     messages = [
         {'role': 'user', 'content': 'first', 'meta': {}},
         {'role': 'assistant', 'content': '', 'name': '', 'meta': {}, 'blocks': [{'type': 'text', 'text': 'ok'}]},
         {'role': 'user', 'content': 'second', 'meta': {}},
     ]
-    wire = to_wire_messages(messages, context_text='FACTS')
-    first = wire[0]['content'][0]['text']
-    second = wire[-1]['content'][0]['text']
-    assert '<cai_xi_hui_context>' not in first
-    assert '<cai_xi_hui_context>' in second and 'FACTS' in second
+    wire = to_messages(messages, context_text='FACTS')
+    assert '<cai_xi_hui_context>' not in wire[0]['content']
+    assert '<cai_xi_hui_context>' in wire[-1]['content'] and 'FACTS' in wire[-1]['content']
 
 
 def test_redaction_removes_keys_from_context():
@@ -131,6 +131,20 @@ def test_router_names_the_skill_it_chose():
     assert skills.route('帮我搭一个工作流') == 'workflow'
 
 
+def test_the_project_facts_name_each_platforms_modes_without_empty_commas():
+    """The 采集平台 block printed `- zhihu: , ,` for every platform: it read `mode['mode']`, a key
+    the capability payload no longer carries, and joined the blanks."""
+    from ai.context import project_facts
+
+    lines = project_facts().splitlines()
+    platforms = [line for line in lines if line.startswith('- ') and '：' in line]
+    assert platforms, 'the context named no platform at all'
+    assert not [line for line in platforms if '：, ' in line or line.rstrip().endswith('：')], platforms
+    zhihu = next((line for line in platforms if line.startswith('- zhihu')), '')
+    assert 'posts' in zhihu and '模式' in zhihu, zhihu
+    assert 'selenium' in zhihu, f'the available engine is not named: {zhihu}'
+
+
 def test_the_wire_sends_fetch_only_with_the_search_switch():
     from ai.providers import get_provider
 
@@ -149,7 +163,7 @@ def test_the_wire_sends_fetch_only_with_the_search_switch():
                 'tools': [],
             }
         )
-        return [tool.get('name') for tool in payload.get('tools') or []]
+        return [tool.get('type') or tool.get('name') for tool in payload.get('tools') or []]
 
     assert 'deepseek_read_url' not in tools_for(False)
     assert 'deepseek_read_url' in tools_for(True)

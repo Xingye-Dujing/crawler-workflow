@@ -115,6 +115,38 @@ out.editor = { contextChecks, toolChecks };
 sandbox.AISettings.save({ provider: 'custom_provider' });
 out.provider = { stored: sandbox.AISettings.load().provider };
 
+/* The provider settings page's three buttons. They were listed in the delegated selector but had
+ * no branch in the handler, so 保存 — the only place the API key is typed — did nothing at all
+ * (no toast, no request, no error). Each target must reach its own method. */
+workspace.openSettings();
+const settingsButtons = {
+    save: workspace._dom.chat.querySelector('[data-ai-save-settings]'),
+    models: workspace._dom.chat.querySelector('[data-ai-refresh-models]'),
+    test: workspace._dom.chat.querySelector('[data-ai-test]'),
+};
+const settingsCalls = [];
+workspace._saveSettings = async () => settingsCalls.push('save');
+workspace._refreshModels = async () => settingsCalls.push('models');
+workspace._testProvider = async () => settingsCalls.push('test');
+for (const button of Object.values(settingsButtons)) {
+    if (button) dispatchOn(workspace._dom.root, 'click', { target: button });
+}
+out.settings = {
+    found: Object.keys(settingsButtons).filter((key) => settingsButtons[key]).length,
+    calls: settingsCalls,
+};
+
+/* A control OUTSIDE the panel (the Python node's 管理脚本) opens the studio. If the workspace is
+ * closed, that call has to open it — `_mode` only decides what the transcript would draw, so the
+ * old code left the button looking dead. */
+workspace.close();
+workspace.openStudio('python');
+out.studioOpensPanel = {
+    open: workspace._open === true,
+    hidden: workspace._dom.root.hidden === true,
+    mode: workspace._mode,
+};
+
 /* The canvas Python node's settings form. Its script picker must offer one empty placeholder and
  * nothing whose VALUE is the placeholder sentence (that sentence would be stored as script_id), and
  * “管理脚本” must call the studio entry that exists. */

@@ -19,7 +19,7 @@ from runtime import account_context
 from runtime.settings import get_setting
 
 from ai import context as context_builder
-from ai import environment, skills, store, tools
+from ai import environment, references, skills, store, tools, vocabulary, workflow_draft
 from ai.errors import AIError
 from ai.providers import get_provider
 from ai.types import new_id, usage_totals
@@ -85,6 +85,10 @@ def _system_prompt(skill, provider, model: str) -> str:
     )
     return (
         f'{skills.GLOBAL_POLICY}\n\n'
+        f'{vocabulary.prompt_block()}\n\n'
+        f'你与采析绘的应用是双向的：工作流草案可以用 apply_workflow 直接校验、保存并载入画布（用户要求运行时再加 '
+        f'run=true）；本地文件可以用 workspace_* 读取、写回、导入为数据集；run_cmd 在你的工作文件夹里执行一个白名单'
+        f'程序（不是 shell）；app_errors 读后端日志与最近失败运行。做完一件事就调用一个工具，不要只描述。\n\n'
         f'Active skill: {skill.id}\n{skill.prompt}\n\n'
         f'Provider: {provider.spec.id} / {model}. Declared capabilities: {capability_words}.\n'
         f'{environment.prompt_line()}\n'
@@ -188,6 +192,9 @@ class AgentService:
         if payload.get('scope'):
             context_payload['scope'] = str(payload['scope'])
         context_text, context_meta = context_builder.build_context(text, context_payload)
+        references_text, reference_files = references.resolve(payload.get('references') or [])
+        if references_text:
+            context_text = f'{context_text}\n\n{references_text}'.strip()
         skill_meta = {
             'skill': skill.id,
             'provider': provider_id,
@@ -201,9 +208,12 @@ class AgentService:
             'latest_reminder': reminder,
         }
         attachments = []
+        # A file named with `@` lives in a conversation of its own; the caller picked it from a
+        # list this account owns, so that row is allowed through the same check as a fresh upload.
+        referenced_ids = {str(row.get('id') or '') for row in reference_files}
         for attachment_id in payload.get('attachments') or ():
             row = store.get_attachment(str(attachment_id))
-            if row is None or row.get('conversation_id') != conversation['id']:
+            if row is None or (row.get('conversation_id') != conversation['id'] and row['id'] not in referenced_ids):
                 raise AIError('ai.fileUnsupported', kind='bad_request')
             if not provider.supports('files', model):
                 raise AIError(
@@ -222,12 +232,28 @@ class AgentService:
                     'purpose': row.get('purpose') or '',
                 }
             )
+        for row in reference_files:
+            if not provider.supports('files', model) or not row.get('file_id'):
+                continue
+            attachments.append(
+                {
+                    'id': str(row.get('id') or ''),
+                    'file_id': row.get('file_id') or '',
+                    'kind': 'image' if str(row.get('mime') or '').startswith('image/') else 'document',
+                    'name': row.get('name') or 'file',
+                    'purpose': row.get('purpose') or '',
+                }
+            )
         if attachments:
             skill_meta['attachments'] = attachments
         # An automatic turn started by a run monitor is marked so the transcript can say so —
         # and so a reader can tell a machine notice from something the user typed.
         if payload.get('monitor_event_id'):
             skill_meta['monitor_event'] = str(payload['monitor_event_id'])[:80]
+        # A note posted by the workspace itself (a failed apply, a failed run) is marked so the
+        # transcript can show it as machine feedback rather than something the user typed.
+        if payload.get('feedback'):
+            skill_meta['feedback'] = True
         user = store.append_message(
             conversation['id'],
             'user',
@@ -254,6 +280,49 @@ class AgentService:
             safety=skill_meta['safety'],
             context_text=context_text,
             context_meta=context_meta,
+            run_id=run['id'],
+        )
+
+    def retry(self, conversation_id: str, api_key: str = ''):
+        """Run the last user turn again, with the settings that turn was sent with.
+
+        A Codex/Claude-Code staple: when an answer is wrong or the provider failed, you retry
+        instead of retyping the question. It is ONE new run of the SAME turn (same skill, model,
+        thinking, context), not a second user message — so the transcript's history stays honest.
+        """
+        conversation = store.get_conversation(conversation_id)
+        if conversation is None:
+            raise AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id)
+        user = None
+        for message in reversed(store.list_messages(conversation_id, limit=400)):
+            if message['role'] == 'user':
+                user = message
+                break
+        if user is None:
+            raise AIError('ai.apiNoText', kind='bad_request')
+        meta = user.get('meta') or {}
+        provider, model = _validate_provider(
+            meta.get('provider') or 'deepseek',
+            meta.get('model') or '',
+            api_key,
+            bool(meta.get('thinking')),
+            bool(meta.get('web_search')),
+        )
+        skill = skills.get_skill(meta.get('skill') or 'auto')
+        run = store.create_run(conversation_id, user['id'])
+        return self._loop(
+            conversation=conversation,
+            turn_id=user['id'],
+            skill=skill,
+            skill_reason=str(meta.get('skill') or skill.id),
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            thinking=bool(meta.get('thinking')),
+            web_search=bool(meta.get('web_search')),
+            safety=str(meta.get('safety') or 'high'),
+            context_text=str(meta.get('context_text') or ''),
+            context_meta=meta.get('context_meta') or {},
             run_id=run['id'],
         )
 
@@ -343,30 +412,47 @@ class AgentService:
         run_id: str,
     ):
         cancel_event = _active(conversation['id'])
-        max_rounds = max(0, int(get_setting('ai_max_tool_rounds') or 4))
+        # 0 means "no ceiling": the workspace is a harness, and a task with many files legitimately
+        # needs many tools. A finite value is a SOFT stop — the assistant asks the user whether to
+        # continue, which is how a limit stays flexible instead of failing the turn.
+        max_rounds = max(0, int(get_setting('ai_max_tool_rounds') or 0))
         allow_code = bool(get_setting('ai_allow_code_context'))
         allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
-        tool_schemas = tools.schemas(allow_code=allow_code, allow_python=allow_python)
+        allow_files = bool(environment.capabilities()['user_files'])
+        tool_schemas = tools.schemas(allow_code=allow_code, allow_python=allow_python, allow_files=allow_files)
         offered = set()
         if provider.supports('tools', model) and skill.tools:
-            offered = set(skill.tools) | {'ask_user_question', 'update_plan', 'present_artifact'}
+            offered = set(skill.tools) | {
+                'ask_user_question',
+                'update_plan',
+                'present_artifact',
+                'apply_workflow',
+                'workflow_schema',
+                'workflow_validate',
+                'app_errors',
+                'workspace_info',
+                'workspace_list',
+                'workspace_read',
+            }
+            if allow_files:
+                offered |= {'workspace_set', 'workspace_write', 'workspace_import', 'run_cmd'}
             tool_schemas = [tool for tool in tool_schemas if tool['name'] in offered]
         else:
             tool_schemas = []
         system = _system_prompt(skill, provider, model)
         rounds = 0
+        state: dict = {}
         try:
             while True:
                 if cancel_event.is_set():
                     raise AIError('ai.cancelled', kind='cancelled')
-                if rounds > max_rounds:
-                    yield {
-                        'type': 'error',
-                        'kind': 'tool_limit',
-                        'error': t('ai.toolLimit'),
-                    }
-                    yield {'type': 'done', 'stop_reason': 'tool_limit'}
-                    return
+                if max_rounds and rounds > max_rounds:
+                    # The budget is a decision for the user, not a wall. Ask once; the answer resumes
+                    # the turn with a fresh budget, and "stop" lets the model summarise what it has.
+                    asked = yield from self._ask_budget(conversation, state, run_id, rounds)
+                    if asked:
+                        yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'tool_budget'}
+                        return
                 history = _history(conversation['id'])
                 request = {
                     'provider': provider.spec.id,
@@ -397,6 +483,7 @@ class AgentService:
                     skill_reason=skill_reason,
                     run_id=run_id,
                     context_meta=context_meta,
+                    seed=rounds == 0,
                 )
                 if state.get('error'):
                     return
@@ -423,6 +510,9 @@ class AgentService:
                     if call['name'] == 'present_artifact':
                         yield from self._artifact_event(conversation, state, call, run_id)
                         continue
+                    if call['name'] == 'apply_workflow':
+                        yield from self._apply_workflow_event(conversation, state, call, run_id)
+                        continue
                     yield from self._tool_event(
                         conversation, state, call, turn_id, api_key, provider.spec.id, model, offered
                     )
@@ -440,6 +530,7 @@ class AgentService:
         skill_reason: str,
         run_id: str,
         context_meta: dict,
+        seed: bool = False,
     ):
         assistant = store.append_message(
             conversation['id'],
@@ -453,6 +544,11 @@ class AgentService:
         )
         yield _meta_event(conversation, assistant, skill, skill_reason, run_id, context_meta)
         blocks = list(assistant.get('blocks') or [])
+        if seed:
+            # First row of the turn: say which skill answered and why, IN the transcript's order.
+            # Without it a conversation reopened from the store could not tell an automatic route
+            # from a user's choice — the fact lived only in the meta of a user row.
+            blocks.append({'type': 'skill', 'name': skill.id, 'reason': skill_reason or skill.id})
         usage = dict(assistant.get('usage') or {})
         stop_reason = ''
         title = ''
@@ -588,6 +684,39 @@ class AgentService:
                 }
             raise
 
+    def _ask_budget(self, conversation: dict, state: dict, run_id: str, rounds: int):
+        """A soft tool budget: the assistant ASKS before it is stopped, and the answer resumes.
+
+        The question is attached to the round that just completed as an assistant ``tool_use`` so the
+        provider's tool-pair rule stays valid after the answer: assistant(tool_use X) → tool result X.
+        """
+        call = {
+            'id': new_id('call'),
+            'name': 'ask_user_question',
+            'arguments': {
+                'questions': [
+                    {
+                        'id': 'tool_budget',
+                        'header': t('ai.toolBudgetHeader'),
+                        'question': t('ai.toolBudgetQuestion', rounds=rounds),
+                        'options': [
+                            {'label': t('ai.toolBudgetContinue'), 'description': t('ai.toolBudgetContinueHint')},
+                            {'label': t('ai.toolBudgetStop'), 'description': t('ai.toolBudgetStopHint')},
+                        ],
+                    }
+                ]
+            },
+        }
+        message = store.get_message(state['message']['id']) or state['message']
+        blocks = list(message.get('blocks') or [])
+        blocks.append({'type': 'tool_use', 'id': call['id'], 'name': 'ask_user_question', 'input': call['arguments']})
+        meta = dict(message.get('meta') or {})
+        meta['tool_calls'] = list(meta.get('tool_calls') or []) + [call]
+        store.update_message(message['id'], blocks=blocks, meta=meta)
+        waiting = self._ask_user(conversation, {'message': {**message, 'blocks': blocks, 'meta': meta}}, [call], run_id)
+        yield waiting['event']
+        return True
+
     def _ask_user(self, conversation: dict, state: dict, calls: list, run_id: str) -> dict:
         call = next((item for item in calls if item['name'] == 'ask_user_question'), None)
         if call is None:
@@ -644,6 +773,13 @@ class AgentService:
         store.update_run(run_id, plan=plan)
         for step in plan:
             store.add_step(run_id, step['title'], status='done' if step['status'] == 'done' else 'pending')
+        # Keep the plan IN the turn's block stream: the transcript then shows "what it planned"
+        # at the point it planned it, even after a reload (the tool row alone reads like a log).
+        message = store.get_message(state['message']['id'])
+        if message is not None:
+            blocks = list(message.get('blocks') or [])
+            blocks.append({'type': 'plan', 'steps': plan})
+            store.update_message(message['id'], blocks=blocks, content=_current_text(blocks))
         store.append_message(
             conversation['id'],
             'tool',
@@ -662,6 +798,14 @@ class AgentService:
             'payload': args.get('payload') if isinstance(args.get('payload'), dict) else {},
             'summary': str(args.get('summary') or ''),
         }
+        if artifact['kind'] in ('workflow', 'workflow_draft'):
+            # A draft the canvas cannot load is refused HERE, by name, with the offending node —
+            # applying it used to leave blank boxes and a 500 on every diagnostics poll. Structure
+            # AND the engine's run validation are asked, so "it loads" and "it can run" agree.
+            report = workflow_draft.validate(artifact['payload'])
+            if not report['ok']:
+                detail = '; '.join((report['structural'] + report['engine'])[:6])
+                raise AIError('ai.workflowDraftInvalid', kind='bad_request', detail=detail)
         store.append_message(
             conversation['id'],
             'tool',
@@ -671,6 +815,72 @@ class AgentService:
         )
         store.add_step(run_id, artifact['title'], tool='present_artifact', args=artifact, status='done')
         yield {'type': 'artifact', 'artifact': artifact}
+
+    def _apply_workflow_event(self, conversation: dict, state: dict, call: dict, run_id: str):
+        """Validate → save → load on the canvas, in that order.
+
+        ``present_artifact`` leaves a proposal the user must click; this is the assistant actually
+        doing it, which is what a harness is for. Nothing is applied until the file is legal for the
+        engine, and every problem is answered to the MODEL as a tool result, so it can repair its own
+        draft in the same turn instead of the user reporting a blank canvas.
+        """
+        args = call.get('arguments') if isinstance(call.get('arguments'), dict) else {}
+        payload = args.get('workflow') if isinstance(args.get('workflow'), dict) else None
+        meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
+        if payload is None:
+            message = t('ai.workflowDraftInvalid', detail='workflow is missing')
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'apply_workflow'},
+            )
+            yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': False, 'error': message}
+            return
+        report = workflow_draft.validate(payload)
+        if not report['ok']:
+            detail = '; '.join((report['structural'] + report['engine'])[:8])
+            message = t('ai.workflowDraftInvalid', detail=detail)
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message, 'problems': report}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'apply_workflow'},
+            )
+            store.add_step(run_id, t('ai.stepTool', tool='apply_workflow'), tool='apply_workflow', status='failed')
+            yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': False, 'error': message}
+            return
+        try:
+            saved = workflow_draft.save(payload, str(args.get('name') or ''))
+        except Exception as exc:  # a disk that cannot write is a named refusal, not a traceback
+            message = t('ai.workflowSaveFailed', detail=str(exc)[:200])
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'apply_workflow'},
+            )
+            yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': False, 'error': message}
+            return
+        result = {
+            'ok': True,
+            'name': saved['name'],
+            'run': bool(args.get('run')),
+            'summary': str(args.get('summary') or ''),
+        }
+        store.append_message(
+            conversation['id'],
+            'tool',
+            json.dumps(result, ensure_ascii=False),
+            status='done',
+            meta={**meta, 'name': 'apply_workflow'},
+        )
+        store.add_step(run_id, saved['name'], tool='apply_workflow', args=result, status='done')
+        yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': True, 'result': result}
+        yield {'type': 'workflow_apply', 'workflow': payload, 'name': saved['name'], 'run': bool(args.get('run'))}
 
     def _tool_event(
         self,

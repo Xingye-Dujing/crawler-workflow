@@ -863,12 +863,12 @@ SETTINGS = (
     Setting(
         'ai_max_tool_rounds',
         'int',
-        4,
+        24,
         'ai',
         'set.aiMaxToolRounds',
         hint='set.aiMaxToolRoundsHint',
         minimum=0,
-        maximum=12,
+        maximum=200,
         consumer='server',
     ),
     Setting(

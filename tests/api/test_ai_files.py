@@ -137,3 +137,97 @@ def test_fetch_refuses_credentials_in_the_url_without_an_http_call(client, monke
     assert response.status_code == 400
     assert response.get_json()['key'] == 'ai.fetchUrl'
     assert called == []
+
+
+# ─── token budget: a big table is a dataset, not a prompt ───────────────
+
+
+def _upload_csv(client, conversation_id, name, data, key='secret'):
+    return client.post(
+        '/api/ai/files',
+        data={
+            'file': (io.BytesIO(data), name),
+            'conversation_id': conversation_id,
+            'provider': 'deepseek',
+            'api_key': key,
+        },
+        content_type='multipart/form-data',
+    )
+
+
+def test_a_big_table_is_imported_as_a_dataset_instead_of_being_sent_to_the_model(client, ai_conversation, monkeypatch):
+    """The whole point of the token budget: a few thousand rows are read in SLICES by the
+    dataset tools, never billed in full on every turn that names the file."""
+    from ai import files
+
+    uploads = []
+    monkeypatch.setattr(files.requests, 'post', lambda url, **kwargs: uploads.append(url))
+
+    rows = '\n'.join(f'{index},name-{index}' for index in range(4000))
+    response = _upload_csv(client, ai_conversation, 'big.csv', ('a,b\n' + rows + '\n').encode())
+    body = response.get_json()
+    assert response.status_code == 200, body
+    assert body.get('dataset'), body
+    assert body['dataset']['rows'] == 4000
+    assert body['dataset']['columns'] == ['a', 'b']
+    assert uploads == [], 'the table was still uploaded to the provider'
+    listed = client.get('/api/data/datasets').get_json()['datasets']
+    assert any(row['dataset_id'] == body['dataset']['dataset_id'] for row in listed)
+
+
+def test_a_small_table_still_travels_as_a_file(client, ai_conversation, monkeypatch):
+    from ai import files
+
+    def fake_post(url, **kwargs):
+        return FakeResponse(200, {'id': 'file-api-small', 'filename': 'small.csv', 'bytes': 30, 'purpose': 'user_data'})
+
+    monkeypatch.setattr(files.requests, 'post', fake_post)
+    response = _upload_csv(client, ai_conversation, 'small.csv', b'a,b\n1,2\n3,4\n')
+    body = response.get_json()
+    assert body.get('attachment'), body
+    assert body['attachment']['file_id'] == 'file-api-small'
+
+
+def test_an_oversized_attachment_is_refused_by_name(client, ai_conversation, monkeypatch):
+    from ai import files
+
+    monkeypatch.setattr(files, 'ATTACH_MAX_BYTES', 8)
+    response = _upload_csv(client, ai_conversation, 'report.pdf', b'x' * 64)
+    body = response.get_json()
+    assert response.status_code == 400
+    assert 'report.pdf' in body['error']
+
+
+def test_the_same_bytes_in_a_second_conversation_reuse_the_provider_upload(client, monkeypatch):
+    """Uploading one file in two conversations used to send and parse it twice (and bill twice)."""
+    from ai import files
+
+    calls = []
+
+    def fake_post(url, **kwargs):
+        calls.append(url)
+        return FakeResponse(200, {'id': 'file-api-1', 'filename': 'note.txt', 'bytes': 5, 'purpose': 'user_data'})
+
+    monkeypatch.setattr(files.requests, 'post', fake_post)
+    first = client.post(
+        '/api/ai/conversations', json={'provider': 'deepseek', 'model': 'deepseek-flash', 'skill': 'project'}
+    ).get_json()['conversation']['id']
+    second = client.post(
+        '/api/ai/conversations', json={'provider': 'deepseek', 'model': 'deepseek-flash', 'skill': 'project'}
+    ).get_json()['conversation']['id']
+
+    one = _upload_csv(client, first, 'note.txt', b'hello')
+    two = _upload_csv(client, second, 'note.txt', b'hello')
+    assert one.status_code == 200 and two.status_code == 200
+    assert len(calls) == 1, 'the same bytes were uploaded twice'
+    assert one.get_json()['attachment']['file_id'] == two.get_json()['attachment']['file_id']
+
+
+def test_previous_uploads_and_this_accounts_objects_are_offerable(client, ai_conversation):
+    response = client.get('/api/ai/references')
+    body = response.get_json()
+    assert body['ok'] is True
+    kinds = {row['kind'] for row in body['references']}
+    assert kinds <= {'dataset', 'export', 'workflow', 'file'}
+    filtered = client.get('/api/ai/references', query_string={'q': 'zzz-nothing-matches'}).get_json()
+    assert filtered['references'] == []

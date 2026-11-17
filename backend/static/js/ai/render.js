@@ -206,7 +206,10 @@ const AIRender = {
                 : artifact.kind === 'monitor'
                     ? '<button type="button" class="ai-primary" data-ai-apply-monitor="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.auto')) + '</button>' +
                       '<button type="button" class="ai-ghost" data-ai-watch-only="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.watchOnly')) + '</button>'
-                    : '';
+                    : (artifact.kind === 'workflow' || artifact.kind === 'workflow_draft')
+                        ? '<button type="button" class="ai-primary" data-ai-apply-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoad')) + '</button>' +
+                          '<button type="button" class="ai-ghost" data-ai-run-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoadRun')) + '</button>'
+                        : '';
         return (
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +
@@ -222,12 +225,134 @@ const AIRender = {
         const detail = status === 'done' && result
             ? '<details class="ai-tool-detail"><summary>' + this.escape(I18n.t('ai.toolResult')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(result, null, 2)) + '</pre></details>'
             : '';
+        /* What it was ASKED to do, not only what came back: a reader following the trace needs the
+           folder/command/kind, and the running card would otherwise show only a tool name. */
+        let argsText = '';
+        try {
+            const raw = args && typeof args === 'object' && Object.keys(args).length ? JSON.stringify(args) : '';
+            if (raw) argsText = raw.length > 180 ? raw.slice(0, 180) + '…' : raw;
+        } catch (error) {
+            argsText = '';
+        }
+        const argsLine = argsText ? '<code class="ai-tool-args">' + this.escape(argsText) + '</code>' : '';
         return (
             '<div class="ai-tool ' + (status === 'running' ? 'is-running' : status === 'failed' ? 'is-failed' : '') + '">' +
             '<span class="ai-tool-dot"></span><span class="ai-tool-name">' + this.escape(name) + '</span>' +
+            argsLine +
             '<span class="ai-tool-state">' + this.escape(summary) + '</span>' +
             detail +
             '</div>'
+        );
+    },
+
+    /* The transcript's ONE body painter, for a live turn and for a stored one.
+
+       A turn is a SEQUENCE: thinking, a tool call, more thinking, the answer. The live view used to
+       keep three fixed boxes (thinking / text / tools) and append each delta into its own box, so
+       the order on screen was the boxes' order, not the model's — the answer appeared above the
+       search it was based on. Walking the blocks in order fixes both that and the double listing:
+       a tool renders once, keyed by its call id. */
+    assistantFlow(blocks) {
+        const parts = [];
+        let group = null;
+        const flush = () => {
+            if (!group) return;
+            parts.push('<div class="ai-flow-group ai-group-' + group.kind + '">' + group.rows.join('') + '</div>');
+            group = null;
+        };
+        const push = (kind, row) => {
+            if (!group || group.kind !== kind) {
+                flush();
+                group = { kind: kind, rows: [] };
+            }
+            group.rows.push(row);
+        };
+        const seen = new Set();
+        for (const block of blocks || []) {
+            if (!block || typeof block !== 'object') continue;
+            const type = String(block.type || '');
+            if (type === 'thinking') {
+                const text = String(block.thinking || '');
+                if (!text) continue;
+                flush();
+                parts.push(
+                    '<details class="ai-thinking"><summary>' + this.escape(I18n.t('ai.thinkingLabel')) +
+                    '</summary><pre class="ai-thinking-body">' + this.escape(text) + '</pre></details>'
+                );
+                continue;
+            }
+            if (type === 'skill') {
+                flush();
+                const id = String(block.name || '');
+                const nameKey = 'ai.skill.' + id + '.name';
+                const label = I18n.has(nameKey) ? I18n.t(nameKey) : id;
+                const reason = String(block.reason || '');
+                const why = reason === 'auto'
+                    ? I18n.t('ai.skillAuto')
+                    : (I18n.has('ai.skill.' + reason + '.name') ? I18n.t('ai.skill.' + reason + '.name') : '');
+                parts.push(
+                    '<div class="ai-skill-row"><span class="ai-skill-kind">' + this.escape(I18n.t('ai.skillRow')) + '</span>' +
+                    '<span class="ai-skill-name">' + this.escape(label) + '</span>' +
+                    (why ? '<span class="ai-skill-why">' + this.escape(why) + '</span>' : '') +
+                    '</div>'
+                );
+                continue;
+            }
+            if (type === 'plan') {
+                flush();
+                const steps = Array.isArray(block.steps) ? block.steps : [];
+                if (!steps.length) continue;
+                parts.push(
+                    '<div class="ai-plan"><div class="ai-plan-head">' + this.escape(I18n.t('ai.plan')) + '</div><ol>' +
+                    steps.map((step) => {
+                        const status = String(step.status || 'pending');
+                        return '<li class="ai-plan-step is-' + this.escape(status) + '">' +
+                            '<span class="ai-plan-dot" aria-hidden="true"></span>' +
+                            '<span>' + this.escape(String(step.title || '')) + '</span></li>';
+                    }).join('') +
+                    '</ol></div>'
+                );
+                continue;
+            }
+            if (type === 'text') {
+                const text = String(block.text || '');
+                if (!text) continue;
+                flush();
+                parts.push('<div class="ai-text">' + this.markdown(text) + '</div>');
+                continue;
+            }
+            if (type === 'error') {
+                flush();
+                parts.push('<div class="ai-error-text">' + this.escape(block.text || '') + '</div>');
+                continue;
+            }
+            if (type === 'tool_use') {
+                const key = String(block.id || '') || 'name:' + String(block.name || '');
+                if (seen.has(key)) continue;
+                seen.add(key);
+                push('tools', this.toolCard(block.name || '', block.input || {}, block.status || 'done', block.result ?? null));
+                continue;
+            }
+            if (type === 'server_tool_use' || type === 'web_search_tool_result' || type === 'web_fetch_tool_result') {
+                const key = 'srv:' + String(block.id || block.tool_use_id || '');
+                if (key !== 'srv:' && seen.has(key)) continue;
+                if (key !== 'srv:') seen.add(key);
+                const card = this.sourceCard(block);
+                if (card) push('sources', card);
+            }
+        }
+        flush();
+        return parts.join('');
+    },
+
+    workingRow(label) {
+        /* One pulsing line at the END of the turn, while the runtime is between steps. Without it
+           the transcript goes quiet after a tool card and a reader cannot tell "finished" from
+           "waiting for the app to answer". */
+        return (
+            '<div class="ai-working" role="status" aria-live="polite">' +
+            '<span class="ai-working-dot" aria-hidden="true"></span>' +
+            '<span>' + this.escape(label) + '</span></div>'
         );
     },
 
