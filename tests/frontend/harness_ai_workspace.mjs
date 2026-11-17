@@ -166,4 +166,20 @@ out.pythonPanel = {
     manageTarget: manageButton ? String(manageButton.onclick) : '',
 };
 
+/* Slash commands: `/re` offers retry, Enter runs it, the composer clears and the menu closes.
+ * The palette must not leak into `send()` — that is the one thing a typed `/` must never do. */
+workspace._dom.input.value = '/re';
+workspace._onCmdInput();
+const cmdRows = workspace._dom.cmdMenu.querySelectorAll('[data-ai-cmd]').map((el) => el.getAttribute('data-ai-cmd'));
+const cmdCalls = [];
+workspace.retry = async () => cmdCalls.push('retry');
+const cmdHandled = workspace._onCmdKey({ key: 'Enter', preventDefault() {} }, false);
+out.commands = {
+    ids: cmdRows,
+    handled: cmdHandled,
+    calls: cmdCalls,
+    cleared: workspace._dom.input.value === '',
+    closed: workspace._dom.cmdMenu.hidden === true,
+};
+
 fs.writeFileSync(1, JSON.stringify(out));

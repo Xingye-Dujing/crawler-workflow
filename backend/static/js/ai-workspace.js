@@ -75,10 +75,13 @@ const AIWorkspace = {
             attachments: 'ai-attachments',
             refs: 'ai-refs',
             refMenu: 'ai-ref-menu',
+            cmdMenu: 'ai-cmd-menu',
             attachBtn: 'ai-attach-btn',
             workspaceBtn: 'ai-workspace-btn',
             folderDialog: 'ai-folder-dialog',
             jump: 'ai-jump',
+            agentPlan: 'ai-agent-plan',
+            agentBuild: 'ai-agent-build',
         };
         for (const [key, id] of Object.entries(ids)) this._dom[key] = document.getElementById(id);
         const root = this._dom.root;
@@ -89,19 +92,24 @@ const AIWorkspace = {
         this._provider = AISettings.providerId(null);
         this._model = AISettings.modelFor(this._provider, null);
         this._skill = AISettings.load().skill || 'auto';
+        this._agentMode = AISettings.load().agentMode === 'plan' ? 'plan' : 'build';
         this._scope = AISettings.load().scope || 'summary';
         if (this._dom.sessionsBtn) {
             this._dom.sessionsBtn.setAttribute('aria-expanded', this._sessionsOpen ? 'true' : 'false');
             this._dom.sessionsBtn.classList.toggle('active', this._sessionsOpen);
         }
         if (this._dom.input) {
-            this._dom.input.addEventListener('input', () => this._onRefInput());
+            this._dom.input.addEventListener('input', () => {
+                this._onRefInput();
+                this._onCmdInput();
+            });
             this._dom.input.addEventListener('keydown', (event) => {
                 /* `nativeEvent` is a jQuery field; a DOM KeyboardEvent has none, so the old guard
                    threw on EVERY keypress in the composer (uncaught TypeError) and Enter never
                    sent. An IME's composing Enter is `isComposing` (or keyCode 229 on older
                    browsers) — that is the one this must not eat. */
                 const composing = event.isComposing === true || event.keyCode === 229;
+                if (this._cmdOpen && this._onCmdKey(event, composing)) return;
                 if (this._refOpen && this._onRefKey(event, composing)) return;
                 if (event.key === 'Escape' && this._sending) {
                     event.preventDefault();
@@ -401,7 +409,25 @@ const AIWorkspace = {
         return pieces.join(' · ');
     },
 
+    _renderAgentMode() {
+        const mode = this._agentMode === 'plan' ? 'plan' : 'build';
+        for (const [button, value] of [[this._dom.agentPlan, 'plan'], [this._dom.agentBuild, 'build']]) {
+            if (!button) continue;
+            const on = value === mode;
+            button.classList.toggle('selected', on);
+            button.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+    },
+
+    setAgentMode(mode) {
+        this._agentMode = String(mode) === 'plan' ? 'plan' : 'build';
+        AISettings.save({ agentMode: this._agentMode });
+        this._renderAgentMode();
+        this._toast(I18n.t(this._agentMode === 'plan' ? 'ai.mode.planHint' : 'ai.mode.buildHint'));
+    },
+
     _renderToggles() {
+        this._renderAgentMode();
         const provider = (this._bootstrap?.providers || []).find((item) => item.id === this._provider);
         const capabilities = provider?.capabilities || [];
         const thinking = !!AISettings.load().thinking && capabilities.includes('thinking');
@@ -445,6 +471,106 @@ const AIWorkspace = {
        Typing `@` names something this account already has, so nothing is uploaded twice: the
        server resolves a dataset/export/workflow into bounded text, and a file uploaded in an
        earlier conversation into its existing file_id. */
+
+    /* ─── Slash commands ───
+       `/` at the start of the composer is a command palette, the way Codex/Claude Code expose
+       actions without hunting through buttons. It is local: no provider call, no new protocol. */
+
+    _commands() {
+        return [
+            { id: 'folder', label: 'ai.cmd.folder' },
+            { id: 'retry', label: 'ai.cmd.retry' },
+            { id: 'new', label: 'ai.cmd.new' },
+            { id: 'skills', label: 'ai.cmd.skills' },
+            { id: 'stop', label: 'ai.cmd.stop' },
+        ];
+    },
+
+    _onCmdInput() {
+        const input = this._dom.input;
+        if (!input) return;
+        const match = /^\/([a-z]*)$/i.exec(String(input.value || '').trim());
+        if (!match) {
+            this._closeCmds();
+            return;
+        }
+        this._cmdQuery = match[1].toLowerCase();
+        this._cmdRows = this._commands().filter((row) => !this._cmdQuery || row.id.startsWith(this._cmdQuery));
+        this._cmdIndex = 0;
+        this._cmdOpen = true;
+        if (this._refOpen) this._closeRefs();
+        this._renderCmdMenu();
+    },
+
+    _renderCmdMenu() {
+        const menu = this._dom.cmdMenu;
+        if (!menu) return;
+        if (!this._cmdOpen) {
+            menu.hidden = true;
+            menu.innerHTML = '';
+            return;
+        }
+        const rows = this._cmdRows || [];
+        menu.innerHTML =
+            '<div class="ai-ref-head">' + AIRender.escape(I18n.t('ai.cmd.title')) + '</div>' +
+            (rows.length
+                ? rows.map((row, index) =>
+                    '<button type="button" class="ai-ref-row' + (index === this._cmdIndex ? ' active' : '') + '" data-ai-cmd="' + AIRender.escape(row.id) + '">' +
+                    '<span class="ai-ref-kind">/' + AIRender.escape(row.id) + '</span>' +
+                    '<span class="ai-ref-label">' + AIRender.escape(I18n.t(row.label)) + '</span></button>'
+                ).join('')
+                : '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.cmd.empty')) + '</div>');
+        menu.hidden = false;
+    },
+
+    _closeCmds() {
+        this._cmdOpen = false;
+        this._cmdRows = [];
+        if (this._dom.cmdMenu) {
+            this._dom.cmdMenu.hidden = true;
+            this._dom.cmdMenu.innerHTML = '';
+        }
+    },
+
+    _onCmdKey(event, composing) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            this._closeCmds();
+            return true;
+        }
+        if (!this._cmdRows || !this._cmdRows.length) {
+            if (event.key === 'Enter' && !composing) {
+                event.preventDefault();
+                return true;
+            }
+            if (event.key === 'Backspace') this._closeCmds();
+            return false;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const delta = event.key === 'ArrowDown' ? 1 : -1;
+            this._cmdIndex = (this._cmdIndex + delta + this._cmdRows.length) % this._cmdRows.length;
+            this._renderCmdMenu();
+            return true;
+        }
+        if ((event.key === 'Enter' || event.key === 'Tab') && !composing) {
+            event.preventDefault();
+            this._runCommand(this._cmdRows[this._cmdIndex].id);
+            return true;
+        }
+        return false;
+    },
+
+    _runCommand(id) {
+        this._closeCmds();
+        if (this._dom.input) this._dom.input.value = '';
+        if (id === 'folder') this.toggleFolder();
+        else if (id === 'retry') this.retry();
+        else if (id === 'new') this.newChat();
+        else if (id === 'skills') this.openStudio();
+        else if (id === 'stop') this.stop();
+        this._onRefInput();
+    },
 
     _onRefInput() {
         if (!this._dom.input) return;
@@ -981,7 +1107,7 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1013,6 +1139,14 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-context-preview')) {
             this._previewContext();
+            return;
+        }
+        if (target.hasAttribute('data-ai-agents')) {
+            this.setAgentMode(target.getAttribute('data-ai-agents'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-cmd')) {
+            this._runCommand(target.getAttribute('data-ai-cmd'));
             return;
         }
         if (target.hasAttribute('data-ai-context-apply')) {
@@ -1429,6 +1563,7 @@ const AIWorkspace = {
             references: pendingRefs.map((row) => ({ kind: row.kind, id: row.id })),
             monitor_event_id: opts.monitorEventId || '',
             feedback: !!opts.feedback,
+            agent_mode: this._agentMode || 'build',
         };
         try {
             await this._stream('/api/ai/chat', body);

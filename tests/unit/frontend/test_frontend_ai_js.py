@@ -115,6 +115,14 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['contextChecks'] == ['project', 'run'], out['contextChecks']
         assert out['toolChecks'] == ['run_status'], 'a control tool was offered as a skill tool'
 
+    def test_a_slash_command_runs_and_never_leaks_into_a_message(self):
+        out = _run_workspace()['commands']
+        assert out['ids'] == ['retry'], out['ids']
+        assert out['handled'] is True
+        assert out['calls'] == ['retry'], out['calls']
+        assert out['cleared'] is True
+        assert out['closed'] is True
+
     def test_a_saved_provider_id_is_not_rewritten_in_the_browser(self):
         out = _run_workspace()['provider']
         assert out['stored'] == 'custom_provider'

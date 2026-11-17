@@ -121,6 +121,10 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   运行监控可把结果作为新一轮消息送回。
 - **工具预算不是硬墙**：默认 24 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
   `ask_user_question` 通道询问“继续/到此为止”，回答即续跑一轮，按钮/选项照常进入历史。
+- **Plan / Build 与安全开关**：`agent_mode=plan` 时变更类工具不下发（`apply_workflow`、`workspace_write`、
+  `workspace_import`、`run_cmd`、Python 写入/运行）；`ai_auto_approve` 关闭时 `run_cmd`/`workspace_write`
+  按名拒绝并让 AI 先问你。单次工具结果上限 `ai_max_tool_result_chars` 默认 12000，可调。
+- **@ 运行记录**：`references.KINDS` 增加 `run`，展开为状态、节点错误与控制台尾部（20 行、整块受引用预算限制）。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
 

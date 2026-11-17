@@ -16,7 +16,7 @@ from runtime import paths, stores
 from ai import store
 
 #: Kinds the composer's picker offers, in the order it lists them.
-KINDS = ('dataset', 'export', 'workflow', 'file')
+KINDS = ('dataset', 'export', 'workflow', 'run', 'file')
 #: A turn may name at most this many things; the text budget below is what actually binds.
 MAX_REFS = 8
 MAX_CHARS = 1200
@@ -69,6 +69,16 @@ def options(query: str = '') -> list[dict]:
                 'id': str(row.get('name') or ''),
                 'label': str(row.get('name') or ''),
                 'detail': f'{int(row.get("nodes") or 0)} 节点',
+            }
+        )
+
+    for row in stores.get_run_store().run_ledger()[:40]:
+        out.append(
+            {
+                'kind': 'run',
+                'id': str(row.get('id') or ''),
+                'label': str(row.get('workflow_name') or row.get('id') or ''),
+                'detail': f'{row.get("status") or ""} · {row.get("row_count") or 0} 行',
             }
         )
 
@@ -131,6 +141,37 @@ def _workflow_text(name: str) -> str:
     return '\n'.join(lines)
 
 
+def _run_text(run_id: str) -> str:
+    """A run record + its node verdicts + a SHORT console tail, for @-referencing a run.
+
+    Token policy: the tail is 20 lines, each capped, and the whole block is clipped by the caller's
+    reference budget. A deeper look is the `run_console` tool (bounded, paged by `limit`).
+    """
+    run_store = stores.get_run_store()
+    run = run_store.get_run(run_id)
+    if not run:
+        return f'运行 {run_id}：找不到。'
+    lines = [
+        f'运行 {run.get("workflow_name") or run_id}（{run_id}）',
+        f'状态：{run.get("status") or ""}；开始：{run.get("started_at") or ""}；结束：{run.get("finished_at") or ""}',
+    ]
+    try:
+        statuses = run_store.node_statuses(run_id)
+        for node_id, node in list(statuses.items())[:20]:
+            error = str(node.get('error') or '')
+            lines.append(
+                f'- {node_id}: {node.get("status") or ""}，{node.get("row_count") or 0} 行'
+                + (f'，错误：{error[:200]}' if error else '')
+            )
+        rows = run_store.read_log(run_id, limit=20).get('rows') or []
+        if rows:
+            lines.append('控制台尾部：')
+            lines.extend(f'{row.get("level") or ""} {str(row.get("line") or "")[:200]}' for row in rows)
+    except Exception as exc:  # a run whose tables are gone is still a named run
+        lines.append(f'（明细不可读：{str(exc)[:120]}）')
+    return '\n'.join(lines)
+
+
 def resolve(refs: list) -> tuple[str, list[dict]]:
     """Render the named references: ``(text for the turn, rows that travel as attachments)``."""
     parts: list[str] = []
@@ -159,6 +200,8 @@ def resolve(refs: list) -> tuple[str, list[dict]]:
             text = _export_text(ident)
         elif kind == 'workflow':
             text = _workflow_text(ident)
+        elif kind == 'run':
+            text = _run_text(ident)
         else:
             row = store.get_attachment(ident)
             if row is None or not row.get('file_id'):

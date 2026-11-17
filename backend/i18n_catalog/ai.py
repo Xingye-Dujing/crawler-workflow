@@ -36,6 +36,10 @@ ZH = {
     'ai.workflowSaveFailed': '工作流无法保存到本账号的 workflows 目录：{detail}',
     'ai.datasetTooBig': '数据超过单表上限，未导入：{detail}',
     'ai.workspaceCloud': '云端模式没有用户本机文件系统，工作文件夹、导入和命令都不可用。',
+    'ai.approvalRequired': (
+        '“{tool}”会改动本机，但“自动同意 AI 的本机操作”是关闭的。'
+        '先用 ask_user_question 请用户确认并开启该设置，或改为只读操作。'
+    ),
     'ai.workspaceNoApp': '这个宿主没有本地安装目录，命令只能在已选择的工作文件夹里运行。',
     'ai.workspaceMissing': '还没有选择工作文件夹：请先在 AI 工作区顶部选择本地文件夹。',
     'ai.workspaceGone': '工作文件夹已不存在：{path}；请重新选择。',
@@ -174,6 +178,10 @@ EN = {
     'ai.datasetTooBig': 'The table is above the single-table limit and was not imported: {detail}',
     'ai.workspaceCloud': (
         'A cloud host has no user filesystem, so the working folder, local imports and commands are unavailable.'
+    ),
+    'ai.approvalRequired': (
+        '“{tool}” changes the machine, but “Approve AI machine actions automatically” is off. Ask the user with '
+        'ask_user_question and let them enable it, or do a read-only step instead.'
     ),
     'ai.workspaceNoApp': 'This host has no local install folder; a command needs a chosen working folder.',
     'ai.workspaceMissing': 'No working folder is chosen yet. Pick a local folder at the top of the AI workspace.',

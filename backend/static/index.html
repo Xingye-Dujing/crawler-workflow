@@ -2615,9 +2615,12 @@
           <div class="ai-attachments" id="ai-attachments"></div>
           <div class="ai-refs" id="ai-refs"></div>
           <div class="ai-ref-menu" id="ai-ref-menu" hidden></div>
+          <div class="ai-ref-menu" id="ai-cmd-menu" hidden></div>
           <textarea id="ai-input" class="ai-input" rows="2" placeholder="Ask about the project, a run, a dataset…" data-i18n-placeholder="ai.placeholder" data-i18n-aria-label="ai.message" aria-label="Message"></textarea>
           <div class="ai-composer-row">
             <div class="ai-toggles">
+              <button type="button" class="ai-toggle" id="ai-agent-plan" data-ai-agents="plan" data-i18n="ai.mode.plan" data-i18n-aria-label="ai.mode.planHint" title="Plan">Plan</button>
+              <button type="button" class="ai-toggle is-on" id="ai-agent-build" data-ai-agents="build" data-i18n="ai.mode.build" data-i18n-aria-label="ai.mode.buildHint" title="Build">Build</button>
               <button type="button" class="ai-toggle" id="ai-thinking-btn" onclick="AIWorkspace.toggleThinking()" data-i18n="ai.thinking" data-i18n-aria-label="ai.thinking" aria-label="Thinking" title="Thinking">Thinking</button>
               <button type="button" class="ai-toggle" id="ai-search-btn" onclick="AIWorkspace.toggleSearch()" data-i18n="ai.search" data-i18n-aria-label="ai.search" aria-label="Web search" title="Web search">Web</button>
               <select id="ai-skill" class="ai-select" data-i18n-aria-label="ai.skill" aria-label="Skill" onchange="aiSetSkill(this.value)"></select>

@@ -1106,4 +1106,7 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
 
         if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
             raise AIError('ai.workspaceCloud', kind='capability')
+        # The user's own safety switch: with it off, touching the machine is a request, not an act.
+        if tool.permission in ('write:files', 'exec:cmd') and not get_setting('ai_auto_approve'):
+            raise AIError('ai.approvalRequired', kind='capability', tool=name)
     return tool.handler(args or {}, ctx or {})

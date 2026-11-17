@@ -71,8 +71,17 @@ def _fallback_title(text: str) -> str:
     return cleaned[:42] + ('…' if len(cleaned) > 42 else '') or t('ai.untitled')
 
 
-def _system_prompt(skill, provider, model: str) -> str:
+def _system_prompt(skill, provider, model: str, agent_mode: str = 'build') -> str:
     capability_words = ', '.join(sorted(provider.spec.capabilities)) or 'none'
+    mode_line = (
+        'Agent mode: PLAN. Read, profile, validate and propose only. Do not write files, run commands, apply or '
+        'run a workflow; publish a plan plus the concrete artifact (workflow draft / analysis plan) the user can '
+        'apply themselves.'
+        if agent_mode == 'plan'
+        else 'Agent mode: BUILD. You may act through the tools you were given (apply a validated workflow, import '
+        'a table, write in the working folder, run one allow-listed command) and must verify the result before '
+        'claiming it worked.'
+    )
     ask_line = (
         'Ask policy: ask whenever the goal, scope, cost or permission is ambiguous.'
         if skill.ask_policy in ('auto', 'always')
@@ -92,6 +101,7 @@ def _system_prompt(skill, provider, model: str) -> str:
         f'Active skill: {skill.id}\n{skill.prompt}\n\n'
         f'Provider: {provider.spec.id} / {model}. Declared capabilities: {capability_words}.\n'
         f'{environment.prompt_line()}\n'
+        f'{mode_line}\n'
         f'{tools_line}\n{ask_line}'
     )
 
@@ -172,6 +182,7 @@ class AgentService:
         if conversation is None:
             conversation = store.create_conversation(provider_id, model, str(payload.get('skill') or 'auto'))
         skill_id = str(payload.get('skill') or 'auto')
+        agent_mode = 'plan' if str(payload.get('agent_mode') or '').lower() == 'plan' else 'build'
         if skill_id == 'auto':
             skill_id = skills.route(text, str((payload.get('context') or {}).get('page') or ''))
         skill = skills.get_skill(skill_id)
@@ -203,6 +214,7 @@ class AgentService:
             'web_search': web_search,
             'safety': str(payload.get('safety') or get_setting('ai_safety_level') or 'high'),
             'locale': lang,
+            'agent_mode': agent_mode,
             'context_text': context_text,
             'context_meta': context_meta,
             'latest_reminder': reminder,
@@ -281,6 +293,7 @@ class AgentService:
             context_text=context_text,
             context_meta=context_meta,
             run_id=run['id'],
+            agent_mode=agent_mode,
         )
 
     def retry(self, conversation_id: str, api_key: str = ''):
@@ -324,6 +337,7 @@ class AgentService:
             context_text=str(meta.get('context_text') or ''),
             context_meta=meta.get('context_meta') or {},
             run_id=run['id'],
+            agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
         )
 
     def answer(self, conversation_id: str, message_id: str, question_id: str, answers: list, api_key: str = ''):
@@ -392,6 +406,7 @@ class AgentService:
             context_text=str(meta.get('context_text') or ''),
             context_meta=meta.get('context_meta') or {},
             run_id=(assistant.get('meta') or {}).get('run_id') or '',
+            agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
         )
 
     def _loop(
@@ -410,6 +425,7 @@ class AgentService:
         context_text: str,
         context_meta: dict,
         run_id: str,
+        agent_mode: str = 'build',
     ):
         cancel_event = _active(conversation['id'])
         # 0 means "no ceiling": the workspace is a harness, and a task with many files legitimately
@@ -439,7 +455,22 @@ class AgentService:
             tool_schemas = [tool for tool in tool_schemas if tool['name'] in offered]
         else:
             tool_schemas = []
-        system = _system_prompt(skill, provider, model)
+        if agent_mode == 'plan':
+            # Plan is read-only by CONSTRUCTION, not by the model's goodwill: the mutating tools are
+            # not offered, so `tools.execute` refuses a replayed call for the same reason.
+            blocked = {
+                'apply_workflow',
+                'workspace_set',
+                'workspace_write',
+                'workspace_import',
+                'run_cmd',
+                'python_run',
+                'python_save_script',
+                'python_write',
+            }
+            offered -= blocked
+            tool_schemas = [tool for tool in tool_schemas if tool['name'] not in blocked]
+        system = _system_prompt(skill, provider, model, agent_mode)
         rounds = 0
         state: dict = {}
         try:
@@ -917,14 +948,21 @@ class AgentService:
             )
             text = json.dumps(result, ensure_ascii=False, default=str)
             # The tool result is what the provider is billed for. A dataset or script output can be
-            # enormous; the workspace's own tools are bounded, and this is the last backstop.
-            if len(text) > 12000:
-                text = text[:12000] + '\n…[truncated by the workspace; ask for a narrower page]'
+            # enormous; the workspace's own tools are bounded, and this is the last backstop. The cap
+            # is a setting (default 12k) rather than a constant: a turn that truly needs more asks
+            # the user to raise it instead of being silently cut.
+            limit_chars = max(2000, int(get_setting('ai_max_tool_result_chars') or 12000))
+            if len(text) > limit_chars:
+                text = (
+                    text[:limit_chars]
+                    + f'\n…[truncated at {limit_chars} chars by the workspace; use a narrower page, or ask the user'
+                    ' to raise ai_max_tool_result_chars]'
+                )
             is_error = False
             store.update_step(step['id'], status='done', result=result)
-            # The browser renders the tool card from this event; the 12k cap above only bounded
-            # what the model and the store receive, so an enormous result still crossed the wire.
-            shown = result if len(text) <= 12000 else {'truncated': text}
+            # The browser renders the tool card from this event; the cap above only bounded what the
+            # model and the store receive, so an enormous result still crossed the wire.
+            shown = result if len(text) <= limit_chars else {'truncated': text}
         except AIError as exc:
             text = json.dumps({'error': exc.localized(), 'key': exc.key}, ensure_ascii=False)
             is_error = True
