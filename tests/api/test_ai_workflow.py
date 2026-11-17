@@ -678,3 +678,29 @@ def test_a_question_with_no_text_is_refused(client, monkeypatch, clean_ai):
     data = _chat(client, provider='fake_blank_q', model='fake-model', text='ask me').get_json()
     errors = _turn_errors(data)
     assert errors and '1' in errors[0], data
+
+
+def test_a_resumed_turn_does_not_seed_a_second_skill_row(client, fake_ai, clean_ai):
+    """Answering a question resumes the turn through `_loop`, which restarted `rounds` at zero and
+    seeded another “skill” row into the SAME turn — the transcript showed the skill twice."""
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'message_id': question['message_id'],
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+        'api_key': 'secret-key',
+    }
+    assert client.post('/api/ai/answer?stream=0', json=answer).status_code == 200
+    stored = client.get('/api/ai/conversations/' + meta['conversation_id']).get_json()
+    skills = [
+        block
+        for message in stored['messages']
+        if message['role'] == 'assistant'
+        for block in message.get('blocks') or []
+        if block.get('type') == 'skill'
+    ]
+    assert len(skills) == 1, skills

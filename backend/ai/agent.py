@@ -531,6 +531,11 @@ class AgentService:
             offered -= blocked
             tool_schemas = [tool for tool in tool_schemas if tool['name'] not in blocked]
         system = _system_prompt(skill, provider, model, agent_mode)
+        # Answering a question (or the tool budget) RESUMES the turn through this same entry point,
+        # which started `rounds` at zero again — so every resumed turn seeded a SECOND “skill” row
+        # into the same transcript. The row belongs to the TURN, so it is seeded only when none of
+        # the turn's assistant rows carries one.
+        seeded = _turn_seeded(conversation['id'], turn_id)
         rounds = 0
         state: dict = {}
         try:
@@ -574,7 +579,7 @@ class AgentService:
                     skill_reason=skill_reason,
                     run_id=run_id,
                     context_meta=context_meta,
-                    seed=rounds == 0,
+                    seed=rounds == 0 and not seeded,
                 )
                 if state.get('error'):
                     return
@@ -1260,6 +1265,18 @@ class AgentService:
             status='done',
             meta={'turn_id': turn_id, 'tool_call_id': call['id'], 'name': name, 'is_error': is_error},
         )
+
+
+def _turn_seeded(conversation_id: str, turn_id: str) -> bool:
+    """Whether this turn already opened with its skill row (a resumed turn must not add a second)."""
+    for message in store.list_messages(conversation_id, limit=200):
+        if message['role'] != 'assistant' or message['status'] in ('error', 'interrupted'):
+            continue
+        if str((message.get('meta') or {}).get('turn_id') or '') != str(turn_id):
+            continue
+        if any(block.get('type') == 'skill' for block in message.get('blocks') or []):
+            return True
+    return False
 
 
 def _history(conversation_id: str) -> list:
