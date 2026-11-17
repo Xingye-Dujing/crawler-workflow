@@ -73,7 +73,9 @@ const I18n = {
            the catalogue uses. `field` is the matrix's own label key for the field a
            source node left empty — proving the message names the field THE PAYLOAD
            declares rather than one this test hardcoded. */
-        if (k.startsWith('validate.')) return `${k}|{title}|{n}|{plat}|{col}|{op}|{field}`;
+        if (k.startsWith('validate.')) {
+            return `${k}|{title}|{n}|{plat}|{col}|{op}|{field}|{value}|{allowed}|{cols}|{edges}|{expected}|{given}`;
+        }
         return SHORT[k] || k;
     },
 };
@@ -127,7 +129,7 @@ const selectSourcePlatform = sandbox.__wf.selectSourcePlatform;
 const openSettings = sandbox.__wf.openSettings;
 const nodeNeedsLlm = sandbox.__wf.nodeNeedsLlm;
 
-const out = { validate: {}, url: [], placeholder: {}, settings: {}, needsLlm: {} };
+const out = { validate: {}, url: [], placeholder: {}, settings: {}, needsLlm: {}, badges: {} };
 
 for (const sc of scenarios) {
     I18n.lang = sc.lang || 'en';
@@ -136,6 +138,10 @@ for (const sc of scenarios) {
        previous case's disabled type would silently carry over. */
     sandbox.canvas.disabledTypes = (sc.disabledTypes || []).slice();
     sandbox.canvas._settingsNodeId = null;
+    /* The edit-time parameter problems the diagnostics fetch would hold: the badge words
+       them, while workflow.validateDetailed itself stays the unchanged run gate. Declared
+       per scenario so a case without one proves no second copy lives in workflow.js. */
+    if (sandbox.Diagnostics) sandbox.Diagnostics._paramProblems = sc.paramProblems || {};
     if (sc.needsLlm !== undefined) {
         // One params dict (+ the node-level operation the wire also carries) in,
         // one boolean out — the Python side compares the same table against
@@ -177,6 +183,16 @@ for (const sc of scenarios) {
     }
     sandbox.canvas.connections = sc.connections || [];
     out.validate[sc.id] = workflow.validate();
+    /* The badge's own channel: the step contract's problems join the offline list in
+       Diagnostics.recompute (validateDetailed must stay untouched — it is the run gate).
+       ``badge`` names the node whose badge text is returned. */
+    if (sc.badge && sandbox.Diagnostics) {
+        sandbox.Diagnostics._paramProblems = sc.paramProblems || {};
+        /* The paint step needs real DOM node elements; the badge TEXT is what this measures. */
+        sandbox.canvas._applyValidationVisuals = function () {};
+        sandbox.Diagnostics.recompute();
+        out.badges[sc.id] = sandbox.Diagnostics.problems(sc.badge);
+    }
 }
 
 /* Pure URL helpers, exercised over a fixed table so the JS/Bakend routing

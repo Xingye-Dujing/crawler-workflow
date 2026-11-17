@@ -99,6 +99,20 @@ def referenced_columns(nodes: dict) -> dict:
     return reads
 
 
+def param_errors(nodes: dict) -> dict:
+    """{node_id: [problem...]} — parameter problems a plugin answers WITHOUT a run.
+
+    A problem is data (``code`` + the parameter/box it is about), never a sentence: the canvas
+    badge words it from the browser catalogue. A plugin that declares no ``param_errors`` hook
+    answers ``[]`` — a type with nothing to check is not a gap to guess at.
+    """
+    problems: dict[str, list[dict]] = {}
+    for nid, node in nodes.items():
+        hook = _hook(node.get('type'), 'param_errors')
+        problems[nid] = list(hook(node) or []) if hook is not None else []
+    return problems
+
+
 def _topo_ids(nodes: dict, connections: list) -> list[str]:
     indeg = {nid: 0 for nid in nodes}
     adj: dict[str, list[str]] = {nid: [] for nid in nodes}

@@ -14,11 +14,50 @@
    validateDetailed mirror; missing-column problems are the diff between a node's
    reads and its upstream's known columns — never flagged when the upstream is a
    crawl/comment/resume whose columns the server cannot see without running. */
+/* One parameter problem, worded for the badge. The server answers WHICH box is wrong
+   (``services/analysis/step_checks``); this function owns the words, exactly as
+   ``missingColumnProblems`` does for a missing column. ``field`` is a label key the
+   settings panel already displays, so the message names the box the user is looking at. */
+function analysisParamMessage(title, problem) {
+    var op = I18n.t('op.' + problem.op);
+    if (problem.code === 'steps_shape') {
+        return I18n.t('validate.analysisStepsShape').replace('{title}', title);
+    }
+    var field = problem.field ? I18n.t(problem.field) : String(problem.param || '');
+    if (problem.code === 'bad_option') {
+        return I18n.t('validate.analysisParamOption')
+            .replace('{title}', title)
+            .replace('{op}', op)
+            .replace('{field}', field)
+            .replace('{value}', String(problem.value || ''))
+            .replace('{allowed}', (problem.allowed || []).join(', '));
+    }
+    if (problem.code === 'rename_blank') {
+        return I18n.t('validate.analysisRename')
+            .replace('{title}', title)
+            .replace('{op}', op)
+            .replace('{cols}', (problem.cols || []).join(', '));
+    }
+    if (problem.code === 'labels_mismatch') {
+        return I18n.t('validate.analysisPhaseLabels')
+            .replace('{title}', title)
+            .replace('{op}', op)
+            .replace('{edges}', String(problem.edges))
+            .replace('{expected}', String(problem.expected))
+            .replace('{given}', String(problem.given));
+    }
+    return I18n.t('validate.analysisParam')
+        .replace('{title}', title)
+        .replace('{op}', op)
+        .replace('{field}', field);
+}
+
 var Diagnostics = {
     _timer: null,
     _armed: false,
     _columns: {},
     _reads: {},
+    _paramProblems: {},
     _problems: {},
 
     schedule() {
@@ -58,6 +97,9 @@ var Diagnostics = {
             if (!result || !result.ok) return; /* offline: keep the last known picture */
             this._columns = result.columns || {};
             this._reads = result.reads || {};
+            /* The step contract answered which boxes are empty; the badge words it the same
+               way it words a missing column — the run gate itself is unchanged. */
+            this._paramProblems = result.problems || {};
             this.recompute();
         } catch (e) { /* diagnostics are decoration; a failure leaves the last picture */ }
     },
@@ -102,6 +144,16 @@ var Diagnostics = {
         return out;
     },
 
+    /* The step contract's own answer for one analysis node, worded here. ``field`` is a label
+       key the settings panel already shows, so the badge names the box in front of the user
+       rather than the executor's kwarg. */
+    paramProblems(id) {
+        var list = this._paramProblems[id] || [];
+        var node = (typeof canvas !== 'undefined' && canvas && canvas.nodes) ? canvas.nodes[id] : null;
+        var title = (node && node.title) || I18n.t('node.' + ((node && node.type) || 'analysis'));
+        return list.map(function (problem) { return analysisParamMessage(title, problem); });
+    },
+
     recompute() {
         if (typeof canvas === 'undefined' || !canvas || !canvas.nodes) return;
         var perNode = workflow.validateDetailed().perNode || {};
@@ -111,6 +163,11 @@ var Diagnostics = {
         Object.keys(missing).forEach(function (id) {
             (merged[id] = merged[id] || []).push.apply(merged[id], missing[id]);
         });
+        /* Same channel as a missing column: what the step's own contract answers joins the
+           offline list, so a blank required box gets its badge before a run is paid for. */
+        Object.keys(this._paramProblems).forEach(function (id) {
+            (merged[id] = merged[id] || []).push.apply(merged[id], this.paramProblems(id));
+        }, this);
         this._problems = merged;
         if (typeof canvas._applyValidationVisuals === 'function') canvas._applyValidationVisuals(merged);
         renderCostSummary();

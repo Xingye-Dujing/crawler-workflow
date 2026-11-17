@@ -34,6 +34,7 @@ from services.analysis.params import (
     replaced_columns,
 )
 from services.analysis.pipeline import LLM_OPS, STEP_PARAMS, DataAnalysisService, UnknownOperationError
+from services.analysis.step_checks import param_problems
 
 NODE_TYPE = 'analysis'
 
@@ -88,7 +89,14 @@ def _steps_of(params: dict) -> list[dict]:
     op = params.get('operation')
     if not op:
         return []
-    return [{'op': op, **_normalized_kwargs(str(op), params)}]
+    # ``op`` is the STEP's name here, and a step may also own a parameter called ``op``
+    # (``filter_rows``' comparison) — the panel keeps those apart as ``operation``/``op``.
+    # Writing the step name last keeps the two from swallowing each other: the old merge let
+    # the comparison overwrite the step, so ``filter_rows`` read as an unknown op ``eq`` and
+    # its lineage/parameter model went silent.
+    step = _normalized_kwargs(str(op), params)
+    step['op'] = str(op)
+    return [step]
 
 
 def _step_with_params(step: dict) -> dict:
@@ -185,6 +193,55 @@ def read_columns(node: dict) -> list[str]:
             found += split_panel_columns(step.get('left_on'))
             found += split_panel_columns(step.get('right_on'))
     return [c for c in found if c]
+
+
+def _param_steps(params: dict) -> list[tuple[str, dict]]:
+    """The (op, canonical kwargs) pairs the parameter check asks, one per step.
+
+    Kept apart from ``_steps_of`` because a step's NAME and a step's ``op`` parameter are two
+    different things: ``filter_rows`` compares with a kwarg literally called ``op``, and a
+    dict that merged the name into it would let the comparison answer as the step. Execution
+    keeps them apart the same way (the name is ``step['op']``, the kwargs are
+    ``step['params']``), so the badge reads the shape the run reads.
+    """
+    steps = params.get('steps')
+    if isinstance(steps, list):
+        pairs: list[tuple[str, dict]] = []
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            nested = step.get('params')
+            op = str(step.get('op') or step.get('operation') or '')
+            if not op:
+                continue
+            pairs.append((op, nested if isinstance(nested, dict) else _normalized_kwargs(op, step)))
+        return pairs
+    op = str(params.get('operation') or '')
+    return [(op, _normalized_kwargs(op, params))] if op else []
+
+
+def param_errors(node: dict) -> list[dict]:
+    """Every parameter this node's steps cannot run without, as data (code + box).
+
+    The Settings panel stores each box FLAT beside ``operation`` under the panel's own name
+    (``label_words_col``); the normalized kwargs are what ``validate_step`` compares, so the
+    badge and the run's own refusal ask the same values instead of one of them reading the
+    panel's spelling. Nothing here looks at a table: a named column that the upstream does not
+    carry is the lineage view's question.
+    """
+    params = dict(node_params(node))
+    # The wire carries ``operation`` on the node as well as inside params; the executor reads
+    # either, so the badge may not go silent on the shape a hand-edited file wrote.
+    node_op = str(node.get('operation') or '')
+    if node_op and not params.get('operation'):
+        params['operation'] = node_op
+    if isinstance(params.get('steps'), dict):
+        # The executor refuses this shape by name before running it; a dict is not a step list.
+        return [{'code': 'steps_shape', 'op': 'analysis'}]
+    problems: list[dict] = []
+    for op, kwargs in _param_steps(params):
+        problems.extend(param_problems(op, kwargs))
+    return problems
 
 
 def _two_table_params(step: dict) -> dict:
