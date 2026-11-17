@@ -1288,6 +1288,22 @@ async function connectWarningsScenarios() {
     await warnDrag(s1, nm, KEEP);
     res.name_refused = { msg: lastDialog().message };
 
+    /* A wire OUT of a metadata-only node carries no rows, so there is nothing to explain:
+       no dialog even into a target that ignores upstream (upload) or splits into two
+       branches. The user can see that node produces nothing. */
+    freshWorld();
+    const meta = addNode('name', 0, 0);
+    const metaUp = addNode('upload', 400, 0);
+    const metaPr = addNode('process', 400, 200);
+    const metaOut = addNode('output', 400, 400);
+    await warnDrag(meta, metaUp, KEEP);
+    await warnDrag(meta, metaPr, KEEP);
+    await warnDrag(meta, metaOut, KEEP);
+    res.meta_source_silent = {
+        dialogs: dialogs.length,
+        connections: canvas.connections.length,
+    };
+
     /* Undo: the wire is written, the dialog explains it, "undo" takes it back. */
     freshWorld();
     s1 = addNode('source', 0, 0);

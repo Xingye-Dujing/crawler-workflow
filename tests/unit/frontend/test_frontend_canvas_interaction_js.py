@@ -185,6 +185,15 @@ class TestConnectionWarnings:
     def test_a_wire_into_a_name_node_is_reported_as_refused(self, ix):
         assert ix['connect_warnings']['name_refused']['msg'].startswith('FANIN-NAME')
 
+    def test_a_wire_out_of_a_name_node_explains_nothing(self, ix):
+        """A 工作流命名 node carries no rows, so no wire out of it can change what a target
+        does — the user drew it knowing that node produces nothing. Warn there is crying
+        wolf on a harmless wire (and it used to fire into every upload/comment/resume node,
+        and again as a fan-out on the second branch)."""
+        got = ix['connect_warnings']['meta_source_silent']
+        assert got['dialogs'] == 0, got
+        assert got['connections'] == 3, 'the wires are kept, only the dialog is gone'
+
     def test_undo_takes_the_second_wire_back_and_reports_it_removed(self, ix):
         """The whole point of "written then explained": if the consequence is not what
         the user wanted, the undo button must leave the canvas as it was."""

@@ -1390,6 +1390,22 @@ const canvas = {
         return this._VALID_NODE_TYPES;
     },
 
+    /* The types that carry no rows downstream (``rows: 'none'`` in ``nodes/catalog.py``) — a 工作流命名
+       node is metadata only. Asked of the server's catalogue once it has answered; the pinned list is
+       the cold-page fallback, kept equal to the catalogue by ``tests/unit/analysis/test_node_plugins.py``
+       (the same shape as ``_VALID_NODE_TYPES``). */
+    _META_ONLY_TYPES: ['name'],
+
+    /* Does a wire OUT of this type carry anything at all? A "no" means the wire cannot change what
+       the target does, so the canvas has no consequence to explain. */
+    carriesRows(type) {
+        if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) {
+            const entry = NodeTypes.entry(type);
+            if (entry && entry.rows) return String(entry.rows) !== 'none';
+        }
+        return this._META_ONLY_TYPES.indexOf(type) < 0;
+    },
+
     copyNodeAsJson(id) {
         const n = this.nodes[id];
         if (!n) return Promise.resolve(false);
@@ -2454,7 +2470,14 @@ const canvas = {
        A wire counts as fan-in only at the target that actually consumes data
        differently when a SECOND parent appears; `name`, `upload`, `comment` and
        `resume` warn from the FIRST parent in, because that first parent is already
-       refused (`name`) or already ignored (the other three). */
+       refused (`name`) or already ignored (the other three).
+
+       A wire whose SOURCE carries no rows (a 工作流命名 node) explains nothing: the
+       target's treatment of upstream data is moot when no data can arrive, and the
+       user who drew it already knows that node produces nothing. Every category
+       below is about data, so the whole classifier answers null for such a wire —
+       except a wire INTO a name node, which refuses the RUN rather than explaining
+       data flow. */
     classifyConnection(fromId, toId) {
         const from = this.nodes[fromId];
         const to = this.nodes[toId];
@@ -2473,6 +2496,12 @@ const canvas = {
         if (t === 'name') {
             return { category: 'fanin_name', i18nKey: 'conn.fanin.name', vars: { node: nameOf(toId) } };
         }
+        /* A wire out of a metadata-only node (工作流命名) carries no rows, so it cannot change what
+           the target does — the user drew it knowing that node produces nothing, and the "this wire
+           does nothing" dialog explains something they already see. A wire INTO a name node still
+           refuses the run, so that notice stays above: it is about the target, not about data that
+           was never there. */
+        if (!this.carriesRows(from.type)) return null;
         if (t === 'upload' || t === 'comment' || t === 'resume') {
             return { category: 'fanin_ignore', i18nKey: 'conn.fanin.ignore', vars: { node: nameOf(toId) } };
         }

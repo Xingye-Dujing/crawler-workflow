@@ -124,6 +124,20 @@ def test_every_type_has_seed_parameters_except_the_one_derived_from_the_matrix()
         assert (plugin.type in NODE_DEFAULTS) or (plugin.type in DYNAMIC_DEFAULTS), plugin.type
 
 
+def test_the_frontend_metadata_only_list_matches_the_catalogue():
+    """``canvas.js`` asks the catalogue's ``rows`` before it decides whether a wire can carry data
+    (a 工作流命名 node carries none, so a wire out of it explains nothing). The cold-page fallback
+    list must be the catalogue's ``rows == 'none'`` types; a type that gains rows on one side and
+    not the other would silence a dialog that still has a consequence, or keep one that has none.
+    """
+    source = js_text('canvas.js')
+    match = re.search(r'_META_ONLY_TYPES:\s*\[([^\]]*)\]', source)
+    assert match, 'canvas.js no longer declares the metadata-only fallback list'
+    names = set(re.findall(r"'([\w.-]+)'", match.group(1)))
+    meta = {plugin.type for plugin in catalog.PLUGINS.values() if plugin.rows == 'none'}
+    assert names == meta, f'frontend-only: {sorted(names - meta)}; backend-only: {sorted(meta - names)}'
+
+
 def test_the_page_loads_the_catalogue_before_the_canvas():
     """The canvas reads the payload when it has answered; a page that never loads the module
     would silently run on the fallback forever."""
