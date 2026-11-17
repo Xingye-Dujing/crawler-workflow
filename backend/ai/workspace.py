@@ -409,25 +409,34 @@ def run_command(command: str, *, cwd: str = '', timeout: int = 120) -> dict:
     if not os.path.isdir(workdir):
         raise AIError('ai.workspaceNotDir', kind='bad_request', path=cwd)
     limit = max(1, min(int(timeout or 120), MAX_TIMEOUT))
+    from runtime import processes
+
     try:
-        proc = subprocess.run(
+        # `Popen` + `communicate(timeout=…)` instead of `run`: the child is registered while it
+        # lives, so 进程面板 can list it and 中止 it instead of the user waiting out the timeout.
+        child = subprocess.Popen(
             argv,
             cwd=workdir,
-            capture_output=True,
-            timeout=limit,
-            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             **popen_kwargs(),
         )
     except FileNotFoundError as exc:
         raise AIError('ai.cmdMissing', kind='not_found', command=argv[0]) from exc
+    ident = processes.register('cmd', command, child)
+    try:
+        stdout_raw, stderr_raw = child.communicate(timeout=limit)
     except subprocess.TimeoutExpired as exc:
+        processes.stop(ident)
         raise AIError('ai.cmdTimeout', kind='error', seconds=limit) from exc
-    stdout = _decode(proc.stdout or b'')
-    stderr = _decode(proc.stderr or b'')
+    finally:
+        processes.unregister(ident)
+    stdout = _decode(stdout_raw or b'')
+    stderr = _decode(stderr_raw or b'')
     return {
         'command': command,
         'cwd': _relative(workdir) if folder() else workdir,
-        'exit_code': proc.returncode,
+        'exit_code': child.returncode,
         'stdout': stdout[-MAX_CAPTURE:],
         'stderr': stderr[-MAX_CAPTURE:],
         'truncated': len(stdout) > MAX_CAPTURE or len(stderr) > MAX_CAPTURE,

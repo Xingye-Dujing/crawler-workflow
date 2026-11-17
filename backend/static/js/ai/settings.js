@@ -17,6 +17,9 @@ const AISettings = {
         open: false,
         full: false,
         sessionsOpen: false,
+        /* Pinned = "stay open": a press outside the dock must not close it. Off is the old
+           behaviour (a click elsewhere gives the page back). */
+        pinned: false,
         /* The conversation the panel had open. Without it a reload opened a NEW empty chat and the
            previous turn looked deleted; only the session list still knew it existed. */
         conversation: '',

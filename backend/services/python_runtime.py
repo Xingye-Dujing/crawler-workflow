@@ -317,6 +317,9 @@ def run_code(
     proc = None
     readers = []
     sinks = ({}, {})
+    from runtime import processes
+
+    process_id = ''
     try:
         try:
             proc = subprocess.Popen(
@@ -331,6 +334,8 @@ def run_code(
             # The interpreter probed a second ago, so the OS is answering about the spawn itself.
             # The old code reported "no Python" here, which is a different fact and a wrong fix.
             raise AIError('ai.pythonSpawnFailed', kind='capability', detail=str(exc)[:200]) from exc
+        # A script can loop for minutes; the panel must be able to name it and stop it.
+        process_id = processes.register('python', ' '.join(command), proc)
         readers = [
             threading.Thread(target=_pump, args=(proc.stdout, sinks[0]), daemon=True),
             threading.Thread(target=_pump, args=(proc.stderr, sinks[1]), daemon=True),
@@ -387,6 +392,8 @@ def run_code(
         # Every exit path — success, timeout, stop, non-zero code — leaves with its temp files
         # removed. The input file is the account's upstream rows; a failed script must not keep a
         # copy of the table it never produced output for.
+        if process_id:
+            processes.unregister(process_id)
         if proc is not None:
             if proc.poll() is None:
                 with contextlib.suppress(Exception):

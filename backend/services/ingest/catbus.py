@@ -483,16 +483,24 @@ def _call(
             stderr=subprocess.PIPE,
             **procs.popen_kwargs(),
         ) as proc:
-            _drive(
-                proc,
-                out,
-                deadline=deadline,
-                stdin_text=stdin_text,
-                on_line=on_line,
-                abort=abort,
-                capture=capture,
-                token=token,
-            )
+            # The panel lists and can stop this child by name (kind 'catbus'), not only through the
+            # run's own 停止: an adapter can outlive a request that nobody is watching any more.
+            from runtime import processes
+
+            child_id = processes.register('catbus', ' '.join(argv), proc)
+            try:
+                _drive(
+                    proc,
+                    out,
+                    deadline=deadline,
+                    stdin_text=stdin_text,
+                    on_line=on_line,
+                    abort=abort,
+                    capture=capture,
+                    token=token,
+                )
+            finally:
+                processes.unregister(child_id)
     except (OSError, ValueError) as exc:
         out.code = -1
         out.spawn_error = str(exc)

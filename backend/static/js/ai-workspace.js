@@ -52,6 +52,9 @@ const AIWorkspace = {
        the block stream; without this, every delta closed the thinking block or tool result the user
        had just opened. */
     _openDetails: new Set(),
+    _balance: null,
+    _convoUsage: null,
+    _conversationModel: '',
     _dom: {},
 
     init() {
@@ -86,12 +89,15 @@ const AIWorkspace = {
             jump: 'ai-jump',
             agentPlan: 'ai-agent-plan',
             agentBuild: 'ai-agent-build',
+            pinBtn: 'ai-pin-btn',
         };
         for (const [key, id] of Object.entries(ids)) this._dom[key] = document.getElementById(id);
         const root = this._dom.root;
         if (!root) return;
         this._sessionsOpen = !!AISettings.load().sessionsOpen;
+        this._pinned = !!AISettings.load().pinned;
         root.classList.toggle('sessions-open', this._sessionsOpen);
+        this._renderPin();
         AISettings.save({ open: this._open });
         this._provider = AISettings.providerId(null);
         this._model = AISettings.modelFor(this._provider, null);
@@ -283,6 +289,9 @@ const AIWorkspace = {
     /* True when a press lands outside every surface this panel owns. */
     _onOutsidePress(event) {
         if (!this._open || !this._dom.root) return;
+        /* Pinned: the panel stays until its own × says otherwise. This is the switch that makes
+           “click elsewhere” safe while a turn is running or a file is being chosen. */
+        if (this._pinned) return;
         const target = event && event.target;
         if (!target || typeof target.closest !== 'function') return;
         if (this._dom.root.contains(target)) return;
@@ -299,6 +308,26 @@ const AIWorkspace = {
     toggle() {
         if (this._open) this.close();
         else this.open();
+    },
+
+    /* The pin: ON = the dock ignores outside presses; OFF = the old behaviour. State lives in the
+       browser's settings, so the choice survives a reload. */
+    togglePin() {
+        this._pinned = !this._pinned;
+        AISettings.save({ pinned: this._pinned });
+        this._renderPin();
+        return this._pinned;
+    },
+
+    _renderPin() {
+        const button = this._dom.pinBtn;
+        if (!button) return;
+        button.setAttribute('aria-pressed', this._pinned ? 'true' : 'false');
+        button.classList.toggle('active', !!this._pinned);
+        const label = I18n.t(this._pinned ? 'ai.pinOn' : 'ai.pinOff');
+        button.setAttribute('title', label);
+        button.setAttribute('aria-label', label);
+        if (this._dom.root) this._dom.root.classList.toggle('pinned', !!this._pinned);
     },
 
     open(opts) {
@@ -321,8 +350,12 @@ const AIWorkspace = {
                name, so the picker would offer a model the user may not even have. One silent read
                replaces it — no toast, and a daemon that is down keeps the static list. */
             this._refreshLocalModels();
-            if (this._conversationId) this.selectConversation(this._conversationId);
-            else this._renderWelcome();
+            /* Closing the dock must not end the turn: the fetch is still streaming while the panel
+               is hidden, and re-rendering the stored transcript would throw that live turn away and
+               leave only the deltas that arrive afterwards. Keep the DOM the stream is painting. */
+            if (this._conversationId && !this._sending) this.selectConversation(this._conversationId);
+            else if (!this._conversationId) this._renderWelcome();
+            this._loadSpend();
             if (opts && opts.prompt && this._dom.input) this._dom.input.focus();
         });
     },
@@ -868,10 +901,17 @@ const AIWorkspace = {
             const id = AIRender.escape(row.id);
             const rename = AIRender.escape(I18n.t('ai.rename'));
             const remove = AIRender.escape(I18n.t('ai.delete'));
+            const sessionModel = [row.provider, row.model].filter(Boolean).join(' / ');
             return (
                 '<div class="ai-session-row">' +
-                '<button type="button" class="ai-session ' + (row.id === this._conversationId ? 'selected' : '') + '" data-ai-conversation="' + id + '">' +
+                '<button type="button" class="ai-session ' + (row.id === this._conversationId ? 'selected' : '') + '" data-ai-conversation="' + id + '"' +
+                (sessionModel ? ' title="' + AIRender.escape(sessionModel) + '"' : '') + '>' +
+                '<span class="ai-session-text">' +
                 '<span class="ai-session-title">' + AIRender.escape(row.title || I18n.t('ai.noConversation')) + '</span>' +
+                /* Which model answered this conversation, so an old chat is readable as itself rather
+                   than as "whatever the picker shows today". */
+                (sessionModel ? '<span class="ai-session-model">' + AIRender.escape(sessionModel) + '</span>' : '') +
+                '</span>' +
                 '<span class="ai-session-meta">' + AIRender.escape(String(row.message_count || 0)) + '</span>' +
                 '</button>' +
                 '<span class="ai-session-actions">' +
@@ -925,7 +965,89 @@ const AIWorkspace = {
             '<ul class="ai-monitor-list">' + (monitorRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.monitor.empty')) + '</li>') + '</ul></section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.agentTrace')) + '</h3>' +
             '<ol class="ai-trace">' + (plan || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.planEmpty')) + '</li>') + '</ol></section>' +
+            '<section class="ai-side-block ai-spend"><h3>' + AIRender.escape(I18n.t('ai.spend.heading')) +
+            '<button type="button" class="ai-ghost" data-ai-spend-refresh="1">' + AIRender.escape(I18n.t('ai.spend.refresh')) + '</button></h3>' +
+            this._spendHtml() + '</section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.usage')) + '</h3>' + (usage || '<p class="ai-hint">—</p>') + '</section>';
+    },
+
+    /* The conversation's own numbers: which models it used, the tokens, how much of the input came
+       back from the provider's prefix cache, and (when the provider publishes prices) the money.
+       Everything here is the server's answer — a token count is a fact, a price is the provider's. */
+    _spendHtml() {
+        const rows = [];
+        const money = (amount, currency, digits) => {
+            if (amount === null || amount === undefined) return '—';
+            const code = String(currency || '').toUpperCase();
+            const symbol = code === 'CNY' ? '¥' : (code === 'USD' ? '$' : '');
+            const places = Number.isFinite(digits) ? digits : (Number(amount) < 0.01 ? 6 : 4);
+            return symbol + Number(amount).toFixed(places);
+        };
+        const balance = this._balance;
+        if (balance && balance.supported) {
+            const lines = (balance.balances || []).map((row) => {
+                const label = row.currency || balance.currency || '';
+                return '<li><span>' + AIRender.escape(I18n.t('ai.spend.balance')) + ' · ' + AIRender.escape(label) + '</span><b>' +
+                    AIRender.escape(money(row.total, row.currency || label, 2)) + '</b></li>';
+            }).join('');
+            rows.push(
+                '<ul class="ai-spend-rows">' + (lines || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.spend.noBalance')) + '</li>') +
+                '</ul>' + (balance.available === false ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.spend.unavailable')) + '</p>' : '')
+            );
+        } else if (balance && balance.supported === false) {
+            rows.push('<p class="ai-hint">' + AIRender.escape(I18n.t('ai.spend.unsupported')) + '</p>');
+        }
+        const usage = this._convoUsage;
+        if (usage && (usage.total_tokens || usage.calls)) {
+            const models = (usage.models || []).map((row) => (row.provider ? row.provider + ' / ' : '') + row.model).filter(Boolean);
+            if (models.length) {
+                rows.push('<ul class="ai-spend-rows"><li><span>' + AIRender.escape(I18n.t('ai.spend.models')) + '</span><b>' +
+                    AIRender.escape(models.join('、')) + '</b></li></ul>');
+            }
+            rows.push(
+                '<ul class="ai-spend-rows">' +
+                '<li><span>' + AIRender.escape(I18n.t('ai.spend.input')) + '</span><b>' + usage.prompt_tokens + '</b></li>' +
+                '<li><span>' + AIRender.escape(I18n.t('ai.spend.output')) + '</span><b>' + usage.completion_tokens + '</b></li>' +
+                '<li><span>' + AIRender.escape(I18n.t('ai.spend.cacheRate')) + '</span><b>' + (Math.round((usage.cache_hit_rate || 0) * 1000) / 10) + '%</b></li>' +
+                (usage.cost === null || usage.cost === undefined
+                    ? ''
+                    : '<li><span>' + AIRender.escape(I18n.t('ai.spend.cost')) + ' <span class="ai-hint">' + AIRender.escape(I18n.t('ai.spend.estimated')) + '</span></span><b>' + AIRender.escape(money(usage.cost, usage.currency)) + '</b></li>') +
+                '</ul>'
+            );
+        } else if (this._conversationId) {
+            rows.push('<p class="ai-hint">' + AIRender.escape(I18n.t('ai.spend.empty')) + '</p>');
+        }
+        return rows.join('') || '<p class="ai-hint">—</p>';
+    },
+
+    async _loadSpend() {
+        const provider = this._provider || '';
+        const key = AISettings.keyFor(provider);
+        if (key) {
+            try {
+                const response = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/balance', {
+                    headers: { 'X-Provider-Key': key },
+                });
+                const data = await response.json();
+                this._balance = data.ok ? data : null;
+            } catch (error) {
+                this._balance = null;
+            }
+        } else {
+            this._balance = null;
+        }
+        if (this._conversationId) {
+            try {
+                const response = await fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId) + '/usage');
+                const data = await response.json();
+                this._convoUsage = data.ok ? data.usage : null;
+            } catch (error) {
+                this._convoUsage = null;
+            }
+        } else {
+            this._convoUsage = null;
+        }
+        this._renderSide();
     },
 
     _ensureAssistant() {
@@ -1000,11 +1122,25 @@ const AIWorkspace = {
         }
     },
 
+    /* One writer for a disclosure's state, because a programmatic `.open` (the tool row click) does
+       not always reach the capture listener in time for the next paint. */
+    _setDetailOpen(detail, open) {
+        if (!detail) return;
+        detail.open = !!open;
+        const key = String((detail.getAttribute && detail.getAttribute('data-ai-detail')) || '');
+        if (key) {
+            if (open) this._openDetails.add(key);
+            else this._openDetails.delete(key);
+        }
+        const card = detail.parentElement;
+        if (card && card.classList && card.classList.contains('ai-tool')) card.classList.toggle('is-open', !!open);
+    },
+
     _applyOpenDetails(root) {
         if (!root || typeof root.querySelectorAll !== 'function' || !this._openDetails.size) return;
         for (const el of root.querySelectorAll('details[data-ai-detail]')) {
             const key = String((el.getAttribute && el.getAttribute('data-ai-detail')) || '');
-            if (key && this._openDetails.has(key)) el.open = true;
+            if (key && this._openDetails.has(key)) this._setDetailOpen(el, true);
         }
     },
 
@@ -1441,7 +1577,18 @@ const AIWorkspace = {
     },
 
     _onClick(event) {
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        /* A tool card's own row toggles its result BEFORE the data-action lookup: the row carries no
+           data-ai-* attribute, and clicking the result's body must not close what it points at. */
+        const raw = event.target;
+        const card = raw && raw.closest ? raw.closest('.ai-tool') : null;
+        if (card && !(raw.closest('summary')) && !(raw.closest('details')) && !(raw.closest('button'))) {
+            const detail = card.querySelector('details.ai-tool-detail');
+            if (detail) {
+                this._setDetailOpen(detail, detail.open !== true);
+                return;
+            }
+        }
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1729,6 +1876,10 @@ const AIWorkspace = {
             this._refreshModels();
             return;
         }
+        if (target.hasAttribute('data-ai-spend-refresh')) {
+            this._loadSpend();
+            return;
+        }
         if (target.hasAttribute('data-ai-test')) {
             this._testProvider();
             return;
@@ -1765,6 +1916,10 @@ const AIWorkspace = {
 
     async selectConversation(id) {
         if (!id) return;
+        /* The turn in flight owns this DOM. Re-selecting the same conversation while it streams
+           (which is what reopening the dock does) would repaint from the store and drop the live
+           bubble, so the answer would continue in a second bubble. */
+        if (this._sending && String(id) === String(this._conversationId)) return;
         this._conversationId = id;
         this._mode = 'chat';
         this._editingSkill = null;
@@ -1785,10 +1940,17 @@ const AIWorkspace = {
             this._messages = data.messages || [];
             this._conversationId = data.conversation.id;
             this._rememberConversation(this._conversationId);
+            /* The header names the model this conversation used; the picker below keeps the model
+               the NEXT message will use, which may be a different one. */
+            this._conversationModel = [data.conversation.provider, data.conversation.model].filter(Boolean).join(' / ');
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
             this._renderSide();
-            if (this._dom.title) this._dom.title.textContent = data.conversation.title || I18n.t('ai.title');
+            this._loadSpend();
+            if (this._dom.title) {
+                this._dom.title.textContent = data.conversation.title || I18n.t('ai.title');
+                this._dom.title.title = this._conversationModel;
+            }
         } catch (error) {
             this._toast(I18n.t('ai.error') + ': ' + error.message);
         }
@@ -1838,16 +2000,62 @@ const AIWorkspace = {
             this._renderWelcome();
             return;
         }
-        /* A snapshot, and no recording: this function paints the transcript it was given. Iterating
-           the live array while appending to it is an infinite loop, not a slow repaint. */
-        for (const message of [...this._messages]) {
-            if (message.role === 'user') {
-                this._appendUser(message.content, message.meta?.context, message.meta?.attachments, null, false);
-            } else if (message.role === 'assistant') {
-                this._renderStoredAssistant(message);
-            } else if (message.role === 'tool') {
-                this._renderStoredTool(message);
+        /* Tool calls already drawn INSIDE their assistant bubble (a `tool_use` block). Their `tool`
+           row must not draw a second, detached card between bubbles — that was the misaligned box
+           above every "AI" label. Rows we render in their own right (an answered question, an
+           artifact) stay. */
+        this._inlineToolCalls = new Set();
+        for (const message of this._messages) {
+            if (message.role !== 'assistant') continue;
+            for (const block of message.blocks || []) {
+                if (block && block.type === 'tool_use' && block.id) this._inlineToolCalls.add(String(block.id));
             }
+        }
+        /* A turn is SEVERAL stored assistant rows — one per provider round — all sharing a
+           turn_id. The live view draws one bubble for the whole turn, so the reopened transcript
+           must too: grouping by turn_id is what makes “while it streams” and “after it finished”
+           the same picture. Round-per-bubble was the screenshot with a detached card above every
+           “AI”. */
+        const order = [];
+        const turns = new Map();
+        const turnFor = (message) => {
+            const meta = message.meta || {};
+            const turnId = String(meta.turn_id || message.id || '');
+            let turn = turns.get(turnId);
+            if (!turn) {
+                turn = { kind: 'turn', turnId: turnId, messageId: message.id, blocks: [], usage: null, error: '', extras: [] };
+                turns.set(turnId, turn);
+                order.push(turn);
+            }
+            return turn;
+        };
+        for (const message of this._messages) {
+            if (message.role === 'user') {
+                order.push({ kind: 'user', message: message });
+                continue;
+            }
+            if (message.role === 'assistant') {
+                const turn = turnFor(message);
+                turn.blocks.push(...(message.blocks || []));
+                if (message.usage && Object.keys(message.usage).length) turn.usage = message.usage;
+                const error = String((message.meta || {}).error || '');
+                if (error) turn.error = error;
+                continue;
+            }
+            if (message.role !== 'tool') continue;
+            const meta = message.meta || {};
+            const callId = String(meta.tool_call_id || '');
+            const inline = !!(callId && this._inlineToolCalls.has(callId));
+            if (!this._isStandaloneToolRow(message, inline)) continue;
+            const turnId = String(meta.turn_id || '');
+            const turn = turnId ? turns.get(turnId) : null;
+            if (turn) turn.extras.push(message);
+            else order.push({ kind: 'tool', message: message });
+        }
+        for (const item of order) {
+            if (item.kind === 'user') this._appendUser(item.message.content, item.message.meta?.context, item.message.meta?.attachments, null, false);
+            else if (item.kind === 'turn') this._renderTurn(item);
+            else this._renderStoredTool(item.message);
         }
         for (const question of pending || []) {
             this._appendQuestion(question);
@@ -1855,37 +2063,73 @@ const AIWorkspace = {
         this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
     },
 
-    _renderStoredAssistant(message) {
-        const blocks = message.blocks || [];
+    /* One stored row that deserves its own element: an answered/abandoned question (the answer is
+       part of the transcript), an artifact (its card exists nowhere else), or a tool call whose
+       assistant block is missing. Everything else was already drawn inline. */
+    _isStandaloneToolRow(message, inline) {
+        let payload = message.content || '';
+        try {
+            payload = JSON.parse(payload);
+        } catch (e) {
+            payload = null;
+        }
+        if (payload && payload.tool === 'ask_user_question' && (payload.cancelled || Array.isArray(payload.answers))) return true;
+        if (payload && payload.artifact) return true;
         const meta = message.meta || {};
-        const error = String(meta.error || '');
+        return !inline && !!meta.name && meta.name !== 'update_plan';
+    },
+
+    _renderTurn(turn) {
         const el = document.createElement('article');
         el.className = 'ai-message assistant';
-        if (message.id) el.setAttribute('data-ai-message', message.id);
+        if (turn.messageId) el.setAttribute('data-ai-message', turn.messageId);
         el.innerHTML =
             '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div><div class="ai-message-body">' +
-            '<div class="ai-flow">' + AIRender.assistantFlow(blocks) + '</div>' +
+            '<div class="ai-flow">' + AIRender.assistantFlow(turn.blocks) + '</div>' +
             /* A turn that ENDED in an error is part of the transcript: the reason was painted into
                this page once and then lost on every reload, so a user reopening the conversation
                saw a silent gap where the provider had said exactly what was wrong. */
-            (error ? '<div class="ai-error-text">' + AIRender.escape(error) + '</div>' : '') +
-            '<div class="ai-usage">' + AIRender.usage(message.usage || {}) + '</div>' +
+            (turn.error ? '<div class="ai-error-text">' + AIRender.escape(turn.error) + '</div>' : '') +
+            '<div class="ai-extras"></div>' +
+            '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
             '<button type="button" class="ai-ghost" data-ai-copy-answer="1">' + AIRender.escape(I18n.t('ai.copyAnswer')) + '</button>' +
             '<button type="button" class="ai-ghost" data-ai-retry="1">' + AIRender.escape(I18n.t('ai.retry')) + '</button>' +
             '</div>' +
             '</div>';
         this._dom.chat.appendChild(el);
+        const extras = el.querySelector('.ai-extras');
+        for (const message of turn.extras) {
+            const node = this._storedRowNode(message);
+            if (node && extras) extras.appendChild(node);
+        }
         this._applyOpenDetails(el);
     },
 
-    _renderStoredTool(message) {
+    /* A stored row that stands on its own (an answered question, an artifact) still belongs in the
+       assistant's COLUMN: `.ai-message` is a role + body grid, and appending a bare card put it at
+       the panel's left edge, above the next "AI" label. */
+    _wrapStoredRow(el) {
+        if (!el) return;
+        const article = document.createElement('article');
+        article.className = 'ai-message assistant ai-message-tool';
+        article.innerHTML = '<div class="ai-message-role"></div><div class="ai-message-body"></div>';
+        const body = article.querySelector('.ai-message-body');
+        if (body) body.appendChild(el);
+        else article.appendChild(el);
+        this._dom.chat.appendChild(article);
+        this._applyOpenDetails(article);
+    },
+
+    /* The element for one standalone stored row, or null when it has no rendering of its own. */
+    _storedRowNode(message) {
         let payload = message.content || '';
         try {
             payload = JSON.parse(payload);
         } catch (e) {
             /* plain text tool output is shown verbatim */
         }
+        const meta = message.meta || {};
         /* An answered (or abandoned) question is its own row: what was ASKED and what was
            ANSWERED are both part of the transcript, so a reload must not reduce it to a bare
            “answered” line — the question text used to vanish with the live card. */
@@ -1915,22 +2159,25 @@ const AIWorkspace = {
                 '</div>' +
                 lines.join('') +
                 '<div class="ai-question-answered">' + AIRender.escape(verdict) + '</div>';
-            this._dom.chat.appendChild(el);
-            return;
+            return el;
         }
         const artifact = payload && payload.artifact;
         if (artifact) {
             const holder = document.createElement('div');
             holder.innerHTML = AIRender.artifactCard(artifact);
-            this._dom.chat.appendChild(holder.firstElementChild);
-            return;
+            return holder.firstElementChild;
         }
-        const meta = message.meta || {};
-        if (meta.name) {
+        if (meta.name && meta.name !== 'update_plan') {
             const holder = document.createElement('div');
             holder.innerHTML = AIRender.toolCard(meta.name, {}, meta.is_error ? 'failed' : 'done', payload);
-            this._dom.chat.appendChild(holder.firstElementChild);
+            return holder.firstElementChild;
         }
+        return null;
+    },
+
+    _renderStoredTool(message) {
+        const node = this._storedRowNode(message);
+        if (node) this._wrapStoredRow(node);
     },
 
     _appendQuestion(question) {
@@ -2309,6 +2556,9 @@ const AIWorkspace = {
             this._setSending(false);
             this._paintAssistant();
             this._refreshConversations();
+            /* A finished turn changed the numbers the side panel shows (usage, and the balance).
+               One read, after the turn, not a poller. */
+            this._loadSpend();
             return;
         }
     },

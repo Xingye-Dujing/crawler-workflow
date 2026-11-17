@@ -391,6 +391,9 @@ const AIRender = {
                 continue;
             }
             if (type === 'tool_use') {
+                /* The question card (or its answered row) IS the rendering of `ask_user_question`;
+                   a second generic tool card above it was noise. */
+                if (String(block.name || '') === 'ask_user_question') continue;
                 const key = String(block.id || '') || 'name:' + String(block.name || '');
                 if (seen.has(key)) continue;
                 seen.add(key);

@@ -117,6 +117,35 @@ def ai_models(provider_id: str):
         return _error(exc, 502)
 
 
+@bp.route('/api/ai/providers/<provider_id>/balance', methods=['GET'])
+def ai_provider_balance(provider_id: str):
+    """The account's remaining credit, when the provider publishes one.
+
+    The key is the browser's: it arrives in the same header as the models refresh, is used for this
+    one request and is never stored. A provider with no balance endpoint answers
+    ``supported: false`` — the panel hides the block instead of showing a zero balance.
+    """
+    try:
+        provider = get_provider(provider_id)
+        key = str(request.headers.get('X-Provider-Key') or '')
+        balance = provider.balance(key)
+    except AIError as exc:
+        return _error(exc, 502)
+    if balance is None:
+        return jsonify({'ok': True, 'supported': False, 'provider': provider.spec.id})
+    return jsonify({'ok': True, 'supported': True, 'provider': provider.spec.id, **balance})
+
+
+@bp.route('/api/ai/conversations/<conversation_id>/usage', methods=['GET'])
+def ai_conversation_usage(conversation_id: str):
+    """This conversation's tokens, cache hit rate and estimated spend (the side panel's numbers)."""
+    from ai import costs
+
+    if store.get_conversation(conversation_id) is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    return jsonify({'ok': True, 'usage': costs.conversation_cost(conversation_id)})
+
+
 @bp.route('/api/ai/providers/<provider_id>/test', methods=['POST'])
 def ai_provider_test(provider_id: str):
     data = _json_body()

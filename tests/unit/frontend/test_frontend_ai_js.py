@@ -96,8 +96,25 @@ class TestWorkspaceRepaintAndDelegation:
         out = _run_workspace()['repaint']
         assert out['stored'] == 4, 'a repaint recorded a second copy of the transcript'
         assert out['users'] == 2
-        assert out['assistants'] == 1
+        # The assistant bubble plus the standalone row a stored `tool` message draws (a row with no
+        # inline card of its own belongs to the assistant's column, so it is an article too).
+        assert out['assistants'] == 2, out
         assert out['escaped'] is True
+
+    def test_a_stored_tool_row_does_not_draw_a_second_detached_card(self):
+        """The misaligned card above every "AI" label: the bubble already drew this call."""
+        out = _run_workspace()['storedToolRow']
+        assert out['cards'] == 1, out
+        assert out['insideBubble'] is True, 'the tool card was painted outside a message body'
+
+    def test_a_stored_turn_is_one_bubble_like_the_live_one(self):
+        """Two provider rounds are two stored assistant rows; the reopened transcript must still be
+        one bubble (the live view's picture), not one bubble per round."""
+        out = _run_workspace()['storedTwoRounds']
+        assert out['bubbles'] == 1, out
+        assert out['skills'] == 1, out
+        assert out['tools'] == 1, out
+        assert out['detached'] == 0, 'a standalone tool row appeared beside the bubble'
 
     def test_controls_outside_the_transcript_reach_the_delegated_handler(self):
         out = _run_workspace()['delegated']
@@ -176,6 +193,23 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['native'] is True, 'the system dialog button is missing'
         assert out['opened'] == ['D:/'], out['opened']
         assert out['picked'] == ['pick'], out['picked']
+
+    def test_the_spend_block_names_the_model_and_the_numbers(self):
+        """Which model answered this chat, its tokens, the cache hit rate and the estimated money."""
+        out = _run_workspace()['spend']
+        assert out['sessionModel'] == 'deepseek / deepseek-v4-pro', out['sessionModel']
+        numbers = out['numbers']
+        assert '¥110.25' in numbers, numbers
+        assert 'deepseek / deepseek-flash' in numbers, numbers
+        assert '1000' in numbers and '100' in numbers, numbers
+        assert '80%' in numbers, numbers
+        assert any(value.startswith('¥0.0006') for value in numbers), numbers
+
+    def test_the_pin_keeps_the_panel_open_on_an_outside_click(self):
+        out = _run_workspace()['pin']
+        assert out['pinnedStayedOpen'] is True, 'a pinned panel closed on an outside press'
+        assert out['ariaPressed'] == 'true', out
+        assert out['unpinnedClosed'] is True, 'unpinned, an outside press did not close it'
 
     def test_a_local_daemons_real_models_replace_the_static_one(self):
         out = _run_workspace()['localModels']

@@ -221,7 +221,14 @@ def usage_totals(usage: dict) -> dict:
     return {
         'prompt_tokens': prompt,
         'completion_tokens': completion,
-        'cached_tokens': int(details.get('cached_tokens') or usage.get('cache_read_input_tokens') or 0),
+        # DeepSeek reports its prefix cache as two top-level counts; the OpenAI dialect nests it in
+        # `prompt_tokens_details`. Both are the same fact: tokens that were served from the cache.
+        'cached_tokens': int(
+            details.get('cached_tokens')
+            or usage.get('prompt_cache_hit_tokens')
+            or usage.get('cache_read_input_tokens')
+            or 0
+        ),
         'reasoning_tokens': int(completion_details.get('reasoning_tokens') or 0),
         'total_tokens': int(usage.get('total_tokens') or prompt + completion),
     }

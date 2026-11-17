@@ -134,6 +134,7 @@ ZH = {
     'api.workflowRenamed': '工作流已重命名：{old} → {new}',
     'api.workflowShapeInvalid': '工作流内容无法理解：需要带 nodes 列表的对象',
     'api.diagnosticsFailed': '工作流诊断失败，已跳过本次列检查',
+    'api.processNotYours': '这个进程属于别的账号，不能由你中止',
     'auth.badCredentials': '账号或密码不正确',
     'auth.loginHint': '这台服务器上保存着采集登录态、数据集与运行记录，登录后才能访问。',
     'auth.loginNeedsSecretKey': (
@@ -383,6 +384,7 @@ EN = {
     'api.workflowRenamed': 'Workflow renamed: {old} → {new}',
     'api.workflowShapeInvalid': 'the workflow could not be read: an object with a nodes list is required',
     'api.diagnosticsFailed': 'Workflow diagnostics failed; the column check was skipped for this pass',
+    'api.processNotYours': 'That process belongs to another account and cannot be stopped here',
     'auth.badCredentials': 'Wrong username or password',
     'auth.loginHint': 'This server keeps crawl sessions, datasets and run records — sign in to continue.',
     'auth.loginNeedsSecretKey': (

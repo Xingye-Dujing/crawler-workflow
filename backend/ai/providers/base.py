@@ -168,6 +168,19 @@ class Provider:
     def list_models(self, _api_key: str = '', _host: str = '') -> list:
         return [{'id': model.id, 'label': model.label or model.id} for model in self.spec.models]
 
+    def balance(self, _api_key: str = '') -> dict | None:
+        """The account's remaining credit, for a provider that publishes it; ``None`` elsewhere.
+
+        A balance is the provider's own fact (it needs its own endpoint and currency), so a
+        transport that has no such endpoint answers ``None`` and the panel says so instead of
+        showing a zero that would read as "empty account".
+        """
+        return None
+
+    def cost(self, _model: str = '', _prompt: int = 0, _completion: int = 0, _cached: int = 0) -> dict | None:
+        """Estimated cost of a token count in this provider's own prices; ``None`` when unpublished."""
+        return None
+
     def supports(self, capability: str, model: str = '') -> bool:
         return self.spec.supports(capability, model)
 

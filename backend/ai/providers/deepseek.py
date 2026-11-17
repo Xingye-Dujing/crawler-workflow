@@ -66,6 +66,42 @@ SPEC = ProviderSpec(
 #: service, so this side only ever sends a canonical value.
 EFFORTS = {'low': 'low', 'medium': 'high', 'high': 'high', 'max': 'max', 'xhigh': 'high', 'minimal': 'low'}
 
+#: The balance endpoint and the currency its numbers are in.
+BALANCE_URL = 'https://api.deepseek.com/user/balance'
+CURRENCY = 'CNY'
+
+#: Published list prices, CNY per 1M tokens, as ``{model: (cache_hit, cache_miss, output)}``.
+#: A price is the PROVIDER's fact, so it lives here and nowhere else; the panel labels the number
+#: an estimate (``≈``) because a price change is a provider announcement, not a code change we see.
+PRICES: dict[str, tuple[float, float, float]] = {
+    'deepseek-flash': (0.2, 2.0, 3.0),
+    'deepseek-v4-pro': (0.2, 2.0, 3.0),
+}
+
+
+def _amount(value) -> float:
+    """A balance string ("110.00") as a number; anything unreadable is 0 rather than a crash."""
+    try:
+        return round(float(str(value).strip()), 4)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def cost_of(model: str, prompt: int, completion: int, cached: int) -> dict:
+    """Estimated cost of a token count in this provider's list prices (``None`` when unknown).
+
+    ``cached`` is the part of ``prompt`` that hit the prefix cache; the rest is cache-miss input.
+    """
+    price = PRICES.get(str(model or ''))
+    if price is None:
+        return {'currency': CURRENCY, 'amount': None}
+    hit, miss, output = price
+    cached = max(0, min(int(cached or 0), int(prompt or 0)))
+    uncached = max(0, int(prompt or 0) - cached)
+    amount = (cached * hit + uncached * miss + int(completion or 0) * output) / 1_000_000
+    return {'currency': CURRENCY, 'amount': round(amount, 6)}
+
+
 #: ``finish_reason`` → the canonical reason the transcript shows.
 STOP_REASONS = {
     'stop': 'end_turn',
@@ -484,3 +520,48 @@ class DeepSeekProvider(Provider):
             for row in rows or ()
             if isinstance(row, dict) and row.get('id')
         ]
+
+    def balance(self, api_key: str = '') -> dict | None:
+        """``GET /user/balance`` — the account's remaining credit, in the currency it reports.
+
+        The key travels in the header and is held for this one request; nothing about it is stored.
+        An account with no credit answers ``is_available: false`` and a zero balance, which is a
+        fact the panel shows, not an error.
+        """
+        if not api_key:
+            return None
+        try:
+            response = requests.get(
+                BALANCE_URL,
+                headers={'Authorization': f'Bearer {api_key}', 'Accept': 'application/json'},
+                timeout=15,
+            )
+        except requests.RequestException as exc:
+            raise AIProviderError('ai.network', kind='network', detail=str(exc)[:300]) from exc
+        if response.status_code in (401, 403):
+            raise AIProviderError('ai.auth', kind='auth', detail=str(response.status_code))
+        if response.status_code != 200:
+            raise http_error(response.status_code, response.text[:200])
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise AIProviderError('ai.badResponse', kind='bad_response', detail=response.text[:200]) from exc
+        rows = payload.get('balance_infos') if isinstance(payload, dict) else None
+        return {
+            'available': bool(payload.get('is_available')),
+            'balances': [
+                {
+                    'currency': str(row.get('currency') or CURRENCY),
+                    'total': _amount(row.get('total_balance')),
+                    'granted': _amount(row.get('granted_balance')),
+                    'topped_up': _amount(row.get('topped_up_balance')),
+                }
+                for row in rows or []
+                if isinstance(row, dict)
+            ],
+            'currency': CURRENCY,
+        }
+
+    def cost(self, model: str = '', prompt: int = 0, completion: int = 0, cached: int = 0) -> dict | None:
+        """This model's price applied to a token count (``None`` for a model we have no price for)."""
+        return cost_of(model, prompt, completion, cached)

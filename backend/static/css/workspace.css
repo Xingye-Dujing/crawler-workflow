@@ -232,3 +232,19 @@
   color: #fff;
 }
 
+
+/* The command column is the whole point of the children table, but a long command must not push
+   the Stop button off the panel: one ellipsized line, the full text in the title. */
+#processes-children {
+  border-top: 1px solid var(--line2);
+  margin-top: 6px;
+  padding-top: 4px;
+}
+.proc-cmd {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 10px;
+}

@@ -467,4 +467,107 @@ const before = workspace._dom.chat.querySelector('details.ai-thinking');
 workspace._paintAssistant();
 out.openDetails.sameNode = workspace._dom.chat.querySelector('details.ai-thinking') === before;
 
+/* A stored tool row whose call was ALREADY drawn inside the assistant bubble must not paint a
+   second, detached card — that was the misaligned box above every "AI" label. */
+workspace._messages = [
+    {
+        role: 'assistant',
+        blocks: [
+            { type: 'thinking', thinking: '先跑命令。' },
+            { type: 'tool_use', id: 'call_x', name: 'run_cmd', input: { command: 'ls' }, status: 'done', result: { ok: true } },
+        ],
+        usage: {},
+    },
+    {
+        role: 'tool',
+        content: JSON.stringify({ ok: true }),
+        meta: { tool_call_id: 'call_x', name: 'run_cmd' },
+    },
+];
+workspace._renderMessages([]);
+const inlineCards = workspace._dom.chat.querySelectorAll('.ai-tool');
+out.storedToolRow = {
+    cards: inlineCards.length,
+    insideBubble: inlineCards.length === 1 && !!inlineCards[0].closest('.ai-message-body'),
+};
+
+/* The SAME turn as `twoRounds`, but read back from the store: two assistant rows (one per provider
+   round) + the tool row between them. It must draw ONE bubble, exactly like the live view — a row
+   per bubble is what made the finished transcript look nothing like the streaming one. */
+workspace._messages = [
+    { id: 'u1', role: 'user', content: '列一下', meta: {} },
+    {
+        id: 'a1',
+        role: 'assistant',
+        blocks: [
+            { type: 'skill', name: 'workflow', reason: 'auto' },
+            { type: 'thinking', thinking: '先看看。' },
+            { type: 'tool_use', id: 'call_r', name: 'workspace_list', input: {}, status: 'done', result: { entries: [] } },
+        ],
+        meta: { turn_id: 't-two' },
+        usage: { prompt_tokens: 10, completion_tokens: 2 },
+    },
+    { role: 'tool', content: JSON.stringify({ entries: [] }), meta: { turn_id: 't-two', tool_call_id: 'call_r', name: 'workspace_list' } },
+    {
+        id: 'a2',
+        role: 'assistant',
+        blocks: [{ type: 'thinking', thinking: '再回答。' }, { type: 'text', text: '只有一个 notes.txt。' }],
+        meta: { turn_id: 't-two' },
+        usage: { prompt_tokens: 20, completion_tokens: 6 },
+    },
+];
+workspace._renderMessages([]);
+out.storedTwoRounds = {
+    bubbles: workspace._dom.chat.querySelectorAll('.ai-message.assistant').length,
+    skills: workspace._dom.chat.querySelectorAll('.ai-skill-row').length,
+    tools: workspace._dom.chat.querySelectorAll('.ai-tool').length,
+    detached: workspace._dom.chat.querySelectorAll('.ai-message-tool').length,
+};
+
+/* Which model answered a saved conversation, and this session's numbers (tokens, cache hit rate,
+   estimated money, balance). Both are the server's facts; the panel only words them. */
+workspace._bootstrap.conversations = [
+    { id: 'c-model', title: 'Old chat', message_count: 3, provider: 'deepseek', model: 'deepseek-v4-pro' },
+];
+workspace._renderSessions();
+const modelRow = workspace._dom.sessions.querySelector('.ai-session-model');
+workspace._balance = {
+    supported: true,
+    available: true,
+    currency: 'CNY',
+    balances: [{ currency: 'CNY', total: 110.25, granted: 10, topped_up: 100.25 }],
+};
+workspace._convoUsage = {
+    prompt_tokens: 1000,
+    completion_tokens: 100,
+    total_tokens: 1100,
+    cache_hit_rate: 0.8,
+    cost: 0.00062,
+    currency: 'CNY',
+    cost_complete: true,
+    models: [{ provider: 'deepseek', model: 'deepseek-flash', prompt_tokens: 1000 }],
+};
+workspace._renderSide();
+const spendNumbers = workspace._dom.side.querySelectorAll('b').map((el) => String(el.textContent || ''));
+out.spend = {
+    sessionModel: modelRow ? String(modelRow.textContent) : '',
+    numbers: spendNumbers,
+};
+
+/* The pin: while it is on, a press outside the dock must NOT close it; off is the old behaviour. */
+workspace._pinned = true;
+workspace._renderPin();
+workspace._open = true;
+workspace._onOutsidePress({ target: { closest: () => null } });
+const pinnedStayedOpen = workspace._open === true;
+const pinPressed = workspace._dom.pinBtn ? workspace._dom.pinBtn.getAttribute('aria-pressed') : '';
+workspace._pinned = false;
+workspace._renderPin();
+workspace._onOutsidePress({ target: workspace._dom.chat });
+out.pin = {
+    pinnedStayedOpen: pinnedStayedOpen,
+    ariaPressed: pinPressed,
+    unpinnedClosed: workspace._open === false,
+};
+
 fs.writeFileSync(1, JSON.stringify(out));

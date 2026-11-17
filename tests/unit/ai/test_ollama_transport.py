@@ -147,12 +147,12 @@ def test_a_streamed_tool_call_becomes_a_tool_call_event(monkeypatch):
 
     from ai.providers import ollama
 
-    real_post = ollama.requests.post
-
     def post(url, **kwargs):
         if url.endswith('/api/chat'):
             return FakeResponse(lines=[json.dumps(frame) for frame in frames])
-        return real_post(url, **kwargs)
+        return FakeResponse(
+            {'capabilities': ['completion', 'tools', 'thinking'], 'model_info': {'qwen35.context_length': 262144}}
+        )
 
     monkeypatch.setattr(ollama.requests, 'post', post)
     events = list(provider.stream({'model': 'qwen3.5:9b', 'messages': [], 'tools': []}))

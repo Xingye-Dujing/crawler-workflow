@@ -630,6 +630,28 @@ def usage_summary() -> dict:
     return dict(row) if row else {}
 
 
+def conversation_usage(conversation_id: str) -> list:
+    """Token counts for ONE conversation, per ``(provider, model)`` — the spend panel's input.
+
+    Grouped, because a conversation can switch models mid-way (a fallen-back provider, a user's
+    picker change) and each model has its own price: one blended number would be a number nobody
+    could check.
+    """
+    with connect() as conn:
+        rows = conn.execute(
+            'SELECT provider, model, '
+            'COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, '
+            'COALESCE(SUM(completion_tokens), 0) AS completion_tokens, '
+            'COALESCE(SUM(cached_tokens), 0) AS cached_tokens, '
+            'COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens, '
+            'COUNT(*) AS calls '
+            'FROM usage WHERE conversation_id = ? GROUP BY provider, model '
+            'ORDER BY prompt_tokens DESC',
+            (conversation_id,),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def list_user_skills() -> list:
     with connect() as conn:
         rows = conn.execute('SELECT * FROM user_skills ORDER BY updated_at DESC').fetchall()

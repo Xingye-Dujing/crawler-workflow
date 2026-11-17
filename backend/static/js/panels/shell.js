@@ -329,7 +329,87 @@ function toggleProcessesPanel() {
            is listed in DOCKED_PANELS so opening any of THEM shuts this one. */
         closeDockedPanels('processes-panel');
         processesPoll();
+        processesPollChildren();
+    } else if (_childInterval) {
+        clearInterval(_childInterval);
+        _childInterval = null;
     }
+}
+
+/* The children this server started — a command the assistant ran, a Python script, the CatBus
+   adapter. They used to exist only as "a request that is still open": no list, nothing to stop.
+   Stopping goes through /api/processes/<id>/stop, which kills the child AND its tree. */
+var _childInterval = null;
+
+function _childRowHtml(row) {
+    var kindKey = 'processes.kind.' + String(row.kind || '');
+    var kind = I18n.has(kindKey) ? I18n.t(kindKey) : String(row.kind || '');
+    var seconds = Number(row.seconds || 0);
+    var elapsed = seconds < 60 ? seconds + 's' : (seconds < 3600 ? Math.floor(seconds / 60) + 'm' : Math.floor(seconds / 3600) + 'h');
+    return '<tr>' +
+        '<td>' + escapeHtml(kind) + '</td>' +
+        '<td class="proc-cmd" title="' + escapeHtml(row.command || '') + '">' + escapeHtml(row.command || '') + '</td>' +
+        '<td>' + escapeHtml(String(row.pid || '')) + '</td>' +
+        '<td>' + escapeHtml(elapsed) + '</td>' +
+        '<td><button class="proc-kill-btn" data-child="' + escapeHtml(row.id || '') + '" onclick="stopChildProcess(this)">' + I18n.t('processes.stop') + '</button></td>' +
+        '</tr>';
+}
+
+function _renderChildren(data) {
+    var host = document.getElementById('processes-children');
+    var panel = document.getElementById('processes-panel');
+    if (!host || !panel || !panel.classList.contains('open')) return;
+    var rows = (data && data.children) || [];
+    var head = '<div class="proc-summary"><span>' + I18n.t('processes.children') + ': <b>' + rows.length + '</b></span></div>';
+    if (!rows.length) {
+        host.innerHTML = head + '<div class="proc-line">' + I18n.t('processes.noChildren') + '</div>';
+        return;
+    }
+    host.innerHTML = head +
+        '<table class="proc-table"><tr>' +
+        '<th>' + I18n.t('processes.type') + '</th>' +
+        '<th>' + I18n.t('processes.command') + '</th>' +
+        '<th>' + I18n.t('processes.pid') + '</th>' +
+        '<th>' + I18n.t('processes.elapsed') + '</th>' +
+        '<th>' + I18n.t('processes.stop') + '</th>' +
+        '</tr>' + rows.map(_childRowHtml).join('') + '</table>';
+}
+
+function processesPollChildren() {
+    var panel = document.getElementById('processes-panel');
+    if (!panel) return;
+    if (_childInterval) clearInterval(_childInterval);
+    var load = function () {
+        if (!panel.classList.contains('open')) {
+            if (_childInterval) clearInterval(_childInterval);
+            _childInterval = null;
+            return;
+        }
+        fetch('/api/processes')
+            .then(function (r) { return r.json(); })
+            .then(_renderChildren)
+            .catch(function () { });
+    };
+    load();
+    _childInterval = setInterval(load, 1000);
+}
+
+function stopChildProcess(button) {
+    var ident = button && button.getAttribute ? button.getAttribute('data-child') : '';
+    if (!ident) return;
+    if (button) {
+        button.disabled = true;
+        button.textContent = I18n.t('processes.stopping');
+    }
+    fetch('/api/processes/' + encodeURIComponent(ident) + '/stop', { method: 'POST' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data.ok) showToast(I18n.t('processes.stopFailed') + ': ' + (data.error || data.reason || ''));
+            processesPollChildren();
+        })
+        .catch(function (err) {
+            showToast(I18n.t('processes.stopFailed') + ': ' + err.message);
+        });
 }
 
 var _procInterval = null;
