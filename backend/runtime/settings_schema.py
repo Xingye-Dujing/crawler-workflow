@@ -764,6 +764,18 @@ SETTINGS = (
         hint='set.defaultLiveExportHint',
         consumer='server',
     ),
+    # 工作流文件管理策略：'auto' 把画布改动写回已打开的文件（原行为），'manual' 只在点“保存”时
+    # 写文件。读它的是浏览器（workflow.scheduleAutosave/reloadOpenFile），所以 consumer='browser'。
+    Setting(
+        'workflow_save_mode',
+        'enum',
+        'auto',
+        'defaults',
+        'set.workflowSaveMode',
+        hint='set.workflowSaveModeHint',
+        choices=('auto', 'manual'),
+        consumer='browser',
+    ),
     # ── Hongguo harvest (Windows-only capability, still settings) ────────────
     Setting(
         'hongguo_player_path',

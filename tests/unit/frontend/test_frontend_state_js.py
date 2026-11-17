@@ -803,6 +803,28 @@ def life(tmp_path_factory, capabilities_matrix):
                 'workflow': dict(opened, settings={'mode': 'serial', 'headless': False}),
             },
         },
+        {
+            # 手动保存 policy: the restored draft is unsaved work, so boot must NOT overwrite
+            # it with the file on disk — the user never asked for that save.
+            'id': 'reload_skipped_under_manual_save',
+            'storedOpenFile': '甲流程',
+            'hasDraft': True,
+            'restore': True,
+            'reload': True,
+            'saveMode': 'manual',
+            'loadResponse': {'ok': True, 'workflow': opened},
+        },
+        {
+            # …while 自动保存 (the default) still re-fetches: an autosaved file is at most a
+            # couple of seconds behind the draft, so the file on disk is the newer copy.
+            'id': 'reload_happens_under_auto_save',
+            'storedOpenFile': '甲流程',
+            'hasDraft': True,
+            'restore': True,
+            'reload': True,
+            'saveMode': 'auto',
+            'loadResponse': {'ok': True, 'workflow': opened},
+        },
         {'id': 'save_named', 'currentFile': 'wf1', 'save': True},
         {
             # The camera a person panned to must ride into the saved file.
@@ -1068,6 +1090,21 @@ class TestFileLifecycle:
         assert [n['title'] for n in r['nodes']] == ['抓取微博', '清洗', 'Output'], (
             'the server content loads, not the stale draft'
         )
+
+    def test_manual_saving_keeps_the_unsaved_draft_across_a_reload(self, life):
+        """设置 → 手动保存: the draft can hold hours of un-saved edits, so boot must not swap it
+        for the file on disk. Nothing is fetched and the draft's canvas stays on screen."""
+        r = life['reload_skipped_under_manual_save']
+        assert r['currentFile'] == '甲流程', 'the name still identifies the draft'
+        assert not any(f['url'].startswith('/api/workflow/load') for f in r['fetches']), (
+            'manual saving must not overwrite unsaved work with the saved file'
+        )
+        assert r['nodes'] == [], 'the restored draft (no nodes) is what stays on screen'
+
+    def test_auto_saving_still_reloads_the_open_file_at_boot(self, life):
+        r = life['reload_happens_under_auto_save']
+        assert any(f['url'].startswith('/api/workflow/load') for f in r['fetches'])
+        assert [n['title'] for n in r['nodes']] == ['抓取微博', '清洗', 'Output']
 
     def test_a_remembered_file_that_is_gone_is_forgotten_not_re_requested(self, life):
         """The open-file record must not outlive the file: a fresh data root or a deleted canvas

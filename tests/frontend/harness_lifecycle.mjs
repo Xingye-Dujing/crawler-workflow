@@ -164,6 +164,13 @@ for (const sc of scenarios) {
     canvas.panY = 0;
     canvas.zoom = 1;
     workflow.currentFile = sc.currentFile ?? null;
+    /* A scenario may ask for a save policy: `reloadOpenFile` refuses to overwrite the draft
+       under 手动保存, so this pins both boot behaviours rather than only the autosave one. */
+    if (sc.saveMode) {
+        sandbox.AppSettings = { _values: { workflow_save_mode: sc.saveMode }, pull: async () => {} };
+    } else {
+        delete sandbox.AppSettings;
+    }
     /* The open-file session record lives in localStorage and must be reset between
        scenarios so one scenario's save/restore cannot leak into the next. A
        'returning browser' seeds a draft (the canvas content) and optionally the name

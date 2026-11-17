@@ -68,6 +68,30 @@ class TestAutosaveGates:
         assert ax['debounce']['pending'] == 1, 'the second schedule must cancel the first'
 
 
+class TestSaveMode:
+    """设置 → 工作流文件保存方式 decides whether a modification writes the file at all."""
+
+    def test_manual_policy_arms_nothing_for_a_dirty_open_file(self, ax):
+        assert ax['manual']['pending'] == 0, 'manual saving must wait for the Save button'
+
+    def test_a_timer_queued_before_the_switch_writes_nothing(self, ax):
+        r = ax['manualSwitch']
+        assert r['queued'] == 1, 'the auto policy must still arm the debounce'
+        assert r['postCount'] == 0, 'the fire-time policy check must stop the queued write'
+        assert r['stillDirty'] is True, 'work that was never written must stay flagged unsaved'
+
+    def test_unknown_policy_keeps_the_previous_behaviour(self, ax):
+        r = ax['unknownPolicy']
+        assert r['pending'] == 1, 'settings not loaded yet must not silently disable autosave'
+        assert r['postCount'] == 1
+        assert r['dirtyAfter'] is False
+
+    def test_the_auto_policy_still_writes_and_clears_dirty(self, ax):
+        r = ax['autoPolicy']
+        assert r['postCount'] == 1
+        assert r['dirtyAfter'] is False
+
+
 class TestDirtyGuard:
     def test_the_guard_registers_one_beforeunload_listener(self, ax):
         assert ax['guard']['listeners'] == 1

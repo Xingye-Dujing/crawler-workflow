@@ -39,6 +39,10 @@ const AppSettings = {
     _values: null,
     _draft: {},
     _pulled: false,
+    /* The request a boot step may already be waiting on. Two callers asking at once (the boot
+       step and workflow.reloadOpenFile, which must know the save policy before it decides to
+       overwrite a draft) share one round trip instead of racing two. */
+    _inflight: null,
     /* Whether this account may change these values. The server is the one that decides
        (`/api/settings` answers `read_only`); the panel only mirrors it so a field is
        visibly dead rather than a trap that fails at save time. */
@@ -76,21 +80,28 @@ const AppSettings = {
 
     async pull(force) {
         if (this._pulled && !force) return;
-        try {
-            const resp = await fetch('/api/settings');
-            const result = await resp.json();
-            if (result.ok) {
-                this._values = result.settings || {};
-                this._draft = {};
-                this.readOnly = result.read_only === true;
-                this._pulled = true;
-                this.applyPresetState(result.preset);
-                this.applyRunDefaults();
-                this.applyToPanel();
+        if (this._inflight && !force) return this._inflight;
+        const request = (async () => {
+            try {
+                const resp = await fetch('/api/settings');
+                const result = await resp.json();
+                if (result.ok) {
+                    this._values = result.settings || {};
+                    this._draft = {};
+                    this.readOnly = result.read_only === true;
+                    this._pulled = true;
+                    this.applyPresetState(result.preset);
+                    this.applyRunDefaults();
+                    this.applyToPanel();
+                }
+            } catch (e) {
+                /* Panel just keeps whatever it has; save() reports failures. */
+            } finally {
+                this._inflight = null;
             }
-        } catch (e) {
-            /* Panel just keeps whatever it has; save() reports failures. */
-        }
+        })();
+        this._inflight = request;
+        return request;
     },
 
     applyToPanel() {
@@ -123,6 +134,10 @@ const AppSettings = {
     refreshAfterSave() {
         if (typeof NodeTypes !== 'undefined' && NodeTypes && NodeTypes.load) NodeTypes.load();
         if (typeof Capabilities !== 'undefined' && Capabilities && Capabilities.load) Capabilities.load();
+        /* 工作流文件保存方式 may have just changed. Switching back to 一修改就保存 while the
+           canvas holds unsaved edits should flush them now, not wait for the next edit;
+           switching to 手动保存 is refused by scheduleAutosave itself. */
+        if (typeof workflow !== 'undefined' && workflow && workflow.scheduleAutosave) workflow.scheduleAutosave();
     },
 
     async save() {

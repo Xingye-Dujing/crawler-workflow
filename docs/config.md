@@ -50,6 +50,7 @@
 | `run_keep_per_workflow` · `run_keep_days` · `dataset_keep_days` · `housekeeping_interval_minutes` | 保留策略与清理间隔（20 / 30 / 90 / 60） |
 | `log_max_mb` · `log_backup_count` | 日志轮转大小与份数（重启生效） |
 | `default_run_mode` · `default_headless` · `default_target_count` · `default_comment_limit` · `default_comment_part_size` · `default_source_part_size` · `default_per_article_file` · `default_keep_parts` · `default_live_export` | 新节点的运行模式、目标数、评论上限、分片、按篇拆分、保留分片与实时导出 |
+| `workflow_save_mode` | 工作流文件保存方式：`auto`（默认，改动后几秒静默写回打开的文件）或 `manual`（只有点“保存”才写文件；刷新/重启保留未保存的画布草稿，不覆盖它） |
 | `pool_enabled` · `pool_cooldown_seconds` · `pool_network_cooldown_seconds` · `pool_max_attempts` · `pool_escalate` · `pool_allow_direct_fallback` · `pool_skip_wall_backoff` · `pool_preflight_live` | 账号池与出口池的开关、冷却、换号次数与预检；见 [account_pool.md](account_pool.md) |
 | `hongguo_player_path` · `mitmdump_path` · `harvest_proxy_port` · `harvest_auto_install_ca` | 红果短剧评论收割的播放器、`mitmdump`、代理端口（8860）与自动安装抓包证书；Windows 桌面专属 |
 | `ai_context_scope` · `ai_web_search_default` · `ai_safety_level` · `ai_max_context_chars` · `ai_max_tool_rounds` · `ai_request_timeout` · `ai_allow_code_context` · `ai_allow_python` · `ai_python_path` | AI 工作区的数据范围、默认联网、安全等级、上下文与工具轮次预算、请求超时、源码读取、Python 扩展与解释器路径 |

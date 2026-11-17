@@ -143,5 +143,54 @@ setDirty(true);
 const beforeChoke = sandbox.__pending();
 canvas.addNode('source', 10, 10);
 out.chokepoint = { scheduledByMutation: sandbox.__pending() > beforeChoke };
+/* Flush what that mutation queued before the policy scenarios below measure their own. */
+sandbox.__drain();
+await flushMicrotasks();
+
+/* ── 7. 手动保存 policy: a dirty open file arms nothing ── */
+sandbox.AppSettings = { _values: { workflow_save_mode: 'manual' } };
+workflow.currentFile = 'wfM';
+setDirty(true);
+workflow.scheduleAutosave();
+out.manual = { pending: sandbox.__pending() };
+
+/* ── 8. a timer queued under 自动保存 writes nothing once the policy turns manual ── */
+sandbox.AppSettings._values.workflow_save_mode = 'auto';
+workflow.scheduleAutosave();
+const queuedBeforeSwitch = sandbox.__pending();
+sandbox.AppSettings._values.workflow_save_mode = 'manual';
+fetchCalls.length = 0;
+sandbox.__drain();
+await flushMicrotasks();
+out.manualSwitch = {
+    queued: queuedBeforeSwitch,
+    postCount: fetchCalls.filter((c) => c.url.indexOf('/api/workflow/save') >= 0).length,
+    stillDirty: canvas.dirty,
+};
+
+/* ── 9. settings that never arrived keep the old behaviour: the open file stays fresh ── */
+sandbox.AppSettings._values = {};
+workflow.currentFile = 'wfU';
+setDirty(true);
+fetchCalls.length = 0;
+workflow.scheduleAutosave();
+out.unknownPolicy = { pending: sandbox.__pending() };
+sandbox.__drain();
+await flushMicrotasks();
+out.unknownPolicy.postCount = fetchCalls.filter((c) => c.url.indexOf('/api/workflow/save') >= 0).length;
+out.unknownPolicy.dirtyAfter = canvas.dirty;
+
+/* ── 10. 自动保存 named explicitly still behaves like before ── */
+sandbox.AppSettings._values = { workflow_save_mode: 'auto' };
+workflow.currentFile = 'wfA2';
+setDirty(true);
+fetchCalls.length = 0;
+workflow.scheduleAutosave();
+sandbox.__drain();
+await flushMicrotasks();
+out.autoPolicy = {
+    postCount: fetchCalls.filter((c) => c.url.indexOf('/api/workflow/save') >= 0).length,
+    dirtyAfter: canvas.dirty,
+};
 
 process.stdout.write(JSON.stringify(out));

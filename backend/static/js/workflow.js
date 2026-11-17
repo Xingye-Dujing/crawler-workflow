@@ -106,11 +106,23 @@ const workflow = {
        entry we re-fetch the file's CONTENT by name and load the latest, rather than trusting the stale
        draft. A genuinely new canvas (no currentFile) keeps its draft — there is no server file to be
        stale against. A missing or failing load is non-destructive: the restored draft stays put. No
-       "loaded" toast is raised on this silent refresh; it is boot, not a user action. */
+       "loaded" toast is raised on this silent refresh; it is boot, not a user action.
+       Under 手动保存 the draft IS the unsaved work — it can hold hours of edits, not the couple of
+       seconds an autosaved file has. Overwriting it with the file on disk would throw those edits away
+       without asking, so that policy keeps the draft and leaves the file alone. */
     async reloadOpenFile() {
+        /* The policy is a server answer; ask for it before deciding. AppSettings.pull() is a
+           no-op once the boot step already resolved, and a failed fetch keeps the auto behaviour. */
+        if (typeof AppSettings !== 'undefined' && AppSettings && AppSettings.pull) {
+            try {
+                await AppSettings.pull();
+            } catch (e) {
+                /* an unreachable settings route is not a reason to skip the stale-file refresh */
+            }
+        }
         var name = this.currentFile;
         var loaded = false;
-        if (name) {
+        if (name && this._autosaveEnabled()) {
             try {
                 var resp = await fetch('/api/workflow/load?name=' + encodeURIComponent(name));
                 var result = await resp.json();
@@ -190,13 +202,23 @@ const workflow = {
         }
     },
 
+    /* The file-management policy, answered by the server (设置 → 工作流文件保存方式):
+       'auto' writes the open file back after a change, 'manual' writes it only on Save.
+       Before the settings arrive (an instant after boot) the previous behaviour wins, so
+       a page that never reached /api/settings still keeps its open file fresh — and the
+       fire-time re-check in `_autosaveToFile` catches the switch happening mid-debounce. */
+    _autosaveEnabled() {
+        if (typeof AppSettings === 'undefined' || !AppSettings || !AppSettings._values) return true;
+        return AppSettings._values.workflow_save_mode !== 'manual';
+    },
+
     /* Debounced, silent autosave — fires a couple seconds after the last structural change
        and ONLY when a file is already open. A never-named canvas is deliberately left for the
        explicit Save, so autosave never drops unexpected files into the folder; and it writes
        no toast, because a background save that announces itself every few seconds is noise.
        The dirty flag is the whole gate: nothing to flush, nothing scheduled. */
     scheduleAutosave() {
-        if (!this.currentFile || !canvas.dirty) return;
+        if (!this.currentFile || !canvas.dirty || !this._autosaveEnabled()) return;
         if (this._autosaveTimer) clearTimeout(this._autosaveTimer);
         this._autosaveTimer = setTimeout(() => {
             this._autosaveTimer = null;
@@ -206,8 +228,9 @@ const workflow = {
 
     async _autosaveToFile() {
         /* Re-check at fire time, not just schedule time: the user may have saved explicitly
-           (clearing dirty) or opened a new file inside the debounce window. */
-        if (!this.currentFile || !canvas.dirty) return;
+           (clearing dirty), opened a new file inside the debounce window, or switched the
+           policy to 手动保存 while this timer was queued. */
+        if (!this.currentFile || !canvas.dirty || !this._autosaveEnabled()) return;
         try {
             const resp = await fetch('/api/workflow/save', {
                 method: 'POST',

@@ -124,6 +124,28 @@ class TestSchema:
                     assert key in tables[lang], f'{key} missing from {lang}'
 
 
+class TestWorkflowSaveMode:
+    """设置 → 工作流文件保存方式 is a two-value policy, auto by default.
+
+    The browser reads it (workflow.scheduleAutosave / reloadOpenFile), so the declaration,
+    the two choice labels and the panel group are the whole contract.
+    """
+
+    def test_it_is_an_auto_default_two_value_policy(self):
+        spec = BY_KEY['workflow_save_mode']
+        assert spec.kind == 'enum'
+        assert spec.default == 'auto', 'the previous behaviour must stay the default'
+        assert set(spec.choices) == {'auto', 'manual'}
+        assert spec.consumer == 'browser'
+
+    def test_both_choices_are_translated_for_the_panel(self):
+        tables = catalog_keys()
+        for choice in BY_KEY['workflow_save_mode'].choices:
+            key = f'set.choice.workflow_save_mode.{choice}'
+            for lang in ('en', 'zh'):
+                assert key in tables[lang], f'{key} missing from {lang}'
+
+
 class TestCoverage:
     def test_a_server_read_setting_is_read_somewhere_outside_the_store(self):
         read = _read_setting_keys()
