@@ -209,3 +209,11 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['chips'] == ['Corpus'], out['chips']
         assert out['custom'] == '用这个', out['custom']
         assert out['refs'] == [{'kind': 'dataset', 'id': 'd1'}], out['refs']
+
+    def test_an_open_disclosure_survives_the_streaming_repaint(self):
+        """Thinking and tool-result details stay open while the answer keeps streaming, and an
+        unchanged picture is not rebuilt at all."""
+        out = _run_workspace()['openDetails']
+        assert out['thinking'] is True, 'the streaming repaint closed the thinking block'
+        assert out['tool'] is True, 'the streaming repaint closed the tool result'
+        assert out['sameNode'] is True, 'an unchanged paint rebuilt the DOM'

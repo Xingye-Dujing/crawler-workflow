@@ -431,4 +431,40 @@ out.answerRefs = {
     refs: (sentAnswer && sentAnswer.references) || [],
 };
 
+/* A disclosure the reader opened survives the streaming repaint. The live turn used to rebuild the
+   block stream on every delta, so an opened thinking block or tool result closed itself. */
+workspace._messages = [];
+workspace._conversationId = 'c-open';
+workspace._current = null;
+workspace._openDetails.clear();
+workspace._dom.chat.innerHTML = '';
+workspace._sending = true;
+for (const event of [
+    { type: 'meta', conversation_id: 'c-open', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' },
+    { type: 'thinking', text: '先看看。' },
+    { type: 'tool_start', id: 'call_9', name: 'workspace_list', arguments: {} },
+    { type: 'tool_result', id: 'call_9', name: 'workspace_list', ok: true, result: { entries: [] } },
+]) {
+    workspace._onEvent(event);
+}
+workspace._paintAssistant();
+const thinkingRow = workspace._dom.chat.querySelector('details.ai-thinking');
+const toolDetail = workspace._dom.chat.querySelector('details.ai-tool-detail');
+thinkingRow.open = true;
+dispatchOn(workspace._dom.root, 'toggle', { target: thinkingRow });
+toolDetail.open = true;
+dispatchOn(workspace._dom.root, 'toggle', { target: toolDetail });
+workspace._onEvent({ type: 'text', text: '继续写答案。' });
+workspace._paintAssistant();
+const thinkingAfter = workspace._dom.chat.querySelector('details.ai-thinking');
+const toolAfter = workspace._dom.chat.querySelector('details.ai-tool-detail');
+out.openDetails = {
+    thinking: !!thinkingAfter && thinkingAfter.open === true,
+    tool: !!toolAfter && toolAfter.open === true,
+};
+/* Nothing changed since the last paint: the DOM must be left alone (same node), not rebuilt. */
+const before = workspace._dom.chat.querySelector('details.ai-thinking');
+workspace._paintAssistant();
+out.openDetails.sameNode = workspace._dom.chat.querySelector('details.ai-thinking') === before;
+
 fs.writeFileSync(1, JSON.stringify(out));

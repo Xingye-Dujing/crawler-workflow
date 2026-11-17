@@ -742,6 +742,9 @@
 .ai-tool {
   align-items: center;
   gap: 7px;
+  /* The result disclosure is `flex-basis: 100%`: without wrapping it was squeezed into the row
+     instead of taking its own line, so an opened result drew on top of the tool's own name. */
+  flex-wrap: wrap;
 }
 .ai-tool-dot {
   width: 6px;
@@ -1855,4 +1858,14 @@
 }
 .ai-question-refs .ai-ref-x:hover {
   color: var(--err);
+}
+
+/* An opened tool result is a scroller, not a wall of JSON that pushes the answer off screen. */
+.ai-tool-detail {
+  min-width: 0;
+}
+.ai-tool-detail .ai-code {
+  margin: 4px 0 0;
+  max-height: 320px;
+  overflow: auto;
 }

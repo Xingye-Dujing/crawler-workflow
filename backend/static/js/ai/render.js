@@ -252,7 +252,7 @@ const AIRender = {
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +
             summary +
-            '<details class="ai-artifact-body"><summary>' + this.escape(I18n.t('ai.preview')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(artifact.payload || {}, null, 2)) + '</pre></details>' +
+            '<details class="ai-artifact-body" data-ai-detail="artifact:' + this.escape(String(artifact.id || '')) + ':body"><summary>' + this.escape(I18n.t('ai.preview')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(artifact.payload || {}, null, 2)) + '</pre></details>' +
             '<div class="ai-artifact-actions">' + apply + '<button type="button" class="ai-ghost" data-ai-copy-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.copy')) + '</button><span class="ai-hint">' + this.escape(I18n.t('ai.applyHint')) + '</span></div>' +
             '</section>'
         );
@@ -266,8 +266,9 @@ const AIRender = {
             const seconds = (row.endedAt - row.startedAt) / 1000;
             took = seconds < 1 ? '< 1s' : (seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)) + 's';
         }
+        const detailKey = 'tool:' + String(row.id || row.name || '');
         const detail = status === 'done' && result
-            ? '<details class="ai-tool-detail"><summary>' + this.escape(I18n.t('ai.toolResult')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(result, null, 2)) + '</pre></details>'
+            ? '<details class="ai-tool-detail" data-ai-detail="' + this.escape(detailKey + ':result') + '"><summary>' + this.escape(I18n.t('ai.toolResult')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(result, null, 2)) + '</pre></details>'
             : status === 'failed' && result
                 ? '<pre class="ai-code ai-tool-error">' + this.escape(typeof result === 'string' ? result : JSON.stringify(result, null, 2)) + '</pre>'
                 : '';
@@ -314,6 +315,7 @@ const AIRender = {
             group.rows.push(row);
         };
         const seen = new Set();
+        let thinkingIndex = 0;
         for (const block of blocks || []) {
             if (!block || typeof block !== 'object') continue;
             const type = String(block.type || '');
@@ -321,8 +323,10 @@ const AIRender = {
                 const text = String(block.thinking || '');
                 if (!text) continue;
                 flush();
+                thinkingIndex += 1;
                 parts.push(
-                    '<details class="ai-thinking"><summary>' + this.escape(I18n.t('ai.thinkingLabel')) +
+                    '<details class="ai-thinking" data-ai-detail="thinking:' + thinkingIndex + '"><summary>' +
+                    this.escape(I18n.t('ai.thinkingLabel')) +
                     '</summary><pre class="ai-thinking-body">' + this.escape(text) + '</pre></details>'
                 );
                 continue;
@@ -342,7 +346,7 @@ const AIRender = {
                     why = I18n.has('ai.skill.' + reason + '.name') ? I18n.t('ai.skill.' + reason + '.name') : reason;
                 } else if (reason) why = I18n.t('ai.skillManual');
                 parts.push(
-                    '<details class="ai-skill-row" data-ai-skill="' + this.escape(id) + '">' +
+                    '<details class="ai-skill-row" data-ai-detail="skill:' + this.escape(id) + '" data-ai-skill="' + this.escape(id) + '">' +
                     '<summary><span class="ai-skill-kind">' + this.escape(I18n.t('ai.skillRow')) + '</span>' +
                     '<span class="ai-skill-name">' + this.escape(label) + '</span>' +
                     (why ? '<span class="ai-skill-why">' + this.escape(why) + '</span>' : '') +

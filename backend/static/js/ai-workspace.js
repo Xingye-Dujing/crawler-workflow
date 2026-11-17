@@ -48,6 +48,10 @@ const AIWorkspace = {
     _pythonScript: null,
     _abort: null,
     _renderTimer: null,
+    /* Which disclosures the READER opened, keyed by `data-ai-detail`. A streaming repaint rebuilds
+       the block stream; without this, every delta closed the thinking block or tool result the user
+       had just opened. */
+    _openDetails: new Set(),
     _dom: {},
 
     init() {
@@ -129,6 +133,19 @@ const AIWorkspace = {
                (switching conversations, refreshing context and stopping a monitor were inert). */
             this._dom.root.addEventListener('click', (event) => this._onClick(event));
             this._dom.root.addEventListener('change', (event) => this._onChange(event));
+            /* `toggle` does not bubble, but the CAPTURE phase still passes through this element —
+               so one listener records every disclosure the reader opens or closes. */
+            this._dom.root.addEventListener(
+                'toggle',
+                (event) => {
+                    const el = event && event.target;
+                    const key = el && el.getAttribute ? String(el.getAttribute('data-ai-detail') || '') : '';
+                    if (!key) return;
+                    if (el.open) this._openDetails.add(key);
+                    else this._openDetails.delete(key);
+                },
+                true
+            );
             if (this._dom.chat) this._dom.chat.addEventListener('scroll', () => this._onChatScroll());
             /* An answer box takes `@` too: its textarea announces its own key/input events, and the
                menu must open for THAT box (see `_onRefInput`). */
@@ -953,10 +970,42 @@ const AIWorkspace = {
            no sign of life until the app answers. A text block means the model IS visibly writing, so
            the waiting line is for the other cases (turn just started, thinking, a running tool). */
         const waiting = this._sending && (!last || String(last.type) !== 'text');
-        current.flowEl.innerHTML =
+        const html =
             AIRender.assistantFlow(blocks) +
             (waiting ? AIRender.workingRow(I18n.t(last && last.type === 'tool_use' && last.status === 'running' ? 'ai.waiting' : 'ai.working')) : '');
+        /* A repaint rebuilds this block stream. Two rules make that invisible:
+           1. an unchanged picture is not re-written (a running tool card used to be replaced every
+              90 ms, which dropped the focus and any open disclosure);
+           2. the open/closed state of every disclosure is remembered and re-applied, so reading a
+              thinking block or a tool result is not undone by the next streaming delta. */
+        if (current._flowHtml === html) return;
+        current._flowHtml = html;
+        this._collectOpenDetails(current.flowEl);
+        current.flowEl.innerHTML = html;
+        this._applyOpenDetails(current.flowEl);
         if (atBottom && chat) chat.scrollTop = chat.scrollHeight;
+    },
+
+    /* Disclosure state belongs to the reader, not to the paint. Keyed by ``data-ai-detail`` (a
+       thinking block's index, a tool call's id, an artifact's id), so the same card keeps its
+       state across repaints AND across a stored-transcript repaint. */
+    _collectOpenDetails(root) {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+        for (const el of root.querySelectorAll('details[data-ai-detail]')) {
+            const key = String((el.getAttribute && el.getAttribute('data-ai-detail')) || '');
+            if (!key) continue;
+            const open = el.open === true || (el.hasAttribute && el.hasAttribute('open'));
+            if (open) this._openDetails.add(key);
+            else this._openDetails.delete(key);
+        }
+    },
+
+    _applyOpenDetails(root) {
+        if (!root || typeof root.querySelectorAll !== 'function' || !this._openDetails.size) return;
+        for (const el of root.querySelectorAll('details[data-ai-detail]')) {
+            const key = String((el.getAttribute && el.getAttribute('data-ai-detail')) || '');
+            if (key && this._openDetails.has(key)) el.open = true;
+        }
     },
 
     /* ``record`` is what separates a new turn from a repaint. ``_renderMessages`` replays stored
@@ -1827,6 +1876,7 @@ const AIWorkspace = {
             '</div>' +
             '</div>';
         this._dom.chat.appendChild(el);
+        this._applyOpenDetails(el);
     },
 
     _renderStoredTool(message) {
@@ -2375,6 +2425,7 @@ const AIWorkspace = {
     async newChat() {
         this._conversationId = '';
         this._rememberConversation('');
+        this._openDetails.clear();
         this._messages = [];
         this._current = null;
         this._plan = [];
