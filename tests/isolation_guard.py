@@ -20,7 +20,9 @@ collection imports any test module, and hand the session to :func:`enforce` at t
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+import time as _time
 from pathlib import Path
 
 import pytest
@@ -136,6 +138,52 @@ def report(added: list, removed: list, changed: list) -> str:
 def is_worker(config) -> bool:
     """Whether this process is a pytest-xdist worker (which must not report; the controller does)."""
     return hasattr(config, 'workerinput')
+
+
+#: A throwaway root is only pruned once it has been IDLE this long.
+#:
+#: Two pytest sessions can run at the same time — a full tier in one shell, one file in another (the
+#: documented way to run a single device case). Every session's root mirrors the real layout, and a
+#: long session's root is the OLDEST by mtime, so "keep the newest three" deleted the root of the
+#: session that was still running: its ``data/``, ``settings.json`` and stores vanished underneath
+#: it, and the run reported a dozen unrelated failures (a static source scan, a ``caplog`` count,
+#: the console totals, a store that no longer opened) with no cause in them.
+#:
+#: Age is the portable signal. A pid must not be probed here: on Windows ``os.kill(pid, 0)``
+#: TERMINATES the process, and a lock file is one more thing to leak.
+PRUNE_AFTER_MINUTES = 120
+
+
+def prune_isolated_roots(parent, current=None, keep: int = 3, idle_minutes: int = PRUNE_AFTER_MINUTES, now=None):
+    """Delete throwaway roots that are old AND idle; never this process's own root.
+
+    ``keep`` still bounds what a finished session leaves behind, but only among roots that are
+    already idle — a live session is protected by its own activity, not by a race for the newest
+    directory.
+    """
+    parent = Path(parent)
+    if not parent.is_dir():
+        return []
+    moment = _time.time() if now is None else float(now)
+    fresh_after = moment - max(0.0, float(idle_minutes)) * 60
+    idle = []
+    for path in parent.iterdir():
+        if not path.is_dir():
+            continue
+        if current is not None and path.resolve() == Path(current).resolve():
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime >= fresh_after:
+            continue
+        idle.append((mtime, path))
+    idle.sort()
+    doomed = idle[: len(idle) - keep] if keep else idle
+    for _mtime, path in doomed:
+        shutil.rmtree(path, ignore_errors=True)
+    return [path for _mtime, path in doomed]
 
 
 def terminal_reporter(config):

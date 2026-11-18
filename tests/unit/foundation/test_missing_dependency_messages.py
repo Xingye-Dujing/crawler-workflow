@@ -120,16 +120,26 @@ class TestTheChineseFontAnswer:
         assert visualizer.cjk_font() == 'Microsoft YaHei'
 
     def test_no_cjk_family_means_empty_and_exactly_one_printed_line(self, monkeypatch, caplog):
+        from services.charts import style
+
         class Manager:
             def findfont(self, family, fallback_to_default=True):
                 raise ValueError(f'no {family}')
 
         monkeypatch.setattr('matplotlib.font_manager.fontManager', Manager())
-        with caplog.at_level(logging.WARNING, logger='services.charts.visualizer'):
+        with caplog.at_level(logging.WARNING, logger=style.logger.name):
             visualizer._pyplot()
             visualizer._pyplot()  # thirty figures in one canvas must say it once
         assert visualizer.cjk_font() == ''
-        said = [record.message for record in caplog.records if record.levelno == logging.WARNING]
+        # ``caplog.records`` holds EVERY logger in the process, and this assertion is about the one
+        # warning this module emits: counting a stranger's warning made the case fail when an
+        # unrelated thread logged one at the wrong moment. The emitter owns the name (`style.py`
+        # warns, `visualizer` re-exports it), so it is asked rather than spelled out.
+        said = [
+            record.message
+            for record in caplog.records
+            if record.name == style.logger.name and record.levelno == logging.WARNING
+        ]
         assert len(said) == 1, said
 
     def test_the_warning_names_the_families_it_asked_for(self, monkeypatch, caplog):

@@ -76,3 +76,53 @@ def test_the_cookie_jar_fixture_binds_its_directory_once():
         )
     }
     assert calls == {'_cookie_snapshot': 'directory', '_cookie_restore': 'directory'}, calls
+
+
+class TestPruningOldRoots:
+    """A finished session may clean up after itself — never after a session still running.
+
+    Keeping "the newest three" roots deleted the root of the longest run (it is always the oldest by
+    mtime), which is exactly the root a full tier in one shell is using while another shell runs one
+    file. Its ``data/`` and stores disappeared mid-test, and that run reported a dozen unrelated
+    failures — a static source scan, a ``caplog`` count, the console totals — with no cause in them.
+    """
+
+    @staticmethod
+    def _root(parent, name, age_minutes, now):
+        path = parent / name
+        path.mkdir()
+        (path / 'data').mkdir()
+        stamp = now - age_minutes * 60
+        os.utime(path, (stamp, stamp))
+        return path
+
+    def test_a_live_root_survives_a_prune_however_old_it_is(self, tmp_path):
+        import isolation_guard
+
+        now = 1_800_000_000.0
+        live = self._root(tmp_path, 'isolated-111', 30, now)
+        for index in range(5):
+            self._root(tmp_path, f'isolated-{index}', 300 + index, now)
+        isolation_guard.prune_isolated_roots(tmp_path, current=None, keep=1, now=now)
+        assert live.is_dir(), 'a root younger than the idle window was deleted under a running session'
+        # ``keep`` is spent among the idle roots only: the newest of them stays for post-mortem.
+        assert sorted(path.name for path in tmp_path.iterdir() if path != live) == ['isolated-0']
+
+    def test_the_current_root_is_never_pruned(self, tmp_path):
+        import isolation_guard
+
+        now = 1_800_000_000.0
+        mine = self._root(tmp_path, 'isolated-222', 900, now)
+        self._root(tmp_path, 'isolated-333', 950, now)
+        isolation_guard.prune_isolated_roots(tmp_path, current=mine, keep=0, now=now)
+        assert mine.is_dir()
+
+    def test_keep_still_bounds_what_an_idle_session_leaves_behind(self, tmp_path):
+        import isolation_guard
+
+        now = 1_800_000_000.0
+        for index in range(6):
+            self._root(tmp_path, f'isolated-{index}', 400 + index, now)
+        isolation_guard.prune_isolated_roots(tmp_path, current=None, keep=2, now=now)
+        left = sorted(path.name for path in tmp_path.iterdir())
+        assert left == ['isolated-0', 'isolated-1'], left

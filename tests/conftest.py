@@ -37,7 +37,7 @@ from itertools import count
 from pathlib import Path
 
 import pytest
-from isolation_guard import enforce
+from isolation_guard import enforce, prune_isolated_roots
 from isolation_guard import fingerprint as _fingerprint_protected
 from node_runner import check_node_or_abort
 from run_wait import describe_state, wait_until_quiet
@@ -129,12 +129,14 @@ ACCOUNT_SEQ = count()
 
 
 def _prune_isolated_roots() -> None:
-    """Drop the older throwaway roots, keeping the most recent few."""
-    if not ISOLATED_PARENT.is_dir():
-        return
-    children = sorted((p for p in ISOLATED_PARENT.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime)
-    for stale in children[:-KEEP_ISOLATED_RUNS]:
-        shutil.rmtree(stale, ignore_errors=True)
+    """Drop the older throwaway roots — but only ones no other session is still using.
+
+    The decision moved to :mod:`isolation_guard` (``prune_isolated_roots``) for the reason the
+    module exists: a rule inside ``conftest.py`` is a rule no test can import. The bug it fixes was
+    real and silent — keeping "the newest three" deleted the root of a session that was still
+    running, because the longest run is always the oldest.
+    """
+    prune_isolated_roots(ISOLATED_PARENT, current=ISOLATED_ROOT, keep=KEEP_ISOLATED_RUNS)
 
 
 def pytest_configure(config) -> None:
@@ -359,6 +361,24 @@ def machine_has_a_browser(monkeypatch):
     )
 
 
+def _leak_context(app) -> str:
+    """What else is still running, so a leaked claim points at its owner instead of its victims.
+
+    A leaked worker thread outlives the test that started it and flips the flag *during a later,
+    unrelated* test — which is how a static source scan and a ``caplog`` count ended up failing with
+    no cause in them. Naming the live thread (and the run id it claims) is the difference between
+    "sixteen failures I cannot explain" and one line that says where to look.
+    """
+    parts = []
+    thread = app.execution_state.get('thread')
+    if thread is not None and getattr(thread, 'is_alive', lambda: False)():
+        parts.append(f'a run worker is STILL ALIVE ({getattr(thread, "name", "worker")})')
+    run_id = app.execution_state.get('run_id') or ''
+    if run_id:
+        parts.append(f'it claims run {run_id}')
+    return '. ' + ', '.join(parts) + '.' if parts else ''
+
+
 @pytest.fixture(autouse=True)
 def clean_globals(request):
     """Undo the process-global side effects tests can leave behind.
@@ -482,7 +502,7 @@ def clean_globals(request):
                 f"{request.node.nodeid} left execution_state['running'] at {leaked!r} "
                 f'(it was {running_backup!r} before). Take the `client` fixture or restore '
                 'it with monkeypatch.setitem: a leaked flag makes the server look busy to '
-                'every later test in the session.'
+                'every later test in the session.' + _leak_context(app)
             )
         # A leaked 停止 is the same class of bug wearing a different name: `stopping`
         # is what `stop_requested()` reads, and every crawl's next row asks it. Left
@@ -494,7 +514,7 @@ def clean_globals(request):
             pytest.fail(
                 f"{request.node.nodeid} left execution_state['stopping'] at {leaked!r} "
                 f'(it was {stopping_backup!r} before). Restore it with monkeypatch.setitem: '
-                'a leaked stop makes every later crawl end on its first row.'
+                'a leaked stop makes every later crawl end on its first row.' + _leak_context(app)
             )
 
 
