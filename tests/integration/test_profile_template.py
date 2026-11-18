@@ -72,6 +72,25 @@ def _warm(path: str) -> None:
     _settle(path)
 
 
+def _seed_or_explain(target: str) -> int:
+    """Seed *target* and, when nothing lands, name WHY the template was refused.
+
+    ``seed_new_profile`` answers 0 for two very different reasons — a template that has been used
+    (dirty, so it is never copied into a new account) or a target that is not empty — and the bare
+    ``assert 0 > 0`` cost an investigation on the Windows runner. The verdict is the product's own
+    (``verify_pristine``), so print it instead of guessing.
+    """
+    seeded = profiles.seed_new_profile(target)
+    if seeded:
+        return seeded
+    source = profiles.template_dir()
+    reason = profiles.verify_pristine(source)
+    raise AssertionError(
+        f'nothing was seeded into {target}: template {source} '
+        f'{"is dirty: " + reason if reason else "is pristine"}; target holds {sorted(os.listdir(target))[:6]}'
+    )
+
+
 def _all_names(path: str) -> set:
     names = set()
     for walk_root, _dirs, files in os.walk(path):
@@ -184,7 +203,7 @@ def test_a_seeded_directory_is_a_profile_a_real_browser_accepts(rooted):
     target = profiles.platform_dir('bilibili', 'acct1')
     os.makedirs(target, exist_ok=True)
     before = sorted(os.listdir(target))
-    assert profiles.seed_new_profile(target) > 0
+    assert _seed_or_explain(target) > 0
     assert sorted(os.listdir(target)) != before, 'nothing was seeded'
     crawler = _browser_or_skip(
         'crawl', lambda: get_crawler('bilibili', headless=True, use_profile=True, account='acct1', cookie_dir=None)
@@ -208,7 +227,7 @@ def test_a_directory_that_has_been_used_is_never_reseeded(rooted):
     _warm(source)
     target = profiles.platform_dir('bilibili', 'acct2')
     os.makedirs(target, exist_ok=True)
-    assert profiles.seed_new_profile(target) > 0
+    assert _seed_or_explain(target) > 0
     settled = sorted(os.listdir(target))
     with open(os.path.join(target, 'First Run'), 'w', encoding='utf-8') as handle:
         handle.write('this device has its own history now')

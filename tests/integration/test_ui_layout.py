@@ -2493,9 +2493,14 @@ CHROME_SETTLE_JS = """
 // computed from) match the heights they actually have. A ResizeObserver publishes them, so a
 // layout change made in this same frame — an emulated viewport, a forced language — is one
 // frame ahead of the value the page's own CSS is still using.
+//
+// Fonts first: on a cold runner a CJK fallback arrives AFTER load and re-wraps both bars, which
+// moved the published value twice in one run (measured on ubuntu: a 119px strip beside a 74px
+// publish, and a panel capped at 524px inside a 651px band). `document.fonts.ready` is the
+// browser saying "no more of that is coming"; the poll below then only has to wait for a frame.
 const done = arguments[arguments.length - 1];
 const started = performance.now();
-const step = () => {
+const poll = () => {
     const style = getComputedStyle(document.documentElement);
     const published = [parseFloat(style.getPropertyValue('--menuH')) || 0,
                        parseFloat(style.getPropertyValue('--barH')) || 0];
@@ -2503,12 +2508,16 @@ const step = () => {
     const bar = document.getElementById('status-bar');
     const live = [menu ? menu.offsetHeight : 0, bar ? bar.offsetHeight : 0];
     const settled = Math.abs(published[0] - live[0]) <= 1 && Math.abs(published[1] - live[1]) <= 1;
-    if (settled || performance.now() - started > 3000) {
+    if (settled || performance.now() - started > 5000) {
         return done({ published, live, settled });
     }
-    requestAnimationFrame(() => setTimeout(step, 16));
+    requestAnimationFrame(() => setTimeout(poll, 16));
 };
-step();
+if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => poll());
+} else {
+    poll();
+}
 """
 
 
@@ -2548,6 +2557,16 @@ def _settled_facts(driver, script: str, ready, *, attempts: int = 6, delay: floa
     return facts
 
 
+def _cookie_fit_ok(got: dict) -> bool:
+    """The assertion's own condition: every panel either fits, or fills the whole band.
+
+    Used as ``_settled_facts``'s readiness check, so a run that measured the frame before the
+    bars republished converges instead of reporting the previous band as this one's.
+    """
+    band = got['viewport'][1] - got['chrome']['menuH'] - got['chrome']['barH'] - 24
+    return all(row['scroll'] <= row['client'] + 1 or row['client'] >= band - 4 for row in got['rows'])
+
+
 def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_url, driver):
     """The eight-platform step guide wrapped into a narrow column and pushed the panel
     past the window, so every platform showed a vertical scrollbar. The panel was
@@ -2579,9 +2598,9 @@ def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_
         # set it BEFORE the settle below, or the settle would measure the previous language.
         driver.execute_script("document.body.dataset.lang = 'zh'; I18n.apply();")
         # The bars publish their measured height from a ResizeObserver, so a layout that just
-        # changed leaves the published value one frame behind: wait for the publish, then measure.
-        _settle_chrome(driver)
-        got = driver.execute_script(COOKIE_FIT_JS, [])
+        # changed leaves the published value one frame behind — settle, measure, and settle again
+        # if the panel still describes the previous band (see ``_settled_facts``).
+        got = _settled_facts(driver, COOKIE_FIT_JS, _cookie_fit_ok)
     finally:
         driver.execute_cdp_cmd('Emulation.clearDeviceMetricsOverride', {})
     inner_w, inner_h = got['viewport'][0], got['viewport'][1]
