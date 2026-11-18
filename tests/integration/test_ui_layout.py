@@ -2528,6 +2528,26 @@ def _settle_chrome(driver):
     )
 
 
+def _settled_facts(driver, script: str, ready, *, attempts: int = 6, delay: float = 0.3):
+    """Measure *script* only once it agrees with what the page has published.
+
+    ``_settle_chrome`` and the measurement are two round trips, and a bar can wrap once more in
+    between (a status line appears, a font arrives): the measurement then reads the PREVIOUS
+    publish, and the call looks like a product defect. Measured on the ubuntu runner — ``--barH:
+    74px`` beside a 119px strip in two of three runs of the same commit, the third green.
+    Re-settling after a mismatch closes that gap without weakening the claim: a page that never
+    republishes still fails, and the caller's assertion prints both numbers.
+    """
+    facts: dict = {}
+    for _ in range(attempts):
+        _settle_chrome(driver)
+        facts = driver.execute_script(script, [])
+        if ready(facts):
+            return facts
+        time.sleep(delay)
+    return facts
+
+
 def test_the_cookie_panel_fits_a_laptop_window_without_a_vertical_scrollbar(app_url, driver):
     """The eight-platform step guide wrapped into a narrow column and pushed the panel
     past the window, so every platform showed a vertical scrollbar. The panel was
@@ -3503,7 +3523,8 @@ def test_the_menu_shrinks_back_after_the_window_widens(app_url, driver):
     )
     _set_viewport(driver, 1800, 700)
     time.sleep(0.5)
-    wide = driver.execute_script(
+    wide = _settled_facts(
+        driver,
         """
         const bar = document.getElementById('top-menu');
         return {
@@ -3511,7 +3532,7 @@ def test_the_menu_shrinks_back_after_the_window_widens(app_url, driver):
             published: getComputedStyle(document.documentElement).getPropertyValue('--menuH').trim(),
         };
         """,
-        [],
+        lambda got: got['published'] == f'{got["height"]}px',
     )
     assert narrow['height'] > 56, f'the narrow bar did not wrap, so the shrink was never stressed: {narrow}'
     assert wide['height'] < narrow['height'], f'the bar stayed at its wrapped height after widening: {narrow} → {wide}'
@@ -3524,11 +3545,10 @@ def test_the_status_bar_wraps_and_the_docks_follow_its_real_height(app_url, driv
     _set_viewport(driver, 620, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
-    # --barH is published by a ResizeObserver; measuring in the frame the bar wrapped reads the
-    # previous value (measured on the Windows runner: 74px published beside a 119px strip, which
-    # looks like a product defect). Wait for the publish, then measure.
-    _settle_chrome(driver)
-    facts = driver.execute_script(
+    # --barH is published by a ResizeObserver: settle, then measure, and settle again if the strip
+    # wrapped once more in between (see ``_settled_facts``).
+    facts = _settled_facts(
+        driver,
         """
         const bar = document.getElementById('status-bar');
         const runs = document.getElementById('runs-panel');
@@ -3543,7 +3563,7 @@ def test_the_status_bar_wraps_and_the_docks_follow_its_real_height(app_url, driv
             page: [document.documentElement.scrollWidth, document.documentElement.clientWidth],
         };
         """,
-        [],
+        lambda got: got['published'] == f'{got["height"]}px' and got['dockBottom'] == f'{got["height"]}px',
     )
     assert facts['wrap'] == 'wrap', f'the status bar cannot grow a row: {facts}'
     assert facts['height'] > 28, f'the narrow status bar stayed one row, so nothing wrapped: {facts}'
@@ -3627,8 +3647,8 @@ def test_canvas_popups_keep_the_same_band_between_the_two_bars(app_url, driver):
     _set_viewport(driver, 620, 700)
     _load_app(driver, app_url)
     _kill_animations(driver)
-    _settle_chrome(driver)
-    facts = driver.execute_script(
+    facts = _settled_facts(
+        driver,
         """
         const ids = ['dashboard-panel', 'history-panel', 'chart-preview-panel',
                      'data-preview-panel', 'chart-fullscreen-panel'];
@@ -3677,7 +3697,10 @@ def test_canvas_popups_keep_the_same_band_between_the_two_bars(app_url, driver):
         overlay.classList.remove('open');
         return out;
         """,
-        [],
+        lambda got: all(
+            f'{value}px' in published
+            for value, published in ((got['menuH'], got['chromeTop']), (got['barH'], got['chromeBottom']))
+        ),
     )
     assert facts['menuH'] > 56, f'the menu did not wrap, so this measured nothing: {facts}'
     assert facts['barH'] > 28, f'the status bar did not wrap, so this measured nothing: {facts}'
