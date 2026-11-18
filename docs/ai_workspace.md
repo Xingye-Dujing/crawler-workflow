@@ -128,7 +128,7 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   只接受白名单可执行文件、无管道/重定向、超时与输出上限，工作目录为所选文件夹（未选时用仓库根/安装根）。
 - **反馈闭环**：`app_errors` 读后端 `logs/app.log` 尾部 + 最近失败/部分完成运行的节点错误与控制台；
   运行监控可把结果作为新一轮消息送回。
-- **工具预算不是硬墙**：默认 24 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
+- **工具预算不是硬墙**：默认 30 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
   `ask_user_question` 通道询问“继续/到此为止”，回答即续跑一轮，按钮/选项照常进入历史。
 - **Plan / Build 与安全开关**：`agent_mode=plan` 时变更类工具不下发（`apply_workflow`、`rerun_node`、
   `workspace_write`、`workspace_import`、`run_cmd`、Python 写入/运行）；`ai_auto_approve` 关闭时

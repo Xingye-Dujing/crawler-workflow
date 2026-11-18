@@ -863,7 +863,7 @@ SETTINGS = (
     Setting(
         'ai_max_tool_rounds',
         'int',
-        24,
+        30,
         'ai',
         'set.aiMaxToolRounds',
         hint='set.aiMaxToolRoundsHint',
