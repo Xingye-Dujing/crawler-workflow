@@ -461,6 +461,11 @@ const AIWorkspace = {
             this._model = AISettings.modelFor(this._provider, data.providers);
             this._skill = settings.skill || 'auto';
             this._scope = data.settings?.context_scope || settings.scope || 'summary';
+            /* 联网搜索默认跟随服务端设置：只有这个浏览器从没选过时才采纳，动手点过开关的浏览器
+               保留自己的选择（一次点击不该被下一次刷新改回去）。 */
+            if (data.settings && !AISettings.has('search')) {
+                AISettings.save({ search: !!data.settings.web_search_default });
+            }
             this._renderProviderOptions();
             this._renderSkillOptions();
             this._renderSessions();
@@ -961,6 +966,17 @@ const AIWorkspace = {
             : '';
         const previewLabel = this._contextPreview ? 'ai.contextHide' : 'ai.contextPreview';
         const items = (meta.items || []).map((item) => '<li>' + AIRender.escape(item.title) + ' <span class="ai-hint">' + AIRender.escape(I18n.t('ai.chars', { n: item.chars || 0 })) + '</span></li>').join('');
+        /* What was NOT sent is part of the answer: a context cut by the replay budget or by the
+           overall budget changed what the model could have known, and silence reads as “it saw
+           everything”. */
+        const omitted = (meta.omitted || []).filter(Boolean);
+        const contextNotes =
+            (meta.replay_truncated
+                ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextReplayCut', { n: meta.replay_chars || 0 })) + '</p>'
+                : '') +
+            (omitted.length
+                ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextOmitted', { items: omitted.join('、') })) + '</p>'
+                : '');
         const plan = (this._plan || []).map((step) =>
             '<li class="ai-trace-step ' + (step.status || 'pending') + '"><span class="ai-trace-dot"></span>' + AIRender.escape(step.title) + '</li>'
         ).join('');
@@ -978,7 +994,7 @@ const AIWorkspace = {
             preview +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.context')) + '</h3>' +
             (meta.scope ? '<div class="ai-chip-row"><span class="ai-chip">' + AIRender.escape(meta.scope) + '</span><span class="ai-chip">' + AIRender.escape(I18n.t('ai.contextTokens', { tokens: meta.tokens || 0, chars: meta.chars || 0 })) + '</span></div>' : '') +
-            '<ul class="ai-context-list">' + (items || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</li>') + '</ul>' +
+            '<ul class="ai-context-list">' + (items || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</li>') + '</ul>' + contextNotes +
             '<div class="ai-context-actions"><button type="button" class="ai-ghost" data-ai-context-preview="1">' + AIRender.escape(I18n.t(previewLabel)) + '</button></div>' +
             '<div class="ai-context-fields"><label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.datasetId')) + '</span><input class="ai-input" data-ai-manual="dataset_id" value="' + AIRender.escape(AIContext.manual.dataset_id || '') + '" /></label>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.runId')) + '</span><input class="ai-input" data-ai-manual="run_id" value="' + AIRender.escape(AIContext.manual.run_id || '') + '" /></label>' +

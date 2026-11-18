@@ -64,18 +64,28 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 技能声明提示词、上下文来源、只读工具和所需能力；用户技能是数据，可 Fork/编辑/删除，不能包含代码或写操作。
 
 `ContextBuilder` 从既有注册表生成项目事实，按账号读取实时数据，限额并脱敏；省略项写入
-`context_meta` 并在检查器显示。默认只读最小证据：
+`context_meta` 并在检查器显示。
 
 - **上下文对每一轮、每一个传输层都成立**：`ai.context.build_context` 生成一次，由
-  `ai.providers.base.with_context` 注入**本轮最新一条 user 消息**，DeepSeek / OpenCode Go /
+  `ai.providers.base.replay_context` 注入**那一轮自己的 user 行**，DeepSeek / OpenCode Go /
   OpenRouter / 本地 Ollama 一律收到。这条曾经只有 DeepSeek 的传输层读取，于是本地模型一轮都
-  没收到项目事实，而侧栏仍显示“项目事实 N 字”。注入位置固定在消息里（而不是每轮现拼到末尾），
-  同一轮内字节不变，供应商的前缀缓存才有机会命中。
+  没收到项目事实，而侧栏仍显示“项目事实 N 字”。
+- **重放是逐轮的，字节永不改写**：某一轮的上下文跟着那一轮的行留在会话里，后续每一轮原样重放。
+  供应商的前缀缓存匹配的是字节——一段“只在第一轮存在”的上下文会让它之后的每个消息都失效，
+  等于每个新轮次把整段历史按 cache-miss 价重算一次（实测 63,025 字符里只有 3,725 命中）。
+  因此这段块的大小在**写入时**就定下来（`ai_context_replay_chars`，默认 16,000 字），超出的部分
+  用工具现取，并在 `context_meta.replay_truncated` 里如实报告（检查器显示“已截到 N 字”）。
+- **省略要看得见**：`context_meta.omitted`（整体预算丢掉的来源）以前只在 JSON 里，现在侧栏也列出来。
 - 工具参数不完整（典型是回答被 `max_tokens` 截断）时**拒绝执行并按名字说明**，不拿空参数去跑；
   `done.stop_reason == 'max_tokens'` 在转录里显示一行“被截断”，刷新后仍在（存进 assistant 行的
   `meta.stop_reason`）。
 - 传输层在**首字节之前**对 429/5xx/连接失败重试（最多 3 次、可被停止打断）；401/402/404 这类
   确定性拒绝立即报错，不重试。
+- **花钱的默认值是省的**：联网搜索默认关（`ai_web_search_default`，浏览器没手动选过时采纳），
+  思考强度可选 `low/high/max`（`ai_reasoning_effort`，默认 high），非思考轮次的温度
+  `ai_temperature` 默认 0.3（草案与 JSON 更稳；思考开启时供应商忽略它）。
+
+**默认只读最小证据**：
 
 - `dataset_peek`：列名/类型 + 5 行，单元格 120 字；
 - `dataset_profile`：行数、缺失/唯一值、每列 2 个样本；

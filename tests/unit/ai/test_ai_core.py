@@ -84,18 +84,26 @@ def test_deepseek_wire_includes_file_references():
     assert wire[0]['content'][1]['type'] == 'text'
 
 
-def test_context_prefix_is_added_to_the_last_user_turn_only():
-    from ai.providers.base import with_context
+def test_every_turn_replays_its_own_context_on_its_own_user_row():
+    """Each turn's block rides on ITS user row and is never moved or rewritten — that is what lets
+    the provider's prefix cache survive the next turn instead of re-billing the whole transcript."""
+    from ai.providers.base import replay_context
     from ai.providers.deepseek import to_messages
 
     messages = [
-        {'role': 'user', 'content': 'first', 'meta': {}},
-        {'role': 'assistant', 'content': '', 'name': '', 'meta': {}, 'blocks': [{'type': 'text', 'text': 'ok'}]},
-        {'role': 'user', 'content': 'second', 'meta': {}},
+        {'role': 'user', 'content': 'first', 'meta': {'context_text': 'FACTS-1'}},
+        {'role': 'assistant', 'content': 'ok', 'name': '', 'meta': {}, 'blocks': [{'type': 'text', 'text': 'ok'}]},
+        {'role': 'user', 'content': 'second', 'meta': {'context_text': 'FACTS-2'}},
     ]
-    wire = to_messages(with_context(messages, 'FACTS'))
-    assert '<cai_xi_hui_context>' not in wire[0]['content']
-    assert '<cai_xi_hui_context>' in wire[-1]['content'] and 'FACTS' in wire[-1]['content']
+    wire = to_messages(replay_context(messages))
+    users = [row for row in wire if row['role'] == 'user']
+    assert 'FACTS-1' in users[0]['content'] and 'FACTS-2' not in users[0]['content']
+    assert 'FACTS-2' in users[1]['content']
+
+    # The first turn's bytes are the SAME before and after the second turn exists.
+    before = to_messages(replay_context(messages[:3]))[0]['content']
+    after = to_messages(replay_context(messages))[0]['content']
+    assert before == after
 
 
 def test_the_context_reaches_every_transport():
@@ -104,7 +112,9 @@ def test_the_context_reaches_every_transport():
     from ai.providers import base, ollama, openai_compat
     from ai.providers.deepseek import to_messages as deepseek_messages
 
-    messages = base.with_context([{'role': 'user', 'content': '画布有什么问题？', 'meta': {}}], 'FACTS-2320')
+    messages = base.replay_context(
+        [{'role': 'user', 'content': '画布有什么问题？', 'meta': {'context_text': 'FACTS-2320'}}]
+    )
     for wire in (
         deepseek_messages(messages),
         openai_compat.to_messages('system', messages),
@@ -112,6 +122,35 @@ def test_the_context_reaches_every_transport():
     ):
         text = [row for row in wire if row['role'] == 'user'][-1]['content']
         assert 'FACTS-2320' in text and '<cai_xi_hui_context>' in text, wire
+
+
+def test_a_reasoning_effort_the_endpoint_does_not_know_degrades_instead_of_400ing():
+    """``max`` is DeepSeek's own word. An OpenAI-compatible gateway documents low/medium/high, and
+    the settings page offers all three names to the user — so the transport maps its own
+    vocabulary instead of forwarding a value the endpoint refuses."""
+    from ai.providers import get_provider
+
+    provider = get_provider('opencode_go')
+    payload = provider._payload(
+        {'model': 'deepseek-v4.1-flash', 'messages': [], 'thinking': True, 'reasoning_effort': 'max'}
+    )
+    assert payload['reasoning_effort'] == 'high'
+    low = provider._payload(
+        {'model': 'deepseek-v4.1-flash', 'messages': [], 'thinking': True, 'reasoning_effort': 'low'}
+    )
+    assert low['reasoning_effort'] == 'low'
+
+
+def test_the_stored_context_is_clamped_once_and_said_so(monkeypatch):
+    """A block that is replayed for the rest of the conversation must be bounded — and the cut is
+    reported (the inspector shows it) instead of silently shrinking what the model was promised."""
+    from ai import context
+
+    monkeypatch.setattr(context, 'get_setting', lambda key: 1000)
+    text, meta = context.for_replay('x' * 5000)
+    assert len(text) < 5000 and meta['replay_truncated'] is True and meta['replay_chars'] == 1000
+    short, small = context.for_replay('a context')
+    assert short == 'a context' and small['replay_truncated'] is False
 
 
 def test_a_tool_call_whose_arguments_never_arrived_is_refused_not_run(monkeypatch):

@@ -799,6 +799,20 @@ out.truncation = {
     stored: String((storedCut || {}).textContent || ''),
 };
 
+/* What the context inspector says was NOT sent: a budget cut the model could have used, and the
+   replay cap that keeps a turn's block bounded. Silence there reads as "it saw everything". */
+workspace._contextMeta = {
+    scope: 'summary',
+    tokens: 10,
+    chars: 20,
+    items: [{ title: '项目事实', chars: 20 }],
+    omitted: ['运行'],
+    replay_truncated: true,
+    replay_chars: 16000,
+};
+workspace._renderSide();
+out.contextNotes = String(workspace._dom.side.innerHTML || '');
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

@@ -145,16 +145,26 @@ def test_chat_returns_canonical_events_and_never_stores_the_key(client, fake_ai,
 
 def test_the_project_context_reaches_the_provider_on_every_round(client, fake_ai, clean_ai):
     """The context is part of the TURN, so a tool round must carry it too — and it must reach
-    whichever transport the user picked (`base.with_context`), not only DeepSeek's."""
+    whichever transport the user picked (`base.replay_context`), not only DeepSeek's."""
     from ai.providers import PROVIDERS
 
     response = _chat(client, provider='fake_record', model='fake-model')
     assert response.status_code == 200, response.get_json()
+    conversation_id = response.get_json()['events'][0]['conversation_id']
     provider = PROVIDERS['fake_record']
     assert len(provider.requests) == 2, provider.requests
     for request in provider.requests:
         newest = [message for message in request['messages'] if message['role'] == 'user'][-1]
         assert '<cai_xi_hui_context>' in newest['content'], newest['content'][:200]
+
+    # A second turn replays turn one's row BYTE FOR BYTE. A block that changes after its turn is
+    # over invalidates every message after it, so the whole transcript is re-billed at the
+    # cache-miss price — that is the difference this test exists to keep.
+    first_before = [row for row in provider.requests[0]['messages'] if row['role'] == 'user'][0]['content']
+    again = _chat(client, provider='fake_record', model='fake-model', text='and again', conversation_id=conversation_id)
+    assert again.status_code == 200, again.get_json()
+    first_after = [row for row in provider.requests[-1]['messages'] if row['role'] == 'user'][0]['content']
+    assert first_after == first_before
 
 
 def test_conversation_list_and_delete(client, fake_ai, clean_ai):

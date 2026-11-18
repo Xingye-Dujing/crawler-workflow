@@ -22,7 +22,7 @@ from ai import approvals, environment, references, skills, store, tools, vocabul
 from ai import context as context_builder
 from ai.errors import AIError
 from ai.providers import get_provider
-from ai.providers.base import with_context
+from ai.providers.base import replay_context
 from ai.types import new_id, usage_totals
 from i18n import get_lang, t
 
@@ -238,6 +238,10 @@ class AgentService:
         references_text, reference_files = references.resolve(payload.get('references') or [])
         if references_text:
             context_text = f'{context_text}\n\n{references_text}'.strip()
+        # The block is stored on this turn's user row and replayed with it forever, so its size is
+        # decided ONCE, here, and reported in `context_meta` (see `ai.context.for_replay`).
+        context_text, replay_meta = context_builder.for_replay(context_text)
+        context_meta = {**context_meta, **replay_meta}
         skill_meta = {
             'skill': skill.id,
             'skill_reason': requested_skill,
@@ -327,7 +331,6 @@ class AgentService:
             thinking=thinking,
             web_search=web_search,
             safety=skill_meta['safety'],
-            context_text=context_text,
             context_meta=context_meta,
             run_id=run['id'],
             agent_mode=agent_mode,
@@ -371,7 +374,6 @@ class AgentService:
             thinking=bool(meta.get('thinking')),
             web_search=bool(meta.get('web_search')),
             safety=str(meta.get('safety') or 'high'),
-            context_text=str(meta.get('context_text') or ''),
             context_meta=meta.get('context_meta') or {},
             run_id=run['id'],
             agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
@@ -461,7 +463,6 @@ class AgentService:
             thinking=bool(meta.get('thinking')),
             web_search=bool(meta.get('web_search')),
             safety=str(meta.get('safety') or 'high'),
-            context_text=str(meta.get('context_text') or ''),
             context_meta=meta.get('context_meta') or {},
             run_id=(assistant.get('meta') or {}).get('run_id') or '',
             agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
@@ -480,7 +481,6 @@ class AgentService:
         thinking: bool,
         web_search: bool,
         safety: str,
-        context_text: str,
         context_meta: dict,
         run_id: str,
         agent_mode: str = 'build',
@@ -490,6 +490,10 @@ class AgentService:
         # needs many tools. A finite value is a SOFT stop — the assistant asks the user whether to
         # continue, which is how a limit stays flexible instead of failing the turn.
         max_rounds = max(0, int(get_setting('ai_max_tool_rounds') or 0))
+        # How hard a thinking model works, and how creative a non-thinking turn is. Both are the
+        # user's levers (settings → AI), read at send time so a change needs no restart.
+        reasoning_effort = str(get_setting('ai_reasoning_effort') or 'high')
+        temperature = get_setting('ai_temperature')
         allow_code = bool(get_setting('ai_allow_code_context'))
         allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
         allow_files = bool(environment.capabilities()['user_files'])
@@ -551,9 +555,10 @@ class AgentService:
                         yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'tool_budget'}
                         return
                 history = _history(conversation['id'])
-                # The context (project facts, canvas, dataset) belongs to the TURN, and every
-                # transport must receive it — `base.with_context` is the one place that decides.
-                history = with_context(history, context_text)
+                # Every turn carries ITS own context on its own user row; `base.replay_context` is
+                # the one place that decides where it goes (and it never rewrites an old row, which
+                # is what lets the provider's prefix cache hit across turns).
+                history = replay_context(history)
                 request = {
                     'provider': provider.spec.id,
                     'model': model,
@@ -565,7 +570,8 @@ class AgentService:
                     'web_search': web_search,
                     'safety': safety,
                     'title': rounds == 0 and not (conversation.get('title') or ''),
-                    'reasoning_effort': 'high',
+                    'reasoning_effort': reasoning_effort,
+                    'temperature': temperature,
                     'max_tokens': 8192,
                     'timeout': int(get_setting('ai_request_timeout') or 180),
                     'cancel_event': cancel_event,

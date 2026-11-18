@@ -17,33 +17,29 @@ def event(kind: str, **data) -> dict:
     return {'type': kind, **data}
 
 
-def with_context(messages: list, context_text: str) -> list:
-    """Return the canonical history with this turn's context on its NEWEST user row.
+def replay_context(messages: list) -> list:
+    """Return the canonical history with every turn's own context on its own user row.
 
     The context is produced once, by ``ai.context.build_context``, and it has to reach whichever
     provider the user picked. It used to be read by the DeepSeek transport alone: a local Ollama
     turn advertised “项目事实 2,320 字” in the context inspector and sent none of it, so the model
     answered questions about the canvas and the datasets from thin air.
 
-    One rule for every transport, and it is also the cache-friendly one: the block rides on the
-    newest user message and stays byte-identical for the whole turn (older turns are NOT replayed
-    here — a five-turn-old canvas is not the current canvas, and the sooner the bytes stop changing
-    the sooner the provider's prefix cache can hit).
+    Every user row carries the context ITS turn was sent with (``meta.context_text``), and that byte
+    string never changes afterwards. That is the whole point of putting it here rather than
+    re-computing one shared block per request: a provider's prefix cache matches bytes, so a block
+    that is dropped after round one (or after the turn) invalidates every message after it — which
+    is what made a new turn re-bill the entire transcript at the cache-miss price.
     """
-    text = str(context_text or '')
-    if not text:
-        return messages
-    index = -1
-    for position in range(len(messages) - 1, -1, -1):
-        if str(messages[position].get('role') or '') == 'user':
-            index = position
-            break
-    if index < 0:
-        return messages
-    out = list(messages)
-    target = dict(out[index])
-    target['content'] = f'{CONTEXT_OPEN}\n{text}\n</cai_xi_hui_context>\n\n{target.get("content") or ""}'
-    out[index] = target
+    out = []
+    for message in messages:
+        stored = str((message.get('meta') or {}).get('context_text') or '') if message.get('role') == 'user' else ''
+        if not stored:
+            out.append(message)
+            continue
+        target = dict(message)
+        target['content'] = f'{CONTEXT_OPEN}\n{stored}\n</cai_xi_hui_context>\n\n{target.get("content") or ""}'
+        out.append(target)
     return out
 
 

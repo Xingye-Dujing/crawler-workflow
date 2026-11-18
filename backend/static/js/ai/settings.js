@@ -14,7 +14,9 @@ const AISettings = {
            batch call takes. Local turns therefore default to no thinking; the toolbar switch
            turns it on per browser. */
         thinkingLocal: false,
-        search: true,
+        /* 联网搜索默认关：开着的时候每一轮都带 DeepSeek 的服务端搜索工具，简单问题也可能先去联网，
+           既慢又贵，还可能拿网上的通用说法覆盖本机事实。要搜索点工具栏的开关，或在设置里改默认。 */
+        search: false,
         skill: 'auto',
         scope: 'summary',
         width: 520,
@@ -92,6 +94,17 @@ const AISettings = {
 
     keyFor(provider) {
         return this.load().keys[provider] || '';
+    },
+
+    /* Whether THIS browser ever chose a value (rather than merely falling back to a default).
+       A server default may only be adopted while the answer is no. */
+    has(key) {
+        try {
+            const raw = JSON.parse(localStorage.getItem(this._key) || '{}');
+            return Object.prototype.hasOwnProperty.call(raw, key);
+        } catch (e) {
+            return false;
+        }
     },
 
     setProvider(provider) {

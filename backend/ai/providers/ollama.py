@@ -224,12 +224,15 @@ class OllamaProvider(Provider):
         model = str(request.get('model') or (self.spec.models[0].id if self.spec.models else ''))
         info = self._info(model, str(request.get('host') or ''))
         context = int(info.get('context') or 0)
+        # ``or 0.2`` treated a deliberate 0.0 (fully deterministic) as "unset" and quietly ran at
+        # 0.2 — a number the user did not choose. Only a missing value takes the default.
+        temperature = request.get('temperature')
         payload = {
             'model': model,
             'messages': self._messages(request),
             'stream': True,
             'options': {
-                'temperature': float(request.get('temperature') or 0.2),
+                'temperature': 0.2 if temperature is None else float(temperature),
                 'num_ctx': min(MAX_NUM_CTX, context) if context else MAX_NUM_CTX,
             },
         }

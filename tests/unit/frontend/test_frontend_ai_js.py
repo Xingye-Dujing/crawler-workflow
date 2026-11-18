@@ -267,6 +267,13 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['toolOpened'] is True, 'a finished tool card did not open on click'
         assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
+    def test_the_context_inspector_names_what_was_left_out(self):
+        """A context cut by the budget — or by the replay cap that keeps one turn's block bounded —
+        must say so; silence reads as “the model saw everything”."""
+        out = _run_workspace()['contextNotes']
+        assert 'Not included' in out and '运行' in out, out
+        assert 'Cut to 16000 characters' in out, out
+
     def test_a_truncated_answer_says_so_live_and_after_a_reload(self):
         """`stop_reason == 'max_tokens'` means the provider CUT the answer. It was painted as a
         finished one, so a half sentence looked like a complete thought."""

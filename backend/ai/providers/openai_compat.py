@@ -14,6 +14,10 @@ from ai.errors import AIProviderError
 from ai.providers.base import Provider, data_frames, event, http_error, open_stream
 from ai.types import ProviderSpec
 
+#: ``reasoning_effort`` values an OpenAI-compatible endpoint accepts; ``max`` is DeepSeek's own
+#: word, so it degrades to the strongest value these endpoints document instead of a 400.
+EFFORTS = {'low': 'low', 'medium': 'medium', 'high': 'high', 'max': 'high', 'minimal': 'low'}
+
 
 def _assistant_message(message: dict) -> dict:
     blocks = message.get('blocks') or []
@@ -112,7 +116,12 @@ class OpenAICompatibleProvider(Provider):
         if request.get('max_tokens'):
             payload['max_tokens'] = int(request['max_tokens'])
         if request.get('thinking') and self.spec.supports('thinking', payload['model']):
-            payload['reasoning_effort'] = request.get('reasoning_effort') or 'high'
+            wanted = str(request.get('reasoning_effort') or 'high').lower()
+            payload['reasoning_effort'] = EFFORTS.get(wanted, 'high')
+        # The same number the agent reads from settings; an endpoint that does not want it ignores a
+        # standard field, and this transport declares no capability that depends on it.
+        if request.get('temperature') is not None:
+            payload['temperature'] = max(0.0, min(2.0, float(request['temperature'])))
         if request.get('web_search') and self.spec.supports('web_search', payload['model']):
             # OpenRouter and Go do not offer DeepSeek's server tool; the capability check above
             # means this branch is only reachable by a provider that explicitly declares it.

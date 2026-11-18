@@ -314,6 +314,24 @@ def context_preview(query: str, payload: dict | None = None) -> dict:
     return {'ok': True, 'context': text, 'meta': meta}
 
 
+def for_replay(text: str) -> tuple[str, dict]:
+    """Clamp the block a turn will carry for the REST of the conversation.
+
+    The block is stored on the user's own row and replayed with that row forever (that is what lets
+    the provider's prefix cache hit across turns — a message whose bytes change invalidates
+    everything after it). "Forever" is why its size matters: a 120,000-character context repeated
+    over twenty turns is a window nobody has. The cap keeps it bounded, and what it drops is
+    reported (``replay_truncated``) and still reachable through the read tools.
+    """
+    value = str(text or '')
+    limit = max(1000, int(get_setting('ai_context_replay_chars') or 16000))
+    meta = {'replay_limit': limit, 'replay_chars': min(len(value), limit), 'replay_truncated': len(value) > limit}
+    if not meta['replay_truncated']:
+        return value, meta
+    note = f'\n…[context cut at {limit} chars for replay; read the rest with a tool]'
+    return value[:limit] + note, meta
+
+
 def ensure_dirs() -> None:
     paths.active().ensure()
 
