@@ -104,7 +104,7 @@ const out = {
             plan: at('ai-plan-step'),
             text: at('ai-text'),
             ordered: at('ai-skill-row') < at('ai-thinking') && at('ai-thinking') < at('ai-tool') && at('ai-tool') < at('ai-plan-step') && at('ai-plan-step') < at('ai-text'),
-            working: sandbox.AIRender.workingRow('waiting').includes('ai-working-dot'),
+            working: sandbox.AIRender.statusRow().includes('ai-working-dot'),
         };
     })(),
 };

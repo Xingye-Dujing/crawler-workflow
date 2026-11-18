@@ -69,20 +69,37 @@ def _workspace_state() -> dict:
         return {'folder': '', 'folder_exists': False, 'cloud': bool(environment.capabilities()['cloud'])}
 
 
-def _stream(generator, account, lang: str):
+def _stream(generator, account, lang: str, conversation_id: str = ''):
+    """The SSE body, plus the one thing only it knows: whether this turn reached an ending.
+
+    A browser that goes away mid-answer (a reload, a closed panel, a laptop that slept) closes this
+    generator at the next ``yield``. The agent never gets to write the round's verdict, so its
+    assistant row stayed ``streaming`` — and the next page load drew a half answer with nothing to
+    say it was half, until a server restart happened to sweep it. The ``finally`` settles the row in
+    the same breath as the disconnect, only for the conversation this stream owned.
+    """
+
     def body():
         with account_context.use(account):
             set_lang(lang)
+            ended = False
             try:
                 for event in generator:
+                    if event.get('type') in ('done', 'paused'):
+                        ended = True
                     yield _sse(event)
             except AIError as exc:
                 yield _sse({'type': 'error', 'kind': exc.kind, 'error': exc.localized(), 'key': exc.key})
                 yield _sse({'type': 'done', 'stop_reason': 'error'})
+                ended = True
             except Exception as exc:  # a provider bug must not kill the whole page
                 logger.warning(t('ai.streamFailed', kind=type(exc).__name__))
                 yield _sse({'type': 'error', 'kind': 'error', 'error': str(exc)[:500]})
                 yield _sse({'type': 'done', 'stop_reason': 'error'})
+                ended = True
+            finally:
+                if not ended:
+                    store.mark_interrupted(conversation_id)
 
     return Response(
         stream_with_context(body()),
@@ -874,7 +891,7 @@ def ai_chat():
         except AIError as exc:
             return _error(exc)
         return jsonify({'ok': True, 'events': events})
-    return _stream(generator, account, lang)
+    return _stream(generator, account, lang, conversation_id)
 
 
 @bp.route('/api/ai/answer', methods=['POST'])
@@ -913,7 +930,7 @@ def ai_answer():
         except AIError as exc:
             return _error(exc)
         return jsonify({'ok': True, 'events': events})
-    return _stream(generator, account, lang)
+    return _stream(generator, account, lang, conversation_id)
 
 
 @bp.route('/api/ai/retry', methods=['POST'])
@@ -938,7 +955,7 @@ def ai_retry():
         except AIError as exc:
             return _error(exc)
         return jsonify({'ok': True, 'events': events})
-    return _stream(generator, account, lang)
+    return _stream(generator, account, lang, conversation_id)
 
 
 @bp.route('/api/ai/stop', methods=['POST'])

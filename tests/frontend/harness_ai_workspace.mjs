@@ -188,6 +188,9 @@ out.commands = {
 workspace._conversationId = 'c-cards';
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 const cardTurn = workspace._ensureAssistant();
 cardTurn.blocks = [{ type: 'failed_nodes', run_id: 'r1', workflow_name: 'wf', nodes: [{ node: 'n2', error: 'boom' }] }];
 workspace._paintAssistant();
@@ -369,6 +372,7 @@ workspace._conversationId = 'c-two';
 workspace._current = null;
 workspace._sending = true;
 workspace._dom.chat.innerHTML = '';
+workspace._streamConversation = '';
 const rounds = [
     { type: 'meta', conversation_id: 'c-two', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' },
     { type: 'thinking', text: '先看看文件夹。' },
@@ -402,6 +406,9 @@ workspace._messages = [];
 workspace._conversationId = 'c-q';
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._appendQuestion({
     id: 'q1',
     message_id: 'm1',
@@ -438,6 +445,7 @@ workspace._conversationId = 'c-open';
 workspace._current = null;
 workspace._openDetails.clear();
 workspace._dom.chat.innerHTML = '';
+workspace._streamConversation = '';
 workspace._sending = true;
 for (const event of [
     { type: 'meta', conversation_id: 'c-open', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' },
@@ -577,6 +585,9 @@ out.pin = {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._sending = true;
 workspace._onEvent({ type: 'meta', conversation_id: 'c-clock', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
 workspace._onEvent({ type: 'tool_start', id: 'call_c', name: 'run_cmd', arguments: { command: 'py x.py' } });
@@ -585,6 +596,143 @@ const runningClocks = workspace._dom.chat.querySelectorAll('.ai-tool-clock').len
 workspace._onEvent({ type: 'tool_result', id: 'call_c', name: 'run_cmd', ok: true, result: { ok: true } });
 workspace._paintAssistant();
 out.toolClock = { running: runningClocks, after: workspace._dom.chat.querySelectorAll('.ai-tool-clock').length };
+
+/* The live line: while a turn is open the transcript says so, ALWAYS — including under a finished
+   paragraph and during a silent minute. It used to be painted only when the last block was not
+   text, so a paragraph followed by the model composing a tool call looked like a complete answer,
+   and the tool clock that was supposed to prove life was written but never started. Deterministic
+   clock: the wording is the phase, the number is the proof. */
+const realNow = sandbox.Date.now;
+const realSetInterval = sandbox.setInterval;
+let clock = 1800000000000;
+sandbox.Date.now = () => clock;
+const ticks = [];
+sandbox.setInterval = (fn) => {
+    ticks.push(fn);
+    return 1;
+};
+const tick = () => ticks.forEach((fn) => fn());
+const statusText = () => String((workspace._dom.chat.querySelector('.ai-status-text') || {}).textContent || '');
+const statusClock = () => String((workspace._dom.chat.querySelector('.ai-status-clock') || {}).textContent || '');
+const statusHidden = () => {
+    const node = workspace._dom.chat.querySelector('.ai-status');
+    return node ? node.hidden === true : true;
+};
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
+workspace._conversationId = '';
+workspace._sending = false;
+workspace._stopClock();
+workspace._beginTurn();
+workspace._sending = true;
+workspace._setSending(true);
+workspace._onEvent({ type: 'meta', conversation_id: 'c-live', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
+workspace._onEvent({ type: 'text', text: '先看数据。' });
+/* 42 s later, the provider has said nothing since the paragraph: the CLOCK (not an event) has to
+   keep the line alive, and the line has to say which silence this is. */
+clock += 42000;
+workspace._lastEventAt = clock - 3000;
+tick();
+const liveAfterText = {
+    visible: statusHidden() === false,
+    text: statusText(),
+    clock: statusClock(),
+    ticks: ticks.length,
+};
+workspace._lastEventAt = clock - 40000;
+tick();
+const liveStalled = statusText();
+workspace._onEvent({ type: 'tool_start', id: 'call_live', name: 'run_cmd', arguments: { command: 'py x.py' } });
+workspace._paintAssistant();
+clock += 65000;
+tick();
+const liveWaitingApp = statusText();
+const toolClockText = String((workspace._dom.chat.querySelector('.ai-tool-clock') || {}).textContent || '');
+workspace._onEvent({ type: 'done', stop_reason: 'end_turn' });
+const i18n = (key, seconds = 42) => {
+    const vars = seconds === undefined ? '' : `, { seconds: ${Number(seconds)} }`;
+    return String(vm.runInContext(`I18n.t(${JSON.stringify(key)}${vars})`, sandbox));
+};
+out.liveLine = {
+    afterText: liveAfterText,
+    stalled: liveStalled,
+    waitingApp: liveWaitingApp,
+    toolClock: toolClockText,
+    hiddenAfterDone: statusHidden(),
+    expected: {
+        generating: i18n('ai.working'),
+        stalled: i18n('ai.stillWaiting'),
+        waitingApp: i18n('ai.waiting'),
+        clock: i18n('ai.elapsed', 42),
+    },
+};
+
+/* A stream that closes without its ending event is a CUT, and the bubble says so once. */
+workspace._turnEnded = false;
+workspace._noteCutStream();
+const cutNotes = () =>
+    workspace._dom.chat.querySelectorAll('.ai-note').map((el) => String(el.textContent || ''));
+const cutOnce = cutNotes();
+workspace._noteCutStream();
+out.cutStream = {
+    notes: cutOnce,
+    again: cutNotes().length,
+    expected: String(vm.runInContext("I18n.t('ai.streamLost')", sandbox)),
+};
+sandbox.Date.now = realNow;
+sandbox.setInterval = realSetInterval;
+
+/* A reopened transcript whose last row never reached its ending names the fact — which one it is
+   matters: `streaming` may still be running in another page, `interrupted` is the server's verdict. */
+workspace._messages = [
+    { id: 'u1', role: 'user', content: 'hello', meta: {}, status: 'done' },
+    { id: 'a1', role: 'assistant', content: 'half', blocks: [{ type: 'text', text: 'half an answer' }], meta: { turn_id: 't9' }, status: 'interrupted', usage: {} },
+    { id: 'u2', role: 'user', content: 'again', meta: {}, status: 'done' },
+    { id: 'a2', role: 'assistant', content: 'live', blocks: [{ type: 'text', text: 'still going' }], meta: { turn_id: 't10' }, status: 'streaming', usage: {} },
+];
+workspace._renderMessages([]);
+out.reloadNotes = {
+    notes: workspace._dom.chat.querySelectorAll('.ai-note').map((el) => String(el.textContent || '')),
+    expected: {
+        interrupted: String(vm.runInContext("I18n.t('ai.interrupted')", sandbox)),
+        live: String(vm.runInContext("I18n.t('ai.stillStreaming')", sandbox)),
+    },
+};
+
+/* Switching conversations while an answer streams must not paint the rest of it into the NEW
+   transcript (the dock stays usable, so this is reachable by one click), and the same events must
+   still paint in the conversation that owns them. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
+workspace._streamConversation = 'c-a';
+workspace._conversationId = 'c-b';
+workspace._sending = true;
+workspace._onEvent({ type: 'text', text: 'answer of the conversation you left' });
+const droppedInOther = workspace._dom.chat.querySelectorAll('.ai-message').length;
+workspace._sending = false;
+workspace._setSending(false);
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
+workspace._streamConversation = 'c-b';
+workspace._conversationId = 'c-b';
+workspace._sending = true;
+workspace._onEvent({ type: 'meta', conversation_id: 'c-b', message_id: 'm9', turn_id: 't9', run_id: 'r9', skill: 'auto', skill_reason: 'auto' });
+workspace._onEvent({ type: 'text', text: 'its own answer' });
+const paintedInOwner = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+workspace._sending = false;
+workspace._setSending(false);
+out.switchGuard = { dropped: droppedInOther, painted: paintedInOwner };
 
 /* Local-only is a guard, not a preference: with it on, a paid provider is refused before any
    request leaves the page (this is the switch that makes "测试只用本地免费模型" enforceable). */
@@ -612,6 +760,9 @@ out.localOnly = {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._sending = false;
 workspace._onEvent({ type: 'meta', conversation_id: 'c-click', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
 workspace._onEvent({ type: 'tool_start', id: 'call_d', name: 'run_cmd', arguments: { command: 'py x.py' } });
@@ -639,6 +790,9 @@ out.clicks = {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._artifactsById = {};
 workspace._sending = false;
 workspace._onEvent({
@@ -663,6 +817,9 @@ out.artifactAction = {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._sending = false;
 workspace._appendQuestion({
     id: 'q3',
@@ -760,6 +917,9 @@ const labelOf = (name) => {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._sending = true;
 workspace._onEvent({ type: 'meta', conversation_id: 'c-stop', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
 await workspace.stop();
@@ -777,6 +937,9 @@ out.guidance = {
 workspace._messages = [];
 workspace._current = null;
 workspace._dom.chat.innerHTML = '';
+/* Every block here is its own turn: a closed turn owns no conversation, and a `meta` event adopts
+   one. Without this the ownership check silently dropped the next scenario's events. */
+workspace._streamConversation = '';
 workspace._sending = true;
 workspace._onEvent({ type: 'meta', conversation_id: 'c-cut', message_id: 'm2', turn_id: 't-cut', run_id: 'r2', skill: 'workflow', skill_reason: 'auto' });
 workspace._onEvent({ type: 'text', text: '这是一段被截断的回答' });

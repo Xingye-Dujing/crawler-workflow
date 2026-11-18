@@ -128,10 +128,28 @@ function _descendants(el, into) {
  */
 const _VOID_TAGS = new Set(['br', 'hr', 'img', 'input', 'source', 'path', 'circle', 'rect', 'use', 'line']);
 
+/* HTML's boolean attributes carry no value: `<div hidden>`, `<details open>`, `<input disabled>`.
+ * The scanner must accept them — and it must set `true`, not `''` — because a bare attribute that
+ * failed to parse silently took its WHOLE element with it: `'<div class="ai-status" hidden>'`
+ * produced the div's children directly under its grandparent, so `querySelector('.ai-status')`
+ * answered nothing while the row was visibly there in the string. */
+const _BOOLEAN_ATTRS = new Set([
+    'hidden',
+    'open',
+    'disabled',
+    'checked',
+    'selected',
+    'multiple',
+    'readonly',
+    'required',
+    'autofocus',
+]);
+
 function _parseMarkup(html) {
     const roots = [];
     const stack = [];
-    const tagRe = /<\/?([a-zA-Z][\w-]*)((?:\s+[a-zA-Z_:][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*'|[^\s">]+))*)\s*(\/?)>|([^<]+)/g;
+    const tagRe =
+        /<\/?([a-zA-Z][\w-]*)((?:\s+[a-zA-Z_:][\w:.-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s">]+))?)*)\s*(\/?)>|([^<]+)/g;
     let match;
     while ((match = tagRe.exec(String(html))) !== null) {
         if (match[4] !== undefined) {
@@ -151,16 +169,17 @@ function _parseMarkup(html) {
             continue;
         }
         const el = makeEl(name);
-        const attrRe = /([a-zA-Z_:][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s">]+))/g;
+        const attrRe = /([a-zA-Z_:][\w:.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s">]+)))?/g;
         let attr;
         while ((attr = attrRe.exec(match[2] || '')) !== null) {
             const key = attr[1];
-            const value = attr[2] ?? attr[3] ?? attr[4] ?? '';
-            if (key === 'class') el.className = value;
-            else if (key === 'id') el.id = value;
+            const value = attr[2] ?? attr[3] ?? attr[4];
+            if (key === 'class') el.className = value ?? '';
+            else if (key === 'id') el.id = value ?? '';
             /* `data-port` is read back as `dataset.port`, in the attribute and in
                the selector alike — so the prefix has to come off both ways. */
-            else if (key.startsWith('data-')) el.dataset[_camelize(key.slice(5))] = value;
+            else if (key.startsWith('data-')) el.dataset[_camelize(key.slice(5))] = value ?? '';
+            else if (value === undefined) el[key] = _BOOLEAN_ATTRS.has(key.toLowerCase()) ? true : '';
             else el[key] = value;
         }
         const parent = stack[stack.length - 1];

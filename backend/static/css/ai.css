@@ -1511,7 +1511,10 @@
 .ai-flow .ai-thinking {
   margin: 0;
 }
-.ai-working {
+/* The live line under a turn that is still open: "生成中 · 12s", "等待应用返回 · 40s", or "仍未收到
+   模型响应 · 65s". It sits in the flow's normal type size so it reads as part of the answer, and it
+   is NEVER hidden by silence — a still transcript is the thing that looked like a cut connection. */
+.ai-status {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1519,6 +1522,9 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--text-dim);
+}
+.ai-status[hidden] {
+  display: none;
 }
 .ai-working-dot {
   width: 6px;

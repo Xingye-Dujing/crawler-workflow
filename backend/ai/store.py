@@ -805,12 +805,19 @@ def set_pref(key: str, value: str) -> str:
     return str(value or '')
 
 
-def mark_interrupted() -> int:
-    """Boot recovery: an assistant row left ``streaming`` cannot still be streaming."""
+def mark_interrupted(conversation_id: str = '') -> int:
+    """Settle rows left ``streaming``: at boot, or the moment a stream's reader goes away.
+
+    A row that is still ``streaming`` cannot still be streaming; with ``conversation_id`` the sweep
+    is limited to the turn whose connection just closed, so a concurrent answer elsewhere is safe.
+    """
+    sql = "UPDATE messages SET status = 'interrupted', updated_at = ? WHERE status = 'streaming'"
+    params: tuple = (now(),)
+    if conversation_id:
+        sql += ' AND conversation_id = ?'
+        params += (conversation_id,)
     with connect() as conn:
-        cur = conn.execute(
-            "UPDATE messages SET status = 'interrupted', updated_at = ? WHERE status = 'streaming'", (now(),)
-        )
+        cur = conn.execute(sql, params)
     return cur.rowcount
 
 

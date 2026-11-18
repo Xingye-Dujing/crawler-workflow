@@ -220,6 +220,45 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['running'] == 1, out
         assert out['after'] == 0, out
 
+    def test_an_open_turn_always_says_it_is_generating(self):
+        """The line under a live turn, measured on the REAL workspace with a pinned clock.
+
+        Three things used to be wrong at once, and each one made a working turn look broken:
+        the line was painted only when the last block was not text (so a finished paragraph
+        followed by a silent minute read as a complete answer), it never changed (so "still
+        working" and "the stream died" looked the same), and the tool clock was written but
+        never started (so a three-minute command showed one static label).
+        """
+        out = _run_workspace()['liveLine']
+        assert out['afterText']['visible'] is True, 'no live line under a turn that is still open'
+        assert out['afterText']['ticks'] == 1, 'the turn clock never started'
+        assert out['afterText']['text'] == out['expected']['generating'], out
+        assert out['afterText']['clock'] == ' · ' + out['expected']['clock'], out
+        assert out['stalled'] == out['expected']['stalled'], out
+        assert out['waitingApp'] == out['expected']['waitingApp'], out
+        assert '65s' in out['toolClock'], out['toolClock']
+        assert out['hiddenAfterDone'] is True, 'the live line outlived its turn'
+
+    def test_a_stream_that_ends_without_its_ending_says_it_was_cut(self):
+        """`_stream` RESOLVES when the server dies or a proxy drops the connection: no `done`, no
+        error. The bubble kept a half answer that read as a finished one. One note, once."""
+        out = _run_workspace()['cutStream']
+        assert out['notes'] == [out['expected']], out
+        assert out['again'] == 1, 'the cut was reported twice'
+
+    def test_a_reopened_turn_that_never_ended_says_which_fact_it_is(self):
+        """`streaming` may still be running in another page; `interrupted` is the server's verdict.
+        Reopening the conversation used to show a half answer with no word about either."""
+        out = _run_workspace()['reloadNotes']
+        assert out['notes'] == [out['expected']['interrupted'], out['expected']['live']], out
+
+    def test_switching_conversations_mid_answer_does_not_paint_into_the_new_one(self):
+        """The dock stays usable while an answer streams, so one click reached this: the rest of the
+        old answer appeared under the new conversation's question."""
+        out = _run_workspace()['switchGuard']
+        assert out['dropped'] == 0, "the previous conversation's answer was painted into the new one"
+        assert out['painted'] == 1, 'the owning conversation lost its own answer'
+
     def test_local_only_refuses_a_paid_provider_before_sending(self):
         """The switch makes "only the free local model" enforceable, not a hope."""
         out = _run_workspace()['localOnly']

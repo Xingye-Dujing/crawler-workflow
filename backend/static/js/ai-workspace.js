@@ -13,12 +13,27 @@ const AI_RUNTIME_KEYS = {
     cloud: 'ai.runtime.cloud',
 };
 
+/* How long a turn may send NOTHING before the live line says so. A local model on a long context is
+ * genuinely silent for tens of seconds while it thinks, and a line that never changes reads as a
+ * dead stream — the reader then assumes the answer was cut. 15 s is long enough not to cry wolf on
+ * an ordinary pause and short enough to answer "is it still alive?" before doubt sets in. */
+const STALL_AFTER_MS = 15000;
+
 const AIWorkspace = {
     _init: false,
     _open: false,
     _full: false,
     _sessionsOpen: false,
     _sending: false,
+    /* The live turn's clock: when it opened, when the last byte arrived, and whether an ENDING event
+       (done / question / paused / error / stop) was seen. A stream that closes without one was cut,
+       and a cut has to say so — otherwise a half answer is indistinguishable from a finished one. */
+    _turnStartedAt: 0,
+    _lastEventAt: 0,
+    _turnEnded: false,
+    _turnClock: null,
+    /* The conversation the OPEN turn belongs to; `''` on a new chat until its first `meta`. */
+    _streamConversation: '',
     _mode: 'chat',
     _conversationId: '',
     _bootstrap: null,
@@ -1101,6 +1116,7 @@ const AIWorkspace = {
                 '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div>' +
                 '<div class="ai-message-body">' +
                 '<div class="ai-flow"></div>' +
+                AIRender.statusRow() +
                 '<div class="ai-artifacts"></div>' +
                 '<div class="ai-question-slot"></div>' +
                 '<div class="ai-usage"></div>' +
@@ -1130,24 +1146,26 @@ const AIWorkspace = {
         const chat = this._dom.chat;
         const atBottom = chat ? chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80 : true;
         const blocks = current.blocks || [];
-        const last = blocks[blocks.length - 1];
+        const html = AIRender.assistantFlow(blocks);
         /* Between steps the model says nothing and the stream is silent: after a tool card there is
-           no sign of life until the app answers. A text block means the model IS visibly writing, so
-           the waiting line is for the other cases (turn just started, thinking, a running tool). */
-        const waiting = this._sending && (!last || String(last.type) !== 'text');
-        const html =
-            AIRender.assistantFlow(blocks) +
-            (waiting ? AIRender.workingRow(I18n.t(last && last.type === 'tool_use' && last.status === 'running' ? 'ai.waiting' : 'ai.working')) : '');
+           no sign of life until the app answers, and after a finished paragraph a reader cannot tell
+           "the answer is complete" from "the model is still composing". The live line is drawn by
+           `_renderStatus` — outside this memoised flow — in BOTH cases, so the transcript never
+           looks finished while the turn is still open. */
         /* A repaint rebuilds this block stream. Two rules make that invisible:
            1. an unchanged picture is not re-written (a running tool card used to be replaced every
               90 ms, which dropped the focus and any open disclosure);
            2. the open/closed state of every disclosure is remembered and re-applied, so reading a
               thinking block or a tool result is not undone by the next streaming delta. */
-        if (current._flowHtml === html) return;
+        if (current._flowHtml === html) {
+            this._renderStatus();
+            return;
+        }
         if (this._pointerDown) {
             /* The reader is pressing something in here: keep the nodes stable until the press ends
                (see the document pointerup listener), or the click lands on a node that just left. */
             current._pendingPaint = true;
+            this._renderStatus();
             return;
         }
         current._flowHtml = html;
@@ -1155,6 +1173,72 @@ const AIWorkspace = {
         current.flowEl.innerHTML = html;
         this._applyOpenDetails(current.flowEl);
         if (atBottom && chat) chat.scrollTop = chat.scrollHeight;
+        this._renderStatus();
+    },
+
+    /* ─── The live line ("生成中 · 12s") ─── */
+
+    /* What the line SAYS is the phase; the number is proof of life. A static "working" line on a
+       stream that has been silent for a minute reads exactly like a dead one — which is why the
+       reader used to conclude the answer had been cut — so the line carries the seconds this turn
+       has been open, and says the model has gone quiet when it has. */
+    _statusPhase() {
+        const running = (this._current?.blocks || []).some(
+            (row) => row.type === 'tool_use' && row.status === 'running'
+        );
+        /* A tool that runs for minutes legitimately sends nothing: say WHO we are waiting for. */
+        if (running) return 'ai.waiting';
+        const silent = Date.now() - (this._lastEventAt || Date.now());
+        if (silent >= STALL_AFTER_MS) return 'ai.stillWaiting';
+        return 'ai.working';
+    },
+
+    /* The one writer for that node. It is updated in place — never through `_paintAssistant` — so a
+       tick does not rebuild (and un-focus, un-open, un-scroll) the block stream. */
+    _renderStatus() {
+        const host = this._current?.el ? this._current.el.querySelector('.ai-status') : null;
+        if (!host) return;
+        if (!this._sending) {
+            host.hidden = true;
+            return;
+        }
+        host.hidden = false;
+        const text = host.querySelector('.ai-status-text');
+        const phase = I18n.t(this._statusPhase());
+        if (text && text.textContent !== phase) text.textContent = phase;
+        const clock = host.querySelector('.ai-status-clock');
+        if (!clock) return;
+        const seconds = Math.max(0, Math.round((Date.now() - (this._turnStartedAt || Date.now())) / 1000));
+        const shown = ' · ' + I18n.t('ai.elapsed', { seconds: seconds });
+        if (clock.textContent !== shown) clock.textContent = shown;
+    },
+
+    /* One interval for the whole turn: it ticks the live line AND every running tool card's clock.
+       (The tool clock was written for this and then never started, so a three-minute command showed
+       the same static "运行中" the whole time.) */
+    _startClock() {
+        if (this._turnClock) return;
+        this._turnClock = setInterval(() => {
+            this._renderStatus();
+            this._tickToolClocks();
+            if (!this._sending && !this._dom.chat?.querySelector('.ai-tool-clock')) this._stopClock();
+        }, 1000);
+    },
+
+    _stopClock() {
+        if (this._turnClock) clearInterval(this._turnClock);
+        this._turnClock = null;
+    },
+
+    _tickToolClocks() {
+        const clocks = this._dom.chat ? this._dom.chat.querySelectorAll('.ai-tool-clock') : [];
+        if (!clocks.length) return;
+        const running = (this._current?.blocks || []).filter(
+            (row) => row.type === 'tool_use' && row.status === 'running'
+        );
+        const started = Number((running[0] && running[0].startedAt) || Date.now());
+        const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
+        for (const el of clocks) el.textContent = ' · ' + seconds + 's';
     },
 
     /* Disclosure state belongs to the reader, not to the paint. Keyed by ``data-ai-detail`` (a
@@ -1566,6 +1650,7 @@ const AIWorkspace = {
             return;
         }
         this._current = null;
+        this._beginTurn();
         this._sending = true;
         this._setSending(true);
         try {
@@ -1575,6 +1660,8 @@ const AIWorkspace = {
         } finally {
             this._sending = false;
             this._setSending(false);
+            this._stopClock();
+            this._noteCutStream();
             this._paintAssistant();
         }
     },
@@ -2145,6 +2232,11 @@ const AIWorkspace = {
                 /* The turn's LAST row carries the turn's verdict: an intermediate round cut at
                    `max_tokens` and then recovered is not a truncated answer. */
                 turn.stopReason = String((message.meta || {}).stop_reason || '');
+                /* ...and its status: a row still `streaming` or already `interrupted` means the
+                   answer never reached its ending. Reopening such a conversation used to show a
+                   half answer with nothing to say it was half — the reader could only guess
+                   between "it finished" and "it broke". */
+                turn.status = String(message.status || '');
                 continue;
             }
             if (message.role !== 'tool') continue;
@@ -2169,6 +2261,11 @@ const AIWorkspace = {
         for (const turn of turns.values()) {
             if (turn.stopReason === 'max_tokens') turn.truncated = true;
             if (turn.stopReason === 'cancelled') turn.stopped = true;
+            /* The last row never reached an ending: say WHICH fact it is, because they are not the
+               same. `streaming` may still be running in another page; `interrupted` is the server's
+               own verdict on a turn whose reader (or process) went away. */
+            if (turn.status === 'interrupted') turn.interrupted = true;
+            else if (turn.status === 'streaming') turn.live = true;
             for (const block of turn.blocks) {
                 if (!block || block.type !== 'tool_use') continue;
                 const found = toolPayloads.get(String(block.id || ''));
@@ -2220,6 +2317,8 @@ const AIWorkspace = {
                same kind of fact, and used to come back as a red error line. */
             (turn.truncated ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.truncated')) + '</div>' : '') +
             (turn.stopped ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stopped')) + '</div>' : '') +
+            (turn.interrupted ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.interrupted')) + '</div>' : '') +
+            (turn.live ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stillStreaming')) + '</div>' : '') +
             '<div class="ai-extras"></div>' +
             '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
@@ -2393,10 +2492,11 @@ const AIWorkspace = {
         }
         this._current = null;
         this._showChat();
+        this._beginTurn();
         this._sending = true;
         this._setSending(true);
-        /* The reaction is the point: the user must see their message AND a "working" turn before
-           the first byte from the provider, otherwise a slow model looks like a dead button. */
+        /* The reaction is the point: the user must see their message AND a live turn before the
+           first byte from the provider, otherwise a slow model looks like a dead button. */
         this._ensureAssistant();
         this._paintAssistant();
         if (this._dom.chat) this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
@@ -2425,6 +2525,8 @@ const AIWorkspace = {
         } finally {
             this._sending = false;
             this._setSending(false);
+            this._stopClock();
+            this._noteCutStream();
         }
         return true;
     },
@@ -2527,12 +2629,27 @@ const AIWorkspace = {
            one toast, which is a better answer than a dead input. */
         if (this._dom.input) this._dom.input.disabled = false;
         this._renderToggles();
+        /* A closed turn no longer owns a conversation: the next one states its own. */
+        if (!sending) this._streamConversation = '';
+        /* The live line follows the same switch as the buttons: it is shown exactly while a turn is
+           open. One funnel, so no ending path can leave "生成中" painted on a finished answer. */
+        this._renderStatus();
     },
 
     _onEvent(event) {
+        /* Any byte from the provider is proof of life; the live line's "no answer yet" wording and
+           its seconds both hang off this. */
+        this._lastEventAt = Date.now();
         const type = event.type;
+        /* A turn belongs to the conversation that started it. Selecting another conversation while
+           an answer streams is allowed (the dock stays usable), and the rest of that answer used to
+           be painted into the NEW transcript — one conversation's words under another's question.
+           Events for a conversation nobody is looking at are dropped; the store still has them. */
+        const owner = String(this._streamConversation || '');
+        if (owner && String(this._conversationId || '') !== owner) return;
         if (type === 'meta') {
             this._conversationId = event.conversation_id || this._conversationId;
+            if (!this._streamConversation) this._streamConversation = this._conversationId;
             /* The first turn of a new chat learns its id here; remember it so a reload reopens THIS
                transcript instead of an empty page. */
             if (event.conversation_id) this._rememberConversation(this._conversationId);
@@ -2617,7 +2734,8 @@ const AIWorkspace = {
                 if (name === 'app_errors') this._ingestFailedNodes(event.result, current);
                 else if (name === 'run_status') this._ingestRunNodes(event.result, current);
             }
-            if (!current.blocks.some((row) => row.type === 'tool_use' && row.status === 'running')) this._stopToolClock();
+            /* The clock keeps running: the turn is still open (the next round may take a while), and
+               the live line is the proof of that. It is stopped only by an ending event. */
             return;
         }
         if (type === 'rerun_started') {
@@ -2648,6 +2766,9 @@ const AIWorkspace = {
             current.questions = event.questions || [];
             current.answers = {};
             current.questionEl.innerHTML = current.questions.map((item) => AIRender.questionCard(item, false)).join('');
+            /* The card IS the state now ("waiting for your answer"), so the live line must go: it
+               used to stay painted under the card, announcing work nobody was doing. */
+            this._turnEnded = true;
             this._sending = false;
             this._setSending(false);
             this._renderSide();
@@ -2687,8 +2808,12 @@ const AIWorkspace = {
         }
         if (type === 'paused') {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
+            /* A pause is an ending of THIS stream (the answer resumes through `/api/ai/answer`), so
+               it must not be reported as a cut connection by `_noteCutStream`. */
+            this._turnEnded = true;
             this._sending = false;
             this._setSending(false);
+            this._stopClock();
             this._paintAssistant();
             return;
         }
@@ -2698,9 +2823,10 @@ const AIWorkspace = {
         }
         if (type === 'done') {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
+            this._turnEnded = true;
             this._sending = false;
             this._setSending(false);
-            this._stopToolClock();
+            this._stopClock();
             /* `stop_reason` is the provider's own verdict, and `max_tokens` means the answer was
                CUT. Painting it as a finished answer was the silent failure: the sentence stopped
                mid-way and nothing said why. */
@@ -2735,31 +2861,35 @@ const AIWorkspace = {
         }, 90);
     },
 
-    /* A command can run for minutes; the card says "运行中" with a live seconds counter, so "still
-       working" and "stuck" no longer look the same. One interval for the whole turn. */
-    _startToolClock() {
-        if (this._toolClock) return;
-        this._toolClock = setInterval(() => {
-            const clocks = this._dom.chat ? this._dom.chat.querySelectorAll('.ai-tool-clock') : [];
-            if (!clocks.length) {
-                this._stopToolClock();
-                return;
-            }
-            const running = (this._current?.blocks || []).filter(
-                (row) => row.type === 'tool_use' && row.status === 'running'
-            );
-            const started = Number((running[0] && running[0].startedAt) || Date.now());
-            const seconds = Math.max(0, Math.round((Date.now() - started) / 1000));
-            for (const el of clocks) el.textContent = ' · ' + seconds + 's';
-        }, 1000);
+    /* A turn opened: the live line starts at 0s and the clock that keeps it (and every running tool
+       card) ticking starts with it. Called where `_sending` becomes true, so a slow first byte is
+       already visible as "生成中 · 1s" instead of a dead send button. */
+    _beginTurn() {
+        this._turnStartedAt = Date.now();
+        this._lastEventAt = this._turnStartedAt;
+        this._turnEnded = false;
+        /* Which conversation this turn paints into; a new chat learns it from the first `meta`. */
+        this._streamConversation = this._conversationId || '';
+        this._startClock();
     },
 
-    _stopToolClock() {
-        if (this._toolClock) clearInterval(this._toolClock);
-        this._toolClock = null;
+    /* An ending the stream did not announce: the server died, a proxy dropped the connection, a
+       laptop slept past the request timeout. `_stream` then simply RESOLVES — no `done` — and the
+       bubble kept a half answer that read as a finished one. Name it instead of leaving the reader
+       to guess (and never twice: `stop()` and the `done`+`cancelled` path each add their own note). */
+    _noteCutStream() {
+        if (this._turnEnded) return;
+        this._turnEnded = true;
+        if (!this._current || !this._current.blocks) return;
+        const said = String(I18n.t('ai.stopped'));
+        if (this._current.blocks.some((block) => block.type === 'note' && block.text === said)) return;
+        this._current.blocks.push({ type: 'note', text: I18n.t('ai.streamLost') });
+        this._paintAssistant();
     },
 
-    _renderError(message) {        const current = this._ensureAssistant();
+    _renderError(message) {
+        this._turnEnded = true;
+        const current = this._ensureAssistant();
         /* The failure belongs at the END of whatever the turn already produced, in order. */
         current.blocks.push({ type: 'text', text: '' });
         current.blocks.push({ type: 'error', text: String(message || '') });
@@ -2866,10 +2996,11 @@ const AIWorkspace = {
         } else {
             current.questionEl.innerHTML = '<div class="ai-question-answered">' + AIRender.escape(I18n.t('ai.questionAnswered')) + '</div>';
         }
+        this._beginTurn();
         this._sending = true;
         this._setSending(true);
-        /* The resumed turn waits for the provider too: show the waiting line now, not after the
-           first event (a slow local model made an answered question look unanswered). */
+        /* The resumed turn waits for the provider too: show the live line now, not after the first
+           event (a slow local model made an answered question look unanswered). */
         this._ensureAssistant();
         this._paintAssistant();
         try {
@@ -2886,10 +3017,13 @@ const AIWorkspace = {
         } finally {
             this._sending = false;
             this._setSending(false);
+            this._stopClock();
+            this._noteCutStream();
         }
     },
 
     async stop() {
+        this._turnEnded = true;
         if (this._abort) this._abort.abort();
         try {
             await fetch('/api/ai/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: this._conversationId }) });
@@ -2898,10 +3032,15 @@ const AIWorkspace = {
         }
         this._sending = false;
         this._setSending(false);
+        this._stopClock();
         /* A stopped turn used to end in silence: the bubble just stopped growing. Say it, and say
-           that the commands it started went with it (the route stops that conversation's children). */
+           that the commands it started went with it (the route stops that conversation's children).
+           Once only: the server may also answer the abort with `done`+`cancelled` first. */
+        const said = String(I18n.t('ai.stopped'));
         if (this._current && this._current.blocks) {
-            this._current.blocks.push({ type: 'note', text: I18n.t('ai.stopped') });
+            if (!this._current.blocks.some((block) => block.type === 'note' && block.text === said)) {
+                this._current.blocks.push({ type: 'note', text: said });
+            }
             this._paintAssistant();
         }
     },

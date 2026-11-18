@@ -147,6 +147,40 @@ def test_chat_returns_canonical_events_and_never_stores_the_key(client, fake_ai,
     assert 'secret-key' not in json.dumps(detail, ensure_ascii=False)
 
 
+def test_a_reader_that_disconnects_mid_answer_leaves_an_interrupted_row(client, fake_ai, clean_ai):
+    """The reload / closed-panel case: the SSE reader goes away before the answer's ending.
+
+    The agent suspends at a ``yield``, so a disconnect means it never writes the round's verdict.
+    Without a settlement at the disconnect the row stayed ``streaming`` for the whole session, and
+    the next page load drew a half answer that read like a finished one (only a server restart
+    swept it). The status is what the workspace turns into "this answer was cut off".
+    """
+    from ai import store
+
+    body = {
+        'text': 'hello',
+        'provider': 'fake_ai',
+        'model': 'fake-model',
+        'api_key': 'secret-key',
+        'skill': 'project',
+        'context': {},
+    }
+    response = client.post('/api/ai/chat', json=body)
+    assert response.status_code == 200, response.get_json()
+    stream = response.response
+    first = next(iter(stream)).decode('utf-8')
+    assert '"type": "meta"' in first, first
+    conversation_id = json.loads(first.split('data: ', 1)[1])['conversation_id']
+    assert [row['status'] for row in store.list_messages(conversation_id) if row['role'] == 'assistant'] == [
+        'streaming'
+    ]
+    stream.close()
+    rows = store.list_messages(conversation_id)
+    assert [row['status'] for row in rows if row['role'] == 'assistant'] == ['interrupted'], rows
+    detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
+    assert any(row['status'] == 'interrupted' for row in detail['messages'])
+
+
 def test_the_project_context_reaches_the_provider_on_every_round(client, fake_ai, clean_ai):
     """The context is part of the TURN, so a tool round must carry it too — and it must reach
     whichever transport the user picked (`base.replay_context`), not only DeepSeek's."""

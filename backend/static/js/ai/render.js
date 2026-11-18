@@ -517,14 +517,19 @@ const AIRender = {
         return parts.join('');
     },
 
-    workingRow(label) {
-        /* One pulsing line at the END of the turn, while the runtime is between steps. Without it
-           the transcript goes quiet after a tool card and a reader cannot tell "finished" from
-           "waiting for the app to answer". */
+    statusRow() {
+        /* The live line ("生成中 · 12s"). It is its OWN node, not part of `.ai-flow`: the flow is
+           memoised by its HTML string, so a line carrying a ticking second would either freeze or
+           force a full repaint of the whole block stream once a second.
+
+           Two children, for a reason a screen reader makes plain: the WORDS are the live region and
+           change only when the phase does, while the seconds are `aria-hidden` — a polite region
+           that re-announced itself every second would be unusable. */
         return (
-            '<div class="ai-working" role="status" aria-live="polite">' +
+            '<div class="ai-status" hidden>' +
             '<span class="ai-working-dot" aria-hidden="true"></span>' +
-            '<span>' + this.escape(label) + '</span></div>'
+            '<span class="ai-status-text" role="status" aria-live="polite"></span>' +
+            '<span class="ai-status-clock" aria-hidden="true"></span></div>'
         );
     },
 
