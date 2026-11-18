@@ -1741,11 +1741,15 @@
 .ai-jump {
   position: absolute;
   right: 18px;
-  bottom: 96px;
+  /* The composer's height is measured into this variable (it grows with the textarea), so the
+     button sits just above it instead of on top of its buttons. */
+  bottom: calc(var(--ai-composer-h, 96px) + 10px);
   z-index: 30;
-  width: 26px;
+  min-width: 26px;
   height: 26px;
-  border-radius: 50%;
+  padding: 0 6px;
+  white-space: nowrap;
+  border-radius: 999px;
   border: 1px solid var(--line2);
   background: var(--paper);
   color: var(--text);

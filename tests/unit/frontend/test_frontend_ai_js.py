@@ -267,6 +267,20 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['toolOpened'] is True, 'a finished tool card did not open on click'
         assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
+    def test_the_jump_button_is_a_pill_above_the_composer(self):
+        """It used to be a 26px circle filled with the sentence “回到最新消息”, which wrapped into a
+        vertical stack and sat on the composer's own buttons. The anchor now follows the composer's
+        measured height; the button keeps its arrow and carries the sentence as a label."""
+        out = _run_workspace()['jumpButton']
+        assert out['composerVar'].endswith('px'), out
+        html = (ROOT / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
+        start = html.index('id="ai-jump"')
+        end = html.index('</button>', start)
+        tag = html[start:end]
+        assert '↓' in tag, 'the button lost its arrow'
+        assert 'data-i18n="ai.jumpLatest"' not in tag, 'the sentence is the button text again'
+        assert 'data-i18n-title="ai.jumpLatest"' in tag
+
     def test_the_pin_keeps_the_panel_open_on_an_outside_click(self):
         out = _run_workspace()['pin']
         assert out['pinnedStayedOpen'] is True, 'a pinned panel closed on an outside press'

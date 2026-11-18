@@ -736,7 +736,22 @@ out.storedArtifact = {
 /* A running present_artifact must say what it is doing, not “读取中…”. */
 out.runningLabel = sandbox.AIRender.toolCard('present_artifact', {}, 'running', null, { id: 'c9' });
 
+
+/* The jump button is a compact pill ABOVE the composer, and its anchor follows the composer's real
+   height (a 26px circle holding the sentence “回到最新消息” wrapped into a vertical stack that sat
+   on the composer's own buttons). */
+/* The panel's own markup is not parsed by the stub, so the composer is built here; the button's
+   MARKUP (glyph + labels) is asserted against index.html in the python test. */
+const composerEl = sandbox.document.createElement('footer');
+composerEl.className = 'ai-composer';
+workspace._dom.root.appendChild(composerEl);
+workspace._syncComposerHeight();
+out.jumpButton = {
+    composerVar: String(workspace._dom.root.style.getPropertyValue('--ai-composer-h') || ''),
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
+
 
 
 

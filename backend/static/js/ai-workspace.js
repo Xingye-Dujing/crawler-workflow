@@ -175,6 +175,7 @@ const AIWorkspace = {
         this._bindColumns();
         this._renderWelcome();
         this._renderComposer();
+        this._syncComposerHeight();
     },
 
     restore() {
@@ -2024,6 +2025,19 @@ const AIWorkspace = {
         if (!input) return;
         input.style.height = 'auto';
         input.style.height = Math.min(input.scrollHeight || 0, 220) + 'px';
+        this._syncComposerHeight();
+    },
+
+    /* The “back to the latest message” button is anchored ABOVE the composer, and the composer grows
+       with the textarea — a fixed `bottom: 96px` put the button on top of the composer's own row.
+       Its measured height is published as `--ai-composer-h`, which the stylesheet reads. */
+    _syncComposerHeight() {
+        const root = this._dom.root;
+        if (!root || typeof root.querySelector !== 'function') return;
+        const composer = root.querySelector('.ai-composer');
+        const rect = composer && composer.getBoundingClientRect ? composer.getBoundingClientRect() : null;
+        const height = rect && rect.height ? Math.round(rect.height) : 0;
+        if (height > 0) root.style.setProperty('--ai-composer-h', height + 'px');
     },
 
     /* The transcript the user was reading survives a reload: the id is browser-local state, the
