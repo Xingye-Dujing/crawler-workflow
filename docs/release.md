@@ -23,15 +23,14 @@
 
 1. 跑发布前检查（下节），0 失败才继续。
 2. 改 `backend/services/version.py` 的 `APP_VERSION`。
-3. 构建 Windows 包（`-Clean -Installer -Version <三段或四段>`），记录两个产物的字节数与 SHA-256。
-4. 按 99,614,720 B 切片，记录每片的大小与 SHA-256。
-5. 先删 Gitee 旧 tag 的附件（仓库附件总量 1 GB）。
-6. 上传 Windows 资产到 GitHub（完整文件）与 Gitee（分片 + 安装器）。
-7. 用**新 tag** 触发 macOS workflow，取四个 DMG 的摘要。
-8. 更新 `version.json`：版本号、大小、SHA-256、`url`/`parts`。
-9. 按 `version.json` 的 `notes` 写 Release 说明。
-10. 提交并推送 `version.json`、代码与 `docs/`。
-11. 用 `CIXI_UPDATE_FEED` 指向这份清单排练一次更新（见“排练”）。
+3. 构建 Windows 包（`-Clean -Installer -Version <三段或四段>`），写 `dist/SHA256SUMS` 与 `dist/release-manifest.json`。
+4. `tools/publish_gitee.py` 一条命令切片、腾 Gitee 空间、建 Release、上传。
+5. 上传 GitHub（完整文件）——`gh release create` + `gh release upload`。
+6. 用**新 tag** 触发 macOS workflow，两个 DMG 由它上传。
+7. `tools/write_release_feed.py` 写 `version.json`：Windows 的字节数与摘要来自 `dist/`，macOS 的从 Release API 读回。
+8. 按 `version.json` 的 `notes` 写 Release 说明。
+9. 提交并推送 `version.json`、代码与 `docs/`。
+10. 用 `CIXI_UPDATE_FEED` 指向这份清单排练一次更新（见“排练”）。
 
 ## 发布前必须通过
 
@@ -123,6 +122,22 @@ macOS 包只能由 `.github/workflows/macos-build.yml` 在 GitHub 的 macOS runn
 macOS 自更新从 GitHub Release 下载 DMG；访问不了 GitHub 的 Mac 用在线安装器或完整 DMG。
 
 ## version.json
+
+**由工具写，不手抄**。三个数字里有两个根本不是人能记住的（总包摘要、每片摘要），手写一次错一次：
+
+```powershell
+.venv\Scripts\python.exe tools\write_release_feed.py 2026.12.01.1 exe-2026-12-01.1 --notes-file notes.md
+# 只发 Windows 时必须显式说，否则旧的 darwin-* 条目会被 Mac 客户端当成“有新版本”
+.venv\Scripts\python.exe tools\write_release_feed.py 2026.12.01.1 exe-2026-12-01.1 --notes-file notes.md --windows-only
+```
+
+- Windows 的数字取自 `dist/`（`CaiXiHui-win64.zip` 与它的 `.001`/`.002`），**并校验分片之和等于总包**——
+  重建后残留的旧分片会被当场拒绝，而不是写进清单让用户拼出一个坏包。
+- macOS 的数字从 Release API 读回（`gh release view <tag> --json assets` 的 `digest`/`size`）；某个 DMG 还没传上去
+  时按名拒绝，不写“看起来对”的摘要。
+- 缺 `notes`、缺平台、版本号不是三段或四段数字，都按名拒绝。
+- 写出的清单必须能被客户端自己的校验器读（`services.update._valid_feed` / `_asset_usable`）——
+  这条由 `tests/unit/tools/test_write_release_feed.py` 端着，改清单形状时先看它。
 
 ```json
 {
