@@ -71,10 +71,17 @@
 - **两个 pytest 会话可以同时跑，所以清理只能回收“空着”的旧根。** 每个会话的临时根按 pid 命名，但“保留最新三个”的清理会把**正在跑的那个**根删掉——
   最长的那次运行按 mtime 永远是最旧的。它的 `data/`、`settings.json`、数据库在一半消失，于是那次全量报出十几个彼此无关的失败
   （一个静态源码扫描、一个 `caplog` 计数、控制台行数、一个打不开的 store），每个失败里都没有成因。现在只删除**空闲超过 2 小时**的根，
-  并跳过本进程自己的；`tests/unit/gates/test_isolation_census.py` 钉住这条（活跃根即使最旧也活着）。
+  并跳过本进程自己的；`tests/unit/gates/test_isolation_census.py` 钉住这条（活跃根即使最旧也活着）**以及接线本身**
+  （`prune_isolated_roots(..., current=ISOLATED_ROOT, keep=KEEP_ISOLATED_RUNS)`：去掉 `current=` 就让 bug 原样回来，而三个守卫用例照样绿）。
+- **诊断信息也要住在测试能导入的地方。** 泄漏旗标的“仍存活的运行线程 + 它声称的 run id”原来写在 `conftest.py` 里，于是没人能测它；
+  现在它是 `isolation_guard.leak_context()`，由 `test_isolation_census.py` 用一个真的活线程断言名字和 run id 都在。
 - **`caplog.records` 是进程里所有 logger 的记录，断言某模块“只说一次”就必须按那个 logger 的名字过滤。**
   不过滤时，任何后台线程的一条 warning 都会让用例失败；发射者的名字从模块自己的 `logger` 取，而不是抄字面量
-  （`style.py` 发警告，`visualizer` 只是再导出）。
+  （`style.py` 发警告，`visualizer` 只是再导出）。**不设全局扫描门**：本仓不少用例是“某同步路径只记了这几行”，
+  按名过滤反而是噪音——这条只在真的在数“一次”时适用。
+- **一个行为只有一个逐段单测是不够的，还要有用例证明“这次运行确实调用了它”。** `_fit_history` 单测绿着，但所有假 provider 都
+  返回 `context_window() == 0`，于是“真实一轮按窗口裁剪并在 `context_meta.history` 报告”从没跑过；`meta.stop_reason` 与
+  `replay_chars` 也只在 JS 里被手工塞进去过。证据是 `tests/api/test_ai_workflow.py` 里那个报 3000 窗口的 provider。
 - **一个警告是“测试注意到了什么却还是通过”。** 要么修它注意到的东西，要么让测试说清这台机器为什么没有它；不要静音。
 - **有状态的规则需要无状态的套件。** 共享 Cookie 目录要快照/还原；爬取测试声明自己的登录前置。
 - **失败要大声的旗标必须为“要求了保证的那次运行”而响，不是为它恰好导入的目录。** 钩子要看被选用例的 marker。

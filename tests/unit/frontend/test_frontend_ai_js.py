@@ -153,6 +153,13 @@ class TestWorkspaceRepaintAndDelegation:
         out = _run_workspace()['provider']
         assert out['stored'] == 'custom_provider'
 
+    def test_the_search_default_is_adopted_once_and_never_over_a_choice(self):
+        """联网搜索 costs money, so the server's default is off; adopting it must not undo a click
+        either — a switched-off browser was being turned back on by the next refresh."""
+        out = _run_workspace()['searchDefault']
+        assert out['adopted'] is True, 'a browser that never chose did not adopt the server default'
+        assert out['kept'] is False, 'a click on 联网搜索 was reverted by the next bootstrap'
+
     def test_the_provider_settings_buttons_reach_their_handlers(self):
         """保存 had no branch in the delegated handler, so typing an API key and clicking it did
         nothing — no toast, no request, no error. The same for 刷新模型 and 测试连接."""
@@ -309,10 +316,18 @@ class TestWorkspaceRepaintAndDelegation:
     def test_the_context_inspector_names_what_was_left_out(self):
         """A context cut by the budget — by the replay cap that keeps one turn's block bounded, or by
         the model's window — must say so; silence reads as “the model saw everything”."""
-        out = _run_workspace()['contextNotes']
-        assert 'Not included' in out and '运行' in out, out
-        assert 'Cut to 16000 characters' in out, out
-        assert 'oldest 4 messages' in out and '32768-token' in out, out
+        out = _run_workspace()
+        notes, words = out['contextNotes'], out['contextWords']
+        assert words['omitted'] in notes, f'{words["omitted"]!r} not in the inspector'
+        assert words['replay'] in notes, f'{words["replay"]!r} not in the inspector'
+        assert words['history'] in notes, f'{words["history"]!r} not in the inspector'
+
+    def test_the_turns_last_row_carries_its_verdict(self):
+        """Two provider rounds are two stored rows. Taking the FIRST row's `stop_reason` would call a
+        recovered answer truncated and hide a real cut behind a finished first round."""
+        out = _run_workspace()['turnVerdict']
+        assert out['recovered'] == 0, 'a round that recovered from max_tokens still said “cut off”'
+        assert out['cutLast'] == 1, out
 
     def test_a_stopped_turn_is_a_note_not_an_error(self):
         """Stop used to store status='error', so a reload painted a red error line over a turn the
@@ -342,6 +357,11 @@ class TestWorkspaceRepaintAndDelegation:
         assert 'plugin_tool_x' in out['unknown'], out
         assert out['stoppedNote'] == 1, out
         assert 'Stopped' in out['stoppedText'], out
+
+    def test_a_stop_is_reported_once_even_when_the_server_also_answers(self):
+        """The server answers the aborted stream with `done`+cancelled while the stop button's own
+        call is in flight: two notes for one stop read as two separate failures."""
+        assert _run_workspace()['stopDedupe'] == 1
 
     def test_the_jump_button_is_a_pill_above_the_composer(self):
         """It used to be a 26px circle filled with the sentence “回到最新消息”, which wrapped into a

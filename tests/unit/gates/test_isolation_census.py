@@ -126,3 +126,52 @@ class TestPruningOldRoots:
         isolation_guard.prune_isolated_roots(tmp_path, current=None, keep=2, now=now)
         left = sorted(path.name for path in tmp_path.iterdir())
         assert left == ['isolated-0', 'isolated-1'], left
+
+    def test_the_session_tells_the_prune_which_root_is_its_own(self):
+        """The guard's decision is tested above; this is the WIRING, which is what a live session
+        depends on. Dropping `current=ISOLATED_ROOT` restores the original bug — a session older than
+        the idle window deletes the root it is using — with every guard case still green."""
+        import ast
+
+        source = (REPO / 'tests' / 'conftest.py').read_text(encoding='utf-8')
+        tree = ast.parse(source)
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and getattr(node.func, 'id', '') == 'prune_isolated_roots'
+        ]
+        assert len(calls) == 1, 'the prune moved; retarget this gate'
+        keywords = {keyword.arg: ast.unparse(keyword.value) for keyword in calls[0].keywords}
+        assert keywords.get('current') == 'ISOLATED_ROOT', keywords
+        assert keywords.get('keep') == 'KEEP_ISOLATED_RUNS', keywords
+
+
+class TestTheLeakMessage:
+    """A tripwire that names the victim instead of the owner costs an afternoon every time."""
+
+    def test_a_live_worker_and_its_run_are_named(self):
+        import threading
+
+        import isolation_guard
+
+        finished = threading.Thread(target=lambda: None, name='crawler-run-42', daemon=True)
+        finished.start()
+        finished.join(1)
+        assert isolation_guard.leak_context({'thread': finished, 'run_id': ''}) == '', (
+            'a finished worker was reported as alive'
+        )
+        blocker = threading.Event()
+        running = threading.Thread(target=blocker.wait, name='crawler-run-43', daemon=True)
+        running.start()
+        try:
+            text = isolation_guard.leak_context({'thread': running, 'run_id': 'r_abc'})
+            assert 'STILL ALIVE' in text and 'crawler-run-43' in text, text
+            assert 'r_abc' in text, text
+        finally:
+            blocker.set()
+            running.join(2)
+
+    def test_nothing_running_means_no_sentence(self):
+        import isolation_guard
+
+        assert isolation_guard.leak_context({'thread': None, 'run_id': ''}) == ''

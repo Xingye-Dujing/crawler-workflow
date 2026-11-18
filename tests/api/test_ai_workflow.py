@@ -103,6 +103,20 @@ class AskThenAnswerProvider(FakeProvider):
         yield {'type': 'done', 'stop_reason': 'end_turn'}
 
 
+class WindowedProvider(FakeProvider):
+    """A provider that reports a model window, so the agent has something to fit the history into.
+
+    Every other fake returns 0 ("no window to fit"), which is why the trimming path had never run
+    through a real turn.
+    """
+
+    def __init__(self):
+        super().__init__('fake_window')
+
+    def context_window(self, model: str = '') -> int:
+        return 3000
+
+
 @pytest.fixture
 def fake_ai(monkeypatch):
     from ai.providers import PROVIDERS
@@ -110,6 +124,7 @@ def fake_ai(monkeypatch):
     monkeypatch.setitem(PROVIDERS, 'fake_ai', FakeProvider())
     monkeypatch.setitem(PROVIDERS, 'fake_ask', AskThenAnswerProvider())
     monkeypatch.setitem(PROVIDERS, 'fake_record', RecordingProvider())
+    monkeypatch.setitem(PROVIDERS, 'fake_window', WindowedProvider())
 
 
 @pytest.fixture
@@ -174,11 +189,82 @@ def test_a_reader_that_disconnects_mid_answer_leaves_an_interrupted_row(client, 
     assert [row['status'] for row in store.list_messages(conversation_id) if row['role'] == 'assistant'] == [
         'streaming'
     ]
+    # A concurrent answer in ANOTHER conversation must not be swept with it: the settlement is keyed
+    # by the conversation this stream owned, or a reload in one chat marks a live answer elsewhere
+    # as interrupted.
+    other = store.create_conversation('fake_ai', 'fake-model', 'auto')
+    foreign = store.append_message(other['id'], 'assistant', '一半', blocks=[], status='streaming')
     stream.close()
     rows = store.list_messages(conversation_id)
     assert [row['status'] for row in rows if row['role'] == 'assistant'] == ['interrupted'], rows
+    try:
+        assert store.get_message(foreign['id'])['status'] == 'streaming', 'the sweep reached another conversation'
+    finally:
+        store.update_message(foreign['id'], status='done')
     detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
     assert any(row['status'] == 'interrupted' for row in detail['messages'])
+
+
+def test_a_paused_turn_is_not_a_cut_connection(client, fake_ai, clean_ai):
+    """`paused` is an ENDING of this stream (the answer resumes through /api/ai/answer). Leaving it out
+    of the settlement's ending events would mark a waiting turn interrupted the moment the browser
+    closes the panel."""
+    from ai import store
+
+    body = {
+        'text': 'which?',
+        'provider': 'fake_ask',
+        'model': 'fake-model',
+        'api_key': 'secret-key',
+        'skill': 'project',
+        'context': {},
+    }
+    response = client.post('/api/ai/chat', json=body)
+    assert response.status_code == 200, response.get_json()
+    stream = response.response
+    conversation_id = ''
+    paused = False
+    for chunk in stream:
+        text = chunk.decode('utf-8')
+        for frame in text.split('\n\n'):
+            if not frame.startswith('data: '):
+                continue
+            event = json.loads(frame[len('data: ') :])
+            conversation_id = event.get('conversation_id') or conversation_id
+            if event.get('type') == 'paused':
+                paused = True
+        if paused:
+            break
+    assert paused, 'the scripted question never paused the turn'
+    stream.close()
+    rows = store.list_messages(conversation_id)
+    # A pause leaves the row `waiting` (not `streaming`), so the disconnect sweep must not turn it
+    # into `interrupted`: the answer is coming back through /api/ai/answer, not being cut.
+    assert [row['status'] for row in rows if row['role'] == 'assistant'] == ['waiting'], rows
+    assert store.pending_questions(conversation_id), 'the question did not survive the closed stream'
+
+
+def test_a_real_turn_reports_the_replay_cap_and_the_window_it_trimmed(client, fake_ai, clean_ai):
+    """Two numbers the inspector shows exist only after a real turn built them: the size the context
+    block was capped to at write time, and how many messages the model's window forced out. The
+    trimming function has a unit test; nothing proved the turn calls it and reports it."""
+    first = _chat(client, provider='fake_window', model='fake-model', text='问' * 20000)
+    assert first.status_code == 200, first.get_json()
+    conversation_id = first.get_json()['events'][0]['conversation_id']
+    second = _chat(
+        client,
+        provider='fake_window',
+        model='fake-model',
+        text='再问一次',
+        conversation_id=conversation_id,
+    )
+    assert second.status_code == 200, second.get_json()
+    meta = second.get_json()['events'][0]['context']
+    assert meta['replay_chars'] >= 1000 and meta['replay_truncated'] in (True, False), meta
+    history = meta.get('history') or {}
+    assert history.get('window') == 3000, meta
+    assert history.get('dropped', 0) > 0, f'a 3000-token window kept everything: {history}'
+    assert history['kept'] >= 1, history
 
 
 def test_the_project_context_reaches_the_provider_on_every_round(client, fake_ai, clean_ai):

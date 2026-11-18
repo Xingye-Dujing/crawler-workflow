@@ -76,8 +76,15 @@ def _stream(generator, account, lang: str, conversation_id: str = ''):
     generator at the next ``yield``. The agent never gets to write the round's verdict, so its
     assistant row stayed ``streaming`` — and the next page load drew a half answer with nothing to
     say it was half, until a server restart happened to sweep it. The ``finally`` settles the row in
-    the same breath as the disconnect, only for the conversation this stream owned.
+    the same breath as the disconnect.
+
+    The sweep is scoped by the conversation this stream OWNS, which for a brand-new chat is not in
+    the request at all: the first ``meta`` event carries it, so the id is learned from the stream
+    itself. Without that, a new chat's disconnect swept every ``streaming`` row in the database —
+    including a live answer in another conversation. If the reader leaves before any ``meta``, the
+    sweep is skipped on purpose: the boot pass is the backstop, and guessing a scope is worse.
     """
+    owned = {'id': str(conversation_id or '')}
 
     def body():
         with account_context.use(account):
@@ -85,6 +92,8 @@ def _stream(generator, account, lang: str, conversation_id: str = ''):
             ended = False
             try:
                 for event in generator:
+                    if event.get('type') == 'meta' and event.get('conversation_id'):
+                        owned['id'] = owned['id'] or str(event['conversation_id'])
                     if event.get('type') in ('done', 'paused'):
                         ended = True
                     yield _sse(event)
@@ -98,8 +107,8 @@ def _stream(generator, account, lang: str, conversation_id: str = ''):
                 yield _sse({'type': 'done', 'stop_reason': 'error'})
                 ended = True
             finally:
-                if not ended:
-                    store.mark_interrupted(conversation_id)
+                if not ended and owned['id']:
+                    store.mark_interrupted(owned['id'])
 
     return Response(
         stream_with_context(body()),

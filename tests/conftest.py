@@ -37,7 +37,7 @@ from itertools import count
 from pathlib import Path
 
 import pytest
-from isolation_guard import enforce, prune_isolated_roots
+from isolation_guard import enforce, leak_context, prune_isolated_roots
 from isolation_guard import fingerprint as _fingerprint_protected
 from node_runner import check_node_or_abort
 from run_wait import describe_state, wait_until_quiet
@@ -362,21 +362,8 @@ def machine_has_a_browser(monkeypatch):
 
 
 def _leak_context(app) -> str:
-    """What else is still running, so a leaked claim points at its owner instead of its victims.
-
-    A leaked worker thread outlives the test that started it and flips the flag *during a later,
-    unrelated* test — which is how a static source scan and a ``caplog`` count ended up failing with
-    no cause in them. Naming the live thread (and the run id it claims) is the difference between
-    "sixteen failures I cannot explain" and one line that says where to look.
-    """
-    parts = []
-    thread = app.execution_state.get('thread')
-    if thread is not None and getattr(thread, 'is_alive', lambda: False)():
-        parts.append(f'a run worker is STILL ALIVE ({getattr(thread, "name", "worker")})')
-    run_id = app.execution_state.get('run_id') or ''
-    if run_id:
-        parts.append(f'it claims run {run_id}')
-    return '. ' + ', '.join(parts) + '.' if parts else ''
+    """The diagnostic that names what is still running; the decision lives in ``isolation_guard``."""
+    return leak_context(app.execution_state)
 
 
 @pytest.fixture(autouse=True)

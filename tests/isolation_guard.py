@@ -114,6 +114,27 @@ def diff(before: dict, now: dict) -> tuple:
     return added, removed, changed
 
 
+def leak_context(execution_state: dict) -> str:
+    """What else is still running, so a leaked flag points at its owner instead of its victims.
+
+    A leaked worker thread outlives the test that started it and flips the flag *during a later,
+    unrelated* test — which is how a static source scan and a ``caplog`` count once failed with no
+    cause in them. Naming the live thread (and the run id it claims) is the difference between
+    "sixteen failures I cannot explain" and one line that says where to look.
+
+    Lives here, not in ``conftest.py``, for this module's founding reason: a rule inside a conftest
+    is a rule no test can import.
+    """
+    parts = []
+    thread = execution_state.get('thread')
+    if thread is not None and getattr(thread, 'is_alive', lambda: False)():
+        parts.append(f'a run worker is STILL ALIVE ({getattr(thread, "name", "worker")})')
+    run_id = execution_state.get('run_id') or ''
+    if run_id:
+        parts.append(f'it claims run {run_id}')
+    return '. ' + ', '.join(parts) + '.' if parts else ''
+
+
 def report(added: list, removed: list, changed: list) -> str:
     """The message a leak produces: the paths, and what to do rather than what to delete.
 

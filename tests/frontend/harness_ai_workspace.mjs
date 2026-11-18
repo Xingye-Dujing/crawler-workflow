@@ -364,6 +364,23 @@ await firstBoot;
 sandbox.fetch = realFetch;
 out.staleBootstrap = workspace._provider;
 
+/* The server's 联网搜索 default is adopted ONLY when this browser never chose: a browser that
+   clicked the switch off must not have it turned back on by the next refresh. */
+sandbox.localStorage.setItem(sandbox.AISettings._key, '{}');
+const searchboot = {
+    ok: true,
+    providers: [{ id: 'ollama', local_only: true, models: [{ id: 'm' }] }],
+    settings: { web_search_default: true, context_scope: 'full' },
+};
+sandbox.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve(searchboot) });
+await workspace._loadBootstrap();
+const adopted = sandbox.AISettings.load().search;
+sandbox.AISettings.save({ search: false });
+await workspace._loadBootstrap();
+const kept = sandbox.AISettings.load().search;
+sandbox.fetch = realFetch;
+out.searchDefault = { adopted: adopted, kept: kept };
+
 /* ONE turn, TWO provider rounds (a tool call between them). The transcript must stay one assistant
    bubble with one skill row — the daemon answers each round as its own assistant row, and drawing
    each round separately made a single answer look like two answers on screen. */
@@ -932,6 +949,12 @@ out.guidance = {
     stoppedText: String((workspace._dom.chat.querySelector('.ai-note') || {}).textContent || ''),
 };
 
+/* The same stop can arrive twice: the server answers the aborted stream with `done`+cancelled while
+   the stop button's own call is still in flight. One sentence, not two. */
+workspace._onEvent({ type: 'done', stop_reason: 'cancelled' });
+await workspace.stop();
+out.stopDedupe = workspace._dom.chat.querySelectorAll('.ai-note').length;
+
 /* A turn the PROVIDER ended at `max_tokens` was painted as a finished answer: the sentence stopped
    mid-way and nothing said why. It is a quiet note, not an error — live and after a reload. */
 workspace._messages = [];
@@ -962,6 +985,27 @@ out.truncation = {
     stored: String((storedCut || {}).textContent || ''),
 };
 
+/* The turn's LAST stored row carries the verdict: a round cut at `max_tokens` and then recovered is
+   NOT a truncated answer, and the reverse is. Taking the first row's meta would tell the user their
+   finished answer was cut, or hide a real cut behind a recovered round. */
+workspace._messages = [
+    { id: 'u5', role: 'user', content: '两轮', meta: {} },
+    { id: 'a5', role: 'assistant', blocks: [{ type: 'text', text: '第一轮被截断' }], meta: { turn_id: 't-two', stop_reason: 'max_tokens' }, status: 'done' },
+    { id: 'a6', role: 'assistant', blocks: [{ type: 'text', text: '第二轮写完了' }], meta: { turn_id: 't-two', stop_reason: 'end_turn' }, status: 'done' },
+];
+workspace._current = null;
+workspace._renderMessages([]);
+const recoveredNotes = workspace._dom.chat.querySelectorAll('.ai-note').length;
+workspace._messages = [
+    { id: 'u6', role: 'user', content: '反过来', meta: {} },
+    { id: 'a7', role: 'assistant', blocks: [{ type: 'text', text: '第一轮写完' }], meta: { turn_id: 't-two-b', stop_reason: 'end_turn' }, status: 'done' },
+    { id: 'a8', role: 'assistant', blocks: [{ type: 'text', text: '第二轮被截断' }], meta: { turn_id: 't-two-b', stop_reason: 'max_tokens' }, status: 'done' },
+];
+workspace._current = null;
+workspace._renderMessages([]);
+const cutLastNotes = workspace._dom.chat.querySelectorAll('.ai-note').length;
+out.turnVerdict = { recovered: recoveredNotes, cutLast: cutLastNotes };
+
 /* What the context inspector says was NOT sent: a budget cut the model could have used, and the
    replay cap that keeps a turn's block bounded. Silence there reads as "it saw everything". */
 workspace._contextMeta = {
@@ -976,6 +1020,13 @@ workspace._contextMeta = {
 };
 workspace._renderSide();
 out.contextNotes = String(workspace._dom.side.innerHTML || '');
+/* The words the assertions should look for, resolved from the catalogue rather than copied out of
+   it: a reworded sentence must not fail a test that is really about "the inspector said it". */
+out.contextWords = {
+    omitted: String(vm.runInContext("I18n.t('ai.contextOmitted', { items: '运行' })", sandbox)),
+    replay: String(vm.runInContext("I18n.t('ai.contextReplayCut', { n: 16000 })", sandbox)),
+    history: String(vm.runInContext("I18n.t('ai.contextHistoryCut', { n: 4, window: 32768 })", sandbox)),
+};
 
 /* A STOPPED turn came back from the store as a red error line, because stop wrote status='error'.
    It is the same kind of fact as a truncated answer: a quiet note. */

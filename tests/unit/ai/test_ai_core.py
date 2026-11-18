@@ -141,6 +141,31 @@ def test_a_reasoning_effort_the_endpoint_does_not_know_degrades_instead_of_400in
     assert low['reasoning_effort'] == 'low'
 
 
+def test_a_temperature_of_zero_is_a_choice_not_an_absence(monkeypatch):
+    """``float(x or 0.2)`` treated a deliberate 0.0 (fully deterministic) as "unset" and quietly ran
+    at 0.2 — a number the user did not choose. Only a missing value takes the default."""
+    from ai.providers import ollama
+
+    provider = ollama.OllamaProvider()
+    monkeypatch.setattr(provider, '_info', lambda model, host='': {'context': 8192})
+    zero = provider._payload({'model': 'm', 'messages': [], 'temperature': 0.0})
+    assert zero['options']['temperature'] == 0.0, zero['options']
+    missing = provider._payload({'model': 'm', 'messages': []})
+    assert missing['options']['temperature'] == 0.2, missing['options']
+
+
+def test_the_temperature_reaches_an_openai_compatible_endpoint_and_is_clamped():
+    """The settings page's number has to arrive, unset has to stay unset (the endpoint's own default),
+    and a value outside the documented range must not be forwarded as-is."""
+    from ai.providers import get_provider
+
+    provider = get_provider('opencode_go')
+    base = {'model': 'deepseek-v4.1-flash', 'messages': []}
+    assert provider._payload({**base, 'temperature': 0.0})['temperature'] == 0.0
+    assert 'temperature' not in provider._payload(base)
+    assert provider._payload({**base, 'temperature': 3})['temperature'] == 2.0
+
+
 def test_a_window_too_small_for_the_history_drops_old_turns_and_says_so():
     """Ollama's window here is 32k and a 30-round tool chain is bigger; the daemon then truncates from
     the FRONT, losing the system prompt first. The agent trims at a user boundary instead, and
@@ -249,6 +274,146 @@ def test_a_stopped_turn_keeps_its_partial_answer_and_is_not_an_error():
     assert any('已经写了一半' in str(message.get('content') or '') for message in history)
 
 
+def test_the_providers_stop_reason_is_what_the_stored_row_carries():
+    """The reload note reads ``meta.stop_reason``. The JS harness injects that meta itself, so a
+    server that stored 'end_turn' for every answer would still look tested — and a cut answer
+    would come back looking finished."""
+    from ai import agent, skills, store
+    from ai.types import ModelSpec, ProviderSpec
+
+    class Cutting:
+        spec = ProviderSpec(
+            id='cutting',
+            label_key='x',
+            notes_key='y',
+            protocol='openai',
+            base_url='',
+            models=(ModelSpec('m', 'M', 1000),),
+        )
+
+        def supports(self, capability, model=''):
+            return False
+
+        def stream(self, request):
+            yield {'type': 'text_delta', 'text': '这一段话还没说完'}
+            yield {'type': 'done', 'stop_reason': 'max_tokens'}
+
+    conversation = store.create_conversation('cutting', 'm', 'auto')
+    events = list(
+        agent.AgentService()._round(
+            conversation=conversation,
+            turn_id='t-cut',
+            provider=Cutting(),
+            request={'model': 'm', 'max_tokens': 10},
+            skill=skills.get_skill('project'),
+            skill_reason='auto',
+            run_id='',
+            context_meta={},
+            seed=False,
+        )
+    )
+    row = store.get_message(events[0]['message_id'])
+    assert row['status'] == 'done'
+    assert (row.get('meta') or {}).get('stop_reason') == 'max_tokens', row.get('meta')
+
+
+def test_the_turn_asks_the_provider_with_the_numbers_the_settings_name(monkeypatch):
+    """Effort and temperature are read by the AGENT, not passed in by a transport test: a hardcoded
+    'high' or a dropped temperature here is invisible to every provider-level case."""
+    from ai import agent, skills, store
+    from ai.types import ModelSpec, ProviderSpec
+
+    seen = {}
+
+    class Recording:
+        spec = ProviderSpec(
+            id='recording',
+            label_key='x',
+            notes_key='y',
+            protocol='openai',
+            base_url='',
+            models=(ModelSpec('m', 'M', 1000),),
+        )
+
+        def supports(self, capability, model=''):
+            return False
+
+        def context_window(self, model=''):
+            return 0
+
+        def stream(self, request):
+            seen.update(request)
+            yield {'type': 'text_delta', 'text': 'ok'}
+            yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+    values = {'ai_reasoning_effort': 'max', 'ai_temperature': 0.0, 'ai_max_tool_rounds': 0}
+    monkeypatch.setattr(agent, 'get_setting', lambda key, default=None: values.get(key, default))
+    conversation = store.create_conversation('recording', 'm', 'auto')
+    store.append_message(conversation['id'], 'user', 'hi', status='done')
+    list(
+        agent.AgentService()._loop(
+            conversation=conversation,
+            turn_id='t-numbers',
+            skill=skills.get_skill('project'),
+            skill_reason='auto',
+            provider=Recording(),
+            model='m',
+            api_key='',
+            thinking=False,
+            web_search=False,
+            safety='high',
+            context_meta={},
+            run_id='',
+        )
+    )
+    assert seen['reasoning_effort'] == 'max', seen
+    assert seen['temperature'] == 0.0, seen
+
+
+def test_a_provider_that_knows_its_window_says_so_and_zero_means_no_window():
+    """``context_window`` is the only answer `_fit_history` trusts. A catalogue with no number must
+    answer 0 (trim nothing) rather than inventing a budget the model never admitted."""
+    from ai.providers import get_provider
+
+    provider = get_provider('deepseek')
+    spec = provider.spec.model('deepseek-flash')
+    assert spec is not None, 'the catalogue lost its model row'
+    assert provider.context_window('deepseek-flash') == int(spec.max_context or 0)
+    assert provider.context_window('a-model-that-does-not-exist') == 0
+
+
+def test_the_history_fallbacks_keep_the_newest_user_row(monkeypatch):
+    """Two edges the main case cannot reach: a window smaller than the system prompt (budget <= 0)
+    and one giant tool result that would evict everything (kept empty). Both must still send the
+    newest user row — an empty request is a provider error the user cannot act on."""
+    from ai import agent
+
+    class Tiny:
+        def context_window(self, model=''):
+            return 50  # less than the system prompt + max_tokens
+
+    history = [
+        {'role': 'user', 'content': '旧问题 ' + '问' * 400, 'meta': {}},
+        {'role': 'assistant', 'content': '旧回答', 'meta': {}, 'blocks': [{'type': 'text', 'text': '旧回答'}]},
+        {'role': 'user', 'content': '新问题', 'meta': {}},
+    ]
+    kept, meta = agent._fit_history(history, Tiny(), 'm', 'x' * 4000, [], 4096)
+    assert meta['budget'] >= 1000, meta  # the floor, not a negative budget
+    assert [row['role'] for row in kept][0] == 'user', kept
+    assert kept[-1]['content'] == '新问题', kept
+
+    class One:
+        def context_window(self, model=''):
+            return 200
+
+    huge = [
+        {'role': 'user', 'content': '看看这个结果', 'meta': {}},
+        {'role': 'tool', 'content': 'x' * 40000, 'tool_call_id': 'c1', 'meta': {}},
+    ]
+    kept, meta = agent._fit_history(huge, One(), 'm', 'system', [], 10)
+    assert kept == [huge[0]], f'a giant tool result took the newest user row with it: {kept}'
+
+
 def test_the_stored_context_is_clamped_once_and_said_so(monkeypatch):
     """A block that is replayed for the rest of the conversation must be bounded — and the cut is
     reported (the inspector shows it) instead of silently shrinking what the model was promised."""
@@ -287,8 +452,77 @@ def test_a_tool_call_whose_arguments_never_arrived_is_refused_not_run(monkeypatc
     assert executed == [], 'a truncated call was executed with empty arguments'
     result = [event for event in events if event['type'] == 'tool_result'][-1]
     assert result['ok'] is False and result['error'], result
+    # The reason must NAME the tool and the cut: a generic refusal sends the model guessing whether
+    # the tool is missing, the arguments were wrong, or the permission was denied.
+    assert 'apply_workflow' in result['error'], result['error']
     stored = [row for row in store.list_messages(conversation['id']) if row['role'] == 'tool']
     assert stored and stored[-1]['meta']['is_error'] is True
+
+
+class _StreamAnswer:
+    """A streaming HTTP answer: bytes chunks, as ``stream_lines`` reads them."""
+
+    status_code = 200
+    text = ''
+
+    def __init__(self, frames):
+        self._frames = frames
+        self.closed = False
+
+    def iter_content(self, chunk_size=1024):
+        yield from self._frames
+
+    def close(self):
+        self.closed = True
+
+
+def _broken_tool_call_stream():
+    """Half a JSON argument object, split over two chunks — what a `max_tokens` cut leaves."""
+    import json
+
+    first = {
+        'choices': [
+            {
+                'delta': {
+                    'tool_calls': [
+                        {
+                            'index': 0,
+                            'id': 'call_half',
+                            'function': {'name': 'workspace_read', 'arguments': '{"path": "a'},
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    second = {'choices': [{'delta': {'tool_calls': [{'index': 0, 'function': {'arguments': 'b.txt'}}]}}]}
+    finish = {'choices': [{'delta': {}, 'finish_reason': 'length'}]}
+    frames = [
+        ('data: ' + json.dumps(row, ensure_ascii=False) + '\n\n').encode('utf-8') for row in (first, second, finish)
+    ]
+    return frames + [b'data: [DONE]\n\n']
+
+
+def test_a_half_written_tool_call_is_marked_unusable_by_every_transport(monkeypatch):
+    """The refusal has to come from the PARSER, not from an empty-arguments guess: both wires must
+    hand the agent ``parse_error=True`` with ``arguments == {}`` and keep the raw text."""
+    from ai.providers import deepseek as deepseek_transport
+    from ai.providers import get_provider
+    from ai.providers import openai_compat as openai_transport
+
+    answers = iter([_StreamAnswer(_broken_tool_call_stream()) for _ in range(2)])
+    monkeypatch.setattr(deepseek_transport, 'open_stream', lambda *args, **kwargs: next(answers))
+    monkeypatch.setattr(openai_transport, 'open_stream', lambda *args, **kwargs: next(answers))
+
+    for provider_id in ('deepseek', 'opencode_go'):
+        provider = get_provider(provider_id)
+        request = {'model': provider.spec.models[0].id, 'messages': [{'role': 'user', 'content': 'hi', 'meta': {}}]}
+        events = [event for event in provider.stream(request) if event['type'] == 'tool_call']
+        assert len(events) == 1, (provider_id, events)
+        call = events[0]
+        assert call['parse_error'] is True, (provider_id, call)
+        assert call['arguments'] == {}, (provider_id, call)
+        assert call['raw_arguments'] == '{"path": "ab.txt', (provider_id, call)
 
 
 def test_a_rate_limit_is_retried_before_the_stream_starts(monkeypatch):
@@ -325,6 +559,33 @@ def test_a_rate_limit_is_retried_before_the_stream_starts(monkeypatch):
     with pytest.raises(AIProviderError) as refusal:
         base.open_stream('https://example.invalid/chat', {}, {}, 5, None)
     assert refusal.value.kind == 'auth' and len(calls) == 1
+
+    # A connection dropped before the first byte is retried the same way a 429 is: the old default
+    # of one attempt ended the turn on a reset TLS socket.
+    calls.clear()
+
+    def flaky(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise base.requests.ConnectionError('reset by peer')
+        return _Answer()
+
+    monkeypatch.setattr(base.requests, 'post', flaky)
+    response = base.open_stream('https://example.invalid/chat', {}, {}, 5, None)
+    assert response.status_code == 200 and len(calls) == 2
+
+    # And the ceiling is real: three attempts, then the provider's own reason — never a silent
+    # empty stream the turn would settle as an answer.
+    calls.clear()
+
+    def always_busy(*args, **kwargs):
+        calls.append(1)
+        return _HttpAnswer(429, '{"error":"slow down"}')
+
+    monkeypatch.setattr(base.requests, 'post', always_busy)
+    with pytest.raises(AIProviderError) as exhausted:
+        base.open_stream('https://example.invalid/chat', {}, {}, 5, None)
+    assert exhausted.value.kind == 'rate_limit' and len(calls) == 3, (exhausted.value.kind, calls)
 
 
 def test_redaction_removes_keys_from_context():
