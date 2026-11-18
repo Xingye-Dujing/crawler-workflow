@@ -162,6 +162,10 @@ ZH = {
     'ai.skillExists': '内置技能不能被覆盖；请先 Fork 成自己的技能。',
     'ai.toolUnknown': '未知工具：{tool}',
     'ai.toolRefused': '工具“{tool}”被拒绝：{reason}',
+    'ai.toolArgumentsCut': (
+        '工具“{tool}”的参数没有传完（通常是回答被输出长度上限截断），已拒绝执行，而不是拿空参数去跑。'
+        '请把这一步拆小，或缩短要一次输出的内容。'
+    ),
     'ai.cancelled': '已停止生成。',
     'ai.streamFailed': 'AI 流式连接失败（{kind}）。',
     'ai.fileUnsupported': '这个供应商不能解析该文件；请改用 DeepSeek，或上传纯文本/表格。',
@@ -368,6 +372,10 @@ EN = {
     'ai.skillExists': 'A built-in skill cannot be overwritten; fork it into your own skill first.',
     'ai.toolUnknown': 'Unknown tool: {tool}',
     'ai.toolRefused': 'Tool “{tool}” was refused: {reason}',
+    'ai.toolArgumentsCut': (
+        'The arguments for “{tool}” never arrived whole (usually an answer cut off by the output limit). '
+        'The call was refused instead of being run with empty parameters.'
+    ),
     'ai.cancelled': 'Generation stopped.',
     'ai.streamFailed': 'The AI stream failed ({kind}).',
     'ai.fileUnsupported': 'This provider cannot parse that file; use DeepSeek, or upload plain text/tables.',

@@ -267,6 +267,13 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['toolOpened'] is True, 'a finished tool card did not open on click'
         assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
+    def test_a_truncated_answer_says_so_live_and_after_a_reload(self):
+        """`stop_reason == 'max_tokens'` means the provider CUT the answer. It was painted as a
+        finished one, so a half sentence looked like a complete thought."""
+        out = _run_workspace()['truncation']
+        assert 'cut off' in out['live'], out
+        assert out['stored'] == out['live'], out
+
     def test_every_tool_family_and_a_stop_have_visible_guidance(self):
         """No generation step may be a silent tool card: reads, peeks and plans each say what they
         are doing, an unknown (plugin) tool is NAMED, and a stopped turn says it stopped."""

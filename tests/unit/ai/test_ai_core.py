@@ -85,6 +85,7 @@ def test_deepseek_wire_includes_file_references():
 
 
 def test_context_prefix_is_added_to_the_last_user_turn_only():
+    from ai.providers.base import with_context
     from ai.providers.deepseek import to_messages
 
     messages = [
@@ -92,9 +93,91 @@ def test_context_prefix_is_added_to_the_last_user_turn_only():
         {'role': 'assistant', 'content': '', 'name': '', 'meta': {}, 'blocks': [{'type': 'text', 'text': 'ok'}]},
         {'role': 'user', 'content': 'second', 'meta': {}},
     ]
-    wire = to_messages(messages, context_text='FACTS')
+    wire = to_messages(with_context(messages, 'FACTS'))
     assert '<cai_xi_hui_context>' not in wire[0]['content']
     assert '<cai_xi_hui_context>' in wire[-1]['content'] and 'FACTS' in wire[-1]['content']
+
+
+def test_the_context_reaches_every_transport():
+    """It used to be read by the DeepSeek transport alone, so a LOCAL turn sent none of it while the
+    panel advertised the character count — the model then answered about a canvas it never saw."""
+    from ai.providers import base, ollama, openai_compat
+    from ai.providers.deepseek import to_messages as deepseek_messages
+
+    messages = base.with_context([{'role': 'user', 'content': '画布有什么问题？', 'meta': {}}], 'FACTS-2320')
+    for wire in (
+        deepseek_messages(messages),
+        openai_compat.to_messages('system', messages),
+        ollama.OllamaProvider()._messages({'messages': messages}),
+    ):
+        text = [row for row in wire if row['role'] == 'user'][-1]['content']
+        assert 'FACTS-2320' in text and '<cai_xi_hui_context>' in text, wire
+
+
+def test_a_tool_call_whose_arguments_never_arrived_is_refused_not_run(monkeypatch):
+    """A stream cut by `max_tokens` leaves half a JSON document. Running it with {} made the TOOL
+    refuse for the wrong reason; the turn must say the arguments were cut."""
+    from ai import agent, store, tools
+
+    conversation = store.create_conversation('deepseek', 'deepseek-flash', 'auto')
+    user = store.append_message(conversation['id'], 'user', 'build it', status='done')
+    run = store.create_run(conversation['id'], user['id'])
+    executed = []
+    monkeypatch.setattr(tools, 'execute', lambda *args, **kwargs: executed.append(args) or {'ok': True})
+    call = {'id': 'call_cut', 'name': 'apply_workflow', 'arguments': {}, 'parse_error': True}
+    events = list(
+        agent.AgentService()._tool_event(
+            conversation,
+            {'message': {'meta': {'run_id': run['id']}}},
+            call,
+            'turn_cut',
+            '',
+            'deepseek',
+            'deepseek-flash',
+            {'apply_workflow'},
+        )
+    )
+    assert executed == [], 'a truncated call was executed with empty arguments'
+    result = [event for event in events if event['type'] == 'tool_result'][-1]
+    assert result['ok'] is False and result['error'], result
+    stored = [row for row in store.list_messages(conversation['id']) if row['role'] == 'tool']
+    assert stored and stored[-1]['meta']['is_error'] is True
+
+
+def test_a_rate_limit_is_retried_before_the_stream_starts(monkeypatch):
+    """`retries` defaulted to 1, which made the whole backoff branch dead code: one 429 ended the
+    turn and the user had to press retry by hand."""
+    from ai.errors import AIProviderError
+    from ai.providers import base
+
+    monkeypatch.setattr(base, '_nap', lambda *args: False)
+    calls = []
+
+    class _Answer:
+        status_code = 200
+        text = ''
+
+    def fake_post(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            return _HttpAnswer(429, '{"error":"slow down"}')
+        return _Answer()
+
+    monkeypatch.setattr(base.requests, 'post', fake_post)
+    response = base.open_stream('https://example.invalid/chat', {}, {}, 5, None)
+    assert response.status_code == 200 and len(calls) == 2
+
+    # A deterministic refusal is not retried: an auth failure answers the same thing every time.
+    calls.clear()
+
+    def bad_key(*args, **kwargs):
+        calls.append(1)
+        return _HttpAnswer(401, '{"error":"bad key"}')
+
+    monkeypatch.setattr(base.requests, 'post', bad_key)
+    with pytest.raises(AIProviderError) as refusal:
+        base.open_stream('https://example.invalid/chat', {}, {}, 5, None)
+    assert refusal.value.kind == 'auth' and len(calls) == 1
 
 
 def test_redaction_removes_keys_from_context():
@@ -174,6 +257,10 @@ class _HttpAnswer:
     def __init__(self, status: int, body: str):
         self.status_code = status
         self.text = body
+        self.closed = False
+
+    def close(self):
+        self.closed = True
 
     def json(self):
         import json

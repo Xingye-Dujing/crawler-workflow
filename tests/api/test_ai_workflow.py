@@ -55,6 +55,33 @@ class FakeProvider:
         yield {'type': 'done', 'stop_reason': 'end_turn'}
 
 
+class RecordingProvider(FakeProvider):
+    """One tool round, then an answer, and it KEEPS every request it was handed."""
+
+    def __init__(self):
+        super().__init__('fake_record')
+        self.requests = []
+
+    def stream(self, request):
+        self.requests.append(request)
+        planned = any(
+            block.get('type') == 'tool_use'
+            for message in request.get('messages') or []
+            for block in message.get('blocks') or []
+        )
+        if not planned:
+            yield {
+                'type': 'tool_call',
+                'id': 'call_plan',
+                'name': 'update_plan',
+                'arguments': {'steps': [{'title': 'look', 'status': 'pending'}]},
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'text_delta', 'text': 'done'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
 class AskThenAnswerProvider(FakeProvider):
     def __init__(self):
         super().__init__('fake_ask')
@@ -78,6 +105,7 @@ def fake_ai(monkeypatch):
 
     monkeypatch.setitem(PROVIDERS, 'fake_ai', FakeProvider())
     monkeypatch.setitem(PROVIDERS, 'fake_ask', AskThenAnswerProvider())
+    monkeypatch.setitem(PROVIDERS, 'fake_record', RecordingProvider())
 
 
 @pytest.fixture
@@ -113,6 +141,20 @@ def test_chat_returns_canonical_events_and_never_stores_the_key(client, fake_ai,
     assert detail['ok'] is True
     assert detail['messages']
     assert 'secret-key' not in json.dumps(detail, ensure_ascii=False)
+
+
+def test_the_project_context_reaches_the_provider_on_every_round(client, fake_ai, clean_ai):
+    """The context is part of the TURN, so a tool round must carry it too — and it must reach
+    whichever transport the user picked (`base.with_context`), not only DeepSeek's."""
+    from ai.providers import PROVIDERS
+
+    response = _chat(client, provider='fake_record', model='fake-model')
+    assert response.status_code == 200, response.get_json()
+    provider = PROVIDERS['fake_record']
+    assert len(provider.requests) == 2, provider.requests
+    for request in provider.requests:
+        newest = [message for message in request['messages'] if message['role'] == 'user'][-1]
+        assert '<cai_xi_hui_context>' in newest['content'], newest['content'][:200]
 
 
 def test_conversation_list_and_delete(client, fake_ai, clean_ai):

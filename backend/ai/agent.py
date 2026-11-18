@@ -22,6 +22,7 @@ from ai import approvals, environment, references, skills, store, tools, vocabul
 from ai import context as context_builder
 from ai.errors import AIError
 from ai.providers import get_provider
+from ai.providers.base import with_context
 from ai.types import new_id, usage_totals
 from i18n import get_lang, t
 
@@ -550,6 +551,9 @@ class AgentService:
                         yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'tool_budget'}
                         return
                 history = _history(conversation['id'])
+                # The context (project facts, canvas, dataset) belongs to the TURN, and every
+                # transport must receive it — `base.with_context` is the one place that decides.
+                history = with_context(history, context_text)
                 request = {
                     'provider': provider.spec.id,
                     'model': model,
@@ -561,7 +565,6 @@ class AgentService:
                     'web_search': web_search,
                     'safety': safety,
                     'title': rounds == 0 and not (conversation.get('title') or ''),
-                    'context_text': context_text if rounds == 0 else '',
                     'reasoning_effort': 'high',
                     'max_tokens': 8192,
                     'timeout': int(get_setting('ai_request_timeout') or 180),
@@ -722,6 +725,7 @@ class AgentService:
                         'name': str(event.get('name') or ''),
                         'arguments': event.get('arguments') if isinstance(event.get('arguments'), dict) else {},
                         'raw_arguments': str(event.get('raw_arguments') or ''),
+                        'parse_error': bool(event.get('parse_error')),
                     }
                     _append_block(
                         blocks,
@@ -1213,6 +1217,11 @@ class AgentService:
             'step_id': step['id'],
         }
         try:
+            if call.get('parse_error'):
+                # The argument object never arrived whole (a stream cut by the output limit, or
+                # broken JSON). Executing it with `{}` made the TOOL refuse for a reason that was
+                # not the real one — the model then spent a round guessing which field was missing.
+                raise AIError('ai.toolArgumentsCut', kind='bad_request', tool=name)
             result = tools.execute(
                 name,
                 call.get('arguments') or {},

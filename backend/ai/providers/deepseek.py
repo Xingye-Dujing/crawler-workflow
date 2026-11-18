@@ -194,11 +194,9 @@ def _server_tool_steps(blocks: list) -> list:
     return steps
 
 
-def _user_content(message: dict, *, context_text: str = '', is_last_user: bool = False):
+def _user_content(message: dict):
     text = str(message.get('content') or '')
     meta = message.get('meta') or {}
-    if context_text and is_last_user:
-        text = f'<cai_xi_hui_context>\n{context_text}\n</cai_xi_hui_context>\n\n{text}'
     parts = []
     for attachment in meta.get('attachments') or ():
         file_id = str(attachment.get('file_id') or '')
@@ -211,14 +209,14 @@ def _user_content(message: dict, *, context_text: str = '', is_last_user: bool =
     return parts
 
 
-def to_messages(messages: list, *, context_text: str = '') -> list:
-    """Turn canonical messages into Chat Completions messages (system turn excluded)."""
+def to_messages(messages: list) -> list:
+    """Turn canonical messages into Chat Completions messages (system turn excluded).
+
+    The project context is injected into the canonical list by ``base.with_context`` before it
+    reaches any transport, so nothing here has to know about it.
+    """
     out: list[dict] = []
-    last_user = max(
-        (index for index, message in enumerate(messages) if str(message.get('role') or '') == 'user'),
-        default=-1,
-    )
-    for index, message in enumerate(messages):
+    for message in messages:
         role = str(message.get('role') or '')
         if role == 'assistant':
             out.append(_assistant_message(message))
@@ -237,12 +235,7 @@ def to_messages(messages: list, *, context_text: str = '') -> list:
             # DeepSeek's own message type: it marks the newest user turn for its cache and the
             # model reads it as instructions, not as something the user said.
             out.append({'role': 'latest_reminder', 'content': reminder})
-        out.append(
-            {
-                'role': 'user',
-                'content': _user_content(message, context_text=context_text, is_last_user=index == last_user),
-            }
-        )
+        out.append({'role': 'user', 'content': _user_content(message)})
     _validate_tool_pairs(out)
     return out
 
@@ -340,7 +333,7 @@ class DeepSeekProvider(Provider):
             'model': model,
             'stream': True,
             'stream_options': {'include_usage': True},
-            'messages': to_messages(request.get('messages') or [], context_text=request.get('context_text') or ''),
+            'messages': to_messages(request.get('messages') or []),
             'max_tokens': int(request.get('max_tokens') or 8192),
             # Sent explicitly both ways: omitted, DeepSeek turns thinking ON by default.
             'thinking': {'type': 'enabled' if thinking else 'disabled'},
@@ -446,13 +439,18 @@ class DeepSeekProvider(Provider):
                 try:
                     arguments = json.loads(slot['arguments'] or '{}')
                 except ValueError:
-                    arguments = {}
+                    arguments = None
+                # Half a JSON document is what a stream cut by `max_tokens` leaves behind. It used
+                # to run with `{}` — so the tool answered “缺少参数” instead of the turn saying it
+                # was truncated, and the model spent another round guessing why.
+                usable = isinstance(arguments, dict)
                 yield event(
                     'tool_call',
                     id=slot['id'] or '',
                     name=slot['name'],
-                    arguments=arguments if isinstance(arguments, dict) else {},
+                    arguments=arguments if usable else {},
                     raw_arguments=slot['arguments'],
+                    parse_error=not usable,
                 )
             for citation in self._citations(annotations):
                 yield event('citation', citation=citation)

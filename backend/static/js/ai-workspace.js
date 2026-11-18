@@ -2122,6 +2122,9 @@ const AIWorkspace = {
                 if (message.usage && Object.keys(message.usage).length) turn.usage = message.usage;
                 const error = String((message.meta || {}).error || '');
                 if (error) turn.error = error;
+                /* The turn's LAST row carries the turn's verdict: an intermediate round cut at
+                   `max_tokens` and then recovered is not a truncated answer. */
+                turn.stopReason = String((message.meta || {}).stop_reason || '');
                 continue;
             }
             if (message.role !== 'tool') continue;
@@ -2144,6 +2147,7 @@ const AIWorkspace = {
             else order.push({ kind: 'tool', message: message });
         }
         for (const turn of turns.values()) {
+            if (turn.stopReason === 'max_tokens') turn.truncated = true;
             for (const block of turn.blocks) {
                 if (!block || block.type !== 'tool_use') continue;
                 const found = toolPayloads.get(String(block.id || ''));
@@ -2190,6 +2194,9 @@ const AIWorkspace = {
                this page once and then lost on every reload, so a user reopening the conversation
                saw a silent gap where the provider had said exactly what was wrong. */
             (turn.error ? '<div class="ai-error-text">' + AIRender.escape(turn.error) + '</div>' : '') +
+            /* A turn cut by the output limit is not an error, but it is not a finished answer
+               either: the sentence stopped mid-way and the provider said so. */
+            (turn.truncated ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.truncated')) + '</div>' : '') +
             '<div class="ai-extras"></div>' +
             '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
@@ -2668,6 +2675,13 @@ const AIWorkspace = {
             this._sending = false;
             this._setSending(false);
             this._stopToolClock();
+            /* `stop_reason` is the provider's own verdict, and `max_tokens` means the answer was
+               CUT. Painting it as a finished answer was the silent failure: the sentence stopped
+               mid-way and nothing said why. */
+            if (String(event.stop_reason || '') === 'max_tokens' && this._current?.blocks) {
+                this._current.blocks.push({ type: 'note', text: I18n.t('ai.truncated') });
+                this._toast(I18n.t('ai.truncated'));
+            }
             this._paintAssistant();
             this._refreshConversations();
             /* A finished turn changed the numbers the side panel shows (usage, and the balance).

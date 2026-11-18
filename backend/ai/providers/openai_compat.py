@@ -172,13 +172,17 @@ class OpenAICompatibleProvider(Provider):
                 try:
                     arguments = json.loads(slot['arguments'] or '{}')
                 except ValueError:
-                    arguments = {}
+                    arguments = None
+                # A half-written argument object means the stream was cut (or the model emitted
+                # broken JSON). Either way it cannot be executed; see `deepseek.stream`.
+                usable = isinstance(arguments, dict)
                 yield event(
                     'tool_call',
                     id=slot['id'] or '',
                     name=slot['name'],
-                    arguments=arguments if isinstance(arguments, dict) else {},
+                    arguments=arguments if usable else {},
                     raw_arguments=slot['arguments'],
+                    parse_error=not usable,
                 )
             yield event('done', stop_reason=finish_reason or 'end_turn')
         finally:

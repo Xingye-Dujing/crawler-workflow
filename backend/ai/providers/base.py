@@ -9,9 +9,42 @@ import requests
 from ai.errors import AIError, AIProviderError
 from ai.types import ProviderSpec
 
+#: The wrapper the model reads as "facts about the user's project", not as something they typed.
+CONTEXT_OPEN = '<cai_xi_hui_context>'
+
 
 def event(kind: str, **data) -> dict:
     return {'type': kind, **data}
+
+
+def with_context(messages: list, context_text: str) -> list:
+    """Return the canonical history with this turn's context on its NEWEST user row.
+
+    The context is produced once, by ``ai.context.build_context``, and it has to reach whichever
+    provider the user picked. It used to be read by the DeepSeek transport alone: a local Ollama
+    turn advertised “项目事实 2,320 字” in the context inspector and sent none of it, so the model
+    answered questions about the canvas and the datasets from thin air.
+
+    One rule for every transport, and it is also the cache-friendly one: the block rides on the
+    newest user message and stays byte-identical for the whole turn (older turns are NOT replayed
+    here — a five-turn-old canvas is not the current canvas, and the sooner the bytes stop changing
+    the sooner the provider's prefix cache can hit).
+    """
+    text = str(context_text or '')
+    if not text:
+        return messages
+    index = -1
+    for position in range(len(messages) - 1, -1, -1):
+        if str(messages[position].get('role') or '') == 'user':
+            index = position
+            break
+    if index < 0:
+        return messages
+    out = list(messages)
+    target = dict(out[index])
+    target['content'] = f'{CONTEXT_OPEN}\n{text}\n</cai_xi_hui_context>\n\n{target.get("content") or ""}'
+    out[index] = target
+    return out
 
 
 def check_cancel(cancel_event) -> None:
@@ -77,12 +110,16 @@ def read_json_error(response) -> str:
     return str(error or payload)[:400]
 
 
-def open_stream(url: str, headers: dict, payload: dict, timeout: int, cancel_event, retries: int = 1):
+def open_stream(url: str, headers: dict, payload: dict, timeout: int, cancel_event, retries: int = 3):
     """POST a JSON body and return a streaming response.
 
     Retries only before the first byte of the body has been handed to the caller: once a stream
-    starts, a retry would duplicate the answer. A 429/5xx answer is retried with a short,
-    interruptible backoff; auth/model/quota failures are deterministic and raise immediately.
+    starts, a retry would duplicate the answer. A 429/5xx answer or a dropped connection is retried
+    with a short, interruptible backoff; auth/model/quota failures are deterministic and raise
+    immediately.
+
+    ``retries`` used to default to 1, which made the whole backoff branch dead code: one 429 or one
+    reset TLS socket ended the turn and the user had to press 重试 by hand.
     """
     last: AIProviderError | None = None
     for attempt in range(1, retries + 1):

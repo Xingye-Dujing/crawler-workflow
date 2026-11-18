@@ -772,6 +772,33 @@ out.guidance = {
     stoppedText: String((workspace._dom.chat.querySelector('.ai-note') || {}).textContent || ''),
 };
 
+/* A turn the PROVIDER ended at `max_tokens` was painted as a finished answer: the sentence stopped
+   mid-way and nothing said why. It is a quiet note, not an error — live and after a reload. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._sending = true;
+workspace._onEvent({ type: 'meta', conversation_id: 'c-cut', message_id: 'm2', turn_id: 't-cut', run_id: 'r2', skill: 'workflow', skill_reason: 'auto' });
+workspace._onEvent({ type: 'text', text: '这是一段被截断的回答' });
+workspace._onEvent({ type: 'done', stop_reason: 'max_tokens' });
+const cutNote = workspace._dom.chat.querySelector('.ai-note');
+workspace._messages = [
+    { id: 'u2', role: 'user', content: '写长一点', meta: {} },
+    {
+        id: 'a3',
+        role: 'assistant',
+        blocks: [{ type: 'text', text: '这是一段被截断的回答' }],
+        meta: { turn_id: 't-cut', stop_reason: 'max_tokens' },
+    },
+];
+workspace._current = null;
+workspace._renderMessages([]);
+const storedCut = workspace._dom.chat.querySelector('.ai-note');
+out.truncation = {
+    live: String((cutNote || {}).textContent || ''),
+    stored: String((storedCut || {}).textContent || ''),
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

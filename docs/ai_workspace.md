@@ -66,6 +66,17 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 `ContextBuilder` 从既有注册表生成项目事实，按账号读取实时数据，限额并脱敏；省略项写入
 `context_meta` 并在检查器显示。默认只读最小证据：
 
+- **上下文对每一轮、每一个传输层都成立**：`ai.context.build_context` 生成一次，由
+  `ai.providers.base.with_context` 注入**本轮最新一条 user 消息**，DeepSeek / OpenCode Go /
+  OpenRouter / 本地 Ollama 一律收到。这条曾经只有 DeepSeek 的传输层读取，于是本地模型一轮都
+  没收到项目事实，而侧栏仍显示“项目事实 N 字”。注入位置固定在消息里（而不是每轮现拼到末尾），
+  同一轮内字节不变，供应商的前缀缓存才有机会命中。
+- 工具参数不完整（典型是回答被 `max_tokens` 截断）时**拒绝执行并按名字说明**，不拿空参数去跑；
+  `done.stop_reason == 'max_tokens'` 在转录里显示一行“被截断”，刷新后仍在（存进 assistant 行的
+  `meta.stop_reason`）。
+- 传输层在**首字节之前**对 429/5xx/连接失败重试（最多 3 次、可被停止打断）；401/402/404 这类
+  确定性拒绝立即报错，不重试。
+
 - `dataset_peek`：列名/类型 + 5 行，单元格 120 字；
 - `dataset_profile`：行数、缺失/唯一值、每列 2 个样本；
 - `dataset_page`：≤50 行，带 `has_more`；
