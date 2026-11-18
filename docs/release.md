@@ -60,16 +60,28 @@ powershell -ExecutionPolicy Bypass -File desktop\build_windows.ps1 -Clean -Insta
 
 产出 `dist\CaiXiHui-Setup.exe` 与 `dist\CaiXiHui-win64.zip`。
 
-**分片**：`version.json` 与 Gitee 上传都按 **99,614,720 B** 一片，最后一片通常更小。Gitee 单个附件上限 100 MB，
-所以 `CaiXiHui-win64.zip` 与 `CaiXiHui-Setup.exe` **都要切**；GitHub 传完整文件。下载页让用户按顺序拼接
-（Windows：`copy /b CaiXiHui-Setup.exe.001+CaiXiHui-Setup.exe.002 CaiXiHui-Setup.exe`；POSIX：`cat ... >`），
-再校验总 SHA-256。
-
-**先腾 Gitee 空间**：仓库 Release 附件总量上限 1 GB，而每个 Windows 版本的分片合计约 260 MB。
-每次发布只保留当前 tag 的附件：
+**分片 + 腾空间 + 建 Release + 上传，一条命令**（`tools/publish_gitee.py`，2026.11.18.2 那次发布起）：
 
 ```powershell
 $env:GITEE_TOKEN = '<带 projects 权限的私人令牌>'      # 只从环境变量读，命令行里不出现
+.venv\Scripts\python.exe tools\publish_gitee.py exe-2026-11-19.1 --keep manual-2026-11 --dry-run
+.venv\Scripts\python.exe tools\publish_gitee.py exe-2026-11-19.1 --keep manual-2026-11
+```
+
+它按这个顺序做四件事，顺序本身是有原因的：**切片**（`version.json` 与 Gitee 上传都按 **99,614,720 B** 一片，
+最后一片通常更小；每片都**重写**，因为重建后的包第一片字节数相同而内容不同）→ **建 Release**（Gitee 的写接口
+要求令牌与 `owner`/`repo` 作为表单字段，只放在路径和头里会回 400“验证失败，所有参数不能为空”）→ **腾空间**
+（`prune_gitee_releases` 拒绝“要保留的 tag 还没有 Release”的调用，所以必须先建）→ **上传**（同名附件跳过，不覆盖
+已发布的字节）。GitHub 那一半仍是 `gh release create` + `gh release upload`：传完整文件，不切片。
+
+切片是为了下载页：Gitee 单个附件上限 100 MB，所以 `CaiXiHui-win64.zip` 与 `CaiXiHui-Setup.exe` **都要切**。
+下载页让用户按顺序拼接（Windows：`copy /b CaiXiHui-Setup.exe.001+CaiXiHui-Setup.exe.002 CaiXiHui-Setup.exe`；
+POSIX：`cat ... >`），再校验总 SHA-256。
+
+**只保留当前 tag 的附件**：仓库 Release 附件总量上限 1 GB，而每个 Windows 版本的分片合计约 260 MB。
+这条规则由 `prune_gitee_releases` 执行（上面的工具内部会调它，也可以单独跑）：
+
+```powershell
 .venv\Scripts\python.exe tools\prune_gitee_releases.py --tag exe-2026-11.13 --dry-run
 .venv\Scripts\python.exe tools\prune_gitee_releases.py --tag exe-2026-11.13 --tag manual-2026-11
 ```
