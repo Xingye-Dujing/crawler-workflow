@@ -2056,3 +2056,11 @@
   font-size: 10px;
   color: var(--text-faint);
 }
+
+
+/* A quiet state line: “已停止生成” is not an error, so it is neither red nor silent. */
+.ai-note {
+  margin: 6px 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}

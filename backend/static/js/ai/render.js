@@ -308,15 +308,52 @@ const AIRender = {
        generic “读取中…”. The model emits no prose before `present_artifact` / `ask_user_question`, so
        without this the turn looks stalled exactly when the useful part is being built. */
     _runningLabel(name) {
-        const key = {
-            present_artifact: 'ai.toolRunningArtifact',
-            ask_user_question: 'ai.toolRunningQuestion',
-            apply_workflow: 'ai.toolRunningWorkflow',
-            run_cmd: 'ai.toolRunningCommand',
-            python_run: 'ai.toolRunningPython',
-            workspace_import: 'ai.toolRunningImport',
-        }[String(name || '')];
-        return I18n.has(key || '') ? I18n.t(key) : I18n.t('ai.toolRunning');
+        const tool = String(name || '');
+        /* Every phase of a turn says what it is doing. The families below cover the whole built-in
+           tool table; anything else (a plugin's tool) still gets a sentence that NAMES it, so no
+           generation step is ever a silent tool card. */
+        const families = [
+            ['present_artifact', 'ai.toolRunningArtifact'],
+            ['ask_user_question', 'ai.toolRunningQuestion'],
+            ['apply_workflow', 'ai.toolRunningWorkflow'],
+            ['rerun_node', 'ai.toolRunningRerun'],
+            ['request_approval', 'ai.toolRunningApproval'],
+            ['update_plan', 'ai.toolRunningPlan'],
+            ['run_cmd', 'ai.toolRunningCommand'],
+            ['python_run', 'ai.toolRunningPython'],
+            ['python_save_script', 'ai.toolRunningPythonSave'],
+            ['python_write', 'ai.toolRunningPythonWrite'],
+            ['workspace_import', 'ai.toolRunningImport'],
+            ['workspace_write', 'ai.toolRunningWrite'],
+            ['workspace_list', 'ai.toolRunningList'],
+            ['workspace_info', 'ai.toolRunningFolder'],
+            ['workspace_read', 'ai.toolRunningRead'],
+            ['workflow_schema', 'ai.toolRunningSchema'],
+            ['workflow_validate', 'ai.toolRunningValidate'],
+            ['app_errors', 'ai.toolRunningErrors'],
+            ['run_status', 'ai.toolRunningRunStatus'],
+            ['run_console', 'ai.toolRunningRunConsole'],
+            ['list_runs', 'ai.toolRunningListRuns'],
+            ['dataset_peek', 'ai.toolRunningPeek'],
+            ['dataset_page', 'ai.toolRunningPage'],
+            ['dataset_profile', 'ai.toolRunningProfile'],
+            ['list_datasets', 'ai.toolRunningListDatasets'],
+            ['chart_catalog', 'ai.toolRunningCharts'],
+            ['analysis_catalog', 'ai.toolRunningOps'],
+            ['project_facts', 'ai.toolRunningFacts'],
+            ['capabilities', 'ai.toolRunningCapabilities'],
+            ['docs_search', 'ai.toolRunningDocs'],
+            ['code_search', 'ai.toolRunningCodeSearch'],
+            ['code_read', 'ai.toolRunningCodeRead'],
+            ['python_scripts', 'ai.toolRunningScripts'],
+            ['web_search', 'ai.toolRunningWebSearch'],
+            ['web_fetch', 'ai.toolRunningWebFetch'],
+        ];
+        for (const [toolName, key] of families) {
+            if (tool === toolName && I18n.has(key)) return I18n.t(key);
+        }
+        if (I18n.has('ai.toolRunningNamed')) return I18n.t('ai.toolRunningNamed', { tool: tool || 'tool' });
+        return I18n.t('ai.toolRunning');
     },
 
     toolCard(name, args, status, result, block) {
@@ -450,6 +487,12 @@ const AIRender = {
             if (type === 'error') {
                 flush();
                 parts.push('<div class="ai-error-text">' + this.escape(block.text || '') + '</div>');
+                continue;
+            }
+            if (type === 'note') {
+                /* A quiet line for a state that is not a failure (停止, 等待选择). */
+                flush();
+                parts.push('<div class="ai-note">' + this.escape(block.text || '') + '</div>');
                 continue;
             }
             if (type === 'tool_use') {

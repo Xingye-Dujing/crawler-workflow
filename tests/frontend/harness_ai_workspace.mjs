@@ -750,7 +750,30 @@ out.jumpButton = {
     composerVar: String(workspace._dom.root.style.getPropertyValue('--ai-composer-h') || ''),
 };
 
+
+/* Every tool family says what it does while it runs, and a stopped turn says it stopped. */
+const labelOf = (name) => {
+    const html = sandbox.AIRender.toolCard(name, {}, 'running', null, { id: 'x' + name });
+    const m = /<span class="ai-tool-state">([^<]*)</.exec(html);
+    return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+};
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._sending = true;
+workspace._onEvent({ type: 'meta', conversation_id: 'c-stop', message_id: 'm1', turn_id: 't1', run_id: 'r1', skill: 'workflow', skill_reason: 'auto' });
+await workspace.stop();
+out.guidance = {
+    read: labelOf('workspace_read'),
+    peek: labelOf('dataset_peek'),
+    plan: labelOf('update_plan'),
+    unknown: labelOf('plugin_tool_x'),
+    stoppedNote: workspace._dom.chat.querySelectorAll('.ai-note').length,
+    stoppedText: String((workspace._dom.chat.querySelector('.ai-note') || {}).textContent || ''),
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
+
 
 
 

@@ -2818,6 +2818,10 @@ const AIWorkspace = {
         }
         this._sending = true;
         this._setSending(true);
+        /* The resumed turn waits for the provider too: show the waiting line now, not after the
+           first event (a slow local model made an answered question look unanswered). */
+        this._ensureAssistant();
+        this._paintAssistant();
         try {
             await this._stream('/api/ai/answer', {
                 conversation_id: this._conversationId,
@@ -2844,6 +2848,12 @@ const AIWorkspace = {
         }
         this._sending = false;
         this._setSending(false);
+        /* A stopped turn used to end in silence: the bubble just stopped growing. Say it, and say
+           that the commands it started went with it (the route stops that conversation's children). */
+        if (this._current && this._current.blocks) {
+            this._current.blocks.push({ type: 'note', text: I18n.t('ai.stopped') });
+            this._paintAssistant();
+        }
     },
 
     async newChat() {

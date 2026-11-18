@@ -267,6 +267,17 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['toolOpened'] is True, 'a finished tool card did not open on click'
         assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
+    def test_every_tool_family_and_a_stop_have_visible_guidance(self):
+        """No generation step may be a silent tool card: reads, peeks and plans each say what they
+        are doing, an unknown (plugin) tool is NAMED, and a stopped turn says it stopped."""
+        out = _run_workspace()['guidance']
+        assert 'Reading the file' in out['read'], out
+        assert 'first rows' in out['peek'], out
+        assert 'plan' in out['plan'].lower(), out
+        assert 'plugin_tool_x' in out['unknown'], out
+        assert out['stoppedNote'] == 1, out
+        assert 'Stopped' in out['stoppedText'], out
+
     def test_the_jump_button_is_a_pill_above_the_composer(self):
         """It used to be a 26px circle filled with the sentence “回到最新消息”, which wrapped into a
         vertical stack and sat on the composer's own buttons. The anchor now follows the composer's
