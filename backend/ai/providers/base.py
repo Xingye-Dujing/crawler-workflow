@@ -217,6 +217,16 @@ class Provider:
     def supports(self, capability: str, model: str = '') -> bool:
         return self.spec.supports(capability, model)
 
+    def context_window(self, model: str = '') -> int:
+        """How many tokens this model admits, or 0 when the transport cannot say.
+
+        0 means "do not window the history": a provider whose catalogue is truthful (a 512k model)
+        will refuse a request that does not fit, and inventing a smaller budget would hide the
+        problem instead of naming it.
+        """
+        spec = self.spec.model(model)
+        return int(spec.max_context or 0) if spec else 0
+
     def public(self) -> dict:
         """The catalog row for this provider."""
         return self.spec.to_public()

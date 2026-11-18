@@ -268,11 +268,23 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['skillLoads'] == 1, 'the skill row never asked for its detail'
 
     def test_the_context_inspector_names_what_was_left_out(self):
-        """A context cut by the budget — or by the replay cap that keeps one turn's block bounded —
-        must say so; silence reads as “the model saw everything”."""
+        """A context cut by the budget — by the replay cap that keeps one turn's block bounded, or by
+        the model's window — must say so; silence reads as “the model saw everything”."""
         out = _run_workspace()['contextNotes']
         assert 'Not included' in out and '运行' in out, out
         assert 'Cut to 16000 characters' in out, out
+        assert 'oldest 4 messages' in out and '32768-token' in out, out
+
+    def test_a_stopped_turn_is_a_note_not_an_error(self):
+        """Stop used to store status='error', so a reload painted a red error line over a turn the
+        user ended on purpose."""
+        out = _run_workspace()['storedStop']
+        assert 'Stopped' in out['note'], out
+        assert out['errors'] == 0, out
+
+    def test_the_composer_stays_usable_while_a_turn_runs(self):
+        out = _run_workspace()['sendingInput']
+        assert out['disabled'] is False, out
 
     def test_a_truncated_answer_says_so_live_and_after_a_reload(self):
         """`stop_reason == 'max_tokens'` means the provider CUT the answer. It was painted as a

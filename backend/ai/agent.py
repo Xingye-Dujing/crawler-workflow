@@ -33,6 +33,10 @@ ACTIVE_STREAMS: dict[str, threading.Event] = {}
 MAX_QUESTIONS = 5
 _STREAM_LOCK = threading.RLock()
 
+#: The output budget of one provider round. A workflow draft is the longest thing a round emits;
+#: 8192 is what every transport here accepts as `max_tokens` (Ollama now maps it to `num_predict`).
+MAX_OUTPUT_TOKENS = 8192
+
 
 def _active(conversation_id: str) -> threading.Event:
     with _STREAM_LOCK:
@@ -494,6 +498,7 @@ class AgentService:
         # user's levers (settings → AI), read at send time so a change needs no restart.
         reasoning_effort = str(get_setting('ai_reasoning_effort') or 'high')
         temperature = get_setting('ai_temperature')
+        max_tokens = MAX_OUTPUT_TOKENS
         allow_code = bool(get_setting('ai_allow_code_context'))
         allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
         allow_files = bool(environment.capabilities()['user_files'])
@@ -559,6 +564,8 @@ class AgentService:
                 # the one place that decides where it goes (and it never rewrites an old row, which
                 # is what lets the provider's prefix cache hit across turns).
                 history = replay_context(history)
+                # A window smaller than the history would be cut by the PROVIDER, from the front.
+                history, history_meta = _fit_history(history, provider, model, system, tool_schemas, max_tokens)
                 request = {
                     'provider': provider.spec.id,
                     'model': model,
@@ -572,7 +579,7 @@ class AgentService:
                     'title': rounds == 0 and not (conversation.get('title') or ''),
                     'reasoning_effort': reasoning_effort,
                     'temperature': temperature,
-                    'max_tokens': 8192,
+                    'max_tokens': max_tokens,
                     'timeout': int(get_setting('ai_request_timeout') or 180),
                     'cancel_event': cancel_event,
                     'session_id': f'ses_{conversation["id"]}',
@@ -587,7 +594,7 @@ class AgentService:
                     skill=skill,
                     skill_reason=skill_reason,
                     run_id=run_id,
-                    context_meta=context_meta,
+                    context_meta={**context_meta, 'history': history_meta} if history_meta else context_meta,
                     seed=rounds == 0 and not seeded,
                 )
                 if state.get('error'):
@@ -784,14 +791,19 @@ class AgentService:
                 'title': title,
             }
         except AIError as exc:
-            store.update_message(
-                assistant['id'],
-                status='error',
-                content=_current_text(blocks),
-                blocks=blocks,
-                meta={**(assistant.get('meta') or {}), 'error': exc.localized()},
-            )
             if exc.kind == 'cancelled':
+                # A stop is not a failure. The partial answer stays in the transcript AND in the
+                # next turn's history (someone who stops and says “继续” expects the model to see
+                # what it already wrote), and the row is `done` with a named reason — the old code
+                # wrote status='error', which painted a red error line after a reload.
+                store.update_message(
+                    assistant['id'],
+                    status='done',
+                    content=_current_text(blocks),
+                    blocks=blocks,
+                    usage=usage,
+                    meta={**(assistant.get('meta') or {}), 'stop_reason': 'cancelled', 'stopped': True},
+                )
                 yield {'type': 'done', 'stop_reason': 'cancelled'}
                 return {
                     'message': assistant,
@@ -801,6 +813,13 @@ class AgentService:
                     'tool_calls': [],
                     'error': 'cancelled',
                 }
+            store.update_message(
+                assistant['id'],
+                status='error',
+                content=_current_text(blocks),
+                blocks=blocks,
+                meta={**(assistant.get('meta') or {}), 'error': exc.localized()},
+            )
             raise
 
     def _ask_budget(self, conversation: dict, state: dict, run_id: str, rounds: int):
@@ -1280,6 +1299,65 @@ class AgentService:
             status='done',
             meta={'turn_id': turn_id, 'tool_call_id': call['id'], 'name': name, 'is_error': is_error},
         )
+
+
+def _message_tokens(message: dict) -> int:
+    """A cheap estimate of one history row: its text, thinking and tool arguments."""
+    parts = [str(message.get('content') or '')]
+    for block in message.get('blocks') or ():
+        if not isinstance(block, dict):
+            continue
+        parts.append(str(block.get('text') or ''))
+        parts.append(str(block.get('thinking') or ''))
+        if block.get('type') == 'tool_use':
+            parts.append(json.dumps(block.get('input') or {}, ensure_ascii=False, default=str))
+    return context_builder.estimate_tokens('\n'.join(parts))
+
+
+def _fit_history(
+    history: list, provider, model: str, system: str, tool_schemas: list, max_tokens: int
+) -> tuple[list, dict]:
+    """Drop the oldest turns until the request fits the model's window; report what was dropped.
+
+    A local daemon is the reason this exists: Ollama's ``num_ctx`` here is 32k, a 30-round tool
+    chain is far bigger, and the daemon then truncates the START of the prompt — the system prompt
+    is the first thing to go, so the model forgets its own rules halfway through a turn. Cutting at
+    a USER boundary keeps every ``tool_use`` paired with its result; ``context_meta.history`` tells
+    the inspector what happened instead of pretending the model saw everything.
+    """
+    window = int(provider.context_window(model) or 0)
+    if window <= 0:
+        return history, {}
+    overhead = context_builder.estimate_tokens(system)
+    overhead += sum(
+        context_builder.estimate_tokens(json.dumps(tool, ensure_ascii=False, default=str))
+        for tool in tool_schemas or ()
+    )
+    budget = int(window * 0.9) - overhead - int(max_tokens or 0)
+    if budget <= 0:
+        budget = max(1000, int(window * 0.5))
+    sizes = [_message_tokens(message) for message in history]
+    meta = {'window': window, 'budget': budget, 'dropped': 0, 'kept': len(history)}
+    if sum(sizes) <= budget:
+        return history, meta
+    kept: list = []
+    used = 0
+    for message, size in zip(reversed(history), reversed(sizes), strict=True):
+        if kept and used + size > budget:
+            break
+        kept.append(message)
+        used += size
+    kept.reverse()
+    while kept and str(kept[0].get('role') or '') != 'user':
+        kept.pop(0)
+    if not kept:
+        # One giant tool result would otherwise leave nothing: the newest user row must survive.
+        for message in reversed(history):
+            if str(message.get('role') or '') == 'user':
+                kept = [message]
+                break
+    meta.update(dropped=len(history) - len(kept), kept=len(kept))
+    return kept, meta
 
 
 def _turn_seeded(conversation_id: str, turn_id: str) -> bool:

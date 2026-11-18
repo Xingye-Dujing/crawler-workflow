@@ -148,6 +148,17 @@ class OllamaProvider(Provider):
             return capability in caps
         return capability in self.spec.capabilities
 
+    def context_window(self, model: str = '') -> int:
+        """The window this request really gets — exactly what ``num_ctx`` is set to.
+
+        It is the model's own ``context_length`` (from ``/api/show``) capped at ``MAX_NUM_CTX``, not
+        the static catalogue: the daemon is the only side that knows what a pulled tag was built
+        with, and the agent needs the SAME number here to trim a history that would not fit.
+        """
+        info = self._info(model)
+        context = int(info.get('context') or 0)
+        return min(MAX_NUM_CTX, context) if context else MAX_NUM_CTX
+
     def public(self) -> dict:
         """The picker's static row; the daemon's real list is ``GET …/models``.
 
@@ -227,14 +238,19 @@ class OllamaProvider(Provider):
         # ``or 0.2`` treated a deliberate 0.0 (fully deterministic) as "unset" and quietly ran at
         # 0.2 — a number the user did not choose. Only a missing value takes the default.
         temperature = request.get('temperature')
+        options = {
+            'temperature': 0.2 if temperature is None else float(temperature),
+            'num_ctx': min(MAX_NUM_CTX, context) if context else MAX_NUM_CTX,
+        }
+        if request.get('max_tokens'):
+            # The daemon defaults to "generate until the window is full"; the agent's output budget
+            # was silently ignored, so one answer could run for minutes on a local model.
+            options['num_predict'] = int(request['max_tokens'])
         payload = {
             'model': model,
             'messages': self._messages(request),
             'stream': True,
-            'options': {
-                'temperature': 0.2 if temperature is None else float(temperature),
-                'num_ctx': min(MAX_NUM_CTX, context) if context else MAX_NUM_CTX,
-            },
+            'options': options,
         }
         tools = self._tool_schemas(request.get('tools') or ())
         if tools and self.supports('tools', model):

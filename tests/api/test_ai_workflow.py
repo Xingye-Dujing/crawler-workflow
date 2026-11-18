@@ -26,6 +26,10 @@ class FakeProvider:
     def supports(self, capability: str, model: str = '') -> bool:
         return capability in self.spec.capabilities
 
+    def context_window(self, model: str = '') -> int:
+        # 0 = "no window to fit": a scripted provider has nothing to trim against.
+        return 0
+
     def list_models(self, api_key: str = '', _host: str = '') -> list:
         self.seen_keys.append(api_key)
         return [{'id': 'fake-model', 'label': 'Fake'}]

@@ -29,6 +29,9 @@ class FakeProvider:
     def supports(self, capability: str, model: str = '') -> bool:
         return capability in self.spec.capabilities
 
+    def context_window(self, model: str = '') -> int:
+        return 0
+
     def stream(self, request):
         answered = any(message.get('role') == 'tool' for message in request.get('messages', []))
         if not answered:

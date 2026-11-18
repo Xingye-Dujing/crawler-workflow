@@ -809,9 +809,36 @@ workspace._contextMeta = {
     omitted: ['运行'],
     replay_truncated: true,
     replay_chars: 16000,
+    history: { window: 32768, budget: 20000, dropped: 4, kept: 12 },
 };
 workspace._renderSide();
 out.contextNotes = String(workspace._dom.side.innerHTML || '');
+
+/* A STOPPED turn came back from the store as a red error line, because stop wrote status='error'.
+   It is the same kind of fact as a truncated answer: a quiet note. */
+workspace._messages = [
+    { id: 'u3', role: 'user', content: '写长一点', meta: {} },
+    {
+        id: 'a4',
+        role: 'assistant',
+        blocks: [{ type: 'text', text: '写到一半就停了' }],
+        meta: { turn_id: 't-stop', stop_reason: 'cancelled', stopped: true },
+    },
+];
+workspace._current = null;
+workspace._renderMessages([]);
+const stopNote = workspace._dom.chat.querySelector('.ai-note');
+out.storedStop = {
+    note: String((stopNote || {}).textContent || ''),
+    errors: workspace._dom.chat.querySelectorAll('.ai-error-text').length,
+    text: String(workspace._dom.chat.textContent || ''),
+};
+
+/* The composer stays usable while a turn runs: a disabled input threw the caret away and made the
+   next message impossible to draft. */
+workspace._setSending(true);
+out.sendingInput = { disabled: workspace._dom.input.disabled === true };
+workspace._setSending(false);
 
 fs.writeFileSync(1, JSON.stringify(out));
 

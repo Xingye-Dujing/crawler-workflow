@@ -141,6 +141,114 @@ def test_a_reasoning_effort_the_endpoint_does_not_know_degrades_instead_of_400in
     assert low['reasoning_effort'] == 'low'
 
 
+def test_a_window_too_small_for_the_history_drops_old_turns_and_says_so():
+    """Ollama's window here is 32k and a 30-round tool chain is bigger; the daemon then truncates from
+    the FRONT, losing the system prompt first. The agent trims at a user boundary instead, and
+    reports it — silently sending less than the model could have read is the defect this prevents."""
+    from ai import agent
+
+    class Windowed:
+        window = 1000
+
+        def context_window(self, model=''):
+            return self.window
+
+    def user(index):
+        return {'role': 'user', 'content': f'第{index}轮 ' + '问' * 200, 'meta': {}}
+
+    def tool(index):
+        return {'role': 'tool', 'content': '{"rows": []}' + 'x' * 400, 'tool_call_id': f'c{index}', 'meta': {}}
+
+    history = []
+    for turn in range(6):
+        history.append(user(turn))
+        history.append(
+            {
+                'role': 'assistant',
+                'content': '',
+                'blocks': [{'type': 'tool_use', 'id': f'c{turn}', 'name': 'x'}],
+                'meta': {},
+            }
+        )
+        history.append(tool(turn))
+    kept, meta = agent._fit_history(history, Windowed(), 'm', 'system', [], 10)
+    assert meta['dropped'] > 0 and meta['window'] == 1000, meta
+    assert str(kept[0]['role']) == 'user', 'a tool result without its call is an invalid request'
+    assert kept[-1] == history[-1], 'the newest message must survive'
+    assert 'tool' in [row['role'] for row in kept] or len(kept) == 1
+
+
+def test_a_history_that_fits_is_sent_whole():
+    from ai import agent
+
+    class Windowed:
+        def context_window(self, model=''):
+            return 100000
+
+    history = [{'role': 'user', 'content': '短问题', 'meta': {}}]
+    kept, meta = agent._fit_history(history, Windowed(), 'm', 'system', [], 100)
+    assert kept == history and meta['dropped'] == 0
+
+
+def test_the_local_window_is_the_one_the_daemon_reports_and_num_predict_is_sent(monkeypatch):
+    from ai.providers import ollama
+
+    provider = ollama.OllamaProvider()
+    monkeypatch.setattr(provider, '_info', lambda model, host='': {'context': 262144})
+    assert provider.context_window('m') == ollama.MAX_NUM_CTX
+    monkeypatch.setattr(provider, '_info', lambda model, host='': {'context': 8192})
+    assert provider.context_window('m') == 8192
+    payload = provider._payload({'model': 'm', 'messages': [], 'max_tokens': 1234})
+    assert payload['options']['num_predict'] == 1234, 'the daemon defaulted to "until the window is full"'
+
+
+def test_a_stopped_turn_keeps_its_partial_answer_and_is_not_an_error():
+    """Stop used to store status='error' with meta.error, so a reload showed a red error line and the
+    next turn's history dropped what the model had already written ("继续" started from nothing)."""
+    from ai import agent, skills, store
+    from ai.errors import AIError
+    from ai.types import ModelSpec, ProviderSpec
+
+    class Stopping:
+        spec = ProviderSpec(
+            id='stopping',
+            label_key='x',
+            notes_key='y',
+            protocol='openai',
+            base_url='',
+            models=(ModelSpec('m', 'M', 1000),),
+        )
+
+        def supports(self, capability, model=''):
+            return False
+
+        def stream(self, request):
+            yield {'type': 'text_delta', 'text': '已经写了一半'}
+            raise AIError('ai.cancelled', kind='cancelled')
+
+    conversation = store.create_conversation('stopping', 'm', 'auto')
+    events = list(
+        agent.AgentService()._round(
+            conversation=conversation,
+            turn_id='t-stop',
+            provider=Stopping(),
+            request={'model': 'm', 'max_tokens': 10},
+            skill=skills.get_skill('project'),
+            skill_reason='auto',
+            run_id='',
+            context_meta={},
+            seed=True,
+        )
+    )
+    row = store.get_message(events[0]['message_id'])
+    assert row['status'] == 'done', row['status']
+    assert '已经写了一半' in row['content']
+    assert not (row.get('meta') or {}).get('error')
+    assert (row.get('meta') or {}).get('stop_reason') == 'cancelled'
+    history = agent._history(conversation['id'])
+    assert any('已经写了一半' in str(message.get('content') or '') for message in history)
+
+
 def test_the_stored_context_is_clamped_once_and_said_so(monkeypatch):
     """A block that is replayed for the rest of the conversation must be bounded — and the cut is
     reported (the inspector shows it) instead of silently shrinking what the model was promised."""

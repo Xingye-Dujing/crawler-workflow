@@ -84,11 +84,20 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 - **花钱的默认值是省的**：联网搜索默认关（`ai_web_search_default`，浏览器没手动选过时采纳），
   思考强度可选 `low/high/max`（`ai_reasoning_effort`，默认 high），非思考轮次的温度
   `ai_temperature` 默认 0.3（草案与 JSON 更稳；思考开启时供应商忽略它）。
+- **窗口由我们自己守**：`Provider.context_window()` 是唯一答案（Ollama 回它真正下发的
+  `min(num_ctx, 模型自报窗口)`），`agent._fit_history` 在**user 边界**裁掉最旧轮次，并把
+  `context_meta.history`（window/budget/dropped/kept）交给检查器显示。否则本地 daemon 会**从开头**
+  截断——系统提示最先丢，模型跑到一半就不记得自己的规则。Ollama 的 `num_predict` 现在等于同一次
+  请求的输出预算，不再“生成到窗口填满为止”。
+- **停止是一等状态，不是错误**：按停止的那一轮存 `status=done` + `meta.stop_reason='cancelled'`，
+  已经写出的半截回答留在转录里、也留在下一轮的历史里（说“继续”时模型看得见自己写过什么）；刷新后
+  显示的是一行中性提示，不是红色报错。
+- **生成期间输入框仍可用**：`_setSending` 只禁用发送键、亮出停止键；重复发送由 `_sendText` 用一句
+  toast 挡住，而不是把光标和草稿一起收走（用输入框禁用来防重复，代价是用户连下一条都打不了）。
 
 **默认只读最小证据**：
 
-- `dataset_peek`：列名/类型 + 5 行，单元格 120 字；
-- `dataset_profile`：行数、缺失/唯一值、每列 2 个样本；
+- `dataset_peek`：列名/类型 + 5 行，单元格 120 字；- `dataset_profile`：行数、缺失/唯一值、每列 2 个样本；
 - `dataset_page`：≤50 行，带 `has_more`；
 - `python_run`：行数 + 小样本 + stdout/stderr；
 - 工具结果超过 12,000 字会被截断并注明。

@@ -970,7 +970,11 @@ const AIWorkspace = {
            overall budget changed what the model could have known, and silence reads as “it saw
            everything”. */
         const omitted = (meta.omitted || []).filter(Boolean);
+        const history = meta.history || {};
         const contextNotes =
+            (history.dropped
+                ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextHistoryCut', { n: history.dropped, window: history.window || 0 })) + '</p>'
+                : '') +
             (meta.replay_truncated
                 ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextReplayCut', { n: meta.replay_chars || 0 })) + '</p>'
                 : '') +
@@ -2164,6 +2168,7 @@ const AIWorkspace = {
         }
         for (const turn of turns.values()) {
             if (turn.stopReason === 'max_tokens') turn.truncated = true;
+            if (turn.stopReason === 'cancelled') turn.stopped = true;
             for (const block of turn.blocks) {
                 if (!block || block.type !== 'tool_use') continue;
                 const found = toolPayloads.get(String(block.id || ''));
@@ -2211,8 +2216,10 @@ const AIWorkspace = {
                saw a silent gap where the provider had said exactly what was wrong. */
             (turn.error ? '<div class="ai-error-text">' + AIRender.escape(turn.error) + '</div>' : '') +
             /* A turn cut by the output limit is not an error, but it is not a finished answer
-               either: the sentence stopped mid-way and the provider said so. */
+               either: the sentence stopped mid-way and the provider said so. A STOPPED turn is the
+               same kind of fact, and used to come back as a red error line. */
             (turn.truncated ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.truncated')) + '</div>' : '') +
+            (turn.stopped ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stopped')) + '</div>' : '') +
             '<div class="ai-extras"></div>' +
             '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
@@ -2515,7 +2522,10 @@ const AIWorkspace = {
     _setSending(sending) {
         if (this._dom.send) this._dom.send.disabled = sending;
         if (this._dom.stop) this._dom.stop.hidden = !sending;
-        if (this._dom.input) this._dom.input.disabled = sending;
+        /* The composer stays ENABLED while a turn runs: disabling it threw away the caret and the
+           user could not even draft the next message. A second send is refused by `_sendText` with
+           one toast, which is a better answer than a dead input. */
+        if (this._dom.input) this._dom.input.disabled = false;
         this._renderToggles();
     },
 
@@ -2697,6 +2707,16 @@ const AIWorkspace = {
             if (String(event.stop_reason || '') === 'max_tokens' && this._current?.blocks) {
                 this._current.blocks.push({ type: 'note', text: I18n.t('ai.truncated') });
                 this._toast(I18n.t('ai.truncated'));
+            }
+            /* A stop triggered from another tab (or the stop route answering while the stream was
+               still open) ends the stream too — say it once, never twice. */
+            const stopped = I18n.t('ai.stopped');
+            if (
+                String(event.stop_reason || '') === 'cancelled' &&
+                this._current?.blocks &&
+                !this._current.blocks.some((block) => block.type === 'note' && block.text === stopped)
+            ) {
+                this._current.blocks.push({ type: 'note', text: stopped });
             }
             this._paintAssistant();
             this._refreshConversations();
