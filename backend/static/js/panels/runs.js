@@ -214,6 +214,12 @@ var runsManager = {
         return document.getElementById('runs-panel');
     },
 
+    /* Hand the run id to the workspace as manual context; it re-reads status, nodes and console
+       from its own stores. The question is prefilled, not sent — the user can change it. */
+    askAI(runId) {
+        AIWorkspace.askAbout({ run_id: runId, prompt: I18n.t('ai.askRunPrompt', { id: runId }) });
+    },
+
     toggle() {
         var panel = this.panel();
         if (!panel) return;
@@ -543,6 +549,7 @@ var runsManager = {
             }
             ops += '<button class="runs-mgr-btn del" onclick="runsManager.remove(\'' + attrJsArg(r.run_id) + '\', ' + (resumable ? 'true' : 'false') + ')">' + I18n.t('runsMgr.remove') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="runsManager.detail(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('runsMgr.detail') + '</button>';
+            ops += '<button class="runs-mgr-btn" onclick="runsManager.askAI(\'' + attrJsArg(r.run_id) + '\')">' + I18n.t('ai.askRun') + '</button>';
             ops += lockButtonHtml('runs', r.run_id);
             /* The stored tables are what a report needs, so a run from last week
                is reportable from here. Only the run id travels into the handler — and it

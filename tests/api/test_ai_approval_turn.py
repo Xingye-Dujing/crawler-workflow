@@ -11,7 +11,7 @@ pytestmark = pytest.mark.api
 
 
 class FakeProvider:
-    def __init__(self, provider_id: str, detail=None):
+    def __init__(self, provider_id: str, detail=None, action='run_cmd'):
         from ai.types import ModelSpec, ProviderSpec
 
         capabilities = frozenset({'thinking', 'tools', 'ask_user'})
@@ -25,6 +25,7 @@ class FakeProvider:
             capabilities=capabilities,
         )
         self.detail = detail
+        self.action = action
 
     def supports(self, capability: str, model: str = '') -> bool:
         return capability in self.spec.capabilities
@@ -40,7 +41,7 @@ class FakeProvider:
                 'id': 'call_approve',
                 'name': 'request_approval',
                 'arguments': {
-                    'action': 'run_cmd',
+                    'action': self.action,
                     'summary': 'Run the test suite',
                     'detail': self.detail if self.detail is not None else {'command': 'pytest -q'},
                 },
@@ -58,10 +59,10 @@ def _clean_approvals():
     approvals.reset()
 
 
-def _install(monkeypatch, detail=None):
+def _install(monkeypatch, detail=None, action='run_cmd'):
     from ai.providers import PROVIDERS
 
-    provider = FakeProvider('fake_approval', detail=detail)
+    provider = FakeProvider('fake_approval', detail=detail, action=action)
     monkeypatch.setitem(PROVIDERS, 'fake_approval', provider)
 
 
@@ -108,6 +109,31 @@ def test_the_question_offers_all_three_choices(client, monkeypatch):
     assert any(event['type'] == 'paused' and event.get('reason') == 'awaiting_approval' for event in events)
     # The question is a real tool call on the assistant row, so the provider's pairing stays valid.
     assert question['tool_call_id']
+
+
+def test_the_approval_card_carries_the_command_it_would_run(client, monkeypatch):
+    _install(monkeypatch)
+    question = next(event for event in _chat(client).get_json()['events'] if event['type'] == 'question')
+    preview = question['questions'][0]['preview']
+    assert preview['kind'] == 'command'
+    facts = {row['key']: row['value'] for row in preview['facts']}
+    assert facts['command'] == 'pytest -q'
+    assert facts['timeout'] == ''
+
+
+def test_the_approval_card_shows_a_write_diff_and_changes_nothing(client, monkeypatch, tmp_path):
+    from ai import workspace
+
+    monkeypatch.setattr(workspace, 'folder', lambda: str(tmp_path))
+    (tmp_path / 'plan.md').write_text('old text\n', encoding='utf-8')
+    _install(monkeypatch, detail={'path': 'plan.md', 'content': 'new text\n'}, action='workspace_write')
+    question = next(event for event in _chat(client).get_json()['events'] if event['type'] == 'question')
+    preview = question['questions'][0]['preview']
+    assert preview['kind'] == 'write'
+    assert preview['exists'] is True
+    assert '-old text' in preview['diff'] and '+new text' in preview['diff']
+    # Describing a write is not performing it: the file the user has not approved is untouched.
+    assert (tmp_path / 'plan.md').read_text(encoding='utf-8') == 'old text\n'
 
 
 def test_a_session_approval_is_reused_by_the_resumed_turn(client, monkeypatch):

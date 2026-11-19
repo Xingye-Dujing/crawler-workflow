@@ -228,6 +228,22 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['approval']['badge'] is True
         assert out['runStatus'] == ['n2', 'n9'], 'a run_status answer did not name its failed node'
 
+    def test_the_approval_card_shows_the_exact_target_and_diff(self):
+        """A one-line summary is not enough to approve a file write: the card carries the facts
+        and the coloured diff, and a reloaded transcript still shows the path that was allowed."""
+        approval = _run_workspace()['cards']['approval']
+        assert approval['preview'] is True, 'the approval card has no preview block'
+        assert approval['path'] is True, 'the target fact has no translated label'
+        assert approval['added'] == 2 and approval['removed'] == 2, approval
+        assert _run_workspace()['storedEvidence']['approvalPreviews'] >= 1
+
+    def test_a_panel_entry_opens_a_fresh_chat_with_context_and_prefills(self):
+        out = _run_workspace()['askAbout']
+        assert out['contexts'] == [{'context': {'run_id': 'run-42'}}], out['contexts']
+        assert out['fresh'] == 1, 'the entry did not start a new conversation'
+        assert out['runId'] == 'run-42', 'the run id did not reach the manual context'
+        assert out['prompt'] == 'explain run-42', 'the question was not prefilled'
+
     def test_a_reloaded_transcript_keeps_the_error_and_the_question(self):
         """Both used to live only in the live DOM, so a refresh left a silent gap."""
         out = _run_workspace()['storedEvidence']

@@ -18,7 +18,7 @@ from datetime import datetime
 from runtime import account_context
 from runtime.settings import get_setting
 
-from ai import approvals, environment, references, skills, store, tools, vocabulary, workflow_draft
+from ai import approval_preview, approvals, environment, references, skills, store, tools, vocabulary, workflow_draft
 from ai import context as context_builder
 from ai.errors import AIError
 from ai.providers import get_provider
@@ -907,6 +907,9 @@ class AgentService:
                     # An approval question is painted as a danger-toned card; the browser keys on
                     # this token, never on a translated sentence.
                     'kind': str(item.get('kind') or ''),
+                    # The resolved target of the act being approved. Stored with the question so a
+                    # reloaded transcript still shows WHAT was allowed, not only that it was.
+                    'preview': item.get('preview') if isinstance(item.get('preview'), dict) else {},
                 }
             )
         if not normalized:
@@ -1213,6 +1216,10 @@ class AgentService:
             return False
         labels = {'once': t('ai.approvalOnce'), 'session': t('ai.approvalSession'), 'deny': t('ai.approvalDeny')}
         summary = str(args.get('summary') or '').strip()
+        # The model's summary is its own account of what it intends. Show the exact arguments too —
+        # for a write, the resolved path and the lines that would change — so the user is approving
+        # a known act, not a sentence. The preview only reads; it cannot fail the turn.
+        preview = approval_preview.preview(action, detail)
         ask = {
             'id': new_id('call'),
             'name': 'ask_user_question',
@@ -1223,6 +1230,7 @@ class AgentService:
                         'kind': 'approval',
                         'header': t('ai.approvalHeader', tool=action),
                         'question': t('ai.approvalQuestion', tool=action, summary=summary),
+                        'preview': preview,
                         'options': [
                             {'label': labels['once'], 'value': 'once', 'description': t('ai.approvalOnceHint')},
                             {

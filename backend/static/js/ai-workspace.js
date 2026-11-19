@@ -2456,9 +2456,13 @@ const AIWorkspace = {
             const asked = (payload.questions || []).filter((item) => item && item.question);
             const approval = asked.some((item) => String(item.kind || '') === 'approval');
             let picked = {};
+            let preview = '';
             if (approval) {
                 const question = asked.find((item) => String(item.kind || '') === 'approval') || {};
                 picked = (question.options || []).find((option) => option && option.label === chosen) || {};
+                /* The answered row is what a reload shows: keep the exact target visible there too,
+                   or the card would reduce an approved file write to “this call was answered”. */
+                preview = AIRender.approvalPreview(question.preview);
             }
             const el = document.createElement('section');
             el.className = 'ai-question' + (approval ? ' ai-question-approval' : '');
@@ -2474,6 +2478,7 @@ const AIWorkspace = {
                 AIRender.escape((asked[0] && asked[0].header) || I18n.t('ai.questionTitle')) +
                 '</div>' +
                 lines.join('') +
+                preview +
                 '<div class="ai-question-answered">' + AIRender.escape(verdict) + '</div>';
             return el;
         }
@@ -3406,6 +3411,27 @@ const AIWorkspace = {
         } catch (error) {
             if (result) result.textContent = I18n.t('ai.testFail') + ': ' + error.message;
         }
+    },
+
+    /* ─── Entry from a panel outside the workspace ─────────────────────────────
+       A dataset / run / node panel hands over the ids of the thing it is showing and the question
+       to ask. This opens a NEW chat (an entry from a table must not inherit an unrelated
+       conversation), attaches the ids as manual context so the server re-reads that object, and
+       PRE-FILLS the question without sending it: the send button stays the user's, and a prompt
+       they can edit is the point of an entry. */
+    async askAbout(target) {
+        const spec = target || {};
+        const context = {};
+        if (spec.dataset_id) context.dataset_id = String(spec.dataset_id);
+        if (spec.run_id) context.run_id = String(spec.run_id);
+        AIContext.setManual(context);
+        this.open({ context });
+        await this.newChat();
+        if (this._dom.input) {
+            this._dom.input.value = String(spec.prompt || '');
+            this._dom.input.focus();
+        }
+        this._renderContextBar();
     },
 
     openStudio(tab) {

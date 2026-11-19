@@ -171,6 +171,49 @@ const AIRender = {
         return out.join('');
     },
 
+    /* The exact act behind an approval question: resolved target facts and, for a write, the diff
+       the user is being asked to allow. The server supplies every key; this only paints it. */
+    approvalPreview(preview) {
+        if (!preview || !preview.kind) return '';
+        const facts = (preview.facts || []).map((fact) => {
+            const key = String(fact.key || '');
+            const label = I18n.has('ai.approvalField.' + key) ? I18n.t('ai.approvalField.' + key) : key;
+            return (
+                '<div class="ai-approval-fact"><dt>' + this.escape(label) + '</dt>' +
+                '<dd><code>' + this.escape(String(fact.value || '')) + '</code></dd></div>'
+            );
+        }).join('');
+        let diff = '';
+        const lines = preview.diff || [];
+        if (lines.length) {
+            const rows = lines.map((line) => {
+                const text = String(line);
+                const tone = text.startsWith('+') ? ' add' : text.startsWith('-') ? ' del' : text.startsWith('@@') ? ' hunk' : '';
+                return '<span class="ai-diff-line' + tone + '">' + this.escape(text) + '</span>';
+            }).join('');
+            diff =
+                '<div class="ai-approval-diff">' +
+                '<div class="ai-approval-diff-head">' +
+                this.escape(I18n.t(preview.exists ? 'ai.approvalDiffOverwrite' : 'ai.approvalDiffNew')) +
+                (preview.changed ? '' : ' · ' + this.escape(I18n.t('ai.approvalNoChange'))) +
+                '</div><pre class="ai-diff">' + rows + '</pre>' +
+                (preview.truncated ? '<div class="ai-hint">' + this.escape(I18n.t('ai.approvalDiffCut')) + '</div>' : '') +
+                '</div>';
+        } else if (preview.kind === 'write' && !preview.error) {
+            diff =
+                '<div class="ai-hint">' +
+                this.escape(I18n.t(preview.changed ? 'ai.approvalNoDiff' : 'ai.approvalNoChange')) +
+                '</div>';
+        }
+        return (
+            '<div class="ai-approval-preview">' +
+            (facts ? '<dl class="ai-approval-facts">' + facts + '</dl>' : '') +
+            diff +
+            (preview.error ? '<div class="ai-approval-error">' + this.escape(preview.error) + '</div>' : '') +
+            '</div>'
+        );
+    },
+
     questionCard(question, answered) {
         /* An approval question is the same card with a danger tone: the runtime marks it with
            ``kind`` (and the stable id ``approval``), never with a translated sentence. */
@@ -194,6 +237,7 @@ const AIRender = {
             (approval ? '<span class="ai-chip ai-chip-danger">' + this.escape(I18n.t('ai.approvalBadge')) + '</span>' : '') +
             '</div>' +
             '<p class="ai-question-text">' + this.inline(question.question) + '</p>' +
+            this.approvalPreview(question.preview) +
             '<div class="ai-options">' + options + '</div>' +
             custom + customButton +
             (answered ? '<div class="ai-question-answered">' + this.escape(I18n.t('ai.questionAnswered')) + '</div>' : '') +

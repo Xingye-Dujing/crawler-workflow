@@ -335,6 +335,16 @@ const approvalHtml = sandbox.AIRender.questionCard(
         kind: 'approval',
         header: 'Permission needed',
         question: 'Allow run_cmd?',
+        preview: {
+            tool: 'workspace_write',
+            kind: 'write',
+            exists: true,
+            changed: true,
+            truncated: false,
+            error: '',
+            facts: [{ key: 'path', value: 'notes.txt' }],
+            diff: ['--- a/notes.txt', '+++ b/notes.txt', '@@ -1 +1 @@', '-old', '+new'],
+        },
         options: [
             { label: 'Allow once', value: 'once' },
             { label: 'Allow for this session', value: 'session' },
@@ -366,6 +376,11 @@ out.cards = {
         danger: approvalHtml.includes('ai-question-approval'),
         options: approvalCard.querySelectorAll('[data-ai-answer]').map((el) => el.getAttribute('data-ai-answer')),
         badge: approvalHtml.includes(vm.runInContext("I18n.t('ai.approvalBadge')", sandbox)),
+        preview: approvalHtml.includes('ai-approval-preview'),
+        path: approvalHtml.includes(vm.runInContext("I18n.t('ai.approvalField.path')", sandbox)),
+        /* The DOM stub treats a <pre>'s children as text, so count the painted spans in the HTML. */
+        added: (approvalHtml.match(/ai-diff-line add/g) || []).length,
+        removed: (approvalHtml.match(/ai-diff-line del/g) || []).length,
     },
 };
 
@@ -391,6 +406,33 @@ workspace._messages = [
         }),
         meta: {},
     },
+    {
+        id: 'm3',
+        role: 'tool',
+        content: JSON.stringify({
+            tool: 'ask_user_question',
+            questions: [
+                {
+                    id: 'approval',
+                    kind: 'approval',
+                    header: 'Permission',
+                    question: 'Allow write?',
+                    preview: {
+                        tool: 'workspace_write',
+                        kind: 'write',
+                        exists: false,
+                        changed: true,
+                        truncated: false,
+                        error: '',
+                        facts: [{ key: 'path', value: 'saved.txt' }],
+                        diff: ['+kept line'],
+                    },
+                },
+            ],
+            answers: [{ id: 'approval', selected: ['Allow once'] }],
+        }),
+        meta: {},
+    },
 ];
 workspace._renderMessages([]);
 const errorRow = workspace._dom.chat.querySelectorAll('.ai-error-text')[0];
@@ -400,6 +442,8 @@ out.storedEvidence = {
     error: errorRow ? String(errorRow.textContent) : '',
     asked: askedRow ? String(askedRow.textContent) : '',
     answered: answeredRow ? String(answeredRow.textContent) : '',
+    approvalPath: String(workspace._dom.chat.innerHTML).includes('saved.txt'),
+    approvalPreviews: workspace._dom.chat.querySelectorAll('.ai-approval-preview').length,
 };
 
 /* The folder picker must name the OTHER disks and offer the system dialog: walking down from one
@@ -1179,6 +1223,32 @@ out.storedStop = {
 workspace._setSending(true);
 out.sendingInput = { disabled: workspace._dom.input.disabled === true };
 workspace._setSending(false);
+
+/* A control outside the workspace asks about a run: the entry opens a NEW chat, attaches the id as
+   manual context and prefills the question without sending it. A panel must not have to know how
+   the workspace stores a conversation or builds its context. */
+const openedWith = [];
+const realOpen = workspace.open;
+const realNewChat = workspace.newChat;
+const realRenderContextBar = workspace._renderContextBar;
+workspace.open = (opts) => openedWith.push(opts);
+let freshChats = 0;
+workspace.newChat = async () => {
+    freshChats += 1;
+};
+workspace._renderContextBar = () => {};
+sandbox.AIContext.setManual({ dataset_id: '', run_id: '' });
+workspace._dom.input.value = '';
+await workspace.askAbout({ run_id: 'run-42', prompt: 'explain run-42' });
+out.askAbout = {
+    contexts: openedWith,
+    fresh: freshChats,
+    runId: sandbox.AIContext.manual.run_id,
+    prompt: String(workspace._dom.input.value),
+};
+workspace.open = realOpen;
+workspace.newChat = realNewChat;
+workspace._renderContextBar = realRenderContextBar;
 
 fs.writeFileSync(1, JSON.stringify(out));
 

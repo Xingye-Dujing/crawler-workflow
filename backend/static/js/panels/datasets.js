@@ -18,6 +18,15 @@ var datasetManager = {
         return document.getElementById('dataset-panel');
     },
 
+    /* Hand the dataset id to the workspace as manual context; the server re-reads the columns and
+       a bounded sample. The question is prefilled, not sent — the user can change it. */
+    askAI(datasetId, name) {
+        AIWorkspace.askAbout({
+            dataset_id: datasetId,
+            prompt: I18n.t('ai.askDatasetPrompt', { id: datasetId, name: name || datasetId }),
+        });
+    },
+
     toggle() {
         var panel = this.panel();
         if (!panel) return;
@@ -97,6 +106,8 @@ var datasetManager = {
                 ops += '<button class="runs-mgr-btn" onclick="datasetManager.resetLineage(\'' +
                     self._quote(row.lineage.name) + '\')">' + I18n.t('datasetMgr.lineageReset') + '</button>';
             }
+            ops += '<button class="runs-mgr-btn" onclick="datasetManager.askAI(\'' + self._quote(id) + '\', \'' +
+                self._quote(row.name || '') + '\')">' + I18n.t('ai.askDataset') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleCompare(\'' + self._quote(id) +
                 '\')">' + I18n.t(picked ? 'datasetMgr.compareOn' : 'datasetMgr.compare') + '</button>';
             ops += '<button class="runs-mgr-btn" onclick="datasetManager.toggleMerge(\'' + self._quote(id) +

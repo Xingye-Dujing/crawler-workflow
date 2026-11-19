@@ -197,6 +197,15 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   `request_approval` 复用 `ask_user_question` 的可恢复暂停（合成 assistant `tool_use`，供应商配对规则仍成立），
   选项为 允许一次 / 本次会话允许 / 拒绝；`once` 用掉即失效，`session` 对同一份确切参数可重复使用，
   拒绝/取消/换一份参数都不授权。`request_approval` 的 `detail` 必须是将要执行的**确切参数对象**。
+- **审批卡显示确切改动**：模型的 `summary` 只是它对自己的描述，不能当作批准依据。`ai/approval_preview.py`
+  按工具给出可核对的预览：`workspace_write` 用 `difflib` 对照现有文件与提议内容（解析后的绝对路径、
+  前后字节数、逐行 `+/-` diff，最多 400 行并声明截断；大文件只报大小并说明会整体替换），`run_cmd`
+  给出命令/工作目录/超时，`workspace_import` 给出文件与大小，`rerun_node` 给出运行/节点/工作流。
+  预览只读、绝不写入；路径逃逸或云端按名拒绝时，卡片显示工具本会给出的那句话，而不是中断对话。
+  预览随 `questions_json` 存入会话，刷新后的已回答卡仍显示当时批准的路径。
+- **跨面板入口**：数据集列表、运行列表、节点设置里的“问 AI”调 `AIWorkspace.askAbout()`：打开工作区、
+  新建会话、把该对象作为手动上下文（服务端自己重读），并把问题**预填不发送**。面板不持有 AI 的会话
+  模型，也不会猜上下文该送什么。
 - **@ 运行记录**：`references.KINDS` 增加 `run`，展开为状态、节点错误与控制台尾部（20 行、整块受引用预算限制）。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
@@ -291,6 +300,8 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
   记忆产物卡的提议与“空提案退回模型”。
 - `tests/api/test_ai_conversations.py`：标题搜索的 LIKE 转义、置顶/取消置顶不改变活跃时间、归档可见性、
   Markdown/JSON 导出与文件名头。
+- `tests/unit/ai/test_approval_preview.py`：写文件 diff / 新建 / 相同内容 / 路径逃逸 / 超大文件 / 行数截断，
+  命令与导入的事实，未知工具的原始参数兜底。
 - `tests/unit/ai/test_python_node.py`：Python 节点契约、云端拒绝、受限数据读取。
 - `tests/unit/frontend/test_frontend_ai_js.py` + `harness_ai.mjs`：真实解码器/渲染器、运行时 chip、禁用原因。
 

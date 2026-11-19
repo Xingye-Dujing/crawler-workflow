@@ -492,6 +492,16 @@ function paintOutputColumns(nodeId) {
     if (text !== null) el.innerHTML = text;
 }
 
+/* The canvas draft is already part of the AI context (``AIContext.collect``), so this entry only
+   has to name WHICH node the question is about. The question is prefilled, not sent: the panel
+   opens on a new chat with the composer focused and the user decides what to ask. */
+function askAINode(nodeId) {
+    var node = canvas.nodes[nodeId];
+    if (!node) return;
+    var title = node.title || I18n.t('node.' + node.type);
+    AIWorkspace.askAbout({ prompt: I18n.t('ai.askNodePrompt', { title: title, id: nodeId }) });
+}
+
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node) {
@@ -519,7 +529,9 @@ function openSettings(nodeId) {
     var html = '<div class="settings-group">' +
         '<label class="settings-label">' + I18n.t('settings.nodeType') + '</label>' +
         '<span style="font-size:12px;color:var(--text-dim);">' + escapeHtml(nodeTypeWord(node.type)) + '</span>' +
-        '</div>';
+        '</div>' +
+        '<div class="settings-group"><button class="menu-btn" onclick="askAINode(\'' + attrJsArg(nodeId) + '\')">' +
+        escapeHtml(I18n.t('ai.askNode')) + '</button></div>';
     /* The columns this node will emit — the edit-time lineage. A producer whose shape
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. `outputColumnsHtml` is shared with the in-place repaint below. */

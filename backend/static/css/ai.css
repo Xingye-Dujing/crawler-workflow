@@ -910,6 +910,68 @@
   margin: 0 0 8px;
   line-height: 1.5;
 }
+/* What the approval actually touches. A bounded block above the options, so the words the user
+   authorises are read BEFORE the button they will press. */
+.ai-approval-preview {
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+  background: var(--line2);
+  max-height: 260px;
+  overflow: auto;
+}
+.ai-approval-facts {
+  margin: 0 0 6px;
+  display: grid;
+  gap: 3px;
+}
+.ai-approval-fact {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 6px;
+  font-size: 11px;
+}
+.ai-approval-fact dt {
+  color: var(--text-dim);
+}
+.ai-approval-fact dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+.ai-approval-diff-head {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.ai-diff {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ai-diff-line {
+  display: block;
+}
+.ai-diff-add {
+  color: var(--ok);
+}
+.ai-diff-del {
+  color: var(--err);
+}
+.ai-diff-hunk {
+  color: var(--accent);
+}
+.ai-approval-error {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--err);
+}
 .ai-options {
   display: grid;
   gap: 4px;
