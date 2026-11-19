@@ -675,6 +675,117 @@ def ai_workflow_validate():
     return jsonify({'ok': True, 'report': workflow_draft.validate(payload)})
 
 
+@bp.route('/api/ai/chart/preview', methods=['POST'])
+def ai_chart_preview():
+    """Turn a ``chart_spec`` artifact into a validated ``/api/visualize/render`` request.
+
+    The chart registry is the one contract and the dataset store is per-account. This route never
+    guesses a chart or a column: an unknown type, a missing dataset, a missing required column or a
+    column the spec named that is not there is a refusal BY NAME that the card can show verbatim.
+    Rendering itself stays in ``/api/visualize/render`` — the two doors cannot drift apart.
+    """
+    from runtime.stores import get_dataset_store
+
+    from services.charts.registry import spec_for
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    spec = data.get('spec') if isinstance(data.get('spec'), dict) else None
+    if not spec:
+        return _error(AIError('ai.chartSpecRefused', kind='bad_request', reason='spec is missing'))
+    chart_type = str(spec.get('chart_type') or spec.get('chart') or spec.get('key') or '').strip()
+    definition = spec_for(chart_type)
+    if definition is None:
+        return _error(
+            AIError('ai.chartSpecRefused', kind='bad_request', reason=f'unknown chart type {chart_type or "(empty)"}')
+        )
+    dataset_id = str(spec.get('dataset_id') or '').strip()
+    if not dataset_id:
+        return _error(AIError('ai.chartSpecRefused', kind='bad_request', reason='dataset_id is missing'))
+    try:
+        frame = get_dataset_store().get(dataset_id)
+    except Exception as exc:  # a store that cannot open is a named refusal, not an empty figure
+        return _error(AIError('ai.chartSpecRefused', kind='error', reason=str(exc)[:160]))
+    if frame is None:
+        return _error(AIError('ai.chartSpecRefused', kind='not_found', reason=f'no dataset {dataset_id}'))
+    columns = {str(column) for column in frame.columns}
+
+    def field(*names, limit: int = 120) -> str:
+        for name in names:
+            value = spec.get(name)
+            if value is not None and str(value).strip():
+                return str(value).strip()[:limit]
+        return ''
+
+    render_request = {
+        'dataset_id': dataset_id,
+        'chart_type': chart_type,
+        'x_field': field('x_field', 'x'),
+        'y_field': field('y_field', 'y'),
+        'value_field': field('value_field', 'value'),
+        'agg': field('agg') or 'sum',
+        'y2_field': field('y2_field', 'y2'),
+        'agg2': field('agg2', 'agg2_field'),
+        'label_field': field('label_field', 'label'),
+        'center_node': field('center_node'),
+        'model_field': field('model_field'),
+        'agreement_label_field': field('agreement_label_field'),
+        'id_field': field('id_field'),
+        'title': field('title', limit=200),
+        'engine': field('engine') or 'echarts',
+        'tokenize': bool(spec.get('tokenize')),
+    }
+    stack = spec.get('stack_fields') if spec.get('stack_fields') is not None else spec.get('series')
+    if isinstance(stack, str):
+        stack = [stack]
+    if isinstance(stack, list):
+        render_request['stack_fields'] = [str(item)[:120] for item in stack[:20]]
+    annotations = spec.get('annotations')
+    if isinstance(annotations, list):
+        render_request['annotations'] = annotations[:20]
+    wordcloud_style = spec.get('wordcloud_style')
+    if isinstance(wordcloud_style, dict):
+        render_request['wordcloud_style'] = {
+            str(key)[:60]: str(value)[:200] for key, value in list(wordcloud_style.items())[:20]
+        }
+
+    missing = [name for name in definition.reads if name not in columns]
+    chosen = [
+        render_request[key]
+        for key in (
+            'x_field',
+            'y_field',
+            'value_field',
+            'y2_field',
+            'label_field',
+            'center_node',
+            'model_field',
+            'agreement_label_field',
+            'id_field',
+        )
+        if render_request.get(key)
+    ]
+    chosen += render_request.get('stack_fields') or []
+    unknown = [name for name in chosen if name not in columns]
+    if missing or unknown:
+        reasons = []
+        if missing:
+            reasons.append('missing required columns: ' + ', '.join(missing))
+        if unknown:
+            reasons.append('no such columns: ' + ', '.join(unknown))
+        return _error(AIError('ai.chartSpecRefused', kind='bad_request', reason='; '.join(reasons)))
+    if (
+        definition.family != 'biblio'
+        and not definition.no_x
+        and not (render_request['x_field'] or render_request['y_field'])
+    ):
+        return _error(AIError('ai.chartSpecRefused', kind='bad_request', reason='x and y encoding are missing'))
+    return jsonify(
+        {'ok': True, 'chart': chart_type, 'request': render_request, 'required_columns': list(definition.reads)}
+    )
+
+
 @bp.route('/api/ai/rerun', methods=['POST'])
 def ai_rerun():
     """Rerun ONE failed node (and its downstream) from the monitor card.

@@ -178,6 +178,21 @@ out.memoryArtifact = {
     applied: calls.includes('memory-artifact:art1'),
 };
 
+/* A chart_spec is no longer copy-only: its card carries the one mechanical action, and the click
+   funnels through the same delegated selector as every other artifact button. */
+const chartArtifactHolder = sandbox.document.createElement('div');
+chartArtifactHolder.innerHTML = sandbox.AIRender.artifactCard({
+    id: 'chart_art',
+    kind: 'chart_spec',
+    title: 'Bar chart',
+    payload: { chart_type: 'bar', dataset_id: 'd1', x: 'city', y: 'likes' },
+    summary: '',
+});
+const chartArtifactButton = chartArtifactHolder.querySelector('[data-ai-apply-chart]');
+workspace._applyChartArtifact = (id) => calls.push('chart-artifact:' + id);
+if (chartArtifactButton) dispatchOn(workspace._dom.root, 'click', { target: chartArtifactButton });
+out.chartArtifact = { button: !!chartArtifactButton, applied: calls.includes('chart-artifact:chart_art') };
+
 /* Attachments: a multi-file pick uploads each file (one request each) and keeps the successes; a
    drop and a pasted screenshot enter the SAME path, so neither can bypass the capability check. */
 const realWorkspaceFetch = sandbox.fetch;

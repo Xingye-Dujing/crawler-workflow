@@ -1812,7 +1812,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1919,6 +1919,10 @@ const AIWorkspace = {
                 return;
             }
             this._applyWorkflowPayload(artifact.payload || {}, run, artifact.title || '');
+            return;
+        }
+        if (target.hasAttribute('data-ai-apply-chart')) {
+            this._applyChartArtifact(target.getAttribute('data-ai-apply-chart'));
             return;
         }
         if (target.hasAttribute('data-ai-copy-answer')) {
@@ -3310,6 +3314,33 @@ const AIWorkspace = {
                 this._toast(I18n.t(data.duplicate ? 'ai.memoryDuplicate' : 'ai.memorySaved'));
             })
             .catch((error) => this._toast(error.message));
+    },
+
+    /* A chart_spec is a proposal with ONE mechanical action: render it through the SAME endpoint
+       the dashboard uses. The server validates the chart type, the dataset and every named column;
+       this page holds no second opinion about either the registry or the data contract. */
+    async _applyChartArtifact(id) {
+        const artifact = (this._artifactsById || {})[id] || this._artifactById(id);
+        if (!artifact) return;
+        try {
+            const prepared = await fetch('/api/ai/chart/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ spec: artifact.payload || {} }),
+            }).then((response) => response.json());
+            if (!prepared.ok) throw new Error(prepared.error || I18n.t('ai.error'));
+            const result = await fetch('/api/visualize/render', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(prepared.request),
+            }).then((response) => response.json());
+            if (!result.ok) throw new Error(result.error || I18n.t('ai.error'));
+            if (typeof renderChartPreview !== 'function') throw new Error(I18n.t('ai.chartPainterMissing'));
+            renderChartPreview(result);
+            this._toast(I18n.t('ai.chartRendered'));
+        } catch (error) {
+            this._toast(error.message || I18n.t('ai.error'));
+        }
     },
 
     async _deleteConversation(id) {

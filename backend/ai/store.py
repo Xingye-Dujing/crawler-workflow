@@ -684,6 +684,31 @@ def conversation_usage(conversation_id: str) -> list:
     return [dict(row) for row in rows]
 
 
+def token_usage(conversation_id: str = '', since: str = '') -> dict:
+    """Tokens already spent, scoped to one conversation and/or a UTC-since timestamp.
+
+    A budget needs the spend SO FAR, not a per-model price breakdown: cached tokens are a subset of
+    the prompt, so only prompt + completion count. Both filters are optional; with neither, this is
+    the all-time account total (the store itself is one SQLite file per account).
+    """
+    clauses = []
+    params: list = []
+    if conversation_id:
+        clauses.append('conversation_id = ?')
+        params.append(conversation_id)
+    if since:
+        clauses.append('created_at >= ?')
+        params.append(since)
+    where = ' WHERE ' + ' AND '.join(clauses) if clauses else ''
+    with connect() as conn:
+        row = conn.execute(
+            'SELECT COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens, '
+            'COALESCE(SUM(cached_tokens), 0) AS cached, COUNT(*) AS calls FROM usage' + where,
+            tuple(params),
+        ).fetchone()
+    return dict(row) if row else {'tokens': 0, 'cached': 0, 'calls': 0}
+
+
 def list_user_skills() -> list:
     with connect() as conn:
         rows = conn.execute('SELECT * FROM user_skills ORDER BY updated_at DESC').fetchall()

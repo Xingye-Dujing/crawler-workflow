@@ -15,6 +15,7 @@ built — a replayed history can name a tool the current turn does not offer.
 intercepts them and never looks for a handler here.
 """
 
+import math
 import re
 
 from core.config import Config
@@ -169,6 +170,215 @@ def tool_dataset_page(args: dict, _ctx: dict) -> dict:
         'has_more': offset + len(rows) < len(frame),
         'next_offset': offset + len(rows),
     }
+
+
+#: Bounded, read-only aggregations a model may ask for. A name outside this table is refused BY
+#: NAME: a query tool must never become a code-execution surface. The same table drives the tool
+#: schema (so the model cannot invent an op) and the execution-time check (so a replayed history
+#: cannot smuggle one in).
+DATASET_QUERY_OPS = frozenset(
+    {'count', 'sum', 'mean', 'median', 'min', 'max', 'std', 'nunique', 'value_counts', 'groupby', 'filter'}
+)
+_QUERY_AGG_OPS = frozenset({'count', 'sum', 'mean', 'median', 'min', 'max', 'std', 'nunique'})
+_WHERE_OPS = frozenset({'eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains'})
+
+
+def _query_number(value) -> object:
+    """A pandas/numpy scalar as JSON-safe data, keeping integers integers."""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)[:200]
+    if not math.isfinite(number):
+        return None
+    return int(number) if number.is_integer() else round(number, 6)
+
+
+def _query_label(value, width: int) -> str:
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return '(missing)'
+    text = str(value)
+    return text[:width] + ('…' if len(text) > width else '')
+
+
+def _query_where(frame, where):
+    """Apply an optional, whitelisted filter before any aggregation."""
+    if not where:
+        return frame
+    if not isinstance(where, dict):
+        raise AIError('ai.toolRefused', kind='bad_request', tool='dataset_query', reason='where must be an object')
+    column = str(where.get('column') or '').strip()
+    if column not in frame.columns:
+        raise AIError('ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'no column {column} in where')
+    op = str(where.get('op') or 'eq').strip().lower()
+    if op not in _WHERE_OPS:
+        raise AIError('ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'unsupported where op {op}')
+    value = where.get('value')
+    series = frame[column]
+    try:
+        if op == 'eq':
+            mask = series == value
+        elif op == 'ne':
+            mask = series != value
+        elif op == 'gt':
+            mask = series > value
+        elif op == 'gte':
+            mask = series >= value
+        elif op == 'lt':
+            mask = series < value
+        elif op == 'lte':
+            mask = series <= value
+        else:
+            mask = series.astype(str).str.contains(str(value), na=False)
+    except (TypeError, ValueError) as exc:
+        raise AIError(
+            'ai.toolRefused',
+            kind='bad_request',
+            tool='dataset_query',
+            reason=f'where on {column} failed: {str(exc)[:120]}',
+        ) from exc
+    return frame[mask.fillna(False)]
+
+
+def tool_dataset_query(args: dict, _ctx: dict) -> dict:
+    """An exact, bounded answer to a quantitative question — no whole-table read, no code.
+
+    ``dataset_peek`` exists to be cheap; it is not an answer to “how many / what is the mean”. This
+    tool keeps those questions precise AND cheap: every op is a named pandas aggregation, every
+    result is capped, and a missing column or an unknown op is a named refusal instead of a blank.
+    """
+    import pandas as pd
+
+    dataset_id = str(args.get('dataset_id') or _ctx.get('dataset_id') or '')
+    frame = _dataset_frame(dataset_id)
+    op = str(args.get('op') or '').strip().lower()
+    if op not in DATASET_QUERY_OPS:
+        raise AIError(
+            'ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'unsupported op {op or "(empty)"}'
+        )
+    limit = _int_arg(args.get('limit'), 50, 1, 200)
+    width = _int_arg(args.get('width'), 120, 40, 400)
+    selected = _query_where(frame, args.get('where'))
+    result: dict = {
+        'dataset_id': dataset_id,
+        'op': op,
+        'total_rows': len(frame),
+        'matched_rows': len(selected),
+    }
+    wanted = _project_columns(selected, args.get('columns'))
+    if op == 'filter' and not wanted:
+        # Like peek/page, a row read defaults to the leading columns; an aggregation still has to
+        # name what it measures, so an empty `columns` is refused there.
+        wanted = [str(column) for column in selected.columns[:40]]
+
+    if op == 'count':
+        result['columns'] = {name: int(selected[name].notna().sum()) for name in wanted}
+        result['next'] = 'Report the numbers; do not pull rows just to count them again.'
+        return result
+    if not wanted:
+        raise AIError(
+            'ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'columns is required for {op}'
+        )
+
+    if op == 'value_counts':
+        if len(wanted) != 1:
+            raise AIError(
+                'ai.toolRefused',
+                kind='bad_request',
+                tool='dataset_query',
+                reason='value_counts needs exactly one column',
+            )
+        counts = selected[wanted[0]].value_counts(dropna=False).head(limit)
+        rows = [{'value': _query_label(key, width), 'count': int(count)} for key, count in counts.items()]
+        result.update(
+            {
+                'column': wanted[0],
+                'rows': rows,
+                'truncated': len(counts) < int(selected[wanted[0]].nunique(dropna=False)),
+                'next': 'These are exact counts; cite them instead of estimating from a peek.',
+            }
+        )
+        return result
+
+    if op == 'groupby':
+        by_columns = _project_columns(selected, args.get('by'))
+        if not by_columns:
+            raise AIError(
+                'ai.toolRefused',
+                kind='bad_request',
+                tool='dataset_query',
+                reason='by must name at least one existing column',
+            )
+        agg = str(args.get('agg') or 'count').strip().lower()
+        if agg not in _QUERY_AGG_OPS:
+            raise AIError('ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'unsupported agg {agg}')
+        measures = wanted[:20]
+        try:
+            grouped = selected.groupby(by_columns, dropna=False)[measures].agg(agg)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise AIError(
+                'ai.toolRefused', kind='bad_request', tool='dataset_query', reason=f'groupby failed: {str(exc)[:120]}'
+            ) from exc
+        groups = []
+        for key, row in grouped.head(limit).iterrows():
+            keys = key if isinstance(key, tuple) else (key,)
+            entry = {name: _query_label(part, width) for name, part in zip(by_columns, keys, strict=True)}
+            entry.update({name: _query_number(row.get(name)) for name in measures})
+            groups.append(entry)
+        result.update(
+            {
+                'by': by_columns,
+                'agg': agg,
+                'groups': groups,
+                'truncated': len(grouped) > limit,
+                'next': 'These are exact group totals; cite them instead of estimating from a peek.',
+            }
+        )
+        return result
+
+    if op == 'filter':
+        columns = wanted[:40]
+        page = selected.iloc[:limit]
+        rows = [{name: _bounded_cell(row.get(name), width) for name in columns} for row in page.to_dict('records')]
+        result.update(
+            {
+                'columns': columns,
+                'rows': rows,
+                'omitted_columns': max(0, len(selected.columns) - len(columns)),
+                'truncated': len(selected) > limit,
+                'next': 'Use an aggregation op for counts and totals; page only when the rows themselves matter.',
+            }
+        )
+        return result
+
+    rows = []
+    for name in wanted:
+        series = selected[name]
+        if op == 'count':
+            value = int(series.notna().sum())
+        elif op == 'nunique':
+            value = int(series.nunique(dropna=True))
+        else:
+            try:
+                number = pd.to_numeric(series, errors='coerce')
+                value = getattr(number, op)()
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise AIError(
+                    'ai.toolRefused',
+                    kind='bad_request',
+                    tool='dataset_query',
+                    reason=f'{op} on {name} failed: {str(exc)[:120]}',
+                ) from exc
+        rows.append({'column': name, op: _query_number(value)})
+    result.update(
+        {
+            'columns': rows,
+            'next': 'Report these numbers; do not pull the table to recompute them by eye.',
+        }
+    )
+    return result
 
 
 def tool_dataset_sample(args: dict, _ctx: dict) -> dict:
@@ -832,6 +1042,36 @@ TOOLS = {
                 },
             },
             handler=tool_dataset_page,
+        ),
+        ToolSpec(
+            'dataset_query',
+            'Answer an EXACT quantitative question about a dataset with one bounded read-only '
+            'aggregation: count / sum / mean / median / min / max / std / nunique / value_counts / '
+            'groupby / filter. Every result is capped and a missing column or unknown op is refused '
+            'by name. Use this instead of guessing a number from the five rows dataset_peek shows.',
+            {
+                'type': 'object',
+                'properties': {
+                    'dataset_id': {'type': 'string'},
+                    'op': {'type': 'string', 'enum': sorted(DATASET_QUERY_OPS)},
+                    'columns': {'type': 'array', 'items': {'type': 'string'}},
+                    'by': {'type': 'array', 'items': {'type': 'string'}},
+                    'agg': {'type': 'string', 'enum': sorted(_QUERY_AGG_OPS)},
+                    'where': {
+                        'type': 'object',
+                        'description': 'Optional filter: {column, op: eq|ne|gt|gte|lt|lte|contains, value}.',
+                        'properties': {
+                            'column': {'type': 'string'},
+                            'op': {'type': 'string'},
+                            'value': {},
+                        },
+                    },
+                    'limit': {'type': 'integer'},
+                    'width': {'type': 'integer'},
+                },
+                'required': ['op'],
+            },
+            handler=tool_dataset_query,
         ),
         ToolSpec(
             'list_runs',

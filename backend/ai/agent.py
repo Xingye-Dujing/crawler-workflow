@@ -18,7 +18,18 @@ from datetime import datetime
 from runtime import account_context
 from runtime.settings import get_setting
 
-from ai import approval_preview, approvals, environment, references, skills, store, tools, vocabulary, workflow_draft
+from ai import (
+    approval_preview,
+    approvals,
+    costs,
+    environment,
+    references,
+    skills,
+    store,
+    tools,
+    vocabulary,
+    workflow_draft,
+)
 from ai import context as context_builder
 from ai.errors import AIError
 from ai.providers import get_provider
@@ -73,6 +84,11 @@ def _latest_reminder(locale: str, location: str = '') -> str:
     weekday = (weekdays_zh if zh else weekdays_en)[now.weekday()]
     language = '中文' if zh else 'English'
     return f'{now.date().isoformat()},{weekday},{location or ""},Web,{language}'
+
+
+def _budget_scope_text(scope: str) -> str:
+    """Literal keys: a concatenated key would print `ai.budgetScope.` for a typo and dodge i18n gates."""
+    return t('ai.budgetScope.day') if scope == 'day' else t('ai.budgetScope.conversation')
 
 
 def _fallback_title(text: str) -> str:
@@ -307,6 +323,18 @@ class AgentService:
         # transcript can show it as machine feedback rather than something the user typed.
         if payload.get('feedback'):
             skill_meta['feedback'] = True
+        # A spent cap is a named refusal BEFORE the turn writes anything: no user row, no run, no
+        # provider call. Inside a turn the cap is softer (it asks first), but a FRESH message must
+        # not quietly spend past a cap the user already reached.
+        spend = costs.spend_state(conversation['id'])
+        if spend['exceeded']:
+            raise AIError(
+                'ai.budgetExceeded',
+                kind='capability',
+                scope=_budget_scope_text(spend['scope']),
+                spent=spend['spent'],
+                limit=spend['limit'],
+            )
         user = store.append_message(
             conversation['id'],
             'user',
@@ -448,6 +476,10 @@ class AgentService:
         if user is None:
             raise AIError('ai.apiNoMessage', kind='bad_request', message=message_id)
         meta = user.get('meta') or {}
+        # Answering a token-cap question means "spend on": remember it on the TURN so the resumed
+        # loop does not ask the same question again at its very next round boundary.
+        if str(question_id) == 'token_budget':
+            store.update_message(user['id'], meta={**meta, 'token_budget_ack': True})
         provider, model = _validate_provider(
             meta.get('provider') or 'deepseek',
             meta.get('model') or '',
@@ -559,6 +591,16 @@ class AgentService:
                     if asked:
                         yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'tool_budget'}
                         return
+                if state.get('message') and not self._token_budget_acknowledged(conversation['id'], turn_id):
+                    # A token cap reached MID-turn is a decision for the user, not a wall. Ask once
+                    # with the same resumable question channel as the round budget; the answer is
+                    # acknowledged on the turn's user row so the resumed loop does not ask again.
+                    spend = costs.spend_state(conversation['id'])
+                    if spend['exceeded']:
+                        asked = yield from self._ask_token_budget(conversation, state, run_id, spend)
+                        if asked:
+                            yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'token_budget'}
+                            return
                 history = _history(conversation['id'])
                 # Every turn carries ITS own context on its own user row; `base.replay_context` is
                 # the one place that decides where it goes (and it never rewrites an old row, which
@@ -821,6 +863,39 @@ class AgentService:
                 meta={**(assistant.get('meta') or {}), 'error': exc.localized()},
             )
             raise
+
+    def _token_budget_acknowledged(self, conversation_id: str, turn_id: str) -> bool:
+        """Whether this turn already asked about a spent token cap and the user chose to go on."""
+        user = _turn_user(conversation_id, turn_id)
+        return bool(user and (user.get('meta') or {}).get('token_budget_ack'))
+
+    def _ask_token_budget(self, conversation: dict, state: dict, run_id: str, spend: dict):
+        """A soft token cap: ask once at a round boundary, then resume with the same tool pairing."""
+        call = {
+            'id': new_id('call'),
+            'name': 'ask_user_question',
+            'arguments': {
+                'questions': [
+                    {
+                        'id': 'token_budget',
+                        'header': t('ai.tokenBudgetHeader'),
+                        'question': t(
+                            'ai.tokenBudgetQuestion',
+                            scope=_budget_scope_text(spend['scope']),
+                            spent=spend['spent'],
+                            limit=spend['limit'],
+                        ),
+                        'options': [
+                            {'label': t('ai.toolBudgetContinue'), 'description': t('ai.toolBudgetContinueHint')},
+                            {'label': t('ai.toolBudgetStop'), 'description': t('ai.toolBudgetStopHint')},
+                        ],
+                    }
+                ]
+            },
+        }
+        waiting = self._attach_question(conversation, state, call, run_id)
+        yield waiting['event']
+        return True
 
     def _ask_budget(self, conversation: dict, state: dict, run_id: str, rounds: int):
         """A soft tool budget: the assistant ASKS before it is stopped, and the answer resumes.

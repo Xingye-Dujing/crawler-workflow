@@ -44,6 +44,7 @@ RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 BODY_ROUTES = [
     '/api/ai/answer',
     '/api/ai/chat',
+    '/api/ai/chart/preview',
     '/api/ai/context',
     '/api/ai/retry',
     '/api/ai/rerun',

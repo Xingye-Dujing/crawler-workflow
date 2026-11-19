@@ -189,6 +189,12 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['button'] is True, 'a memory artifact drew no apply button'
         assert out['applied'] is True, 'the button did not reach _applyMemoryArtifact'
 
+    def test_a_chart_spec_has_a_render_button(self):
+        """A chart proposal is not copy-only: its one action goes through the delegated selector."""
+        out = _run_workspace()['chartArtifact']
+        assert out['button'] is True, 'a chart_spec artifact drew no render button'
+        assert out['applied'] is True, 'the button did not reach _applyChartArtifact'
+
     def test_a_multi_file_pick_uploads_each_and_drop_and_paste_share_the_path(self):
         out = _run_workspace()['upload']
         assert out['requests'] == 2, out['requests']

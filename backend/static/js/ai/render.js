@@ -335,7 +335,9 @@ const AIRender = {
                     : (artifact.kind === 'workflow' || artifact.kind === 'workflow_draft')
                         ? '<button type="button" class="ai-primary" data-ai-apply-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoad')) + '</button>' +
                           '<button type="button" class="ai-ghost" data-ai-run-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoadRun')) + '</button>'
-                        /* Every OTHER artifact (a plan, a chart spec, a report) is a proposal with no
+                        : artifact.kind === 'chart_spec'
+                            ? '<button type="button" class="ai-primary" data-ai-apply-chart="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.chartRender')) + '</button>'
+                        /* Every OTHER artifact (a plan, a report) is a proposal with no
                            mechanical "apply" of its own — but it must still be actionable, or it reads
                            as a dead card. The button hands the proposal back to the assistant, which
                            builds the canvas with its validated tools. */
@@ -381,6 +383,7 @@ const AIRender = {
             ['run_console', 'ai.toolRunningRunConsole'],
             ['list_runs', 'ai.toolRunningListRuns'],
             ['dataset_peek', 'ai.toolRunningPeek'],
+            ['dataset_query', 'ai.toolRunningQuery'],
             ['dataset_page', 'ai.toolRunningPage'],
             ['dataset_profile', 'ai.toolRunningProfile'],
             ['list_datasets', 'ai.toolRunningListDatasets'],

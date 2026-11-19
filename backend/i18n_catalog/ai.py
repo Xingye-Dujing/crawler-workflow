@@ -119,6 +119,11 @@ ZH = {
     'ai.toolBudgetContinueHint': '再给一组工具调用，继续读文件、跑命令或修复结果。',
     'ai.toolBudgetStop': '到此为止',
     'ai.toolBudgetStopHint': '不再调用工具，用已有结果总结并给出下一步。',
+    'ai.budgetExceeded': '预算已用尽：{scope}已用 {spent} tokens，上限 {limit}。请到设置里调高上限后再发。',
+    'ai.budgetScope.conversation': '本会话',
+    'ai.budgetScope.day': '今日',
+    'ai.tokenBudgetHeader': 'Token 预算',
+    'ai.tokenBudgetQuestion': '{scope}已用 {spent} tokens，达到上限 {limit}。要继续生成吗？',
     'ai.stepAwaiting': '等待你的回答',
     'ai.stepTool': '调用 {tool}',
     'ai.artifact': '产物',
@@ -168,6 +173,7 @@ ZH = {
     'ai.skillExists': '内置技能不能被覆盖；请先 Fork 成自己的技能。',
     'ai.toolUnknown': '未知工具：{tool}',
     'ai.toolRefused': '工具“{tool}”被拒绝：{reason}',
+    'ai.chartSpecRefused': '图表方案无法渲染：{reason}',
     'ai.toolArgumentsCut': (
         '工具“{tool}”的参数没有传完（通常是回答被输出长度上限截断），已拒绝执行，而不是拿空参数去跑。'
         '请把这一步拆小，或缩短要一次输出的内容。'
@@ -328,6 +334,13 @@ EN = {
     'ai.toolBudgetContinueHint': 'Grant another round: keep reading files, running commands or fixing results.',
     'ai.toolBudgetStop': 'Stop here',
     'ai.toolBudgetStopHint': 'No more tools: summarise what you have and give the next step.',
+    'ai.budgetExceeded': (
+        'Budget spent: {scope} used {spent} of {limit} tokens. Raise the limit in settings to send more.'
+    ),
+    'ai.budgetScope.conversation': 'This conversation',
+    'ai.budgetScope.day': 'Today',
+    'ai.tokenBudgetHeader': 'Token budget',
+    'ai.tokenBudgetQuestion': '{scope} used {spent} tokens and reached the {limit} cap. Continue generating?',
     'ai.stepAwaiting': 'Waiting for your answer',
     'ai.stepTool': 'Calling {tool}',
     'ai.artifact': 'Artifact',
@@ -386,6 +399,7 @@ EN = {
     'ai.skillExists': 'A built-in skill cannot be overwritten; fork it into your own skill first.',
     'ai.toolUnknown': 'Unknown tool: {tool}',
     'ai.toolRefused': 'Tool “{tool}” was refused: {reason}',
+    'ai.chartSpecRefused': 'The chart spec cannot be rendered: {reason}',
     'ai.toolArgumentsCut': (
         'The arguments for “{tool}” never arrived whole (usually an answer cut off by the output limit). '
         'The call was refused instead of being run with empty parameters.'

@@ -8,6 +8,10 @@ is not a discount we compute: it is the split DeepSeek itself reports (hit vs mi
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, time
+
+from runtime.settings import get_setting
+
 from ai import store
 from ai.errors import AIError
 from ai.providers import get_provider
@@ -69,4 +73,45 @@ def conversation_cost(conversation_id: str) -> dict:
         # True when every model in this conversation had a published price, so the money is whole.
         'cost_complete': bool(lines) and priced,
         'models': lines,
+    }
+
+
+def _local_day_start_utc() -> str:
+    """Midnight of the server's LOCAL day, in UTC for the ISO ``created_at`` column.
+
+    A budget's "day" is the operator's day, not UTC's: asking the machine for its timezone (instead
+    of hardcoding one) also keeps CI's UTC box and an Asia/Shanghai desktop honest.
+    """
+    local = datetime.now().astimezone()
+    midnight = datetime.combine(local.date(), time.min, tzinfo=local.tzinfo)
+    return midnight.astimezone(UTC).isoformat()
+
+
+def spend_state(conversation_id: str) -> dict:
+    """The token caps and what is already spent — checked BEFORE another provider round.
+
+    Money is deliberately absent here: a list price is in the provider's own currency, and adding
+    currencies would invent a number. Tokens are the one meter every transport actually reports.
+    A cap of 0 means off; a reached cap is a soft stop (the agent asks), not a failed turn.
+    """
+    conv_cap = max(0, int(get_setting('ai_budget_conversation_tokens') or 0))
+    day_cap = max(0, int(get_setting('ai_budget_daily_tokens') or 0))
+    conv_tokens = int((store.token_usage(conversation_id=conversation_id) or {}).get('tokens') or 0)
+    day_tokens = int((store.token_usage(since=_local_day_start_utc()) or {}).get('tokens') or 0)
+    scope = ''
+    limit = 0
+    spent = 0
+    if conv_cap and conv_tokens >= conv_cap:
+        scope, limit, spent = 'conversation', conv_cap, conv_tokens
+    elif day_cap and day_tokens >= day_cap:
+        scope, limit, spent = 'day', day_cap, day_tokens
+    return {
+        'conversation_tokens': conv_tokens,
+        'conversation_limit': conv_cap,
+        'daily_tokens': day_tokens,
+        'daily_limit': day_cap,
+        'exceeded': bool(scope),
+        'scope': scope,
+        'limit': limit,
+        'spent': spent,
     }

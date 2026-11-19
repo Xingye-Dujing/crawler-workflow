@@ -84,6 +84,12 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 - **花钱的默认值是省的**：联网搜索默认关（`ai_web_search_default`，浏览器没手动选过时采纳），
   思考强度可选 `low/high/max`（`ai_reasoning_effort`，默认 high），非思考轮次的温度
   `ai_temperature` 默认 0.3（草案与 JSON 更稳；思考开启时供应商忽略它）。
+- **token 软预算**：`ai_budget_conversation_tokens` / `ai_budget_daily_tokens`（默认 0=不限）只按
+  真实 token 计，不把不同币种的标价相加。`costs.spend_state` 读本会话与本机当日（按服务器时区向机器
+  询问，不写死时区）已花的 prompt+completion；新消息在写用户行、开 run、调供应商**之前**若已
+  超支就具名拒绝（`ai.budgetExceeded`）；一轮之内触顶则复用 `ask_user_question` 的暂停通道问一次
+  “继续 / 到此为止”，回答记在该轮用户行上，续跑不再重复问。金额仍由 `costs.conversation_cost`
+  按供应商自己的价格呈现，价格未知就说未知。
 - **窗口由我们自己守**：`Provider.context_window()` 是唯一答案（Ollama 回它真正下发的
   `min(num_ctx, 模型自报窗口)`），`agent._fit_history` 在**user 边界**裁掉最旧轮次，并把
   `context_meta.history`（window/budget/dropped/kept）交给检查器显示。否则本地 daemon 会**从开头**
@@ -118,9 +124,10 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 - `dataset_peek`：列名/类型 + 5 行，单元格 120 字；- `dataset_profile`：行数、缺失/唯一值、每列 2 个样本；
 - `dataset_page`：≤50 行，带 `has_more`；
 - `python_run`：行数 + 小样本 + stdout/stderr；
+- `dataset_query`：精确的只读聚合（`count`/`sum`/`mean`/`median`/`min`/`max`/`std`/`nunique`/`value_counts`/`groupby`/`filter`），操作名白名单在 schema 与执行时各查一次，列名不存在、算子不支持、参数不完整都按名拒绝，结果行数与单元格都封顶——精确数字不靠 `dataset_peek` 的前几行估算；
 - 工具结果超过 12,000 字会被截断并注明。
 
-写入永远是产物（工作流草稿、分析计划、图表规格、报告、技能草稿、插件清单、监控请求），由用户应用。
+写入永远是产物（工作流草稿、分析计划、图表规格、报告、技能草稿、插件清单、监控请求），由用户应用。图表规格的产物卡有“渲染这张图”按钮：`POST /api/ai/chart/preview` 按图表注册表与账号数据集校验类型、数据集与每个列名（缺列具名拒绝），返回归一化的渲染请求，浏览器再走**同一个** `/api/visualize/render` 与现有图表查看器；这里不持有第二份图表契约，也不把渲染逻辑复制成另一条路。
 
 **长期记忆是另一条边界：读得到，也必须管得住。** `ai.db` 的 `memories` 表由工作室的“记忆”页维护
 （新增/删除/计数）。助手不能直接写：它用 `present_artifact(kind="memory", payload={text})` 提议，
@@ -263,6 +270,7 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | GET | `/api/ai/workspace/browse` | 目录选择器（只列目录，附本机磁盘/挂载点 `roots`） |
 | POST | `/api/ai/workspace/pick` | 调起系统文件夹对话框，返回所选路径或 `cancelled` |
 | POST | `/api/ai/workflow/validate` | 工作流草案的结构 + 引擎校验 |
+| POST | `/api/ai/chart/preview` | 校验 chart_spec（图表类型/数据集/列名）并返回归一化渲染请求 |
 | POST | `/api/ai/rerun` | 从已保存文件重跑一个失败节点及其下游（失败节点卡片的按钮） |
 | GET | `/api/ai/usage` | 本账号 token 汇总 |
 | GET/POST | `/api/ai/skills` | 技能列表 / 保存 |
@@ -303,6 +311,9 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 - `tests/unit/ai/test_approval_preview.py`：写文件 diff / 新建 / 相同内容 / 路径逃逸 / 超大文件 / 行数截断，
   命令与导入的事实，未知工具的原始参数兜底。
 - `tests/unit/ai/test_python_node.py`：Python 节点契约、云端拒绝、受限数据读取。
+- `tests/unit/ai/test_dataset_query.py`：精确聚合的算子白名单、有界结果、缺列/未知算子按名拒绝。
+- `tests/unit/ai/test_budget.py` + `tests/api/test_ai_budget.py`：token 软预算——超支预拒且不发起调用、轮中触顶只问一次、当日边界问机器时区。
+- `tests/api/test_ai_chart_artifact.py`：chart_spec 的类型/数据集/列名校验与具名拒绝；前端产物卡的渲染按钮在 `tests/unit/frontend/test_frontend_ai_js.py`。
 - `tests/unit/frontend/test_frontend_ai_js.py` + `harness_ai.mjs`：真实解码器/渲染器、运行时 chip、禁用原因。
 
 ## 11. 未实现
