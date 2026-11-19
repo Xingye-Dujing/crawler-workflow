@@ -69,11 +69,11 @@ jobs:
     timeout-minutes: 50
 
     steps:
-      # The chart studio guard (tests/unit/gates/test_zenviz_core_sync.py) needs
-      # third_party/zenviz-core. Once .gitmodules points at a real remote instead
-      # of the local bootstrap clone, add `with: submodules: true` here; until
-      # then the guard skips rather than breaking checkout.
+      # The chart studio guard (tests/unit/gates/test_zenviz_core_sync.py)
+      # regenerates from third_party/zenviz-core, so check the submodule out.
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-python@v7
         with:
@@ -166,6 +166,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - uses: actions/setup-python@v7
         with:
@@ -240,6 +242,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          submodules: true
 
       - name: Build the deployment image
         run: |

@@ -17,7 +17,5 @@ python third_party/zenviz-core/build.py --product caixihui --root .
 and compares every artifact byte-for-byte, so hand-editing a generated file (or
 forgetting to regenerate) fails the suite.
 
-The submodule was initially wired from a local clone (`D:/zenviz-core`). Before
-sharing this repository, replace the `url` in `.gitmodules` with the real remote,
-run `git submodule sync --recursive`, and add `with: submodules: true` to the
-checkout steps in `.github/workflows/ci.yml` so the guard runs in CI.
+The submodule points at https://github.com/Xingye-Dujing/zenviz-core and the CI
+checkout steps already use `with: submodules: true`, so the guard runs in CI.
