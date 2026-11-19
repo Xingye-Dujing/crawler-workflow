@@ -6,6 +6,7 @@ The package is deliberately split by lifetime rather than by route:
 * ``store`` — the durable per-account transcript and agent records;
 * ``context`` — what the model is allowed to read, in what order and under which budget;
 * ``skills`` / ``tools`` — the assistant's expert modes and its read-only verbs;
+* ``validators`` — strict-shape checks a proposed artifact must pass before it is painted;
 * ``agent`` — the turn loop that ties a provider, a skill and the tools together;
 * ``extensions`` — the plugin host that lets all of the above grow without editing this file.
 

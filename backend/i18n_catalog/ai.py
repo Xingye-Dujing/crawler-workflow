@@ -92,6 +92,10 @@ ZH = {
         '这份草稿和上次被拒绝的完全一样，问题没有变化，原样重发不可能通过。请按上面的问题修改草稿，'
         '或者用 ask_user_question 问用户缺的东西（数据集、平台/账号、关键词）。'
     ),
+    'ai.repairCapReached': (
+        '这类草稿在本轮已经被拒绝 {limit} 次，逐项试错没有收敛。请停止继续提交：'
+        '要么依据已报告的问题重写整份草稿，要么用 ask_user_question 向用户要缺失的数据、平台/账号、关键词。'
+    ),
     'ai.pickUnavailable': (
         '这台机器没有可用的系统文件夹窗口（Windows 用 PowerShell，macOS 用 osascript，'
         'Linux 用 zenity 或 kdialog）。请在上方列表里逐层选择。'
@@ -300,6 +304,11 @@ EN = {
         'This is the SAME draft with the SAME problems, and nothing was changed. Do not send it again: '
         'change the draft to fix them, or use ask_user_question to get what is missing (a dataset, a '
         'platform/account, a keyword). A second identical attempt cannot succeed.'
+    ),
+    'ai.repairCapReached': (
+        'This kind of draft has been refused {limit} times in this turn without converging. Stop '
+        'resubmitting: either rewrite the whole draft using the problems already reported, or use '
+        'ask_user_question to get the missing data, platform/account or keyword from the user.'
     ),
     'ai.pickUnavailable': (
         'This machine has no usable system folder window (PowerShell on Windows, osascript on macOS, '

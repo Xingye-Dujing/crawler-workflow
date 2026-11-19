@@ -27,6 +27,7 @@ from ai import (
     skills,
     store,
     tools,
+    validators,
     vocabulary,
     workflow_draft,
 )
@@ -206,17 +207,24 @@ class AgentService:
     #: Same-problems draft refusals counted within the current turn (see ``send``).
     _draft_refusals: dict[str, int] = {}
 
-    def _refusal_note(self, problems: list[str]) -> str:
-        """A sentence for a draft refused with exactly the same problems again.
+    def _refusal_note(self, problems: list[str], kind: str = '') -> str:
+        """A sentence for a draft refused again without useful new information.
 
-        Nothing changed between two identical submissions, so the third cannot be different either.
-        The model is told to change the draft or to ask the user for what is missing, instead of
-        spending another round (and the user's patience) on the same call.
+        Identical problems mean nothing changed, so another identical submission cannot pass; that
+        gets ``ai.draftRefusedAgain``. The per-kind total bounds a different failure: a model that
+        keeps inventing *different* bad drafts is not converging, so after ``MAX_ARTIFACT_REPAIRS``
+        refusals it gets its own sentence. Sharing one wording would tell a model that fixed three
+        different problems that its drafts were “identical” — a false reason to give up.
         """
-        key = '|'.join(sorted(problems))
+        key = f'{kind}|' + '|'.join(sorted(problems))
         count = self._draft_refusals.get(key, 0) + 1
         self._draft_refusals[key] = count
-        return t('ai.draftRefusedAgain') if count >= 2 else ''
+        if count >= 2:
+            return t('ai.draftRefusedAgain')
+        same_kind = sum(value for name, value in self._draft_refusals.items() if name.startswith(f'{kind}|'))
+        if same_kind >= validators.MAX_ARTIFACT_REPAIRS:
+            return t('ai.repairCapReached', limit=validators.MAX_ARTIFACT_REPAIRS)
+        return ''
 
     def send(self, conversation_id: str, payload: dict):
         text = str(payload.get('text') or '').strip()
@@ -1063,66 +1071,37 @@ class AgentService:
             'summary': str(args.get('summary') or ''),
         }
         meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
-        if artifact['kind'] == 'memory':
-            # A memory is replayed into every later turn, so its shape is checked HERE, before the
-            # card is painted: an empty payload or a pasted transcript would otherwise sit in the
-            # studio looking confirmed while the store refused it at apply time.
-            text = str((artifact.get('payload') or {}).get('text') or '').strip()
-            if not text or len(text) > store.MAX_MEMORY_CHARS:
-                message = t('ai.memoryDraftRefused', limit=store.MAX_MEMORY_CHARS)
-                store.append_message(
-                    conversation['id'],
-                    'tool',
-                    json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
-                    status='done',
-                    meta={**meta, 'is_error': True, 'name': 'present_artifact'},
-                )
-                store.add_step(
-                    run_id, t('ai.stepTool', tool='present_artifact'), tool='present_artifact', status='failed'
-                )
-                yield {
-                    'type': 'tool_result',
-                    'id': call['id'],
-                    'name': 'present_artifact',
-                    'ok': False,
-                    'error': message,
-                }
-                return
-            artifact['payload'] = {'text': text}
-        if artifact['kind'] in ('workflow', 'workflow_draft'):
-            # A draft the canvas cannot load is refused by name, with the offending node — applying
-            # it used to leave blank boxes and a 500 on every diagnostics poll. Structure AND the
-            # engine's run validation are asked, so "it loads" and "it can run" agree.
-            #
-            # The refusal goes back to the MODEL as this call's tool result, never up as an AIError.
-            # Raising ended the turn with the tool_use unpaired: the user saw “工作流草稿无法载入” and
-            # nothing repaired the draft, and the NEXT message was refused by the provider
-            # (“unresolved tool call”) because that call never got an answer.
-            report = workflow_draft.validate(artifact['payload'])
-            if not report['ok']:
-                problems = (report['structural'] + report['engine'])[:8]
-                note = self._refusal_note(problems)
-                message = t('ai.workflowDraftInvalid', detail='; '.join(problems))
-                if note:
-                    message = f'{message}\n{note}'
-                store.append_message(
-                    conversation['id'],
-                    'tool',
-                    json.dumps({'ok': False, 'error': message, 'problems': report}, ensure_ascii=False),
-                    status='done',
-                    meta={**meta, 'is_error': True, 'name': 'present_artifact'},
-                )
-                store.add_step(
-                    run_id, t('ai.stepTool', tool='present_artifact'), tool='present_artifact', status='failed'
-                )
-                yield {
-                    'type': 'tool_result',
-                    'id': call['id'],
-                    'name': 'present_artifact',
-                    'ok': False,
-                    'error': message,
-                }
-                return
+        validation = validators.check(artifact['kind'], artifact['payload'])
+        if validation is not None and not validation.ok:
+            # A draft the app cannot load or store is refused here, before the card is painted —
+            # otherwise it sits in the studio looking confirmed while apply time rejects it.
+            # The refusal goes back to the MODEL as this call's tool result, never up as an AIError:
+            # raising left the tool_use unpaired and the NEXT turn died on “unresolved tool call”.
+            note = self._refusal_note(validation.problems, artifact['kind'])
+            message = validation.message
+            if note:
+                message = f'{message}\n{note}'
+            row = {'ok': False, 'error': message}
+            if validation.report is not None:
+                row['problems'] = validation.report
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps(row, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'present_artifact'},
+            )
+            store.add_step(run_id, t('ai.stepTool', tool='present_artifact'), tool='present_artifact', status='failed')
+            yield {
+                'type': 'tool_result',
+                'id': call['id'],
+                'name': 'present_artifact',
+                'ok': False,
+                'error': message,
+            }
+            return
+        if validation is not None and validation.payload is not None:
+            artifact['payload'] = validation.payload
         store.append_message(
             conversation['id'],
             'tool',
@@ -1155,17 +1134,19 @@ class AgentService:
             )
             yield {'type': 'tool_result', 'id': call['id'], 'name': 'apply_workflow', 'ok': False, 'error': message}
             return
-        report = workflow_draft.validate(payload)
-        if not report['ok']:
-            problems = (report['structural'] + report['engine'])[:8]
-            note = self._refusal_note(problems)
-            message = t('ai.workflowDraftInvalid', detail='; '.join(problems))
+        validation = validators.check('workflow', payload)
+        if validation is not None and not validation.ok:
+            note = self._refusal_note(validation.problems, 'workflow')
+            message = validation.message
             if note:
                 message = f'{message}\n{note}'
+            row = {'ok': False, 'error': message}
+            if validation.report is not None:
+                row['problems'] = validation.report
             store.append_message(
                 conversation['id'],
                 'tool',
-                json.dumps({'ok': False, 'error': message, 'problems': report}, ensure_ascii=False),
+                json.dumps(row, ensure_ascii=False),
                 status='done',
                 meta={**meta, 'is_error': True, 'name': 'apply_workflow'},
             )
