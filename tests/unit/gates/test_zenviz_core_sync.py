@@ -33,6 +33,7 @@ def test_studio_files_match_the_shared_core_generator():
             capture_output=True,
             text=True,
             cwd=REPO,
+            check=False,  # the assertion below reads returncode; a non-zero exit is the test's subject
         )
         assert result.returncode == 0, result.stderr
         generated = pathlib.Path(tmp) / 'backend/static'
