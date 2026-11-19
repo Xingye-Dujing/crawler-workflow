@@ -967,6 +967,32 @@ class AgentService:
             'summary': str(args.get('summary') or ''),
         }
         meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
+        if artifact['kind'] == 'memory':
+            # A memory is replayed into every later turn, so its shape is checked HERE, before the
+            # card is painted: an empty payload or a pasted transcript would otherwise sit in the
+            # studio looking confirmed while the store refused it at apply time.
+            text = str((artifact.get('payload') or {}).get('text') or '').strip()
+            if not text or len(text) > store.MAX_MEMORY_CHARS:
+                message = t('ai.memoryDraftRefused', limit=store.MAX_MEMORY_CHARS)
+                store.append_message(
+                    conversation['id'],
+                    'tool',
+                    json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                    status='done',
+                    meta={**meta, 'is_error': True, 'name': 'present_artifact'},
+                )
+                store.add_step(
+                    run_id, t('ai.stepTool', tool='present_artifact'), tool='present_artifact', status='failed'
+                )
+                yield {
+                    'type': 'tool_result',
+                    'id': call['id'],
+                    'name': 'present_artifact',
+                    'ok': False,
+                    'error': message,
+                }
+                return
+            artifact['payload'] = {'text': text}
         if artifact['kind'] in ('workflow', 'workflow_draft'):
             # A draft the canvas cannot load is refused by name, with the offending node — applying
             # it used to leave blank boxes and a 500 on every diagnostics poll. Structure AND the

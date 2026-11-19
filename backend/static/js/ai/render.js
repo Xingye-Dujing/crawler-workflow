@@ -286,6 +286,8 @@ const AIRender = {
                 : artifact.kind === 'monitor'
                     ? '<button type="button" class="ai-primary" data-ai-apply-monitor="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.auto')) + '</button>' +
                       '<button type="button" class="ai-ghost" data-ai-watch-only="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.monitor.watchOnly')) + '</button>'
+                    : artifact.kind === 'memory'
+                        ? '<button type="button" class="ai-primary" data-ai-apply-memory="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.remember')) + '</button>'
                     : (artifact.kind === 'workflow' || artifact.kind === 'workflow_draft')
                         ? '<button type="button" class="ai-primary" data-ai-apply-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoad')) + '</button>' +
                           '<button type="button" class="ai-ghost" data-ai-run-workflow="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.workflowLoadRun')) + '</button>'

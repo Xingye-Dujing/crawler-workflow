@@ -96,6 +96,130 @@ out.delegated = {
     deleteRowFound: !!deleteRow,
 };
 
+/* Session management: pin / archive / export reach their own methods, and typing in the search box
+   asks the SERVER (a page of 80 rows in memory cannot answer "not found" honestly). */
+workspace._bootstrap.conversations = [
+    { id: 'c1', title: 'Saved conversation', message_count: 2, pinned: 0, archived: 0 },
+];
+workspace._renderSessions();
+workspace._toggleConversationPin = async (id) => calls.push('pin:' + id);
+workspace._toggleConversationArchive = async (id) => calls.push('archive:' + id);
+workspace._exportConversation = async (id) => calls.push('export:' + id);
+workspace._refreshConversations = async () =>
+    calls.push('refresh:' + workspace._sessionQuery + ':' + workspace._showArchived);
+
+const pinRow = workspace._dom.sessions.querySelector('[data-ai-pin-conversation]');
+const archiveRow = workspace._dom.sessions.querySelector('[data-ai-archive-conversation]');
+const exportRow = workspace._dom.sessions.querySelector('[data-ai-export-conversation]');
+const archivedToggle = workspace._dom.sessions.querySelector('[data-ai-toggle-archived]');
+for (const row of [pinRow, archiveRow, exportRow, archivedToggle]) {
+    if (!row) continue;
+    dispatchOn(workspace._dom.root, 'click', { target: row });
+}
+
+/* The debounce is a real timer; run it inline for the scenario so the request is observable. */
+const realTimeout = sandbox.setTimeout;
+sandbox.setTimeout = (fn) => {
+    fn();
+    return 0;
+};
+dispatchOn(workspace._dom.root, 'input', {
+    target: {
+        hasAttribute: (name) => name === 'data-ai-session-search',
+        value: 'old',
+    },
+});
+sandbox.setTimeout = realTimeout;
+
+out.sessions = {
+    search: !!workspace._dom.sessions.querySelector('[data-ai-session-search]'),
+    pin: calls.includes('pin:c1'),
+    archive: calls.includes('archive:c1'),
+    export: calls.includes('export:c1'),
+    archivedToggle: calls.includes('refresh:old:true'),
+    searchRows: [pinRow, archiveRow, exportRow, archivedToggle].filter(Boolean).length,
+};
+
+/* The studio's Memory tab lists what the server confirmed and offers add/delete; the assistant's
+   proposal is a card whose button applies it. */
+workspace._studioTab = 'memory';
+workspace._memories = [{ id: 'mem1', text: '默认账号是 default' }];
+workspace._memoryLimit = 200;
+sandbox.AIStudio.render(workspace._dom.chat, workspace);
+sandbox.AIStudio.saveMemory = async () => calls.push('memory-save');
+sandbox.AIStudio.deleteMemory = async (_host, id) => calls.push('memory-delete:' + id);
+const memoryAdd = workspace._dom.chat.querySelector('[data-ai-memory-add]');
+const memoryDelete = workspace._dom.chat.querySelector('[data-ai-memory-delete]');
+for (const row of [memoryAdd, memoryDelete]) {
+    if (!row) continue;
+    dispatchOn(workspace._dom.root, 'click', { target: row });
+}
+out.memoryTab = {
+    cards: workspace._dom.chat.querySelectorAll('.ai-memory-card').length,
+    text: String(workspace._dom.chat.innerHTML || ''),
+    add: calls.includes('memory-save'),
+    delete: calls.includes('memory-delete:mem1'),
+    count: String(workspace._dom.chat.innerHTML || '').includes('1 / 200'),
+};
+
+const artifactHolder = sandbox.document.createElement('div');
+artifactHolder.innerHTML = sandbox.AIRender.artifactCard({
+    id: 'art1',
+    kind: 'memory',
+    title: '记住这条',
+    payload: { text: '这个项目用默认账号' },
+    summary: '',
+});
+const memoryArtifactButton = artifactHolder.querySelector('[data-ai-apply-memory]');
+workspace._applyMemoryArtifact = (id) => calls.push('memory-artifact:' + id);
+if (memoryArtifactButton) dispatchOn(workspace._dom.root, 'click', { target: memoryArtifactButton });
+out.memoryArtifact = {
+    button: !!memoryArtifactButton,
+    applied: calls.includes('memory-artifact:art1'),
+};
+
+/* Attachments: a multi-file pick uploads each file (one request each) and keeps the successes; a
+   drop and a pasted screenshot enter the SAME path, so neither can bypass the capability check. */
+const realWorkspaceFetch = sandbox.fetch;
+const uploadRequests = [];
+sandbox.fetch = async (url, options) => {
+    uploadRequests.push({ url, entries: (options && options.body && options.body.entries) || [] });
+    return { json: async () => ({ ok: true, attachment: { id: 'att' + uploadRequests.length, name: 'f' } }) };
+};
+workspace._bootstrap.providers = [{ id: workspace._provider, capabilities: ['files'] }];
+workspace._conversationId = 'c1';
+workspace._attachments = [];
+workspace._renderToggles = () => {};
+const realRenderAttachments = workspace._renderAttachments;
+workspace._renderAttachments = () => {};
+const savedToast = workspace._toast;
+workspace._toast = () => {};
+
+await workspace._uploadFiles([new sandbox.File('a.txt'), new sandbox.File('b.txt')], 'key');
+out.upload = {
+    requests: uploadRequests.length,
+    attachments: workspace._attachments.length,
+    files: uploadRequests.map((row) => row.entries.find(([key]) => key === 'file')[1].name),
+};
+
+const realUploadFiles = workspace._uploadFiles;
+const dropped = [];
+workspace._uploadFiles = async (files) => dropped.push(files.length);
+dispatchOn(workspace._dom.root, 'dragenter', { target: workspace._dom.root, dataTransfer: { files: [new sandbox.File('c.png')] } });
+out.upload.dropActive = workspace._dom.root.classList.contains('ai-drop-active');
+dispatchOn(workspace._dom.root, 'drop', { target: workspace._dom.root, dataTransfer: { files: [new sandbox.File('c.png')] } });
+out.upload.dropped = dropped.length === 1 && dropped[0] === 1;
+out.upload.dropCleared = !workspace._dom.root.classList.contains('ai-drop-active');
+
+dispatchOn(workspace._dom.input, 'paste', {
+    clipboardData: { items: [{ kind: 'file', getAsFile: () => new sandbox.File('shot.png') }] },
+});
+out.upload.pasted = dropped.length === 2 && dropped[1] === 1;
+workspace._uploadFiles = realUploadFiles;
+workspace._renderAttachments = realRenderAttachments;
+workspace._toast = savedToast;
+sandbox.fetch = realWorkspaceFetch;
+
 /* The skill editor's two lists are the server's answer. */
 workspace._bootstrap.context_sources = ['project', 'run'];
 workspace._bootstrap.tools = [
@@ -1017,6 +1141,7 @@ workspace._contextMeta = {
     replay_truncated: true,
     replay_chars: 16000,
     history: { window: 32768, budget: 20000, dropped: 4, kept: 12 },
+    memories: { total: 25, shown: 20, omitted: 5 },
 };
 workspace._renderSide();
 out.contextNotes = String(workspace._dom.side.innerHTML || '');
@@ -1026,6 +1151,7 @@ out.contextWords = {
     omitted: String(vm.runInContext("I18n.t('ai.contextOmitted', { items: '运行' })", sandbox)),
     replay: String(vm.runInContext("I18n.t('ai.contextReplayCut', { n: 16000 })", sandbox)),
     history: String(vm.runInContext("I18n.t('ai.contextHistoryCut', { n: 4, window: 32768 })", sandbox)),
+    memories: String(vm.runInContext("I18n.t('ai.contextMemoryCut', { n: 5, shown: 20 })", sandbox)),
 };
 
 /* A STOPPED turn came back from the store as a red error line, because stop wrote status='error'.

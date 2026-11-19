@@ -122,6 +122,12 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 
 写入永远是产物（工作流草稿、分析计划、图表规格、报告、技能草稿、插件清单、监控请求），由用户应用。
 
+**长期记忆是另一条边界：读得到，也必须管得住。** `ai.db` 的 `memories` 表由工作室的“记忆”页维护
+（新增/删除/计数）。助手不能直接写：它用 `present_artifact(kind="memory", payload={text})` 提议，
+卡片里的“记住这条”才落库。同一句话再次保存返回已有行（`duplicate`），超过 2000 字或 200 条都按名
+拒绝（`ai.memoryTooLong`/`ai.memoryFull`），不截断、不淘汰最旧一条。每条记忆跟着之后每一轮上下文发送，
+`build_context` 只带最新 20 条，并把 `context_meta.memories = {total, shown, omitted}` 交给检查器。
+
 ## 4. 运行监控
 
 AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分析”或“只通知”。条件示例：
@@ -235,8 +241,11 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | GET | `/api/ai/providers` | 供应商目录与能力 |
 | GET | `/api/ai/providers/<id>/models` | 模型列表 |
 | POST | `/api/ai/providers/<id>/test` | 一次最小流式往返 |
-| GET/POST | `/api/ai/conversations` | 列表 / 新建 |
-| GET/PATCH/DELETE | `/api/ai/conversations/<id>` | 详情、重命名/置顶、删除 |
+| GET/POST | `/api/ai/conversations` | 列表（`?q=` 标题搜索、`?archived=1`、`limit/offset`）/ 新建 |
+| GET/PATCH/DELETE | `/api/ai/conversations/<id>` | 详情、重命名/置顶/归档、删除 |
+| GET | `/api/ai/conversations/<id>/export` | 下载 `format=md|json`（Markdown 投影 / JSON 无损） |
+| GET/POST | `/api/ai/memories` | 长期记忆列表（附上限）/ 新增（去重、超长与满额按名拒绝） |
+| DELETE | `/api/ai/memories/<id>` | 删除一条记忆 |
 | POST | `/api/ai/chat` | SSE 一轮（`?stream=0` 为 JSON） |
 | POST | `/api/ai/answer` | 恢复暂停的问题 |
 | POST | `/api/ai/stop` | 取消事件 |
@@ -278,6 +287,10 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
   `/api/ai/rerun` 的具名拒绝；agent 的 `rerun_node` 只发 `rerun_started`，不载入画布。
 - `tests/api/test_ai_files.py`：上传分片顺序、本地副本、删除、搜索/抓页与凭据 URL 拒绝。
 - `tests/api/test_ai_monitors.py`：监控匹配/投递/确认、`run.log` 关键字拒绝、脚本库往返与真实 Python 样本。
+- `tests/api/test_ai_memories.py`：记忆去重/超长/满额按名拒绝、上下文只带最新 N 条并报告省略、账号隔离、
+  记忆产物卡的提议与“空提案退回模型”。
+- `tests/api/test_ai_conversations.py`：标题搜索的 LIKE 转义、置顶/取消置顶不改变活跃时间、归档可见性、
+  Markdown/JSON 导出与文件名头。
 - `tests/unit/ai/test_python_node.py`：Python 节点契约、云端拒绝、受限数据读取。
 - `tests/unit/frontend/test_frontend_ai_js.py` + `harness_ai.mjs`：真实解码器/渲染器、运行时 chip、禁用原因。
 

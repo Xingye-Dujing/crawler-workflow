@@ -700,6 +700,7 @@ PRESENT_SCHEMA = {
                 'skill_draft',
                 'plugin_manifest',
                 'monitor',
+                'memory',
                 'markdown',
             ],
         },
@@ -1124,9 +1125,10 @@ TOOLS = {
         ),
         ToolSpec(
             'present_artifact',
-            'Present a workflow draft, analysis plan, chart spec, report, skill draft, plugin manifest or a '
-            'run monitor. The user applies it; kind="monitor" payload = {run_id, events, node_ids, statuses, '
-            'min_rows, console_contains, outcomes, max_triggers, note}.',
+            'Present a workflow draft, analysis plan, chart spec, report, skill draft, plugin manifest, a '
+            'confirmed fact to remember (kind="memory", payload = {text}) or a run monitor. The user applies '
+            'it; kind="monitor" payload = {run_id, events, node_ids, statuses, min_rows, console_contains, '
+            'outcomes, max_triggers, note}.',
             PRESENT_SCHEMA,
             permission='artifact',
             control=True,

@@ -17,7 +17,14 @@ from datetime import UTC
 
 from runtime import paths
 
+from ai.errors import AIError
 from ai.types import new_id
+
+#: One memory is a fact the user confirmed, not a transcript: it goes into the context of every
+#: later turn, so it has to stay short. Both bounds refuse BY NAME — silently truncating or
+#: dropping the oldest row would decide on the user's behalf what the assistant may remember.
+MAX_MEMORY_CHARS = 2000
+MAX_MEMORIES = 200
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (
@@ -269,13 +276,30 @@ def create_conversation(provider: str = '', model: str = '', skill: str = 'auto'
     return get_conversation(conversation_id)
 
 
-def list_conversations(limit: int = 80) -> list:
+def list_conversations(limit: int = 80, q: str = '', archived: bool = False, offset: int = 0) -> list:
+    """Conversations newest-first, optionally narrowed to a title match.
+
+    ``q`` is matched by SQLite, not by the browser: the list in memory is a page (80 rows), so a
+    client-side filter would report "not found" for a conversation that exists past the page. The
+    LIKE metacharacters in the user's text are escaped, or a search for ``100%`` would match all.
+    """
+    limit = min(500, max(1, int(limit)))
+    offset = max(0, int(offset))
+    clauses = ['c.archived = ?']
+    params: list = [1 if archived else 0]
+    needle = str(q or '').strip()
+    if needle:
+        escaped = needle.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        clauses.append("c.title LIKE ? ESCAPE '\\'")
+        params.append(f'%{escaped}%')
+    params.extend([limit, offset])
     with connect() as conn:
         rows = conn.execute(
             'SELECT c.*, '
             '(SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) AS message_count '
-            'FROM conversations c WHERE c.archived = 0 ORDER BY c.pinned DESC, c.updated_at DESC LIMIT ?',
-            (max(1, int(limit)),),
+            'FROM conversations c WHERE ' + ' AND '.join(clauses) + ' '
+            'ORDER BY c.pinned DESC, c.updated_at DESC, c.rowid DESC LIMIT ? OFFSET ?',
+            tuple(params),
         ).fetchall()
     return [_row(row) for row in rows]
 
@@ -286,13 +310,21 @@ def get_conversation(conversation_id: str) -> dict | None:
     return _row(row)
 
 
-def touch_conversation(conversation_id: str, **fields) -> None:
+def touch_conversation(conversation_id: str, bump: bool = True, **fields) -> None:
+    """Update stored fields; ``bump`` keeps the conversation from looking newly active.
+
+    Pinning or archiving is not activity: bumping ``updated_at`` for those moved an UNpinned chat
+    to the top of a list ordered by recency, which is the opposite of what the click said.
+    """
     allowed = {
         key: value
         for key, value in fields.items()
-        if key in ('title', 'title_source', 'provider', 'model', 'skill', 'pinned')
+        if key in ('title', 'title_source', 'provider', 'model', 'skill', 'pinned', 'archived')
     }
-    allowed['updated_at'] = now()
+    if bump:
+        allowed['updated_at'] = now()
+    if not allowed:
+        return
     assignments = ', '.join(f'{key} = ?' for key in allowed)
     with connect() as conn:
         conn.execute(f'UPDATE conversations SET {assignments} WHERE id = ?', (*allowed.values(), conversation_id))
@@ -765,17 +797,47 @@ def delete_plugin(plugin_id: str) -> bool:
     return cur.rowcount > 0
 
 
-def list_memories() -> list:
+def list_memories(limit: int = 0) -> list:
+    """Confirmed memories, newest first. ``limit=0`` means every row (the studio lists them all)."""
+    sql = 'SELECT * FROM memories ORDER BY created_at DESC, rowid DESC'
+    params: tuple = ()
+    if limit:
+        sql += ' LIMIT ?'
+        params = (max(1, int(limit)),)
     with connect() as conn:
-        rows = conn.execute('SELECT * FROM memories ORDER BY created_at DESC').fetchall()
+        rows = conn.execute(sql, params).fetchall()
     return [_row(row) for row in rows]
 
 
+def _memory_key(text: str) -> str:
+    return ' '.join(str(text or '').split()).casefold()
+
+
 def save_memory(text: str) -> dict:
-    memory_id = new_id('mem')
+    """Store one confirmed fact, idempotently.
+
+    A duplicate is not an error: the same sentence reaching the store twice (an artifact applied
+    twice, a retried request) means the fact is already known, so the existing row is returned with
+    ``duplicate: True``. A store that is FULL refuses by name — evicting the oldest memory would let
+    a chat silently rewrite what the user chose to keep.
+    """
+    cleaned = str(text or '').strip()
+    if not cleaned:
+        raise AIError('ai.apiNoText', kind='bad_request')
+    if len(cleaned) > MAX_MEMORY_CHARS:
+        raise AIError('ai.memoryTooLong', kind='bad_request', limit=MAX_MEMORY_CHARS)
+    key = _memory_key(cleaned)
     with connect() as conn:
-        conn.execute('INSERT INTO memories (id, text, created_at) VALUES (?, ?, ?)', (memory_id, text, now()))
-    return {'id': memory_id, 'text': text}
+        rows = conn.execute('SELECT * FROM memories ORDER BY created_at DESC').fetchall()
+        for row in rows:
+            if _memory_key(row['text']) == key:
+                return {**_row(row), 'duplicate': True}
+        if len(rows) >= MAX_MEMORIES:
+            raise AIError('ai.memoryFull', kind='bad_request', limit=MAX_MEMORIES)
+        memory_id = new_id('mem')
+        stamp = now()
+        conn.execute('INSERT INTO memories (id, text, created_at) VALUES (?, ?, ?)', (memory_id, cleaned, stamp))
+    return {'id': memory_id, 'text': cleaned, 'created_at': stamp}
 
 
 def delete_memory(memory_id: str) -> bool:

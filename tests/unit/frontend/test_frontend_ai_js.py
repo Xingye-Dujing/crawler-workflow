@@ -167,6 +167,38 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['found'] == 3, 'the settings page did not render all three buttons'
         assert out['calls'] == ['save', 'models', 'test'], out['calls']
 
+    def test_the_session_list_offers_pin_archive_export_and_server_search(self):
+        """Five controls on a row, and the search must reach `_refreshConversations` (the server)
+        rather than filter the 80-row page in memory."""
+        out = _run_workspace()['sessions']
+        assert out['search'] is True, 'the session search box is missing'
+        assert out['pin'] and out['archive'] and out['export'], out
+        assert out['archivedToggle'] is True, 'the archived switch did not re-query with archived=1'
+        assert out['searchRows'] == 4, out['searchRows']
+
+    def test_the_memory_tab_lists_and_deletes_what_was_confirmed(self):
+        out = _run_workspace()['memoryTab']
+        assert out['cards'] == 1, out['cards']
+        assert '默认账号是 default' in out['text']
+        assert out['add'] is True and out['delete'] is True, out
+        assert out['count'] is True, 'the count did not show the server limit'
+
+    def test_a_memory_artifact_has_its_own_apply_button(self):
+        """A proposal is not a write: the card carries 记住这条, which posts to /api/ai/memories."""
+        out = _run_workspace()['memoryArtifact']
+        assert out['button'] is True, 'a memory artifact drew no apply button'
+        assert out['applied'] is True, 'the button did not reach _applyMemoryArtifact'
+
+    def test_a_multi_file_pick_uploads_each_and_drop_and_paste_share_the_path(self):
+        out = _run_workspace()['upload']
+        assert out['requests'] == 2, out['requests']
+        assert out['attachments'] == 2, out['attachments']
+        assert out['files'] == ['a.txt', 'b.txt'], out['files']
+        assert out['dropActive'] is True, 'a file drag over the panel showed no drop target'
+        assert out['dropped'] is True, 'a dropped file did not enter the upload path'
+        assert out['dropCleared'] is True, 'the drop highlight stayed after the drop'
+        assert out['pasted'] is True, 'a pasted screenshot did not enter the upload path'
+
     def test_opening_the_studio_from_outside_opens_the_panel(self):
         """The Python node's 管理脚本 lives outside the aside; opening the studio used to leave the
         panel hidden, so the button looked dead. `_mode` alone is not "open"."""
@@ -321,6 +353,7 @@ class TestWorkspaceRepaintAndDelegation:
         assert words['omitted'] in notes, f'{words["omitted"]!r} not in the inspector'
         assert words['replay'] in notes, f'{words["replay"]!r} not in the inspector'
         assert words['history'] in notes, f'{words["history"]!r} not in the inspector'
+        assert words['memories'] in notes, f'{words["memories"]!r} not in the inspector'
 
     def test_the_turns_last_row_carries_its_verdict(self):
         """Two provider rounds are two stored rows. Taking the FIRST row's `stop_reason` would call a

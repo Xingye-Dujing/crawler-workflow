@@ -111,6 +111,11 @@ const AIWorkspace = {
         if (!root) return;
         this._sessionsOpen = !!AISettings.load().sessionsOpen;
         this._pinned = !!AISettings.load().pinned;
+        /* The session panel's own filters: a search narrows on the server, and the archived view is
+           a separate list rather than a hidden section of the same one. */
+        this._sessionQuery = '';
+        this._showArchived = false;
+        this._sessionSearchTimer = null;
         root.classList.toggle('sessions-open', this._sessionsOpen);
         this._renderPin();
         AISettings.save({ open: this._open });
@@ -148,6 +153,23 @@ const AIWorkspace = {
                     this.send();
                 }
             });
+            /* A screenshot pasted into the composer becomes an attachment; pasted TEXT keeps its
+               normal behavior, because only clipboard file items are intercepted. */
+            this._dom.input.addEventListener('paste', (event) => {
+                const items = event.clipboardData && event.clipboardData.items;
+                if (!items) return;
+                const files = [];
+                /* DataTransferItemList is index-based, not iterable in older engines. */
+                for (let index = 0; index < items.length; index += 1) {
+                    const item = items[index];
+                    if (!item || item.kind !== 'file') continue;
+                    const file = item.getAsFile();
+                    if (file) files.push(file);
+                }
+                if (!files.length) return;
+                event.preventDefault();
+                this._uploadFiles(files);
+            });
         }
         if (this._dom.root) {
             /* Delegated from the dock, not from the transcript: sessions, the side panel and the
@@ -155,6 +177,7 @@ const AIWorkspace = {
                (switching conversations, refreshing context and stopping a monitor were inert). */
             this._dom.root.addEventListener('click', (event) => this._onClick(event));
             this._dom.root.addEventListener('change', (event) => this._onChange(event));
+            this._bindAttachDrop(this._dom.root);
             /* `toggle` does not bubble, but the CAPTURE phase still passes through this element —
                so one listener records every disclosure the reader opens or closes. */
             this._dom.root.addEventListener(
@@ -174,6 +197,13 @@ const AIWorkspace = {
             this._dom.root.addEventListener('input', (event) => {
                 const target = event.target;
                 if (target && target.hasAttribute && target.hasAttribute('data-ai-custom')) this._onRefInput(event);
+                /* Typing in the session search asks the server, not the 80-row page in memory, but a
+                   request per keystroke would reorder the list under the caret for nothing. */
+                if (target && target.hasAttribute && target.hasAttribute('data-ai-session-search')) {
+                    this._sessionQuery = String(target.value || '');
+                    if (this._sessionSearchTimer) clearTimeout(this._sessionSearchTimer);
+                    this._sessionSearchTimer = setTimeout(() => this._refreshConversations(), 250);
+                }
             });
             this._dom.root.addEventListener('keydown', (event) => {
                 const target = event.target;
@@ -940,17 +970,27 @@ const AIWorkspace = {
     _renderSessions() {
         if (!this._dom.sessions) return;
         const rows = this._bootstrap?.conversations || [];
+        const archived = !!this._showArchived;
+        const query = this._sessionQuery || '';
+        /* The search box lives inside this repainted container, so a refresh triggered by typing
+           would otherwise drop the caret after the first character. Remember it and put it back. */
+        const active = document.activeElement;
+        const typing = !!(active && active.hasAttribute && active.hasAttribute('data-ai-session-search'));
+        const caret = typing ? active.selectionStart : null;
         const items = rows.map((row) => {
             const id = AIRender.escape(row.id);
             const rename = AIRender.escape(I18n.t('ai.rename'));
             const remove = AIRender.escape(I18n.t('ai.delete'));
+            const pinLabel = AIRender.escape(I18n.t(row.pinned ? 'ai.unpinConversation' : 'ai.pinConversation'));
+            const exportLabel = AIRender.escape(I18n.t('ai.exportConversation'));
+            const archiveLabel = AIRender.escape(I18n.t(archived ? 'ai.restoreConversation' : 'ai.archiveConversation'));
             const sessionModel = [row.provider, row.model].filter(Boolean).join(' / ');
             return (
-                '<div class="ai-session-row">' +
+                '<div class="ai-session-row' + (row.pinned ? ' pinned' : '') + '">' +
                 '<button type="button" class="ai-session ' + (row.id === this._conversationId ? 'selected' : '') + '" data-ai-conversation="' + id + '"' +
                 (sessionModel ? ' title="' + AIRender.escape(sessionModel) + '"' : '') + '>' +
                 '<span class="ai-session-text">' +
-                '<span class="ai-session-title">' + AIRender.escape(row.title || I18n.t('ai.noConversation')) + '</span>' +
+                '<span class="ai-session-title">' + (row.pinned ? '<span class="ai-session-pin">★</span>' : '') + AIRender.escape(row.title || I18n.t('ai.noConversation')) + '</span>' +
                 /* Which model answered this conversation, so an old chat is readable as itself rather
                    than as "whatever the picker shows today". */
                 (sessionModel ? '<span class="ai-session-model">' + AIRender.escape(sessionModel) + '</span>' : '') +
@@ -958,15 +998,28 @@ const AIWorkspace = {
                 '<span class="ai-session-meta">' + AIRender.escape(String(row.message_count || 0)) + '</span>' +
                 '</button>' +
                 '<span class="ai-session-actions">' +
+                '<button type="button" class="ai-icon-btn' + (row.pinned ? ' active' : '') + '" data-ai-pin-conversation="' + id + '" title="' + pinLabel + '" aria-label="' + pinLabel + '" aria-pressed="' + (row.pinned ? 'true' : 'false') + '">★</button>' +
                 '<button type="button" class="ai-icon-btn" data-ai-rename-conversation="' + id + '" title="' + rename + '" aria-label="' + rename + '">✎</button>' +
+                '<button type="button" class="ai-icon-btn" data-ai-export-conversation="' + id + '" title="' + exportLabel + '" aria-label="' + exportLabel + '">⤓</button>' +
+                '<button type="button" class="ai-icon-btn" data-ai-archive-conversation="' + id + '" data-ai-archived="' + (archived ? '1' : '0') + '" title="' + archiveLabel + '" aria-label="' + archiveLabel + '">' + (archived ? '↩' : '▤') + '</button>' +
                 '<button type="button" class="ai-icon-btn" data-ai-delete-conversation="' + id + '" title="' + remove + '" aria-label="' + remove + '">×</button>' +
                 '</span></div>'
             );
         }).join('');
+        const emptyKey = query ? 'ai.noSessionsMatch' : archived ? 'ai.archivedEmpty' : 'ai.noSessions';
         this._dom.sessions.innerHTML =
             '<div class="ai-sessions-head"><strong>' + AIRender.escape(I18n.t('ai.sessions')) + '</strong>' +
             '<button type="button" class="ai-ghost" data-ai-new-session="1">' + AIRender.escape(I18n.t('ai.newChat')) + '</button></div>' +
-            '<div class="ai-session-list">' + (items || '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.noSessions')) + '</p>') + '</div>';
+            '<label class="ai-session-search"><input class="ai-input" type="search" data-ai-session-search value="' + AIRender.escape(query) + '" placeholder="' + AIRender.escape(I18n.t('ai.searchSessions')) + '" /></label>' +
+            '<div class="ai-session-filter"><button type="button" class="ai-ghost' + (archived ? ' selected' : '') + '" data-ai-toggle-archived="1" aria-pressed="' + (archived ? 'true' : 'false') + '">' + AIRender.escape(I18n.t('ai.archived')) + '</button></div>' +
+            '<div class="ai-session-list">' + (items || '<p class="ai-hint">' + AIRender.escape(I18n.t(emptyKey)) + '</p>') + '</div>';
+        if (typing) {
+            const box = this._dom.sessions.querySelector('[data-ai-session-search]');
+            if (box) {
+                box.focus();
+                if (caret !== null && caret !== undefined) box.setSelectionRange(caret, caret);
+            }
+        }
     },
 
     _renderSide() {
@@ -986,9 +1039,13 @@ const AIWorkspace = {
            everything”. */
         const omitted = (meta.omitted || []).filter(Boolean);
         const history = meta.history || {};
+        const memories = meta.memories || {};
         const contextNotes =
             (history.dropped
                 ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextHistoryCut', { n: history.dropped, window: history.window || 0 })) + '</p>'
+                : '') +
+            (memories.omitted
+                ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextMemoryCut', { n: memories.omitted, shown: memories.shown || 0 })) + '</p>'
                 : '') +
             (meta.replay_truncated
                 ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextReplayCut', { n: meta.replay_chars || 0 })) + '</p>'
@@ -1755,7 +1812,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1779,6 +1836,23 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-delete-conversation')) {
             this._deleteConversation(target.getAttribute('data-ai-delete-conversation'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-pin-conversation')) {
+            this._toggleConversationPin(target.getAttribute('data-ai-pin-conversation'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-archive-conversation')) {
+            this._toggleConversationArchive(target.getAttribute('data-ai-archive-conversation'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-export-conversation')) {
+            this._exportConversation(target.getAttribute('data-ai-export-conversation'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-toggle-archived')) {
+            this._showArchived = !this._showArchived;
+            this._refreshConversations();
             return;
         }
         if (target.hasAttribute('data-ai-context-refresh')) {
@@ -1830,6 +1904,10 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-apply-plugin')) {
             this._applyPluginArtifact(target.getAttribute('data-ai-apply-plugin'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-apply-memory')) {
+            this._applyMemoryArtifact(target.getAttribute('data-ai-apply-memory'));
             return;
         }
         if (target.hasAttribute('data-ai-apply-workflow') || target.hasAttribute('data-ai-run-workflow')) {
@@ -1916,6 +1994,14 @@ const AIWorkspace = {
             );
             return;
         }
+        if (target.hasAttribute('data-ai-memory-add')) {
+            AIStudio.saveMemory(this);
+            return;
+        }
+        if (target.hasAttribute('data-ai-memory-delete')) {
+            AIStudio.deleteMemory(this, target.getAttribute('data-ai-memory-delete'));
+            return;
+        }
         if (target.hasAttribute('data-ai-python-new')) {
             AIStudio.newPython(this);
             return;
@@ -1953,6 +2039,7 @@ const AIWorkspace = {
             this._studioTab = target.getAttribute('data-ai-studio-tab');
             AIStudio.render(this._dom.chat, this);
             if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') AIStudio.loadPython(this);
+            if (this._studioTab === 'memory' && typeof AIStudio.loadMemory === 'function') AIStudio.loadMemory(this);
             return;
         }
         if (target.hasAttribute('data-ai-studio-close')) {
@@ -3066,7 +3153,11 @@ const AIWorkspace = {
 
     async _refreshConversations() {
         try {
-            const response = await fetch('/api/ai/conversations');
+            const params = new URLSearchParams();
+            if (this._sessionQuery) params.set('q', this._sessionQuery);
+            if (this._showArchived) params.set('archived', '1');
+            const suffix = params.toString() ? '?' + params.toString() : '';
+            const response = await fetch('/api/ai/conversations' + suffix);
             const data = await response.json();
             if (data.ok && this._bootstrap) {
                 this._bootstrap.conversations = data.conversations || [];
@@ -3075,6 +3166,63 @@ const AIWorkspace = {
         } catch (e) {
             /* the transcript is still usable when the list refresh fails */
         }
+    },
+
+    async _toggleConversationPin(id) {
+        const row = (this._bootstrap?.conversations || []).find((item) => item.id === id);
+        if (!row) return;
+        try {
+            await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pinned: !row.pinned }),
+            });
+            await this._refreshConversations();
+        } catch (error) {
+            this._toast(error.message);
+        }
+    },
+
+    async _toggleConversationArchive(id) {
+        const row = (this._bootstrap?.conversations || []).find((item) => item.id === id);
+        if (!row) return;
+        const archiving = !row.archived;
+        try {
+            await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ archived: archiving }),
+            });
+            /* The open conversation just left the list: keep the reader on a chat that exists. */
+            if (archiving && this._conversationId === id) this.newChat();
+            await this._refreshConversations();
+        } catch (error) {
+            this._toast(error.message);
+        }
+    },
+
+    async _exportConversation(id) {
+        let format = 'md';
+        if (typeof showDialog === 'function') {
+            const choice = await showDialog({
+                message: I18n.t('ai.exportHint'),
+                buttons: [
+                    { label: I18n.t('ai.exportMarkdown'), value: 'md', primary: true },
+                    { label: I18n.t('ai.exportJson'), value: 'json' },
+                    { label: I18n.t('ai.close'), value: '' },
+                ],
+                cancelValue: '',
+            });
+            if (!choice) return;
+            format = choice;
+        }
+        const link = document.createElement('a');
+        link.href = '/api/ai/conversations/' + encodeURIComponent(id) + '/export?format=' + encodeURIComponent(format);
+        link.setAttribute('download', '');
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
     },
 
     async _confirm(message) {
@@ -3139,6 +3287,24 @@ const AIWorkspace = {
         AIStudio.render(this._dom.chat, this);
         const box = this._dom.chat.querySelector('[data-ai-plugin-manifest]');
         if (box) box.value = JSON.stringify(artifact.payload || {}, null, 2);
+    },
+
+    _applyMemoryArtifact(id) {
+        const artifact = this._artifactById(id);
+        if (!artifact) return;
+        const text = String((artifact.payload || {}).text || '').trim();
+        if (!text) return;
+        fetch('/api/ai/memories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.ok) throw new Error(data.error || 'save failed');
+                this._toast(I18n.t(data.duplicate ? 'ai.memoryDuplicate' : 'ai.memorySaved'));
+            })
+            .catch((error) => this._toast(error.message));
     },
 
     async _deleteConversation(id) {
@@ -3253,6 +3419,9 @@ const AIWorkspace = {
         AIStudio.render(this._dom.chat, this);
         if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') {
             AIStudio.loadPython(this);
+        }
+        if (this._studioTab === 'memory' && typeof AIStudio.loadMemory === 'function') {
+            AIStudio.loadMemory(this);
         }
     },
 
@@ -3448,54 +3617,137 @@ const AIWorkspace = {
         this._renderToggles();
     },
 
-    async attach() {
+    /* The attach button, a drop and a paste all need the same two answers first: does this provider
+       take files, and is a key present. One place decides, so a drop cannot bypass the refusal. */
+    _attachKey() {
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         if (!(provider?.capabilities || []).includes('files')) {
             this._toast(I18n.t('ai.fileUnsupported'));
-            return;
+            return '';
         }
         const key = AISettings.keyFor(this._provider);
         if (!key) {
             this._toast(I18n.t('ai.keyMissing'));
             this.openSettings();
-            return;
+            return '';
         }
+        return key;
+    },
+
+    async attach() {
+        const key = this._attachKey();
+        if (!key) return;
         const input = document.createElement('input');
         input.type = 'file';
+        input.multiple = true;
         input.accept = '.pdf,.doc,.docx,.ppt,.pptx,.txt,.md,.csv,.json,.log,.xlsx,.xls,.png,.jpg,.jpeg,.gif,.webp';
-        input.onchange = async () => {
-            const file = input.files && input.files[0];
-            if (!file) return;
-            this._uploading = true;
-            this._renderToggles();
-            try {
-                const conversationId = await this._ensureConversation();
-                const form = new FormData();
-                form.append('file', file);
-                form.append('conversation_id', conversationId);
-                form.append('provider', this._provider);
-                form.append('api_key', key);
-                const response = await fetch('/api/ai/files', { method: 'POST', body: form });
-                const data = await response.json();
-                if (!data.ok) throw new Error(data.error || 'upload failed');
-                if (data.dataset) {
-                    /* A big table: the server registered it as a dataset instead of sending every
-                       row to the model. Reference it, so the assistant reads a bounded slice. */
-                    this._pickRef('dataset', data.dataset.dataset_id, data.dataset.name);
-                    this._toast(I18n.t('ai.datasetFromUpload', { name: data.dataset.name, rows: data.dataset.rows }));
-                    return;
-                }
-                this._attachments.push(data.attachment);
-                this._renderAttachments();
-                this._toast(I18n.t('ai.saved'));
-            } catch (error) {
-                this._toast(I18n.t('ai.error') + ': ' + error.message);
-            } finally {
-                this._uploading = false;
-                this._renderToggles();
-            }
+        input.onchange = () => {
+            const files = Array.from(input.files || []);
+            if (files.length) this._uploadFiles(files, key);
         };
         input.click();
+    },
+
+    /* One attachment per request (the endpoint takes one), so a multi-file pick is a loop that
+       keeps going: a refused file must not throw away the ones that already uploaded. Failures are
+       collected and reported together — a toast per file would replace the previous one. */
+    async _uploadFiles(files, key = '') {
+        const rows = Array.from(files || []).filter(Boolean);
+        if (!rows.length) return;
+        const apiKey = key || this._attachKey();
+        if (!apiKey) return;
+        this._uploading = true;
+        this._renderToggles();
+        let added = 0;
+        let datasetImported = false;
+        const failures = [];
+        try {
+            const conversationId = await this._ensureConversation();
+            for (const file of rows) {
+                try {
+                    const form = new FormData();
+                    form.append('file', file);
+                    form.append('conversation_id', conversationId);
+                    form.append('provider', this._provider);
+                    form.append('api_key', apiKey);
+                    const response = await fetch('/api/ai/files', { method: 'POST', body: form });
+                    const data = await response.json();
+                    if (!data.ok) throw new Error(data.error || 'upload failed');
+                    if (data.dataset) {
+                        /* A big table: the server registered it as a dataset instead of sending every
+                           row to the model. Reference it, so the assistant reads a bounded slice. */
+                        this._pickRef('dataset', data.dataset.dataset_id, data.dataset.name);
+                        this._toast(I18n.t('ai.datasetFromUpload', { name: data.dataset.name, rows: data.dataset.rows }));
+                        datasetImported = true;
+                    } else {
+                        this._attachments.push(data.attachment);
+                    }
+                    added += 1;
+                } catch (error) {
+                    failures.push({ name: file.name || '', reason: error.message });
+                }
+            }
+        } catch (error) {
+            failures.push({ name: '', reason: error.message });
+        } finally {
+            this._uploading = false;
+            this._renderAttachments();
+            this._renderToggles();
+        }
+        if (failures.length) {
+            const first = failures[0];
+            this._toast(
+                added
+                    ? I18n.t('ai.attachPartial', { saved: added, failed: failures.length })
+                    : (first.name ? first.name + ': ' : '') + first.reason
+            );
+        } else if (added && !datasetImported) {
+            this._toast(I18n.t('ai.saved'));
+        }
+    },
+
+    _hasFileDrag(event) {
+        const transfer = event && event.dataTransfer;
+        if (!transfer) return false;
+        if (transfer.files && transfer.files.length) return true;
+        /* Chrome reports no `files` on dragenter; the type list is what says a file is coming. */
+        return transfer.types ? Array.from(transfer.types).includes('Files') : false;
+    },
+
+    _droppedFiles(event) {
+        const transfer = event && event.dataTransfer;
+        if (!transfer || !transfer.files || !transfer.files.length) return [];
+        return Array.from(transfer.files).filter(Boolean);
+    },
+
+    _bindAttachDrop(root) {
+        let depth = 0;
+        root.addEventListener('dragenter', (event) => {
+            if (!this._hasFileDrag(event)) return;
+            event.preventDefault();
+            depth += 1;
+            root.classList.add('ai-drop-active');
+        });
+        root.addEventListener('dragover', (event) => {
+            if (!this._hasFileDrag(event)) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+        });
+        root.addEventListener('dragleave', () => {
+            /* No file check here: browsers report an empty `dataTransfer.files` on dragleave for
+               security, so requiring one left the highlight stuck after the drag left the panel. */
+            if (!depth) return;
+            depth = Math.max(0, depth - 1);
+            if (!depth) root.classList.remove('ai-drop-active');
+        });
+        root.addEventListener('drop', (event) => {
+            const files = this._droppedFiles(event);
+            if (!files.length) return;
+            event.preventDefault();
+            depth = 0;
+            root.classList.remove('ai-drop-active');
+            this._uploadFiles(files);
+        });
     },
 
     async _ensureConversation() {

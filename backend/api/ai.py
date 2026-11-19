@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import time
+from urllib.parse import quote
 
 from ai import agent, context, environment, files, monitors, plugins, references, skills, store, tools
 from ai.errors import AIError
@@ -20,7 +21,7 @@ from runtime import account_context
 from runtime.settings import get_setting
 
 from api.auth import accounts_mode, is_admin
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import get_lang, set_lang, t
 from services import python_runtime, python_scripts
 
@@ -362,7 +363,7 @@ def ai_plugin_delete(plugin_id: str):
 
 @bp.route('/api/ai/memories', methods=['GET'])
 def ai_memories():
-    return jsonify({'ok': True, 'memories': store.list_memories()})
+    return jsonify({'ok': True, 'memories': store.list_memories(), 'limit': store.MAX_MEMORIES})
 
 
 @bp.route('/api/ai/memories', methods=['POST'])
@@ -370,10 +371,11 @@ def ai_memory_save():
     data = _json_body()
     if data is None:
         return _bad_body()
-    text = str(data.get('text') or '').strip()
-    if not text:
-        return _error(AIError('ai.apiNoText', kind='bad_request'))
-    return jsonify({'ok': True, 'memory': store.save_memory(text[:2000])})
+    try:
+        memory = store.save_memory(str(data.get('text') or ''))
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'memory': memory, 'duplicate': bool(memory.get('duplicate'))})
 
 
 @bp.route('/api/ai/memories/<memory_id>', methods=['DELETE'])
@@ -791,7 +793,20 @@ def ai_fetch():
 
 @bp.route('/api/ai/conversations', methods=['GET'])
 def ai_conversations():
-    return jsonify({'ok': True, 'conversations': store.list_conversations()})
+    """The session list. ``q`` searches titles server-side, because the list is a page (80 rows):
+    a client-side filter would answer "not found" for a conversation that exists past the page."""
+    limit = _safe_int(request.args.get('limit'), 80, 1, 500)
+    offset = _safe_int(request.args.get('offset'), 0, 0, 1000000)
+    archived = str(request.args.get('archived') or '').strip().lower() in ('1', 'true', 'yes')
+    query = str(request.args.get('q') or '').strip()[:120]
+    return jsonify(
+        {
+            'ok': True,
+            'conversations': store.list_conversations(limit=limit, q=query, archived=archived, offset=offset),
+            'query': query,
+            'archived': archived,
+        }
+    )
 
 
 @bp.route('/api/ai/conversations', methods=['POST'])
@@ -832,8 +847,69 @@ def ai_conversation_update(conversation_id: str):
     if title:
         store.touch_conversation(conversation_id, title=title[:120], title_source='manual')
     if 'pinned' in data:
-        store.touch_conversation(conversation_id, pinned=1 if data.get('pinned') else 0)
+        store.touch_conversation(conversation_id, bump=False, pinned=1 if data.get('pinned') else 0)
+    if 'archived' in data:
+        store.touch_conversation(conversation_id, bump=False, archived=1 if data.get('archived') else 0)
     return jsonify({'ok': True, 'conversation': store.get_conversation(conversation_id)})
+
+
+@bp.route('/api/ai/conversations/<conversation_id>/export', methods=['GET'])
+def ai_conversation_export(conversation_id: str):
+    """Download one conversation as Markdown or lossless JSON.
+
+    Markdown is a *projection*, not a second renderer: it writes each row's stored text and the
+    tools a turn called. Reproducing the browser's block semantics here would mean two renderers
+    that eventually disagree; JSON carries the original blocks for anything exact.
+    """
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    fmt = str(request.args.get('format') or 'md').strip().lower()
+    if fmt not in ('md', 'markdown', 'json'):
+        return _bad_param('format')
+    messages = store.list_messages(conversation_id, limit=2001)
+    truncated = len(messages) > 2000
+    if truncated:
+        # The newest 2000 are the answer to "download this conversation"; the rest is reported.
+        messages = messages[-2000:]
+    title = str(conversation.get('title') or t('ai.untitled')).replace('/', '_').replace('\\', '_')
+    name = context.safe_filename(title)[:80] or 'conversation'
+    if fmt == 'json':
+        body = json.dumps(
+            {'conversation': conversation, 'messages': messages, 'truncated': truncated},
+            ensure_ascii=False,
+            indent=2,
+        )
+        mime, suffix = 'application/json', 'json'
+    else:
+        body = _conversation_markdown(conversation, messages, truncated)
+        mime, suffix = 'text/markdown', 'md'
+    response = Response(body, mimetype=mime)
+    quoted = quote(f'{name}.{suffix}', safe='')
+    response.headers['Content-Disposition'] = f"attachment; filename*=UTF-8''{quoted}"
+    return response
+
+
+def _conversation_markdown(conversation: dict, messages: list, truncated: bool = False) -> str:
+    lines = [f'# {str(conversation.get("title") or t("ai.untitled"))}', '']
+    for message in messages:
+        role = str(message.get('role') or '')
+        meta = message.get('meta') or {}
+        if role == 'user':
+            text = str(message.get('content') or '').strip()
+            if text:
+                lines += [f'## {t("ai.exportUser")}', '', text, '']
+        elif role == 'assistant':
+            text = str(message.get('content') or '').strip()
+            if not text:
+                continue
+            lines += [f'## {t("ai.exportAssistant")}', '', text, '']
+        elif role == 'tool' and meta.get('name'):
+            marker = ' ✗' if meta.get('is_error') else ''
+            lines.append(f'- `{meta["name"]}`{marker}')
+    if truncated:
+        lines += ['', f'> {t("ai.exportTruncated", limit=2000)}']
+    return '\n'.join(lines).rstrip() + '\n'
 
 
 @bp.route('/api/ai/conversations/<conversation_id>', methods=['DELETE'])

@@ -452,6 +452,48 @@
   line-height: 1;
   padding: 3px 5px;
 }
+.ai-session-actions .ai-icon-btn.active {
+  color: var(--accent);
+}
+/* Search and the archived switch sit between the head and the list, in the panel's own tone:
+   a filled control here would read as a primary action. */
+.ai-session-search {
+  display: block;
+  padding: 4px 6px 2px;
+}
+.ai-session-search .ai-input {
+  width: 100%;
+  padding: 4px 7px;
+  font-size: 12px;
+}
+.ai-session-filter {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 6px 4px;
+}
+.ai-session-filter .ai-ghost.selected {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.ai-session-pin {
+  margin-inline-end: 4px;
+  color: var(--accent);
+}
+.ai-session-row.pinned .ai-session {
+  color: var(--text);
+}
+.ai-memory-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#ai-workspace.ai-drop-active {
+  outline: 2px dashed var(--accent);
+  outline-offset: -4px;
+}
 .ai-session {
   display: flex;
   justify-content: space-between;

@@ -241,14 +241,25 @@ def _run_context(run_id: str, scope: str) -> str:
     return '\n'.join(lines)
 
 
-def _memory_context() -> str:
+#: How many confirmed memories one turn carries. The rest stay visible in the studio; the count is
+#: reported in ``context_meta.memories`` so a cut is a fact, not a silence.
+MEMORY_CONTEXT_LIMIT = 20
+
+
+def _memory_context() -> tuple[str, dict]:
+    """The user-confirmed memories, newest first, plus how many did not fit.
+
+    The heading is added by ``build_context`` like every other section: returning one here produced
+    a second ``## 项目记忆`` inside the first, which read as two sections and made the inspector's
+    character count disagree with what the model saw.
+    """
     try:
         memories = store.list_memories()
     except Exception:
-        return ''
-    if not memories:
-        return ''
-    return '## 你确认过的项目记忆\n' + '\n'.join(f'- {item["text"]}' for item in memories[:20])
+        return '', {'total': 0, 'shown': 0, 'omitted': 0}
+    shown = memories[:MEMORY_CONTEXT_LIMIT]
+    text = '\n'.join(f'- {item["text"]}' for item in shown)
+    return text, {'total': len(memories), 'shown': len(shown), 'omitted': max(0, len(memories) - len(shown))}
 
 
 def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
@@ -258,11 +269,20 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
     if payload.get('scope') in ('off', 'summary', 'full'):
         scope = str(payload['scope'])
     if scope == 'off':
-        return '', {'scope': 'off', 'items': [], 'chars': 0, 'tokens': 0, 'omitted': []}
+        return '', {
+            'scope': 'off',
+            'items': [],
+            'chars': 0,
+            'tokens': 0,
+            'omitted': [],
+            'memories': {'total': 0, 'shown': 0, 'omitted': 0},
+        }
     parts: list[tuple[str, str]] = []
+    memories_meta: dict = {'total': 0, 'shown': 0, 'omitted': 0}
     if scope in ('summary', 'full'):
         parts.append(('项目事实', project_facts()))
-        parts.append(('项目记忆', _memory_context()))
+        memory_text, memories_meta = _memory_context()
+        parts.append(('项目记忆', memory_text))
     canvas = payload.get('canvas') if isinstance(payload.get('canvas'), dict) else None
     if canvas:
         parts.append(('画布', _canvas_context(canvas)))
@@ -306,6 +326,7 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
         'tokens': estimate_tokens(joined),
         'omitted': omitted,
         'budget': budget,
+        'memories': memories_meta,
     }
 
 

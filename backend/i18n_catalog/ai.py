@@ -34,6 +34,12 @@ ZH = {
     ),
     'ai.workflowDraftInvalid': '工作流草稿无法载入：{detail}',
     'ai.workflowSaveFailed': '工作流无法保存到本账号的 workflows 目录：{detail}',
+    'ai.memoryDraftRefused': '记忆提案需要一段非空的 text，且不超过 {limit} 字；请改短后重新提议。',
+    'ai.memoryTooLong': '一条记忆最多 {limit} 字；请精简后再保存。',
+    'ai.memoryFull': '记忆已达上限（{limit} 条）；请先在“记忆”里删掉不再需要的内容。',
+    'ai.exportUser': '用户',
+    'ai.exportAssistant': '助手',
+    'ai.exportTruncated': '这个会话超过 {limit} 条消息，导出的是最近 {limit} 条。',
     'ai.datasetTooBig': '数据超过单表上限，未导入：{detail}',
     'ai.workspaceCloud': '云端模式没有用户本机文件系统，工作文件夹、导入和命令都不可用。',
     'ai.approvalRequired': (
@@ -221,6 +227,14 @@ EN = {
     ),
     'ai.workflowDraftInvalid': 'The workflow draft cannot be loaded: {detail}',
     'ai.workflowSaveFailed': 'The workflow could not be written to this account’s workflows folder: {detail}',
+    'ai.memoryDraftRefused': (
+        'A memory proposal needs non-empty text of at most {limit} characters; shorten it and propose it again.'
+    ),
+    'ai.memoryTooLong': 'One memory can hold at most {limit} characters; shorten it before saving.',
+    'ai.memoryFull': 'The memory is full ({limit} entries); delete what you no longer need in Memory first.',
+    'ai.exportUser': 'User',
+    'ai.exportAssistant': 'Assistant',
+    'ai.exportTruncated': 'This conversation has more than {limit} messages; the newest {limit} are exported.',
     'ai.datasetTooBig': 'The table is above the single-table limit and was not imported: {detail}',
     'ai.workspaceCloud': (
         'A cloud host has no user filesystem, so the working folder, local imports and commands are unavailable.'

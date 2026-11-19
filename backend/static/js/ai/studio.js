@@ -14,6 +14,7 @@ const AIStudio = {
         const tab = host._studioTab || 'skills';
         const tabs = [
             ['skills', I18n.t('ai.tabSkills')],
+            ['memory', I18n.t('ai.tabMemory')],
             ['python', I18n.t('ai.tabPython')],
             ['plugins', I18n.t('ai.tabPlugins')],
             ['permissions', I18n.t('ai.tabPermissions')],
@@ -22,6 +23,7 @@ const AIStudio = {
         ).join('');
         let body = '';
         if (tab === 'skills') body = this.skills(skills, host);
+        else if (tab === 'memory') body = this.memory(host);
         else if (tab === 'python') body = this.python(host);
         else if (tab === 'plugins') body = this.plugins(plugins, host);
         else body = this.permissions(context, host);
@@ -106,6 +108,71 @@ const AIStudio = {
             '<button type="button" class="ai-ghost" data-ai-cancel-skill="1">' + AIRender.escape(I18n.t('ai.close')) + '</button></div>' +
             '</section>'
         );
+    },
+
+    /* Confirmed facts the assistant carries into every later turn. The list is the server's; the
+       input is a proposal the user writes, never something the model can add behind their back. */
+    memory(host) {
+        const rows = host._memories || [];
+        const limit = host._memoryLimit || 0;
+        const cards = rows.map((item) =>
+            '<article class="ai-skill-card ai-memory-card">' +
+            '<p class="ai-memory-text">' + AIRender.escape(item.text || '') + '</p>' +
+            '<div class="ai-skill-actions"><button type="button" class="ai-ghost danger" data-ai-memory-delete="' + AIRender.escape(item.id || '') + '">' + AIRender.escape(I18n.t('ai.delete')) + '</button></div>' +
+            '</article>'
+        ).join('');
+        const count = limit ? I18n.t('ai.memoryCount', { n: rows.length, limit: limit }) : String(rows.length);
+        return (
+            '<div class="ai-studio-toolbar"><span class="ai-hint">' + AIRender.escape(I18n.t('ai.memoryHint')) + '</span>' +
+            '<span class="ai-chip">' + AIRender.escape(count) + '</span></div>' +
+            '<div class="ai-skill-grid">' + (cards || '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.memoryEmpty')) + '</p>') + '</div>' +
+            '<section class="ai-editor"><h3>' + AIRender.escape(I18n.t('ai.memoryAdd')) + '</h3>' +
+            '<textarea class="ai-textarea" rows="3" id="ai-memory-text" placeholder="' + AIRender.escape(I18n.t('ai.memoryPlaceholder')) + '"></textarea>' +
+            '<div class="ai-editor-actions"><button type="button" class="ai-primary" data-ai-memory-add="1">' + AIRender.escape(I18n.t('ai.memorySave')) + '</button></div>' +
+            '</section>'
+        );
+    },
+
+    async loadMemory(host) {
+        try {
+            const response = await fetch('/api/ai/memories');
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'memories unavailable');
+            host._memories = data.memories || [];
+            host._memoryLimit = Number(data.limit || 0);
+            if ((host._studioTab || '') === 'memory') this.render(host._dom.chat, host);
+        } catch (error) {
+            host._toast(error.message);
+        }
+    },
+
+    async saveMemory(host) {
+        const box = host._dom.chat.querySelector('#ai-memory-text');
+        const text = String(box?.value || '').trim();
+        if (!text) return;
+        try {
+            const response = await fetch('/api/ai/memories', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'save failed');
+            if (box) box.value = '';
+            host._toast(I18n.t(data.duplicate ? 'ai.memoryDuplicate' : 'ai.memorySaved'));
+            await this.loadMemory(host);
+        } catch (error) {
+            host._toast(error.message);
+        }
+    },
+
+    async deleteMemory(host, memoryId) {
+        try {
+            await fetch('/api/ai/memories/' + encodeURIComponent(memoryId), { method: 'DELETE' });
+            await this.loadMemory(host);
+        } catch (error) {
+            host._toast(error.message);
+        }
     },
 
     plugins(plugins, _host) {
