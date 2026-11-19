@@ -2,26 +2,17 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width,initial-scale=1,viewport-fit=cover"
-    />
+
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>可视化图表</title>
     <link rel="icon" href="icon.ico" type="image/x-icon" />
-    <link
-      href="vendor/fonts/literata.css"
-      rel="stylesheet"
-    />
+    <link href="vendor/fonts/literata.css" rel="stylesheet" />
     <script src="vendor/zv/chart.umd.min.js"></script>
     <script src="vendor/zv/apexcharts.min.js"></script>
-    <!-- ECharts is already shipped for the main page; the studio uses the same pinned file
-         instead of carrying a second 1 MB copy under vendor/zv/. -->
     <script src="vendor/echarts.min.js"></script>
     <script src="vendor/zv/xlsx.full.min.js"></script>
     <script src="vendor/zv/html2canvas.min.js"></script>
     <script src="vendor/zv/jspdf.umd.min.js"></script>
-    <!-- One stylesheet per page: the studio's 1,920-line block moved to a file so it is
-         reviewable and a strict CSP can ban inline styles. Kept in the same position. -->
     <link rel="stylesheet" href="css/zenviz.css" />
   </head>
   <body class="body-grid">
@@ -37,24 +28,16 @@
         ><button class="menu-btn" data-menu="engine">引擎</button>
       </div>
       <div class="menu-group">
-        <span class="menu-label">数据</span
-        ><button class="menu-btn" data-menu="data">数据</button>
+        <span class="menu-label">数据</span><button class="menu-btn" data-menu="data">数据</button>
       </div>
       <div class="menu-group">
-        <span class="menu-label">样式</span
-        ><button class="menu-btn" data-menu="style">样式</button>
+        <span class="menu-label">样式</span><button class="menu-btn" data-menu="style">样式</button>
       </div>
       <div class="menu-group">
         <span class="menu-label">导出</span
         ><button class="menu-btn" data-menu="export">导出</button>
       </div>
-      <button
-        class="pin-btn"
-        id="pin-btn"
-        type="button"
-        title="固定菜单"
-        aria-pressed="false"
-      >
+      <button class="pin-btn" id="pin-btn" type="button" title="固定菜单" aria-pressed="false">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -70,10 +53,21 @@
     <div id="dropdowns"></div>
 
     <main id="workspace">
+      <header class="zen-head">
+        <div class="brand">
+          <h1>ZENVIZ</h1>
+          <p>图表可视化 研究 · 人文 · 艺术</p>
+        </div>
+        <div class="head-meta">
+          <span>行数 <b id="meta-rows">12</b></span
+          ><span>系列 <b id="meta-series">3</b></span
+          ><span>引擎 <b id="meta-engine">ECharts</b></span>
+        </div>
+      </header>
+
       <aside class="panel library">
         <div class="panel-head">
-          <span class="panel-title">图表库</span
-          ><span class="panel-note">按引擎筛选</span>
+          <span class="panel-title">图表库</span><span class="panel-note">按引擎筛选</span>
         </div>
         <div class="panel-body">
           <section class="section">
@@ -91,9 +85,7 @@
         <div class="panel-head">
           <span class="panel-title">画布</span>
           <div class="canvas-head-right">
-            <div class="stage-title">
-              <strong id="stage-title">研究结果</strong>
-            </div>
+            <div class="stage-title"><strong id="stage-title">研究结果</strong></div>
             <div class="stage-actions">
               <button class="ghost-btn" id="edit-data-btn">编辑数据</button
               ><button class="ghost-btn" id="fullscreen-btn">全屏</button>
@@ -104,19 +96,12 @@
           <div id="chart-stage">
             <div id="chart-frame">
               <div id="chart-mount"></div>
-              <svg
-                id="zen-svg"
-                viewBox="0 0 1000 620"
-                preserveAspectRatio="none"
-              ></svg>
+              <svg id="zen-svg" viewBox="0 0 1000 620" preserveAspectRatio="none"></svg>
               <div id="chart-overlay"></div>
               <div id="empty-state">
                 <div class="empty-inner">
                   <h2>ZENVIZ</h2>
-                  <p>
-                    从左侧选择图表。<br />可以导入
-                    CSV、TXT、XLSX，也可以直接编辑数据。
-                  </p>
+                  <p>从左侧选择图表。<br />可以导入 CSV、TXT、XLSX，也可以直接编辑数据。</p>
                 </div>
               </div>
             </div>
@@ -129,9 +114,7 @@
           <span class="panel-title">属性</span>
           <div class="canvas-head-right">
             <span class="panel-note">细节调整</span>
-            <button class="ghost-btn" id="reset-inspector-btn" type="button">
-              重置
-            </button>
+            <button class="ghost-btn" id="reset-inspector-btn" type="button">重置</button>
           </div>
         </div>
         <div class="panel-body" id="inspector-body"></div>
@@ -142,9 +125,6 @@
       <div class="data-left">
         <span class="status-dot" id="status-dot"></span
         ><span class="status-text" id="status-text">数据已就绪</span
-        ><span class="data-meta"
-          ><span>行数 <b id="meta-rows">12</b></span
-          ><span>系列 <b id="meta-series">3</b></span></span
         ><span class="engine-chip" id="engine-status">ECharts · 6.1</span>
       </div>
       <div class="data-right">
@@ -152,30 +132,32 @@
         ><button class="data-btn" id="save-png-btn">PNG</button
         ><button class="data-btn" id="save-svg-btn">SVG</button
         ><button class="data-btn" id="save-pdf-btn">PDF</button
+        ><button class="data-btn" id="save-tex-btn">TeX</button
         ><button class="data-btn" id="reset-btn">重置</button>
       </div>
     </div>
     <div class="toast" id="toast"></div>
     <input type="file" id="file-input" accept=".csv,.txt,.xlsx,.xls,.tsv" />
-    <input
-      type="file"
-      id="property-import-input"
-      accept=".json,application/json"
-    />
+    <input type="file" id="property-import-input" accept=".json,application/json" />
 
-    <div
-      class="modal preview-modal"
-      id="preview-modal"
-      aria-label="图表放大查看"
-    >
+    <div class="modal preview-modal" id="preview-modal" aria-label="图表放大查看">
       <div class="preview-card">
         <div class="modal-head">
           <h3>图表放大查看</h3>
-          <button class="modal-close" id="preview-close" type="button">
-            ×
-          </button>
+          <button class="modal-close" id="preview-close" type="button">×</button>
         </div>
         <div class="preview-body" id="preview-body"></div>
+      </div>
+    </div>
+    <div class="modal" id="shortcuts-modal" aria-label="快捷键说明">
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>快捷键</h3>
+          <button class="modal-close" id="shortcuts-close" type="button">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="hk-grid" id="shortcuts-body"></div>
+        </div>
       </div>
     </div>
     <div class="modal" id="data-modal">
@@ -196,11 +178,7 @@
               ></textarea>
             </div>
             <div id="data-role-fields" class="data-role-fields"></div>
-            <div
-              id="data-role-note"
-              class="data-role-note"
-              aria-live="polite"
-            ></div>
+            <div id="data-role-note" class="data-role-note" aria-live="polite"></div>
           </div>
           <div class="modal-gap"></div>
           <div id="table-wrap"></div>
@@ -213,9 +191,8 @@
       </div>
     </div>
 
-    <!-- The page app lives in a file (node --check, CSP); still one IIFE, still first. -->
     <script src="js/zenviz-parse.js"></script>
-<script src="js/zenviz-page.js"></script>
+    <script src="js/zenviz-page.js"></script>
     <script src="js/zenviz-bridge.js"></script>
   </body>
 </html>

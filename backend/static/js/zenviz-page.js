@@ -1,26 +1,19 @@
-/* ZENVIZ chart-studio page app — the body of zenviz.html's inline <script>.
- *
- * Moved out byte-for-byte on 2026-10-29 (it is still one IIFE, indented as it was):
- * a file can be checked by `node --check`, shown in a reviewable diff, and a strict
- * Content-Security-Policy can ban inline scripts. Loaded before zenviz-bridge.js,
- * the same place the inline block ran.
- */
-      (function () {
-        "use strict";
+      ;(function () {
+        'use strict'
         const $ = (s) => document.querySelector(s),
-          $$ = (s) => Array.from(document.querySelectorAll(s));
+          $$ = (s) => Array.from(document.querySelectorAll(s))
         const state = {
-          engine: "echarts",
-          category: "论文",
-          type: "line",
-          palette: "science",
+          engine: 'echarts',
+          category: '论文',
+          type: 'line',
+          palette: 'science',
           radius: 0,
-          title: "研究结果",
-          subtitle: "",
-          titlePosition: "top-left",
-          titleOrientation: "horizontal",
-          legendPosition: "top",
-          legendOrientation: "horizontal",
+          title: '研究结果',
+          subtitle: '',
+          titlePosition: 'top-left',
+          titleOrientation: 'horizontal',
+          legendPosition: 'top',
+          legendOrientation: 'horizontal',
           paddingTop: 4,
           paddingRight: 4,
           paddingBottom: 4,
@@ -30,8 +23,8 @@
           positionBottom: 0,
           positionLeft: 0,
           contentScale: 100,
-          xTitle: "指标",
-          yTitle: "数值",
+          xTitle: '指标',
+          yTitle: '数值',
           showLegend: true,
           showGrid: true,
           smooth: false,
@@ -39,24 +32,24 @@
           pointSize: 5,
           lineWidth: 2,
           opacity: 0.9,
-          fontFamily: "simsun",
-          xAxisFontFamily: "simsun",
-          yAxisFontFamily: "simsun",
-          tooltipFontFamily: "simsun",
-          legendFontFamily: "simsun",
-          titleFontFamily: "simsun",
+          fontFamily: 'simsun',
+          xAxisFontFamily: 'simsun',
+          yAxisFontFamily: 'simsun',
+          tooltipFontFamily: 'simsun',
+          legendFontFamily: 'simsun',
+          titleFontFamily: 'simsun',
           fontSize: 12,
           axisSize: 10,
           rotateLabels: 0,
           tension: 0.25,
           stacked: false,
           normalize: false,
-          bg: "body-grid",
+          bg: 'body-grid',
           width: 1000,
           height: 620,
           exportScale: 3,
           exportTransparent: false,
-          pdfOrientation: "landscape",
+          pdfOrientation: 'landscape',
           data: null,
           xCol: 0,
           yCols: [1, 2, 3],
@@ -64,778 +57,619 @@
           y1Col: 1,
           y2Col: 2,
           chart: null,
-          zenKind: "slope",
-          status: "",
-          artMode: "editorial",
+          zenKind: 'slope',
+          status: '',
+          artMode: 'editorial',
           annotations: true,
           showValues: false,
           showTitle: true,
           border: true,
-        };
+        }
         const categories = {
           论文: [
-            "line",
-            "bar",
-            "area",
-            "scatter",
-            "pie",
-            "radar",
-            "heatmap",
-            "slope",
-            "lollipop",
-            "dotplot",
-            "smallmultiples",
-            "network",
-            "sankey",
-            "correlation",
-            "parallel",
-            "boxplot",
-            "histogram",
-            "errorbar",
-            "bump",
-            "contour",
+            'line',
+            'bar',
+            'area',
+            'scatter',
+            'pie',
+            'radar',
+            'heatmap',
+            'slope',
+            'lollipop',
+            'dotplot',
+            'smallmultiples',
+            'network',
+            'sankey',
+            'correlation',
+            'parallel',
+            'boxplot',
+            'histogram',
+            'errorbar',
+            'bump',
+            'contour',
           ],
-          人文: ["timeline", "wordfreq"],
-          艺术: [
-            "ribbon",
-            "radial",
-            "poster",
-            "field",
-            "chord",
-            "spiral",
-            "swarm",
-            "stream",
-          ],
-        };
+          人文: ['timeline', 'wordfreq'],
+          艺术: ['ribbon', 'radial', 'poster', 'field', 'chord', 'spiral', 'swarm', 'stream'],
+        }
 
         const engineInfo = {
           echarts: {
-            name: "Apache ECharts",
-            short: "ECharts",
-            version: "6.1",
+            name: 'Apache ECharts',
+            short: 'ECharts',
+            version: '6.1',
             types: [
-              "line",
-              "bar",
-              "area",
-              "scatter",
-              "pie",
-              "radar",
-              "heatmap",
-              "network",
-              "sankey",
-              "parallel",
-              "boxplot",
-              "contour",
+              'line',
+              'bar',
+              'area',
+              'scatter',
+              'pie',
+              'radar',
+              'heatmap',
+              'network',
+              'sankey',
+              'parallel',
+              'boxplot',
+              'contour',
             ],
           },
           chartjs: {
-            name: "Chart.js",
-            short: "Chart.js",
-            version: "4.5",
-            types: ["line", "bar", "area", "scatter", "pie", "radar"],
+            name: 'Chart.js',
+            short: 'Chart.js',
+            version: '4.5',
+            types: ['line', 'bar', 'area', 'scatter', 'pie', 'radar'],
           },
           apexcharts: {
-            name: "ApexCharts",
-            short: "ApexCharts",
-            version: "5.3",
-            types: ["line", "bar", "area", "scatter", "pie", "radar"],
+            name: 'ApexCharts',
+            short: 'ApexCharts',
+            version: '5.3',
+            types: ['line', 'bar', 'area', 'scatter', 'pie', 'radar'],
           },
           zen: {
-            name: "ZEN Custom",
-            short: "ZEN",
-            version: "1.0",
+            name: 'ZEN Custom',
+            short: 'ZEN',
+            version: '1.0',
             types: [
-              "slope",
-              "lollipop",
-              "timeline",
-              "dotplot",
-              "wordfreq",
-              "smallmultiples",
-              "network",
-              "correlation",
-              "histogram",
-              "errorbar",
-              "bump",
-              "ribbon",
-              "radial",
-              "poster",
-              "field",
-              "chord",
-              "spiral",
-              "swarm",
-              "stream",
+              'slope',
+              'lollipop',
+              'timeline',
+              'dotplot',
+              'wordfreq',
+              'smallmultiples',
+              'network',
+              'correlation',
+              'histogram',
+              'errorbar',
+              'bump',
+              'ribbon',
+              'radial',
+              'poster',
+              'field',
+              'chord',
+              'spiral',
+              'swarm',
+              'stream',
             ],
           },
-        };
+        }
         function engineReady(id) {
-          if (id === "echarts") return !!window.echarts;
-          if (id === "chartjs") return !!window.Chart;
-          if (id === "apexcharts") return !!window.ApexCharts;
-          if (id === "zen") return true;
-          return false;
+          if (id === 'echarts') return !!window.echarts
+          if (id === 'chartjs') return !!window.Chart
+          if (id === 'apexcharts') return !!window.ApexCharts
+          if (id === 'zen') return true
+          return false
         }
         function engineSupportedTypes(id) {
-          return engineInfo[id]?.types || [];
+          return engineInfo[id]?.types || []
         }
         function typeSupported(t, id = state.engine) {
-          return engineSupportedTypes(id).includes(t);
+          return engineSupportedTypes(id).includes(t)
         }
 
         const chartNames = {
-          line: "折线",
-          bar: "柱状",
-          area: "面积",
-          scatter: "散点",
-          pie: "饼图",
-          radar: "雷达",
-          heatmap: "热图",
-          slope: "斜率图",
-          lollipop: "棒棒糖",
-          timeline: "时间线",
-          dotplot: "点图",
-          wordfreq: "词频",
-          smallmultiples: "小倍图",
-          network: "网络关系",
-          sankey: "桑基",
-          correlation: "相关矩阵",
-          parallel: "平行坐标",
-          boxplot: "箱线",
-          histogram: "直方",
-          errorbar: "误差棒",
-          bump: "排名变化",
-          ribbon: "带状艺术",
-          radial: "径向",
-          poster: "海报统计",
-          field: "粒子场",
-          chord: "弦线艺术",
-          spiral: "螺旋构图",
-          swarm: "蜂群艺术",
-          stream: "流带艺术",
-          contour: "等值矩阵",
-        };
+          line: '折线',
+          bar: '柱状',
+          area: '面积',
+          scatter: '散点',
+          pie: '饼图',
+          radar: '雷达',
+          heatmap: '热图',
+          slope: '斜率图',
+          lollipop: '棒棒糖',
+          timeline: '时间线',
+          dotplot: '点图',
+          wordfreq: '词频',
+          smallmultiples: '小倍图',
+          network: '网络关系',
+          sankey: '桑基',
+          correlation: '相关矩阵',
+          parallel: '平行坐标',
+          boxplot: '箱线',
+          histogram: '直方',
+          errorbar: '误差棒',
+          bump: '排名变化',
+          ribbon: '带状艺术',
+          radial: '径向',
+          poster: '海报统计',
+          field: '粒子场',
+          chord: '弦线艺术',
+          spiral: '螺旋构图',
+          swarm: '蜂群艺术',
+          stream: '流带艺术',
+          contour: '等值矩阵',
+        }
         const chartDataRules = {
           line: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             ui: {
-              note: "横轴使用分类；图例来自所选系列列的列头。",
+              note: '横轴使用分类；图例来自所选系列列的列头。',
               roles: [
-                { key: "x-col", label: "分类列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "系列列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
               ],
             },
           },
           bar: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             ui: {
-              note: "横轴使用分类；每个系列列对应一组柱子，图例显示系列列列头。",
+              note: '横轴使用分类；每个系列列对应一组柱子，图例显示系列列列头。',
               roles: [
-                { key: "x-col", label: "分类列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "系列列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
               ],
             },
           },
           area: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             ui: {
-              note: "横轴使用分类；面积带来自所选系列列。",
+              note: '横轴使用分类；面积带来自所选系列列。',
               roles: [
-                { key: "x-col", label: "分类列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "面积系列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '面积系列', kind: 'numeric', multiple: true },
               ],
             },
           },
           scatter: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             ui: {
-              note: "横轴使用分类，与柱状图相同；点的颜色与图例按系列列对应。",
+              note: '横轴使用分类，与柱状图相同；点的颜色与图例按系列列对应。',
               roles: [
-                { key: "x-col", label: "分类列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "点系列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '分类列', kind: 'category' },
+                { key: 'y-cols', label: '点系列', kind: 'numeric', multiple: true },
               ],
             },
           },
           pie: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "category",
+            legend: 'category',
             positiveY: true,
             aggregateX: true,
             completeY: true,
             ui: {
-              note: "每一行是一个扇区。图例来自扇区名称，颜色与扇区逐项对应。",
+              note: '每一行是一个扇区。图例来自扇区名称，颜色与扇区逐项对应。',
               roles: [
-                { key: "x-col", label: "扇区名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "扇区数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '扇区名称列', kind: 'category' },
+                { key: 'y-cols', label: '扇区数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           radar: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             completeY: true,
             ui: {
-              note: "分类列提供雷达维度；每个系列列形成一条雷达数据系列。",
+              note: '分类列提供雷达维度；每个系列列形成一条雷达数据系列。',
               roles: [
-                { key: "x-col", label: "维度名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "指标系列列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '维度名称列', kind: 'category' },
+                { key: 'y-cols', label: '指标系列列', kind: 'numeric', multiple: true },
               ],
             },
           },
           heatmap: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "横轴使用分类，纵轴由数值系列列的列头构成。",
+              note: '横轴使用分类，纵轴由数值系列列的列头构成。',
               roles: [
-                { key: "x-col", label: "横向类别列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "热图数据列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '横向类别列', kind: 'category' },
+                { key: 'y-cols', label: '热图数据列', kind: 'numeric', multiple: true },
               ],
             },
           },
           slope: {
-            x: "category",
+            x: 'category',
             minY: 2,
             maxY: 2,
-            legend: "none",
+            legend: 'none',
             pairY: true,
             completeY: true,
             ui: {
-              note: "每一行是一个对象；两列数值分别表示起点与终点。",
+              note: '每一行是一个对象；两列数值分别表示起点与终点。',
               roles: [
-                { key: "x-col", label: "对象名称列", kind: "category" },
-                { key: "y1-col", label: "起点数值列", kind: "numeric" },
-                { key: "y2-col", label: "终点数值列", kind: "numeric" },
+                { key: 'x-col', label: '对象名称列', kind: 'category' },
+                { key: 'y1-col', label: '起点数值列', kind: 'numeric' },
+                { key: 'y2-col', label: '终点数值列', kind: 'numeric' },
               ],
             },
           },
           lollipop: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "每一行是一个类别及其对应数值。",
+              note: '每一行是一个类别及其对应数值。',
               roles: [
-                { key: "x-col", label: "类别名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y-cols', label: '数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           timeline: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "第一列用于时间或事件名称，第二列提供事件数值。",
+              note: '第一列用于时间或事件名称，第二列提供事件数值。',
               roles: [
-                { key: "x-col", label: "时间／事件列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "事件数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '时间／事件列', kind: 'category' },
+                { key: 'y-cols', label: '事件数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           dotplot: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "每个分类对应一个点，横向位置由所选数值决定。",
+              note: '每个分类对应一个点，横向位置由所选数值决定。',
               roles: [
-                { key: "x-col", label: "类别名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "点值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y-cols', label: '点值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           wordfreq: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             nonNegativeY: true,
             ui: {
-              note: "第一列是词语，第二列是词频；重复词会按词频汇总。",
+              note: '第一列是词语，第二列是词频；重复词会按词频汇总。',
               roles: [
-                { key: "x-col", label: "词语列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "词频列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '词语列', kind: 'category' },
+                { key: 'y-cols', label: '词频列', kind: 'numeric', multiple: false },
               ],
             },
           },
           smallmultiples: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "第一列提供每个小图的横向类别，系列列分别生成独立小图。",
+              note: '第一列提供每个小图的横向类别，系列列分别生成独立小图。',
               roles: [
-                { key: "x-col", label: "横向类别列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "小图变量列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '横向类别列', kind: 'category' },
+                { key: 'y-cols', label: '小图变量列', kind: 'numeric', multiple: true },
               ],
             },
           },
           network: {
-            x: "category",
-            target: "category",
+            x: 'category',
+            target: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             positiveY: true,
             completeY: true,
             ui: {
-              note: "每一行是一条关系：来源 → 去向，权重决定连接强度。",
+              note: '每一行是一条关系：来源 → 去向，权重决定连接强度。',
               roles: [
-                { key: "x-col", label: "来源列", kind: "category" },
-                { key: "target-col", label: "去向列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "权重列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '权重列', kind: 'numeric', multiple: false },
               ],
             },
           },
           sankey: {
-            x: "category",
-            target: "category",
+            x: 'category',
+            target: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             positiveY: true,
             completeY: true,
             ui: {
-              note: "每一行是一条流向：来源 → 去向，数值列决定流量。",
+              note: '每一行是一条流向：来源 → 去向，数值列决定流量。',
               roles: [
-                { key: "x-col", label: "来源列", kind: "category" },
-                { key: "target-col", label: "去向列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "流量列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '流量列', kind: 'numeric', multiple: false },
               ],
             },
           },
           correlation: {
-            x: "none",
+            x: 'none',
             minY: 2,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             completeY: true,
             ui: {
-              note: "没有单独的分类列；每个数值变量都是矩阵中的一个变量。",
-              roles: [
-                {
-                  key: "y-cols",
-                  label: "变量列",
-                  kind: "numeric",
-                  multiple: true,
-                },
-              ],
+              note: '没有单独的分类列；每个数值变量都是矩阵中的一个变量。',
+              roles: [{ key: 'y-cols', label: '变量列', kind: 'numeric', multiple: true }],
             },
           },
           parallel: {
-            x: "none",
+            x: 'none',
             minY: 2,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             completeY: true,
             ui: {
-              note: "没有单独的 X 轴；每个数值变量构成平行坐标的一条维度轴。",
-              roles: [
-                {
-                  key: "y-cols",
-                  label: "维度变量列",
-                  kind: "numeric",
-                  multiple: true,
-                },
-              ],
+              note: '没有单独的 X 轴；每个数值变量构成平行坐标的一条维度轴。',
+              roles: [{ key: 'y-cols', label: '维度变量列', kind: 'numeric', multiple: true }],
             },
           },
           boxplot: {
-            x: "none",
+            x: 'none',
             minY: 1,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "没有分类列；每个数值列代表一个独立分布组。",
-              roles: [
-                {
-                  key: "y-cols",
-                  label: "分布变量列",
-                  kind: "numeric",
-                  multiple: true,
-                },
-              ],
+              note: '没有分类列；每个数值列代表一个独立分布组。',
+              roles: [{ key: 'y-cols', label: '分布变量列', kind: 'numeric', multiple: true }],
             },
           },
           histogram: {
-            x: "none",
+            x: 'none',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "只需要一列样本值，图表会自动计算频数分布。",
-              roles: [
-                {
-                  key: "y-cols",
-                  label: "样本值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
-              ],
+              note: '只需要一列样本值，图表会自动计算频数分布。',
+              roles: [{ key: 'y-cols', label: '样本值列', kind: 'numeric', multiple: false }],
             },
           },
           errorbar: {
-            x: "category",
+            x: 'category',
             minY: 2,
             maxY: 2,
-            legend: "none",
+            legend: 'none',
             pairY: true,
             completeY: true,
             nonNegativeError: true,
             ui: {
-              note: "每一行是一个类别；中心值与误差值分别来自两列。",
+              note: '每一行是一个类别；中心值与误差值分别来自两列。',
               roles: [
-                { key: "x-col", label: "类别名称列", kind: "category" },
-                { key: "y1-col", label: "中心值列", kind: "numeric" },
-                { key: "y2-col", label: "误差值列", kind: "numeric" },
+                { key: 'x-col', label: '类别名称列', kind: 'category' },
+                { key: 'y1-col', label: '中心值列', kind: 'numeric' },
+                { key: 'y2-col', label: '误差值列', kind: 'numeric' },
               ],
             },
           },
           bump: {
-            x: "category",
+            x: 'category',
             minY: 2,
             maxY: 6,
-            legend: "series",
+            legend: 'series',
             completeY: true,
             ui: {
-              note: "第一列是时间／阶段；每个系列列表示一个排名对象，图例来自系列列列头。",
+              note: '第一列是时间／阶段；每个系列列表示一个排名对象，图例来自系列列列头。',
               roles: [
-                { key: "x-col", label: "时间／阶段列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "排名系列列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '时间／阶段列', kind: 'category' },
+                { key: 'y-cols', label: '排名系列列', kind: 'numeric', multiple: true },
               ],
             },
           },
           contour: {
-            x: "category",
+            x: 'category',
             minY: 2,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "第一列提供横向位置标签，数值列构成等值矩阵的纵向变量。",
+              note: '第一列提供横向位置标签，数值列构成等值矩阵的纵向变量。',
               roles: [
-                { key: "x-col", label: "横向坐标标签列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "等值数据列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '横向坐标标签列', kind: 'category' },
+                { key: 'y-cols', label: '等值数据列', kind: 'numeric', multiple: true },
               ],
             },
           },
           ribbon: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "第一列提供时间／顺序，数据列分别形成带状轨迹。",
+              note: '第一列提供时间／顺序，数据列分别形成带状轨迹。',
               roles: [
-                { key: "x-col", label: "时间／顺序列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "带状数据列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '时间／顺序列', kind: 'category' },
+                { key: 'y-cols', label: '带状数据列', kind: 'numeric', multiple: true },
               ],
             },
           },
           radial: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             nonNegativeY: true,
             ui: {
-              note: "每一行对应一条径向射线，分类控制标签，数值控制半径。",
+              note: '每一行对应一条径向射线，分类控制标签，数值控制半径。',
               roles: [
-                { key: "x-col", label: "分类名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "径向数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '径向数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           poster: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             nonNegativeY: true,
             ui: {
-              note: "每一行是海报中的一个项目，数值决定柱高与总量。",
+              note: '每一行是海报中的一个项目，数值决定柱高与总量。',
               roles: [
-                { key: "x-col", label: "项目／类别列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "统计数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '项目／类别列', kind: 'category' },
+                { key: 'y-cols', label: '统计数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           field: {
-            x: "none",
+            x: 'none',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             ui: {
-              note: "粒子场没有分类 X 轴，只使用一列数值作为粒子分布的驱动数据。",
-              roles: [
-                {
-                  key: "y-cols",
-                  label: "粒子驱动数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
-              ],
+              note: '粒子场没有分类 X 轴，只使用一列数值作为粒子分布的驱动数据。',
+              roles: [{ key: 'y-cols', label: '粒子驱动数值列', kind: 'numeric', multiple: false }],
             },
           },
           chord: {
-            x: "category",
-            target: "category",
+            x: 'category',
+            target: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             positiveY: true,
             completeY: true,
             ui: {
-              note: "每一行表示一条关系，来源与去向围成环形，数值控制弦线粗细。",
+              note: '每一行表示一条关系，来源与去向围成环形，数值控制弦线粗细。',
               roles: [
-                { key: "x-col", label: "来源列", kind: "category" },
-                { key: "target-col", label: "去向列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "权重列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '来源列', kind: 'category' },
+                { key: 'target-col', label: '去向列', kind: 'category' },
+                { key: 'y-cols', label: '权重列', kind: 'numeric', multiple: false },
               ],
             },
           },
           spiral: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             nonNegativeY: true,
             ui: {
-              note: "分类沿螺旋展开，数值同时控制半径与节点强调程度。",
+              note: '分类沿螺旋展开，数值同时控制半径与节点强调程度。',
               roles: [
-                { key: "x-col", label: "分类名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "螺旋数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '螺旋数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           swarm: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 1,
-            legend: "none",
+            legend: 'none',
             nonNegativeY: true,
             ui: {
-              note: "每个分类对应一个艺术化气泡，数值控制气泡大小。",
+              note: '每个分类对应一个艺术化气泡，数值控制气泡大小。',
               roles: [
-                { key: "x-col", label: "分类名称列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "气泡数值列",
-                  kind: "numeric",
-                  multiple: false,
-                },
+                { key: 'x-col', label: '分类名称列', kind: 'category' },
+                { key: 'y-cols', label: '气泡数值列', kind: 'numeric', multiple: false },
               ],
             },
           },
           stream: {
-            x: "category",
+            x: 'category',
             minY: 1,
             maxY: 8,
-            legend: "series",
+            legend: 'series',
             ui: {
-              note: "多个数值系列组成流动的带状轨迹，图例对应系列列。",
+              note: '多个数值系列组成流动的带状轨迹，图例对应系列列。',
               roles: [
-                { key: "x-col", label: "时间／顺序列", kind: "category" },
-                {
-                  key: "y-cols",
-                  label: "流带系列列",
-                  kind: "numeric",
-                  multiple: true,
-                },
+                { key: 'x-col', label: '时间／顺序列', kind: 'category' },
+                { key: 'y-cols', label: '流带系列列', kind: 'numeric', multiple: true },
               ],
             },
           },
-        };
+        }
 
         const typeMeta = {
-          line: { engine: "echarts", cat: "论文", desc: "论文与实验趋势" },
-          bar: { engine: "echarts", cat: "论文", desc: "类别比较" },
-          area: { engine: "echarts", cat: "论文", desc: "总量与趋势" },
-          scatter: { engine: "echarts", cat: "论文", desc: "相关关系" },
-          pie: { engine: "echarts", cat: "论文", desc: "构成占比" },
-          radar: { engine: "echarts", cat: "论文", desc: "多维比较" },
-          heatmap: { engine: "echarts", cat: "论文", desc: "矩阵关系" },
-          slope: { engine: "zen", cat: "论文", desc: "前后变化与排名" },
-          lollipop: { engine: "zen", cat: "论文", desc: "清晰的序列比较" },
-          timeline: { engine: "zen", cat: "人文", desc: "事件与历史" },
-          dotplot: { engine: "zen", cat: "论文", desc: "分布与群组比较" },
-          wordfreq: { engine: "zen", cat: "人文", desc: "文本与词频" },
-          smallmultiples: { engine: "zen", cat: "论文", desc: "叙事式小倍图" },
-          network: { engine: "echarts", cat: "论文", desc: "人物、概念、引用" },
-          sankey: { engine: "echarts", cat: "论文", desc: "流向与结构" },
-          correlation: { engine: "zen", cat: "论文", desc: "变量相关矩阵" },
-          parallel: { engine: "echarts", cat: "论文", desc: "多变量轨迹" },
-          boxplot: { engine: "echarts", cat: "论文", desc: "分布与异常" },
-          histogram: { engine: "zen", cat: "论文", desc: "频数分布" },
-          errorbar: { engine: "zen", cat: "论文", desc: "均值与误差" },
-          bump: { engine: "zen", cat: "论文", desc: "排名变化" },
-          ribbon: { engine: "zen", cat: "艺术", desc: "流动的时间关系" },
-          radial: { engine: "zen", cat: "艺术", desc: "极坐标构图" },
-          poster: { engine: "zen", cat: "艺术", desc: "信息海报" },
-          field: { engine: "zen", cat: "艺术", desc: "粒子／字段" },
-          chord: { engine: "zen", cat: "艺术", desc: "环形关系与弦线" },
-          spiral: { engine: "zen", cat: "艺术", desc: "数据螺旋构图" },
-          swarm: { engine: "zen", cat: "艺术", desc: "气泡群与尺度" },
-          stream: { engine: "zen", cat: "艺术", desc: "流动带状叙事" },
-          contour: { engine: "echarts", cat: "论文", desc: "数据矩阵等值表达" },
-        };
+          line: { engine: 'echarts', cat: '论文', desc: '论文与实验趋势' },
+          bar: { engine: 'echarts', cat: '论文', desc: '类别比较' },
+          area: { engine: 'echarts', cat: '论文', desc: '总量与趋势' },
+          scatter: { engine: 'echarts', cat: '论文', desc: '相关关系' },
+          pie: { engine: 'echarts', cat: '论文', desc: '构成占比' },
+          radar: { engine: 'echarts', cat: '论文', desc: '多维比较' },
+          heatmap: { engine: 'echarts', cat: '论文', desc: '矩阵关系' },
+          slope: { engine: 'zen', cat: '论文', desc: '前后变化与排名' },
+          lollipop: { engine: 'zen', cat: '论文', desc: '清晰的序列比较' },
+          timeline: { engine: 'zen', cat: '人文', desc: '事件与历史' },
+          dotplot: { engine: 'zen', cat: '论文', desc: '分布与群组比较' },
+          wordfreq: { engine: 'zen', cat: '人文', desc: '文本与词频' },
+          smallmultiples: { engine: 'zen', cat: '论文', desc: '叙事式小倍图' },
+          network: { engine: 'echarts', cat: '论文', desc: '人物、概念、引用' },
+          sankey: { engine: 'echarts', cat: '论文', desc: '流向与结构' },
+          correlation: { engine: 'zen', cat: '论文', desc: '变量相关矩阵' },
+          parallel: { engine: 'echarts', cat: '论文', desc: '多变量轨迹' },
+          boxplot: { engine: 'echarts', cat: '论文', desc: '分布与异常' },
+          histogram: { engine: 'zen', cat: '论文', desc: '频数分布' },
+          errorbar: { engine: 'zen', cat: '论文', desc: '均值与误差' },
+          bump: { engine: 'zen', cat: '论文', desc: '排名变化' },
+          ribbon: { engine: 'zen', cat: '艺术', desc: '流动的时间关系' },
+          radial: { engine: 'zen', cat: '艺术', desc: '极坐标构图' },
+          poster: { engine: 'zen', cat: '艺术', desc: '信息海报' },
+          field: { engine: 'zen', cat: '艺术', desc: '粒子／字段' },
+          chord: { engine: 'zen', cat: '艺术', desc: '环形关系与弦线' },
+          spiral: { engine: 'zen', cat: '艺术', desc: '数据螺旋构图' },
+          swarm: { engine: 'zen', cat: '艺术', desc: '气泡群与尺度' },
+          stream: { engine: 'zen', cat: '艺术', desc: '流动带状叙事' },
+          contour: { engine: 'echarts', cat: '论文', desc: '数据矩阵等值表达' },
+        }
         const sample = {
-          headers: ["类别", "甲", "乙", "丙"],
+          headers: ['类别', '甲', '乙', '丙'],
           rows: [
-            ["一月", 42, 37, 28],
-            ["二月", 51, 41, 32],
-            ["三月", 58, 49, 39],
-            ["四月", 63, 55, 43],
-            ["五月", 67, 61, 48],
-            ["六月", 72, 64, 52],
-            ["七月", 69, 67, 58],
-            ["八月", 78, 71, 61],
-            ["九月", 84, 76, 66],
-            ["十月", 88, 82, 70],
-            ["十一月", 93, 86, 75],
-            ["十二月", 98, 91, 79],
+            ['一月', 42, 37, 28],
+            ['二月', 51, 41, 32],
+            ['三月', 58, 49, 39],
+            ['四月', 63, 55, 43],
+            ['五月', 67, 61, 48],
+            ['六月', 72, 64, 52],
+            ['七月', 69, 67, 58],
+            ['八月', 78, 71, 61],
+            ['九月', 84, 76, 66],
+            ['十月', 88, 82, 70],
+            ['十一月', 93, 86, 75],
+            ['十二月', 98, 91, 79],
           ],
-        };
-        state.data = structuredClone(sample);
+        }
+        state.data = structuredClone(sample)
 
         let chartProps = {
           line: {
             lineWidth: 2,
-            lineType: "solid",
-            lineMode: "single",
+            lineType: 'solid',
+            lineMode: 'single',
             pointSize: 5,
             smooth: false,
             showPoints: true,
             showLegend: true,
             showGrid: true,
             rotateLabels: 0,
-            yMin: "",
-            yMax: "",
+            yMin: '',
+            yMax: '',
           },
           bar: {
             barWidth: 46,
@@ -867,7 +701,7 @@
             innerRadius: 32,
             outerRadius: 62,
             showLabels: false,
-            rose: "none",
+            rose: 'none',
             showLegend: true,
           },
           radar: {
@@ -876,17 +710,11 @@
             lineWidth: 2,
             pointSize: 5,
             showPoints: true,
-            shape: "polygon",
+            shape: 'polygon',
             showLegend: true,
             showGrid: true,
           },
-          heatmap: {
-            cellGap: 1,
-            showValues: false,
-            showGrid: true,
-            min: "",
-            max: "",
-          },
+          heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
           network: {
             repulsion: 120,
             edgeLength: 100,
@@ -894,181 +722,89 @@
             lineWidth: 1,
             showLabels: true,
           },
-          sankey: {
-            nodeWidth: 18,
-            nodeGap: 10,
-            edgeOpacity: 0.22,
-            showLabels: true,
-          },
-          parallel: {
-            lineWidth: 1,
-            lineOpacity: 0.18,
-            axisFont: 8,
-            showGrid: true,
-          },
-          boxplot: {
-            boxWidth: 34,
-            lineWidth: 1.5,
-            showGrid: true,
-            showMean: true,
-          },
-          contour: {
-            resolution: 14,
-            contrast: 1,
-            showLabels: false,
-            showGrid: true,
-          },
-          slope: {
-            lineWidth: 2,
-            pointSize: 5,
-            showValues: true,
-            labelCount: 12,
-          },
-          lollipop: {
-            pointSize: 6,
-            stemWidth: 1,
-            opacity: 0.85,
-            sort: "原顺序",
-          },
-          timeline: {
-            pointSize: 4,
-            stemLength: 90,
-            showValues: true,
-            alternate: true,
-          },
+          sankey: { nodeWidth: 18, nodeGap: 10, edgeOpacity: 0.22, showLabels: true },
+          parallel: { lineWidth: 1, lineOpacity: 0.18, axisFont: 8, showGrid: true },
+          boxplot: { boxWidth: 34, lineWidth: 1.5, showGrid: true, showMean: true },
+          contour: { resolution: 14, contrast: 1, showLabels: false, showGrid: true },
+          slope: { lineWidth: 2, pointSize: 5, showValues: true, labelCount: 12 },
+          lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
+          timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
           dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
-          wordfreq: {
-            minFont: 12,
-            maxFont: 44,
-            maxWords: 48,
-            rotation: 0,
-            spacing: 32,
-          },
-          smallmultiples: {
-            columns: 3,
-            gap: 25,
-            lineWidth: 2,
-            showFrame: true,
-          },
-          correlation: {
-            cellSize: 62,
-            precision: 2,
-            mode: "全部",
-            intensity: 1,
-            showGrid: true,
-          },
-          histogram: {
-            bins: 9,
-            barGap: 2,
-            opacity: 0.8,
-            showValues: false,
-            showGrid: true,
-          },
-          errorbar: {
-            pointSize: 5,
-            errorSize: 15,
-            lineWidth: 1.2,
-            showGrid: true,
-          },
+          wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
+          smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
+          correlation: { cellSize: 62, precision: 2, mode: '全部', intensity: 1, showGrid: true },
+          histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: false, showGrid: true },
+          errorbar: { pointSize: 5, errorSize: 15, lineWidth: 1.2, showGrid: true },
           bump: { maxLines: 5, rowGap: 70, lineWidth: 2, showLabels: true },
           ribbon: { bands: 5, width: 14, amplitude: 35, opacity: 0.35 },
           radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
-          poster: {
-            barCount: 8,
-            barWidth: 52,
-            barHeight: 160,
-            headlineSize: 64,
-          },
+          poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
           field: { count: 180, size: 2, opacity: 0.25 },
-          chord: {
-            radius: 205,
-            lineWidth: 5,
-            nodeSize: 5,
-            opacity: 0.55,
-            showLabels: true,
-          },
-          spiral: {
-            turns: 3.2,
-            lineWidth: 2,
-            pointSize: 4,
-            showLabels: true,
-            opacity: 0.82,
-          },
-          swarm: {
-            maxRadius: 28,
-            spread: 360,
-            jitter: 70,
-            opacity: 0.72,
-            showLabels: true,
-          },
-          stream: {
-            bands: 5,
-            amplitude: 72,
-            width: 18,
-            opacity: 0.34,
-            showLabels: false,
-          },
-        };
+          chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+          spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+          swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+          stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
+        }
 
         const ENGINE_PROPERTY_KEYS = [
-          "palette",
-          "title",
-          "subtitle",
-          "titlePosition",
-          "titleOrientation",
-          "legendPosition",
-          "legendOrientation",
-          "paddingTop",
-          "paddingRight",
-          "paddingBottom",
-          "paddingLeft",
-          "positionTop",
-          "positionRight",
-          "positionBottom",
-          "positionLeft",
-          "contentScale",
-          "xTitle",
-          "yTitle",
-          "fontSize",
-          "axisSize",
-          "rotateLabels",
-          "tension",
-          "stacked",
-          "normalize",
-          "width",
-          "height",
-          "exportScale",
-          "exportTransparent",
-          "pdfOrientation",
-          "artMode",
-          "annotations",
-          "showLegend",
-          "showGrid",
-          "smooth",
-          "showPoints",
-          "pointSize",
-          "lineWidth",
-          "opacity",
-          "fontFamily",
-          "xAxisFontFamily",
-          "yAxisFontFamily",
-          "tooltipFontFamily",
-          "legendFontFamily",
-          "titleFontFamily",
-        ];
+          'palette',
+          'title',
+          'subtitle',
+          'titlePosition',
+          'titleOrientation',
+          'legendPosition',
+          'legendOrientation',
+          'paddingTop',
+          'paddingRight',
+          'paddingBottom',
+          'paddingLeft',
+          'positionTop',
+          'positionRight',
+          'positionBottom',
+          'positionLeft',
+          'contentScale',
+          'xTitle',
+          'yTitle',
+          'fontSize',
+          'axisSize',
+          'rotateLabels',
+          'tension',
+          'stacked',
+          'normalize',
+          'width',
+          'height',
+          'exportScale',
+          'exportTransparent',
+          'pdfOrientation',
+          'artMode',
+          'annotations',
+          'showLegend',
+          'showGrid',
+          'smooth',
+          'showPoints',
+          'pointSize',
+          'lineWidth',
+          'opacity',
+          'fontFamily',
+          'xAxisFontFamily',
+          'yAxisFontFamily',
+          'tooltipFontFamily',
+          'legendFontFamily',
+          'titleFontFamily',
+        ]
         // 用户提供的右侧属性基准文件。仅当对应“引擎 + 图表类型”没有 Local Storage 记录时使用。
         // 每个引擎、每个图表类型都直接采用该 JSON 中的独立默认值。
         const RIGHT_PROPERTY_DEFAULTS = {
           echarts: {
             typeStates: {
               line: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -1078,8 +814,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1089,8 +825,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1099,21 +835,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1123,8 +859,8 @@
                 positionBottom: 20,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1134,8 +870,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1144,21 +880,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               area: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1168,8 +904,8 @@
                 positionBottom: 20,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1179,8 +915,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1189,21 +925,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               scatter: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1213,8 +949,8 @@
                 positionBottom: 23,
                 positionLeft: 13,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1224,8 +960,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1234,21 +970,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               pie: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1258,8 +994,8 @@
                 positionBottom: 10,
                 positionLeft: 0,
                 contentScale: 115,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1269,8 +1005,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1279,21 +1015,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1303,8 +1039,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 135,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1314,8 +1050,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1324,21 +1060,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               heatmap: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1348,8 +1084,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1359,8 +1095,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1369,21 +1105,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               slope: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1393,8 +1129,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1404,8 +1140,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1414,21 +1150,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               lollipop: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1438,8 +1174,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1449,8 +1185,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1459,21 +1195,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               timeline: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1483,8 +1219,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1494,8 +1230,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1504,21 +1240,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               dotplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1528,8 +1264,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1539,8 +1275,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1549,21 +1285,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               wordfreq: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1573,8 +1309,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1584,8 +1320,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1594,21 +1330,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               smallmultiples: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1618,8 +1354,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1629,8 +1365,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1639,21 +1375,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               network: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1663,8 +1399,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 150,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1674,8 +1410,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1684,21 +1420,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               sankey: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1708,8 +1444,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1719,8 +1455,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1729,21 +1465,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               correlation: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1753,8 +1489,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1764,8 +1500,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1774,21 +1510,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               parallel: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1798,8 +1534,8 @@
                 positionBottom: 22,
                 positionLeft: 15,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1809,8 +1545,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1819,21 +1555,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               boxplot: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1843,8 +1579,8 @@
                 positionBottom: 28,
                 positionLeft: 17,
                 contentScale: 105,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1854,8 +1590,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1864,21 +1600,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               histogram: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1888,8 +1624,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1899,8 +1635,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1909,21 +1645,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               errorbar: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1933,8 +1669,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1944,8 +1680,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1954,21 +1690,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bump: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -1978,8 +1714,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -1989,8 +1725,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -1999,21 +1735,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               ribbon: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2023,8 +1759,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2034,8 +1770,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2044,21 +1780,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radial: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2068,8 +1804,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2079,8 +1815,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2089,21 +1825,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               poster: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2113,8 +1849,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2124,8 +1860,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2134,21 +1870,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               field: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2158,8 +1894,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2169,8 +1905,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2179,21 +1915,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               chord: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -2203,8 +1939,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2214,8 +1950,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2224,21 +1960,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               spiral: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -2248,8 +1984,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2259,8 +1995,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2269,21 +2005,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               swarm: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -2293,8 +2029,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2304,8 +2040,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2314,21 +2050,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               stream: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -2338,8 +2074,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2349,8 +2085,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2359,21 +2095,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               contour: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2383,8 +2119,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2394,8 +2130,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2404,19 +2140,19 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
             },
             chartProps: {
               line: {
                 lineWidth: 2,
-                lineType: "solid",
-                lineMode: "single",
+                lineType: 'solid',
+                lineMode: 'single',
                 pointSize: 5,
                 smooth: true,
                 showPoints: true,
@@ -2424,7 +2160,7 @@
                 showGrid: true,
                 rotateLabels: 0,
                 yMin: 20,
-                yMax: "",
+                yMax: '',
               },
               bar: {
                 barWidth: 46,
@@ -2456,7 +2192,7 @@
                 innerRadius: 32,
                 outerRadius: 62,
                 showLabels: true,
-                rose: "radius",
+                rose: 'radius',
                 showLegend: true,
               },
               radar: {
@@ -2465,17 +2201,11 @@
                 lineWidth: 2,
                 pointSize: 5,
                 showPoints: true,
-                shape: "circle",
+                shape: 'circle',
                 showLegend: true,
                 showGrid: true,
               },
-              heatmap: {
-                cellGap: 6,
-                showValues: true,
-                showGrid: true,
-                min: "",
-                max: "",
-              },
+              heatmap: { cellGap: 6, showValues: true, showGrid: true, min: '', max: '' },
               network: {
                 repulsion: 120,
                 edgeLength: 100,
@@ -2483,137 +2213,46 @@
                 lineWidth: 1,
                 showLabels: true,
               },
-              sankey: {
-                nodeWidth: 18,
-                nodeGap: 10,
-                edgeOpacity: 0.22,
-                showLabels: true,
-              },
-              parallel: {
-                lineWidth: 1,
-                lineOpacity: 0.18,
-                axisFont: 8,
-                showGrid: true,
-              },
-              boxplot: {
-                boxWidth: 34,
-                lineWidth: 1.5,
-                showGrid: true,
-                showMean: true,
-              },
-              contour: {
-                resolution: 15,
-                contrast: 1.5,
-                showLabels: true,
-                showGrid: true,
-              },
-              slope: {
-                lineWidth: 2,
-                pointSize: 5,
-                showValues: true,
-                labelCount: 12,
-              },
-              lollipop: {
-                pointSize: 6,
-                stemWidth: 1,
-                opacity: 0.85,
-                sort: "原顺序",
-              },
-              timeline: {
-                pointSize: 4,
-                stemLength: 90,
-                showValues: true,
-                alternate: true,
-              },
-              dotplot: {
-                pointSize: 5,
-                rowGap: 30,
-                opacity: 0.9,
-                baseline: true,
-              },
-              wordfreq: {
-                minFont: 12,
-                maxFont: 44,
-                maxWords: 48,
-                rotation: 0,
-                spacing: 32,
-              },
-              smallmultiples: {
-                columns: 3,
-                gap: 25,
-                lineWidth: 2,
-                showFrame: true,
-              },
+              sankey: { nodeWidth: 18, nodeGap: 10, edgeOpacity: 0.22, showLabels: true },
+              parallel: { lineWidth: 1, lineOpacity: 0.18, axisFont: 8, showGrid: true },
+              boxplot: { boxWidth: 34, lineWidth: 1.5, showGrid: true, showMean: true },
+              contour: { resolution: 15, contrast: 1.5, showLabels: true, showGrid: true },
+              slope: { lineWidth: 2, pointSize: 5, showValues: true, labelCount: 12 },
+              lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
+              timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
+              dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
+              smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
                 precision: 2,
-                mode: "全部",
+                mode: '全部',
                 intensity: 1,
                 showGrid: true,
               },
-              histogram: {
-                bins: 9,
-                barGap: 2,
-                opacity: 0.8,
-                showValues: false,
-                showGrid: true,
-              },
-              errorbar: {
-                pointSize: 5,
-                errorSize: 15,
-                lineWidth: 1.2,
-                showGrid: true,
-              },
+              histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: false, showGrid: true },
+              errorbar: { pointSize: 5, errorSize: 15, lineWidth: 1.2, showGrid: true },
               bump: { maxLines: 5, rowGap: 70, lineWidth: 2, showLabels: true },
               ribbon: { bands: 5, width: 14, amplitude: 35, opacity: 0.35 },
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
-              poster: {
-                barCount: 8,
-                barWidth: 52,
-                barHeight: 160,
-                headlineSize: 64,
-              },
+              poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
-              chord: {
-                radius: 205,
-                lineWidth: 5,
-                nodeSize: 5,
-                opacity: 0.55,
-                showLabels: true,
-              },
-              spiral: {
-                turns: 3.2,
-                lineWidth: 2,
-                pointSize: 4,
-                showLabels: true,
-                opacity: 0.82,
-              },
-              swarm: {
-                maxRadius: 28,
-                spread: 360,
-                jitter: 70,
-                opacity: 0.72,
-                showLabels: true,
-              },
-              stream: {
-                bands: 5,
-                amplitude: 72,
-                width: 18,
-                opacity: 0.34,
-                showLabels: false,
-              },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           chartjs: {
             typeStates: {
               line: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2623,8 +2262,8 @@
                 positionBottom: 20,
                 positionLeft: 16,
                 contentScale: 90,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2634,8 +2273,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2644,21 +2283,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2668,8 +2307,8 @@
                 positionBottom: 19,
                 positionLeft: 16,
                 contentScale: 90,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2679,8 +2318,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2689,21 +2328,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               area: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2713,8 +2352,8 @@
                 positionBottom: 13,
                 positionLeft: 17,
                 contentScale: 90,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2724,8 +2363,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2734,21 +2373,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               scatter: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2758,8 +2397,8 @@
                 positionBottom: 18,
                 positionLeft: 11,
                 contentScale: 90,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2769,8 +2408,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2779,21 +2418,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               pie: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2803,8 +2442,8 @@
                 positionBottom: 20,
                 positionLeft: 0,
                 contentScale: 140,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2814,8 +2453,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2824,21 +2463,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2848,8 +2487,8 @@
                 positionBottom: 22,
                 positionLeft: 0,
                 contentScale: 95,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2859,8 +2498,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2869,21 +2508,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               heatmap: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2893,8 +2532,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2904,8 +2543,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2914,21 +2553,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               slope: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2938,8 +2577,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2949,8 +2588,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -2959,21 +2598,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               lollipop: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -2983,8 +2622,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -2994,8 +2633,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3004,21 +2643,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               timeline: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3028,8 +2667,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3039,8 +2678,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3049,21 +2688,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               dotplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3073,8 +2712,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3084,8 +2723,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3094,21 +2733,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               wordfreq: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3118,8 +2757,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3129,8 +2768,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3139,21 +2778,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               smallmultiples: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3163,8 +2802,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3174,8 +2813,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3184,21 +2823,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               network: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3208,8 +2847,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3219,8 +2858,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3229,21 +2868,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               sankey: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3253,8 +2892,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3264,8 +2903,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3274,21 +2913,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               correlation: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3298,8 +2937,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3309,8 +2948,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3319,21 +2958,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               parallel: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3343,8 +2982,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3354,8 +2993,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3364,21 +3003,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               boxplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3388,8 +3027,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3399,8 +3038,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3409,21 +3048,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               histogram: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3433,8 +3072,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3444,8 +3083,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3454,21 +3093,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               errorbar: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3478,8 +3117,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3489,8 +3128,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3499,21 +3138,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bump: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3523,8 +3162,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3534,8 +3173,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3544,21 +3183,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               ribbon: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3568,8 +3207,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3579,8 +3218,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3589,21 +3228,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radial: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3613,8 +3252,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3624,8 +3263,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3634,21 +3273,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               poster: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3658,8 +3297,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3669,8 +3308,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3679,21 +3318,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               field: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3703,8 +3342,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3714,8 +3353,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3724,21 +3363,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               chord: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -3748,8 +3387,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3759,8 +3398,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3769,21 +3408,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               spiral: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -3793,8 +3432,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3804,8 +3443,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3814,21 +3453,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               swarm: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -3838,8 +3477,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3849,8 +3488,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3859,21 +3498,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               stream: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -3883,8 +3522,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3894,8 +3533,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3904,21 +3543,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               contour: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -3928,8 +3567,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -3939,8 +3578,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -3949,27 +3588,27 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
             },
             chartProps: {
               line: {
                 lineWidth: 2,
-                lineType: "solid",
-                lineMode: "single",
+                lineType: 'solid',
+                lineMode: 'single',
                 pointSize: 5,
                 smooth: false,
                 showPoints: true,
                 showLegend: true,
                 showGrid: true,
                 rotateLabels: 0,
-                yMin: "",
-                yMax: "",
+                yMin: '',
+                yMax: '',
               },
               bar: {
                 barWidth: 46,
@@ -4001,7 +3640,7 @@
                 innerRadius: 32,
                 outerRadius: 62,
                 showLabels: true,
-                rose: "none",
+                rose: 'none',
                 showLegend: true,
               },
               radar: {
@@ -4010,17 +3649,11 @@
                 lineWidth: 2,
                 pointSize: 5,
                 showPoints: true,
-                shape: "polygon",
+                shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
               },
-              heatmap: {
-                cellGap: 1,
-                showValues: false,
-                showGrid: true,
-                min: "",
-                max: "",
-              },
+              heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
                 repulsion: 120,
                 edgeLength: 100,
@@ -4028,137 +3661,46 @@
                 lineWidth: 1,
                 showLabels: true,
               },
-              sankey: {
-                nodeWidth: 18,
-                nodeGap: 10,
-                edgeOpacity: 0.22,
-                showLabels: true,
-              },
-              parallel: {
-                lineWidth: 1,
-                lineOpacity: 0.18,
-                axisFont: 8,
-                showGrid: true,
-              },
-              boxplot: {
-                boxWidth: 34,
-                lineWidth: 1.5,
-                showGrid: true,
-                showMean: true,
-              },
-              contour: {
-                resolution: 14,
-                contrast: 1,
-                showLabels: false,
-                showGrid: true,
-              },
-              slope: {
-                lineWidth: 2,
-                pointSize: 5,
-                showValues: true,
-                labelCount: 12,
-              },
-              lollipop: {
-                pointSize: 6,
-                stemWidth: 1,
-                opacity: 0.85,
-                sort: "原顺序",
-              },
-              timeline: {
-                pointSize: 4,
-                stemLength: 90,
-                showValues: true,
-                alternate: true,
-              },
-              dotplot: {
-                pointSize: 5,
-                rowGap: 30,
-                opacity: 0.9,
-                baseline: true,
-              },
-              wordfreq: {
-                minFont: 12,
-                maxFont: 44,
-                maxWords: 48,
-                rotation: 0,
-                spacing: 32,
-              },
-              smallmultiples: {
-                columns: 3,
-                gap: 25,
-                lineWidth: 2,
-                showFrame: true,
-              },
+              sankey: { nodeWidth: 18, nodeGap: 10, edgeOpacity: 0.22, showLabels: true },
+              parallel: { lineWidth: 1, lineOpacity: 0.18, axisFont: 8, showGrid: true },
+              boxplot: { boxWidth: 34, lineWidth: 1.5, showGrid: true, showMean: true },
+              contour: { resolution: 14, contrast: 1, showLabels: false, showGrid: true },
+              slope: { lineWidth: 2, pointSize: 5, showValues: true, labelCount: 12 },
+              lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
+              timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
+              dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
+              smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
                 precision: 2,
-                mode: "全部",
+                mode: '全部',
                 intensity: 1,
                 showGrid: true,
               },
-              histogram: {
-                bins: 9,
-                barGap: 2,
-                opacity: 0.8,
-                showValues: false,
-                showGrid: true,
-              },
-              errorbar: {
-                pointSize: 5,
-                errorSize: 15,
-                lineWidth: 1.2,
-                showGrid: true,
-              },
+              histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: false, showGrid: true },
+              errorbar: { pointSize: 5, errorSize: 15, lineWidth: 1.2, showGrid: true },
               bump: { maxLines: 5, rowGap: 70, lineWidth: 2, showLabels: true },
               ribbon: { bands: 5, width: 14, amplitude: 35, opacity: 0.35 },
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
-              poster: {
-                barCount: 8,
-                barWidth: 52,
-                barHeight: 160,
-                headlineSize: 64,
-              },
+              poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
-              chord: {
-                radius: 205,
-                lineWidth: 5,
-                nodeSize: 5,
-                opacity: 0.55,
-                showLabels: true,
-              },
-              spiral: {
-                turns: 3.2,
-                lineWidth: 2,
-                pointSize: 4,
-                showLabels: true,
-                opacity: 0.82,
-              },
-              swarm: {
-                maxRadius: 28,
-                spread: 360,
-                jitter: 70,
-                opacity: 0.72,
-                showLabels: true,
-              },
-              stream: {
-                bands: 5,
-                amplitude: 72,
-                width: 18,
-                opacity: 0.34,
-                showLabels: false,
-              },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           apexcharts: {
             typeStates: {
               line: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4168,8 +3710,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 95,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4179,8 +3721,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4189,21 +3731,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4213,8 +3755,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 95,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4224,8 +3766,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4234,21 +3776,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               area: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4258,8 +3800,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4269,8 +3811,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4279,21 +3821,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               scatter: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4303,8 +3845,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 95,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4314,8 +3856,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4324,21 +3866,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               pie: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4348,8 +3890,8 @@
                 positionBottom: 27,
                 positionLeft: 0,
                 contentScale: 90,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4359,8 +3901,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4369,21 +3911,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4393,8 +3935,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 180,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4404,8 +3946,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4414,21 +3956,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               heatmap: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4438,8 +3980,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4449,8 +3991,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4459,21 +4001,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               slope: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4483,8 +4025,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4494,8 +4036,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4504,21 +4046,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               lollipop: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4528,8 +4070,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4539,8 +4081,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4549,21 +4091,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               timeline: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4573,8 +4115,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4584,8 +4126,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4594,21 +4136,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               dotplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4618,8 +4160,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4629,8 +4171,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4639,21 +4181,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               wordfreq: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4663,8 +4205,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4674,8 +4216,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4684,21 +4226,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               smallmultiples: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4708,8 +4250,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4719,8 +4261,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4729,21 +4271,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               network: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4753,8 +4295,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4764,8 +4306,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4774,21 +4316,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               sankey: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4798,8 +4340,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4809,8 +4351,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4819,21 +4361,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               correlation: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4843,8 +4385,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4854,8 +4396,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4864,21 +4406,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               parallel: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4888,8 +4430,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4899,8 +4441,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4909,21 +4451,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               boxplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4933,8 +4475,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4944,8 +4486,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4954,21 +4496,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               histogram: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -4978,8 +4520,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -4989,8 +4531,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -4999,21 +4541,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               errorbar: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5023,8 +4565,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5034,8 +4576,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5044,21 +4586,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bump: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5068,8 +4610,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5079,8 +4621,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5089,21 +4631,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               ribbon: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5113,8 +4655,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5124,8 +4666,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5134,21 +4676,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radial: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5158,8 +4700,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5169,8 +4711,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5179,21 +4721,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               poster: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5203,8 +4745,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5214,8 +4756,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5224,21 +4766,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               field: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5248,8 +4790,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5259,8 +4801,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5269,21 +4811,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               chord: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -5293,8 +4835,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5304,8 +4846,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5314,21 +4856,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               spiral: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -5338,8 +4880,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5349,8 +4891,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5359,21 +4901,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               swarm: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -5383,8 +4925,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5394,8 +4936,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5404,21 +4946,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               stream: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -5428,8 +4970,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5439,8 +4981,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5449,21 +4991,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               contour: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5473,8 +5015,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5484,8 +5026,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5494,27 +5036,27 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
             },
             chartProps: {
               line: {
                 lineWidth: 2,
-                lineType: "solid",
-                lineMode: "single",
+                lineType: 'solid',
+                lineMode: 'single',
                 pointSize: 5,
                 smooth: true,
                 showPoints: false,
                 showLegend: true,
                 showGrid: true,
                 rotateLabels: 0,
-                yMin: "",
-                yMax: "",
+                yMin: '',
+                yMax: '',
               },
               bar: {
                 barWidth: 46,
@@ -5546,7 +5088,7 @@
                 innerRadius: 32,
                 outerRadius: 62,
                 showLabels: true,
-                rose: "radius",
+                rose: 'radius',
                 showLegend: true,
               },
               radar: {
@@ -5555,17 +5097,11 @@
                 lineWidth: 1.5,
                 pointSize: 2,
                 showPoints: false,
-                shape: "polygon",
+                shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
               },
-              heatmap: {
-                cellGap: 1,
-                showValues: false,
-                showGrid: true,
-                min: "",
-                max: "",
-              },
+              heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
                 repulsion: 120,
                 edgeLength: 100,
@@ -5573,137 +5109,46 @@
                 lineWidth: 1,
                 showLabels: true,
               },
-              sankey: {
-                nodeWidth: 18,
-                nodeGap: 10,
-                edgeOpacity: 0.22,
-                showLabels: true,
-              },
-              parallel: {
-                lineWidth: 1,
-                lineOpacity: 0.18,
-                axisFont: 8,
-                showGrid: true,
-              },
-              boxplot: {
-                boxWidth: 34,
-                lineWidth: 1.5,
-                showGrid: true,
-                showMean: true,
-              },
-              contour: {
-                resolution: 14,
-                contrast: 1,
-                showLabels: false,
-                showGrid: true,
-              },
-              slope: {
-                lineWidth: 2,
-                pointSize: 5,
-                showValues: true,
-                labelCount: 12,
-              },
-              lollipop: {
-                pointSize: 6,
-                stemWidth: 1,
-                opacity: 0.85,
-                sort: "原顺序",
-              },
-              timeline: {
-                pointSize: 4,
-                stemLength: 90,
-                showValues: true,
-                alternate: true,
-              },
-              dotplot: {
-                pointSize: 5,
-                rowGap: 30,
-                opacity: 0.9,
-                baseline: true,
-              },
-              wordfreq: {
-                minFont: 12,
-                maxFont: 44,
-                maxWords: 48,
-                rotation: 0,
-                spacing: 32,
-              },
-              smallmultiples: {
-                columns: 3,
-                gap: 25,
-                lineWidth: 2,
-                showFrame: true,
-              },
+              sankey: { nodeWidth: 18, nodeGap: 10, edgeOpacity: 0.22, showLabels: true },
+              parallel: { lineWidth: 1, lineOpacity: 0.18, axisFont: 8, showGrid: true },
+              boxplot: { boxWidth: 34, lineWidth: 1.5, showGrid: true, showMean: true },
+              contour: { resolution: 14, contrast: 1, showLabels: false, showGrid: true },
+              slope: { lineWidth: 2, pointSize: 5, showValues: true, labelCount: 12 },
+              lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
+              timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
+              dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
+              wordfreq: { minFont: 12, maxFont: 44, maxWords: 48, rotation: 0, spacing: 32 },
+              smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
                 precision: 2,
-                mode: "全部",
+                mode: '全部',
                 intensity: 1,
                 showGrid: true,
               },
-              histogram: {
-                bins: 9,
-                barGap: 2,
-                opacity: 0.8,
-                showValues: false,
-                showGrid: true,
-              },
-              errorbar: {
-                pointSize: 5,
-                errorSize: 15,
-                lineWidth: 1.2,
-                showGrid: true,
-              },
+              histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: false, showGrid: true },
+              errorbar: { pointSize: 5, errorSize: 15, lineWidth: 1.2, showGrid: true },
               bump: { maxLines: 5, rowGap: 70, lineWidth: 2, showLabels: true },
               ribbon: { bands: 5, width: 14, amplitude: 35, opacity: 0.35 },
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
-              poster: {
-                barCount: 8,
-                barWidth: 52,
-                barHeight: 160,
-                headlineSize: 64,
-              },
+              poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
-              chord: {
-                radius: 205,
-                lineWidth: 5,
-                nodeSize: 5,
-                opacity: 0.55,
-                showLabels: true,
-              },
-              spiral: {
-                turns: 3.2,
-                lineWidth: 2,
-                pointSize: 4,
-                showLabels: true,
-                opacity: 0.82,
-              },
-              swarm: {
-                maxRadius: 28,
-                spread: 360,
-                jitter: 70,
-                opacity: 0.72,
-                showLabels: true,
-              },
-              stream: {
-                bands: 5,
-                amplitude: 72,
-                width: 18,
-                opacity: 0.34,
-                showLabels: false,
-              },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.2, lineWidth: 2, pointSize: 4, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 28, spread: 360, jitter: 70, opacity: 0.72, showLabels: true },
+              stream: { bands: 5, amplitude: 72, width: 18, opacity: 0.34, showLabels: false },
             },
           },
           zen: {
             typeStates: {
               line: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5713,8 +5158,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5724,8 +5169,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5734,21 +5179,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bar: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5758,8 +5203,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5769,8 +5214,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5779,21 +5224,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               area: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5803,8 +5248,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5814,8 +5259,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5824,21 +5269,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               scatter: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5848,8 +5293,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5859,8 +5304,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5869,21 +5314,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               pie: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5893,8 +5338,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5904,8 +5349,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5914,21 +5359,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radar: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5938,8 +5383,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5949,8 +5394,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -5959,21 +5404,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               heatmap: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -5983,8 +5428,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -5994,8 +5439,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6004,21 +5449,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               slope: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6028,8 +5473,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 115,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6039,8 +5484,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6049,21 +5494,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               lollipop: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6073,8 +5518,8 @@
                 positionBottom: 47,
                 positionLeft: 0,
                 contentScale: 115,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6084,8 +5529,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6094,21 +5539,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               timeline: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6118,8 +5563,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 110,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6129,8 +5574,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6139,21 +5584,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               dotplot: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6163,8 +5608,8 @@
                 positionBottom: 27,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6174,8 +5619,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6184,21 +5629,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               wordfreq: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6208,8 +5653,8 @@
                 positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6219,8 +5664,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6229,21 +5674,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               smallmultiples: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6253,8 +5698,8 @@
                 positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6264,8 +5709,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6274,21 +5719,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               network: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6298,8 +5743,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6309,8 +5754,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6319,21 +5764,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               sankey: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6343,8 +5788,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6354,8 +5799,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6364,21 +5809,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               correlation: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6388,8 +5833,8 @@
                 positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 150,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6399,8 +5844,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6409,21 +5854,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               parallel: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6433,8 +5878,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6444,8 +5889,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6454,21 +5899,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               boxplot: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6478,8 +5923,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6489,8 +5934,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6499,21 +5944,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               histogram: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6523,8 +5968,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 110,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6534,8 +5979,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6544,21 +5989,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               errorbar: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6568,8 +6013,8 @@
                 positionBottom: 14,
                 positionLeft: 0,
                 contentScale: 115,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6579,8 +6024,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6589,21 +6034,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               bump: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6613,8 +6058,8 @@
                 positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6624,8 +6069,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6634,21 +6079,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               ribbon: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6658,8 +6103,8 @@
                 positionBottom: 80,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6669,8 +6114,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6679,21 +6124,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               radial: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6703,8 +6148,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 160,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6714,8 +6159,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6724,21 +6169,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               poster: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6748,8 +6193,8 @@
                 positionBottom: 19,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6759,8 +6204,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6769,21 +6214,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               field: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -6793,8 +6238,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6804,8 +6249,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6814,21 +6259,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               chord: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -6838,8 +6283,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6849,8 +6294,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6859,21 +6304,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               spiral: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -6883,8 +6328,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6894,8 +6339,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6904,21 +6349,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               swarm: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -6928,8 +6373,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 165,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6939,8 +6384,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6949,21 +6394,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               stream: {
-                palette: "culture",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'culture',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 0,
@@ -6973,8 +6418,8 @@
                 positionBottom: 22,
                 positionLeft: 8,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -6984,8 +6429,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -6994,21 +6439,21 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
               contour: {
-                palette: "science",
-                title: "研究结果",
-                subtitle: "",
-                titlePosition: "top-left",
-                titleOrientation: "horizontal",
-                legendPosition: "top",
-                legendOrientation: "horizontal",
+                palette: 'science',
+                title: '研究结果',
+                subtitle: '',
+                titlePosition: 'top-left',
+                titleOrientation: 'horizontal',
+                legendPosition: 'top',
+                legendOrientation: 'horizontal',
                 paddingTop: 4,
                 paddingRight: 4,
                 paddingBottom: 4,
@@ -7018,8 +6463,8 @@
                 positionBottom: 0,
                 positionLeft: 0,
                 contentScale: 100,
-                xTitle: "指标",
-                yTitle: "数值",
+                xTitle: '指标',
+                yTitle: '数值',
                 fontSize: 12,
                 axisSize: 10,
                 rotateLabels: 0,
@@ -7029,8 +6474,8 @@
                 width: 1000,
                 height: 620,
                 exportScale: 3,
-                pdfOrientation: "landscape",
-                artMode: "editorial",
+                pdfOrientation: 'landscape',
+                artMode: 'editorial',
                 annotations: true,
                 showLegend: true,
                 showGrid: true,
@@ -7039,27 +6484,27 @@
                 pointSize: 5,
                 lineWidth: 2,
                 opacity: 0.9,
-                fontFamily: "simsun",
-                xAxisFontFamily: "simsun",
-                yAxisFontFamily: "simsun",
-                tooltipFontFamily: "simsun",
-                legendFontFamily: "simsun",
-                titleFontFamily: "simsun",
+                fontFamily: 'simsun',
+                xAxisFontFamily: 'simsun',
+                yAxisFontFamily: 'simsun',
+                tooltipFontFamily: 'simsun',
+                legendFontFamily: 'simsun',
+                titleFontFamily: 'simsun',
               },
             },
             chartProps: {
               line: {
                 lineWidth: 2,
-                lineType: "solid",
-                lineMode: "single",
+                lineType: 'solid',
+                lineMode: 'single',
                 pointSize: 5,
                 smooth: false,
                 showPoints: true,
                 showLegend: true,
                 showGrid: true,
                 rotateLabels: 0,
-                yMin: "",
-                yMax: "",
+                yMin: '',
+                yMax: '',
               },
               bar: {
                 barWidth: 46,
@@ -7091,7 +6536,7 @@
                 innerRadius: 32,
                 outerRadius: 62,
                 showLabels: false,
-                rose: "none",
+                rose: 'none',
                 showLegend: true,
               },
               radar: {
@@ -7100,17 +6545,11 @@
                 lineWidth: 2,
                 pointSize: 5,
                 showPoints: true,
-                shape: "polygon",
+                shape: 'polygon',
                 showLegend: true,
                 showGrid: true,
               },
-              heatmap: {
-                cellGap: 1,
-                showValues: false,
-                showGrid: true,
-                min: "",
-                max: "",
-              },
+              heatmap: { cellGap: 1, showValues: false, showGrid: true, min: '', max: '' },
               network: {
                 repulsion: 120,
                 edgeLength: 100,
@@ -7118,204 +6557,111 @@
                 lineWidth: 1,
                 showLabels: true,
               },
-              sankey: {
-                nodeWidth: 18,
-                nodeGap: 10,
-                edgeOpacity: 0.22,
-                showLabels: true,
-              },
-              parallel: {
-                lineWidth: 1,
-                lineOpacity: 0.18,
-                axisFont: 8,
-                showGrid: true,
-              },
-              boxplot: {
-                boxWidth: 34,
-                lineWidth: 1.5,
-                showGrid: true,
-                showMean: true,
-              },
-              contour: {
-                resolution: 14,
-                contrast: 1,
-                showLabels: false,
-                showGrid: true,
-              },
-              slope: {
-                lineWidth: 2,
-                pointSize: 5,
-                showValues: true,
-                labelCount: 12,
-              },
-              lollipop: {
-                pointSize: 6,
-                stemWidth: 1,
-                opacity: 0.85,
-                sort: "原顺序",
-              },
-              timeline: {
-                pointSize: 4,
-                stemLength: 90,
-                showValues: true,
-                alternate: true,
-              },
-              dotplot: {
-                pointSize: 5,
-                rowGap: 30,
-                opacity: 0.9,
-                baseline: true,
-              },
-              wordfreq: {
-                minFont: 8,
-                maxFont: 64,
-                maxWords: 12,
-                rotation: 24,
-                spacing: 51,
-              },
-              smallmultiples: {
-                columns: 3,
-                gap: 25,
-                lineWidth: 2,
-                showFrame: true,
-              },
+              sankey: { nodeWidth: 18, nodeGap: 10, edgeOpacity: 0.22, showLabels: true },
+              parallel: { lineWidth: 1, lineOpacity: 0.18, axisFont: 8, showGrid: true },
+              boxplot: { boxWidth: 34, lineWidth: 1.5, showGrid: true, showMean: true },
+              contour: { resolution: 14, contrast: 1, showLabels: false, showGrid: true },
+              slope: { lineWidth: 2, pointSize: 5, showValues: true, labelCount: 12 },
+              lollipop: { pointSize: 6, stemWidth: 1, opacity: 0.85, sort: '原顺序' },
+              timeline: { pointSize: 4, stemLength: 90, showValues: true, alternate: true },
+              dotplot: { pointSize: 5, rowGap: 30, opacity: 0.9, baseline: true },
+              wordfreq: { minFont: 8, maxFont: 64, maxWords: 12, rotation: 24, spacing: 51 },
+              smallmultiples: { columns: 3, gap: 25, lineWidth: 2, showFrame: true },
               correlation: {
                 cellSize: 62,
                 precision: 2,
-                mode: "全部",
+                mode: '全部',
                 intensity: 1,
                 showGrid: true,
               },
-              histogram: {
-                bins: 9,
-                barGap: 2,
-                opacity: 0.8,
-                showValues: true,
-                showGrid: true,
-              },
-              errorbar: {
-                pointSize: 5,
-                errorSize: 15,
-                lineWidth: 1.2,
-                showGrid: true,
-              },
+              histogram: { bins: 9, barGap: 2, opacity: 0.8, showValues: true, showGrid: true },
+              errorbar: { pointSize: 5, errorSize: 15, lineWidth: 1.2, showGrid: true },
               bump: { maxLines: 5, rowGap: 70, lineWidth: 2, showLabels: true },
               ribbon: { bands: 5, width: 14, amplitude: 35, opacity: 0.35 },
               radial: { radius: 190, spokeWidth: 1.5, nodeSize: 4 },
-              poster: {
-                barCount: 8,
-                barWidth: 52,
-                barHeight: 160,
-                headlineSize: 64,
-              },
+              poster: { barCount: 8, barWidth: 52, barHeight: 160, headlineSize: 64 },
               field: { count: 180, size: 2, opacity: 0.25 },
-              chord: {
-                radius: 205,
-                lineWidth: 5,
-                nodeSize: 5,
-                opacity: 0.55,
-                showLabels: true,
-              },
-              spiral: {
-                turns: 3.6,
-                lineWidth: 4,
-                pointSize: 3,
-                showLabels: true,
-                opacity: 0.82,
-              },
-              swarm: {
-                maxRadius: 16,
-                spread: 500,
-                jitter: 75,
-                opacity: 0.8,
-                showLabels: true,
-              },
-              stream: {
-                bands: 4,
-                amplitude: 120,
-                width: 8,
-                opacity: 0.48,
-                showLabels: true,
-              },
+              chord: { radius: 205, lineWidth: 5, nodeSize: 5, opacity: 0.55, showLabels: true },
+              spiral: { turns: 3.6, lineWidth: 4, pointSize: 3, showLabels: true, opacity: 0.82 },
+              swarm: { maxRadius: 16, spread: 500, jitter: 75, opacity: 0.8, showLabels: true },
+              stream: { bands: 4, amplitude: 120, width: 8, opacity: 0.48, showLabels: true },
             },
           },
-        };
+        }
 
         // 旧代码仍可能需要通用后备值；真正的默认值优先取 RIGHT_PROPERTY_DEFAULTS。
         const BASE_ENGINE_PROPERTY_DEFAULTS = structuredClone(
           RIGHT_PROPERTY_DEFAULTS.echarts?.typeStates?.line || {},
-        );
+        )
         // 以程序内置的完整图表默认值为基础，再让用户提供的默认 JSON 覆盖同名字段。
         // 这样新增加的图表（如 chord / spiral / swarm / stream）即使不在旧 JSON 中，
         // 也不会得到空对象，从而避免右侧属性出现 undefined 以及 SVG NaN。
-        const CHART_PROP_DEFAULTS = structuredClone(chartProps);
-        const baseChartPropPreset =
-          RIGHT_PROPERTY_DEFAULTS?.echarts?.chartProps;
+        const CHART_PROP_DEFAULTS = structuredClone(chartProps)
+        const baseChartPropPreset = RIGHT_PROPERTY_DEFAULTS?.echarts?.chartProps
         if (
           baseChartPropPreset &&
-          typeof baseChartPropPreset === "object" &&
+          typeof baseChartPropPreset === 'object' &&
           !Array.isArray(baseChartPropPreset)
         ) {
           Object.keys(baseChartPropPreset).forEach((type) => {
             if (
               baseChartPropPreset[type] &&
-              typeof baseChartPropPreset[type] === "object" &&
+              typeof baseChartPropPreset[type] === 'object' &&
               !Array.isArray(baseChartPropPreset[type])
             ) {
               CHART_PROP_DEFAULTS[type] = {
                 ...(CHART_PROP_DEFAULTS[type] || {}),
                 ...structuredClone(baseChartPropPreset[type]),
-              };
+              }
             }
-          });
+          })
         }
-        const ENGINE_IDS = ["echarts", "chartjs", "apexcharts", "zen"];
-        const CHART_TYPE_IDS = Object.keys(chartNames);
-        const enginePropertyStores = {};
+        const ENGINE_IDS = ['echarts', 'chartjs', 'apexcharts', 'zen']
+        const CHART_TYPE_IDS = Object.keys(chartNames)
+        const enginePropertyStores = {}
 
         // 右侧属性采用“引擎 → 图表类型 → 属性”的三级隔离结构。
         // 默认值也严格采用用户提供的 JSON，而不是再由一个全局默认对象推导。
         function getTypePropertyDefaults(id, type) {
-          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.typeStates?.[type];
+          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.typeStates?.[type]
           const base =
-            preset && typeof preset === "object" && !Array.isArray(preset)
+            preset && typeof preset === 'object' && !Array.isArray(preset)
               ? structuredClone(preset)
-              : structuredClone(BASE_ENGINE_PROPERTY_DEFAULTS);
+              : structuredClone(BASE_ENGINE_PROPERTY_DEFAULTS)
           // 基准 JSON 里没有的新开关（例如导出透明背景）在这里补上默认值。
           // 少了这一步，切换图表时 state 会残留上一张图的值。
-          if (!Object.prototype.hasOwnProperty.call(base, "exportTransparent"))
-            base.exportTransparent = false;
-          return base;
+          if (!Object.prototype.hasOwnProperty.call(base, 'exportTransparent'))
+            base.exportTransparent = false
+          return base
         }
 
         function getChartPropDefaults(id, type) {
           const base =
-            CHART_PROP_DEFAULTS?.[type] &&
-            typeof CHART_PROP_DEFAULTS[type] === "object"
+            CHART_PROP_DEFAULTS?.[type] && typeof CHART_PROP_DEFAULTS[type] === 'object'
               ? structuredClone(CHART_PROP_DEFAULTS[type])
-              : {};
-          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps?.[type];
-          if (preset && typeof preset === "object" && !Array.isArray(preset)) {
-            return { ...base, ...structuredClone(preset) };
+              : {}
+          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps?.[type]
+          if (preset && typeof preset === 'object' && !Array.isArray(preset)) {
+            return { ...base, ...structuredClone(preset) }
           }
-          return base;
+          return base
         }
 
         function createTypePropertyState(id, type = state.type) {
-          return getTypePropertyDefaults(id, type);
+          return getTypePropertyDefaults(id, type)
         }
 
-        function createDataSelectionState(type = "") {
+        function createDataSelectionState(type = '') {
           // 网络关系图 / 桑基图的默认映射避开第一列“分类/类别”列，直接使用后面的三列
           // 作为 来源 → 去向 → 权重，这样示例数据加载后即可直接形成有效关系图。
-          if (type === "network" || type === "sankey" || type === "chord") {
+          if (type === 'network' || type === 'sankey' || type === 'chord') {
             return {
               xCol: 1,
               yCols: [3],
               targetCol: 2,
               y1Col: 1,
               y2Col: 2,
-            };
+            }
           }
           return {
             xCol: 0,
@@ -7323,219 +6669,194 @@
             targetCol: null,
             y1Col: 1,
             y2Col: 2,
-          };
+          }
         }
 
         function createDataSelectionStore() {
-          const selections = {};
+          const selections = {}
           CHART_TYPE_IDS.forEach((type) => {
-            selections[type] = createDataSelectionState(type);
-          });
-          return selections;
+            selections[type] = createDataSelectionState(type)
+          })
+          return selections
         }
 
         function createEnginePropertyStore(id) {
-          const typeStates = {};
+          const typeStates = {}
           CHART_TYPE_IDS.forEach((type) => {
-            typeStates[type] = createTypePropertyState(id, type);
-          });
-          const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps;
-          const mergedChartProps = structuredClone(CHART_PROP_DEFAULTS);
+            typeStates[type] = createTypePropertyState(id, type)
+          })
+          const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps
+          const mergedChartProps = structuredClone(CHART_PROP_DEFAULTS)
           if (
             presetChartProps &&
-            typeof presetChartProps === "object" &&
+            typeof presetChartProps === 'object' &&
             !Array.isArray(presetChartProps)
           ) {
             Object.keys(presetChartProps).forEach((type) => {
               if (
                 presetChartProps[type] &&
-                typeof presetChartProps[type] === "object" &&
+                typeof presetChartProps[type] === 'object' &&
                 !Array.isArray(presetChartProps[type])
               ) {
                 mergedChartProps[type] = {
                   ...(mergedChartProps[type] || {}),
                   ...structuredClone(presetChartProps[type]),
-                };
+                }
               }
-            });
+            })
           }
           return {
             typeStates,
             chartProps: mergedChartProps,
             dataSelections: createDataSelectionStore(),
-          };
+          }
         }
 
         ENGINE_IDS.forEach((id) => {
-          enginePropertyStores[id] = createEnginePropertyStore(id);
-        });
+          enginePropertyStores[id] = createEnginePropertyStore(id)
+        })
 
         function getEngineTypePropertyStore(id, type) {
           const store =
-            enginePropertyStores[id] ||
-            (enginePropertyStores[id] = createEnginePropertyStore(id));
-          if (!store.typeStates) store.typeStates = {};
-          if (!store.typeStates[type])
-            store.typeStates[type] = createTypePropertyState(id, type);
+            enginePropertyStores[id] || (enginePropertyStores[id] = createEnginePropertyStore(id))
+          if (!store.typeStates) store.typeStates = {}
+          if (!store.typeStates[type]) store.typeStates[type] = createTypePropertyState(id, type)
           if (!store.chartProps) {
-            const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps;
+            const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps
             store.chartProps =
-              presetChartProps && typeof presetChartProps === "object"
+              presetChartProps && typeof presetChartProps === 'object'
                 ? structuredClone(presetChartProps)
-                : structuredClone(CHART_PROP_DEFAULTS);
+                : structuredClone(CHART_PROP_DEFAULTS)
           }
           // 无论旧存储中是缺失、空对象还是字段不完整，都与当前图表的默认值合并。
           // 这一步专门兼容新增加图表以及旧版本已经写入的残缺 chartProps，避免 undefined 进入属性栏和 SVG 绘图。
           store.chartProps[type] = {
             ...getChartPropDefaults(id, type),
             ...(store.chartProps[type] &&
-            typeof store.chartProps[type] === "object" &&
+            typeof store.chartProps[type] === 'object' &&
             !Array.isArray(store.chartProps[type])
               ? structuredClone(store.chartProps[type])
               : {}),
-          };
-          if (!store.dataSelections || typeof store.dataSelections !== "object")
-            store.dataSelections = createDataSelectionStore();
+          }
+          if (!store.dataSelections || typeof store.dataSelections !== 'object')
+            store.dataSelections = createDataSelectionStore()
           if (!store.dataSelections[type])
-            store.dataSelections[type] = createDataSelectionState(type);
+            store.dataSelections[type] = createDataSelectionState(type)
           return {
             store,
             typeState: store.typeStates[type],
             dataSelection: store.dataSelections[type],
-          };
+          }
         }
 
         function getCurrentDataSelection() {
-          const current = getEngineTypePropertyStore(state.engine, state.type);
-          return current.dataSelection;
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          return current.dataSelection
         }
 
         function syncCurrentDataSelectionStore() {
-          const current = getEngineTypePropertyStore(state.engine, state.type);
+          const current = getEngineTypePropertyStore(state.engine, state.type)
           current.store.dataSelections[state.type] = {
             xCol: structuredClone(state.xCol),
             yCols: structuredClone(state.yCols),
             targetCol: structuredClone(state.targetCol),
             y1Col: structuredClone(state.y1Col),
             y2Col: structuredClone(state.y2Col),
-          };
+          }
         }
 
         function loadDataSelectionStore(id, type = state.type) {
-          const current = getEngineTypePropertyStore(id, type);
-          const selection =
-            current.dataSelection || createDataSelectionState(type);
-          state.xCol = structuredClone(selection.xCol);
-          state.yCols = structuredClone(selection.yCols);
-          state.targetCol = structuredClone(selection.targetCol);
-          state.y1Col = structuredClone(selection.y1Col);
-          state.y2Col = structuredClone(selection.y2Col);
+          const current = getEngineTypePropertyStore(id, type)
+          const selection = current.dataSelection || createDataSelectionState(type)
+          state.xCol = structuredClone(selection.xCol)
+          state.yCols = structuredClone(selection.yCols)
+          state.targetCol = structuredClone(selection.targetCol)
+          state.y1Col = structuredClone(selection.y1Col)
+          state.y2Col = structuredClone(selection.y2Col)
         }
 
         function syncCurrentEnginePropertyStore() {
-          const current = getEngineTypePropertyStore(state.engine, state.type);
+          const current = getEngineTypePropertyStore(state.engine, state.type)
           ENGINE_PROPERTY_KEYS.forEach((key) => {
-            current.typeState[key] = structuredClone(state[key]);
-          });
-          if (
-            !current.store.chartProps ||
-            typeof current.store.chartProps !== "object"
-          ) {
-            const presetChartProps =
-              RIGHT_PROPERTY_DEFAULTS?.[state.engine]?.chartProps;
+            current.typeState[key] = structuredClone(state[key])
+          })
+          if (!current.store.chartProps || typeof current.store.chartProps !== 'object') {
+            const presetChartProps = RIGHT_PROPERTY_DEFAULTS?.[state.engine]?.chartProps
             current.store.chartProps =
-              presetChartProps && typeof presetChartProps === "object"
+              presetChartProps && typeof presetChartProps === 'object'
                 ? structuredClone(presetChartProps)
-                : structuredClone(CHART_PROP_DEFAULTS);
+                : structuredClone(CHART_PROP_DEFAULTS)
           }
           if (!current.store.chartProps[state.type])
-            current.store.chartProps[state.type] = getChartPropDefaults(
-              state.engine,
-              state.type,
-            );
+            current.store.chartProps[state.type] = getChartPropDefaults(state.engine, state.type)
           current.store.chartProps[state.type] = structuredClone(
-            chartProps[state.type] ||
-              getChartPropDefaults(state.engine, state.type),
-          );
-          syncCurrentDataSelectionStore();
+            chartProps[state.type] || getChartPropDefaults(state.engine, state.type),
+          )
+          syncCurrentDataSelectionStore()
         }
 
         function setEngineStateProp(key, value) {
-          if (!ENGINE_PROPERTY_KEYS.includes(key)) return;
-          state[key] = structuredClone(value);
-          const current = getEngineTypePropertyStore(state.engine, state.type);
-          current.typeState[key] = structuredClone(value);
-          schedulePersist();
+          if (!ENGINE_PROPERTY_KEYS.includes(key)) return
+          state[key] = structuredClone(value)
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          current.typeState[key] = structuredClone(value)
+          schedulePersist()
         }
 
         function loadEnginePropertyStore(id, type = state.type) {
-          const current = getEngineTypePropertyStore(id, type);
+          const current = getEngineTypePropertyStore(id, type)
           ENGINE_PROPERTY_KEYS.forEach((key) => {
             if (Object.prototype.hasOwnProperty.call(current.typeState, key)) {
-              state[key] = structuredClone(current.typeState[key]);
+              state[key] = structuredClone(current.typeState[key])
             } else if (
-              Object.prototype.hasOwnProperty.call(
-                getTypePropertyDefaults(id, type),
-                key,
-              )
+              Object.prototype.hasOwnProperty.call(getTypePropertyDefaults(id, type), key)
             ) {
-              state[key] = structuredClone(
-                getTypePropertyDefaults(id, type)[key],
-              );
+              state[key] = structuredClone(getTypePropertyDefaults(id, type)[key])
             }
-          });
+          })
           chartProps = structuredClone(
             current.store.chartProps ||
               RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps ||
               CHART_PROP_DEFAULTS,
-          );
+          )
           // 读取旧 Local Storage 时，当前图表属性也必须逐字段补齐默认值。
           // 不能只判断“是否存在对象”，否则旧版本留下的 {} 会让所有属性变成 undefined。
           chartProps[type] = {
             ...getChartPropDefaults(id, type),
             ...(chartProps[type] &&
-            typeof chartProps[type] === "object" &&
+            typeof chartProps[type] === 'object' &&
             !Array.isArray(chartProps[type])
               ? structuredClone(chartProps[type])
               : {}),
-          };
-          current.store.chartProps[type] = structuredClone(chartProps[type]);
+          }
+          current.store.chartProps[type] = structuredClone(chartProps[type])
         }
 
         function resetCurrentEngineProperties() {
-          const current = getEngineTypePropertyStore(state.engine, state.type);
-          current.store.typeStates[state.type] = createTypePropertyState(
-            state.engine,
-            state.type,
-          );
-          current.store.chartProps[state.type] = getChartPropDefaults(
-            state.engine,
-            state.type,
-          );
-          loadEnginePropertyStore(state.engine, state.type);
-          renderInspector();
-          applyChartMountLayout();
-          resizeChart();
-          renderChart(false);
-          syncCurrentEnginePropertyStore();
-          savePersistedState();
-          setStatus(
-            `${engineInfo[state.engine].short} ·“${chartNames[state.type]}”属性已重置`,
-          );
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          current.store.typeStates[state.type] = createTypePropertyState(state.engine, state.type)
+          current.store.chartProps[state.type] = getChartPropDefaults(state.engine, state.type)
+          loadEnginePropertyStore(state.engine, state.type)
+          renderInspector()
+          applyChartMountLayout()
+          resizeChart()
+          renderChart(false)
+          syncCurrentEnginePropertyStore()
+          savePersistedState()
+          setStatus(`${engineInfo[state.engine].short} ·“${chartNames[state.type]}”属性已重置`)
         }
 
-        const legendSelectionByType = {};
+        const legendSelectionByType = {}
         function chartProp(key, fallback) {
-          return chartProps[state.type]?.[key] ?? fallback;
+          return chartProps[state.type]?.[key] ?? fallback
         }
         function setChartProp(key, value) {
-          if (!chartProps[state.type]) chartProps[state.type] = {};
-          chartProps[state.type][key] = structuredClone(value);
-          const current = getEngineTypePropertyStore(state.engine, state.type);
-          if (!current.store.chartProps[state.type])
-            current.store.chartProps[state.type] = {};
-          current.store.chartProps[state.type][key] = structuredClone(value);
-          schedulePersist();
+          if (!chartProps[state.type]) chartProps[state.type] = {}
+          chartProps[state.type][key] = structuredClone(value)
+          const current = getEngineTypePropertyStore(state.engine, state.type)
+          if (!current.store.chartProps[state.type]) current.store.chartProps[state.type] = {}
+          current.store.chartProps[state.type][key] = structuredClone(value)
+          schedulePersist()
         }
 
         // 工作区与右侧属性使用分离的 Local Storage 键：
@@ -7543,146 +6864,112 @@
         // 2. 每个引擎拥有自己的 v3 存储键。
         // 3. 每个引擎存储内部再按 chart type 分开保存右侧属性。
         // 4. 保留 v2 / v1 读取作为一次性迁移入口，不会删除旧数据。
-        const STORAGE_VERSION = 4;
-        const PROPERTY_EXPORT_VERSION = 1;
-        const WORKSPACE_PERSIST_KEY = "zenviz.workspace.v2";
-        const ENGINE_PERSIST_PREFIX = "zenviz.engine.v4.";
-        const LEGACY_ENGINE_PERSIST_PREFIXES = [
-          "zenviz.engine.v3.",
-          "zenviz.engine.v2.",
-        ];
-        const LEGACY_PERSIST_KEY = "zenviz.preferences.v1";
-        const GLOBAL_PERSIST_KEYS = ["engine", "type", "category"];
-        const LEGACY_DATA_SELECTION_KEYS = [
-          "xCol",
-          "yCols",
-          "targetCol",
-          "y1Col",
-          "y2Col",
-        ];
+        const STORAGE_VERSION = 4
+        const PROPERTY_EXPORT_VERSION = 1
+        const WORKSPACE_PERSIST_KEY = 'zenviz.workspace.v2'
+        const ENGINE_PERSIST_PREFIX = 'zenviz.engine.v4.'
+        const LEGACY_ENGINE_PERSIST_PREFIXES = ['zenviz.engine.v3.', 'zenviz.engine.v2.']
+        const LEGACY_PERSIST_KEY = 'zenviz.preferences.v1'
+        const GLOBAL_PERSIST_KEYS = ['engine', 'type', 'category']
+        const LEGACY_DATA_SELECTION_KEYS = ['xCol', 'yCols', 'targetCol', 'y1Col', 'y2Col']
 
-        function sanitizeChartProps(source, id = "echarts") {
-          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps;
-          const defaultsByType = structuredClone(CHART_PROP_DEFAULTS);
-          if (preset && typeof preset === "object" && !Array.isArray(preset)) {
+        function sanitizeChartProps(source, id = 'echarts') {
+          const preset = RIGHT_PROPERTY_DEFAULTS?.[id]?.chartProps
+          const defaultsByType = structuredClone(CHART_PROP_DEFAULTS)
+          if (preset && typeof preset === 'object' && !Array.isArray(preset)) {
             Object.keys(preset).forEach((type) => {
               if (
                 preset[type] &&
-                typeof preset[type] === "object" &&
+                typeof preset[type] === 'object' &&
                 !Array.isArray(preset[type])
               ) {
                 defaultsByType[type] = {
                   ...(defaultsByType[type] || {}),
                   ...structuredClone(preset[type]),
-                };
+                }
               }
-            });
+            })
           }
-          const result = structuredClone(defaultsByType);
-          if (!source || typeof source !== "object" || Array.isArray(source))
-            return result;
+          const result = structuredClone(defaultsByType)
+          if (!source || typeof source !== 'object' || Array.isArray(source)) return result
           Object.keys(defaultsByType).forEach((type) => {
-            const defaults = defaultsByType[type] || {};
-            const incoming = source[type];
-            if (
-              !incoming ||
-              typeof incoming !== "object" ||
-              Array.isArray(incoming)
-            )
-              return;
+            const defaults = defaultsByType[type] || {}
+            const incoming = source[type]
+            if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) return
             Object.keys(defaults).forEach((k) => {
-              if (!Object.prototype.hasOwnProperty.call(incoming, k)) return;
+              if (!Object.prototype.hasOwnProperty.call(incoming, k)) return
               const v = incoming[k],
-                d = defaults[k];
+                d = defaults[k]
               // 允许“默认值为空字符串、用户实际输入数字”的数值属性正常持久化。
               // 典型字段包括折线图 yMin / yMax、热图 min / max。此前这里严格按默认值
               // 的类型校验，会把用户保存的数字误判为非法，导致刷新后恢复成空值。
               const ok =
-                typeof d === "number"
-                  ? typeof v === "number" && Number.isFinite(v)
-                  : d === "" &&
-                      (v === "" ||
-                        (typeof v === "number" && Number.isFinite(v)))
+                typeof d === 'number'
+                  ? typeof v === 'number' && Number.isFinite(v)
+                  : d === '' && (v === '' || (typeof v === 'number' && Number.isFinite(v)))
                     ? true
-                    : typeof d === typeof v;
-              if (ok) result[type][k] = structuredClone(v);
-            });
-          });
-          return result;
+                    : typeof d === typeof v
+              if (ok) result[type][k] = structuredClone(v)
+            })
+          })
+          return result
         }
 
-        function sanitizeTypeStates(
-          source,
-          legacyState = null,
-          id = "echarts",
-        ) {
-          const result = {};
+        function sanitizeTypeStates(source, legacyState = null, id = 'echarts') {
+          const result = {}
           CHART_TYPE_IDS.forEach((type) => {
-            result[type] = createTypePropertyState(id, type);
-            const incoming = source?.[type];
-            if (
-              incoming &&
-              typeof incoming === "object" &&
-              !Array.isArray(incoming)
-            ) {
+            result[type] = createTypePropertyState(id, type)
+            const incoming = source?.[type]
+            if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
               ENGINE_PROPERTY_KEYS.forEach((k) => {
-                if (!Object.prototype.hasOwnProperty.call(incoming, k)) return;
+                if (!Object.prototype.hasOwnProperty.call(incoming, k)) return
                 if (validPersistValue(k, incoming[k]))
-                  result[type][k] = structuredClone(incoming[k]);
-              });
+                  result[type][k] = structuredClone(incoming[k])
+              })
             } else if (
               legacyState &&
-              typeof legacyState === "object" &&
+              typeof legacyState === 'object' &&
               !Array.isArray(legacyState)
             ) {
               // v2 只有“每个引擎一套属性”。升级到 v3 时把旧值复制到该引擎的各图表，
               // 这样不会丢掉用户已有设置；之后每个图表再独立变化、独立保存。
               ENGINE_PROPERTY_KEYS.forEach((k) => {
-                if (!Object.prototype.hasOwnProperty.call(legacyState, k))
-                  return;
+                if (!Object.prototype.hasOwnProperty.call(legacyState, k)) return
                 if (validPersistValue(k, legacyState[k]))
-                  result[type][k] = structuredClone(legacyState[k]);
-              });
-              result[type].contentScale = Number.isFinite(
-                Number(legacyState.contentScale),
-              )
+                  result[type][k] = structuredClone(legacyState[k])
+              })
+              result[type].contentScale = Number.isFinite(Number(legacyState.contentScale))
                 ? Number(legacyState.contentScale)
-                : (ENGINE_DEFAULT_SCALE[id] ?? 100);
+                : result[type].contentScale
             }
-          });
-          return result;
+          })
+          return result
         }
 
-        function sanitizeDataSelection(source, type = "") {
-          const result = createDataSelectionState(type);
-          if (!source || typeof source !== "object" || Array.isArray(source))
-            return result;
-          if (validPersistValue("xCol", source.xCol))
-            result.xCol = structuredClone(source.xCol);
-          if (validPersistValue("yCols", source.yCols))
-            result.yCols = structuredClone(source.yCols);
-          if (validPersistValue("targetCol", source.targetCol))
-            result.targetCol = structuredClone(source.targetCol);
-          if (validPersistValue("y1Col", source.y1Col))
-            result.y1Col = structuredClone(source.y1Col);
-          if (validPersistValue("y2Col", source.y2Col))
-            result.y2Col = structuredClone(source.y2Col);
-          return result;
+        function sanitizeDataSelection(source, type = '') {
+          const result = createDataSelectionState(type)
+          if (!source || typeof source !== 'object' || Array.isArray(source)) return result
+          if (validPersistValue('xCol', source.xCol)) result.xCol = structuredClone(source.xCol)
+          if (validPersistValue('yCols', source.yCols)) result.yCols = structuredClone(source.yCols)
+          if (validPersistValue('targetCol', source.targetCol))
+            result.targetCol = structuredClone(source.targetCol)
+          if (validPersistValue('y1Col', source.y1Col)) result.y1Col = structuredClone(source.y1Col)
+          if (validPersistValue('y2Col', source.y2Col)) result.y2Col = structuredClone(source.y2Col)
+          return result
         }
 
         function sanitizeDataSelections(source) {
-          const result = createDataSelectionStore();
-          if (!source || typeof source !== "object" || Array.isArray(source))
-            return result;
+          const result = createDataSelectionStore()
+          if (!source || typeof source !== 'object' || Array.isArray(source)) return result
           CHART_TYPE_IDS.forEach((type) => {
-            result[type] = sanitizeDataSelection(source[type], type);
-          });
-          return result;
+            result[type] = sanitizeDataSelection(source[type], type)
+          })
+          return result
         }
 
         function saveEngineStore(id) {
-          const store = enginePropertyStores[id];
-          if (!store) return;
+          const store = enginePropertyStores[id]
+          if (!store) return
           try {
             localStorage.setItem(
               ENGINE_PERSIST_PREFIX + id,
@@ -7692,9 +6979,9 @@
                 chartProps: structuredClone(store.chartProps),
                 dataSelections: structuredClone(store.dataSelections),
               }),
-            );
+            )
           } catch (e) {
-            reportError(`${engineInfo[id]?.short || id} 属性保存失败`, e, true);
+            reportError(`${engineInfo[id]?.short || id} 属性保存失败`, e, true)
           }
         }
 
@@ -7704,514 +6991,424 @@
               WORKSPACE_PERSIST_KEY,
               JSON.stringify({
                 version: STORAGE_VERSION,
-                state: Object.fromEntries(
-                  GLOBAL_PERSIST_KEYS.map((k) => [k, state[k]]),
-                ),
+                state: Object.fromEntries(GLOBAL_PERSIST_KEYS.map((k) => [k, state[k]])),
               }),
-            );
+            )
           } catch (e) {
-            reportError("工作区状态保存失败", e, true);
+            reportError('工作区状态保存失败', e, true)
           }
         }
 
         function schedulePersist() {
           // 设置一改变就立即写入，避免刷新时丢失最后一次操作。
-          syncCurrentEnginePropertyStore();
-          saveEngineStore(state.engine);
-          saveWorkspaceState();
+          syncCurrentEnginePropertyStore()
+          saveEngineStore(state.engine)
+          saveWorkspaceState()
         }
 
         function savePersistedState() {
-          schedulePersist();
+          schedulePersist()
         }
 
-        let persistenceRestoreFailed = false;
+        let persistenceRestoreFailed = false
         function restorePersistedState() {
-          persistenceRestoreFailed = false;
-          let migratedFromLegacy = false;
-          let legacyDataSelection = null;
+          persistenceRestoreFailed = false
+          let migratedFromLegacy = false
+          let legacyDataSelection = null
           try {
-            let workspaceLoaded = false;
-            const workspaceRaw = localStorage.getItem(WORKSPACE_PERSIST_KEY);
+            let workspaceLoaded = false
+            const workspaceRaw = localStorage.getItem(WORKSPACE_PERSIST_KEY)
             if (workspaceRaw) {
               try {
-                const workspace = JSON.parse(workspaceRaw);
+                const workspace = JSON.parse(workspaceRaw)
                 if (
                   workspace &&
-                  (workspace.version === 2 ||
-                    workspace.version === STORAGE_VERSION) &&
+                  (workspace.version === 2 || workspace.version === STORAGE_VERSION) &&
                   workspace.state
                 ) {
                   GLOBAL_PERSIST_KEYS.forEach((k) => {
                     if (
-                      Object.prototype.hasOwnProperty.call(
-                        workspace.state,
-                        k,
-                      ) &&
+                      Object.prototype.hasOwnProperty.call(workspace.state, k) &&
                       validPersistValue(k, workspace.state[k])
                     ) {
-                      state[k] = structuredClone(workspace.state[k]);
+                      state[k] = structuredClone(workspace.state[k])
                     }
-                  });
-                  legacyDataSelection = {};
+                  })
+                  legacyDataSelection = {}
                   LEGACY_DATA_SELECTION_KEYS.forEach((k) => {
                     if (
-                      Object.prototype.hasOwnProperty.call(
-                        workspace.state,
-                        k,
-                      ) &&
+                      Object.prototype.hasOwnProperty.call(workspace.state, k) &&
                       validPersistValue(k, workspace.state[k])
                     ) {
-                      legacyDataSelection[k] = structuredClone(
-                        workspace.state[k],
-                      );
+                      legacyDataSelection[k] = structuredClone(workspace.state[k])
                     }
-                  });
-                  workspaceLoaded = true;
+                  })
+                  workspaceLoaded = true
                 }
               } catch (e) {
-                console.warn(
-                  "[ZENVIZ] 工作区存储读取失败，将尝试旧版迁移：",
-                  e,
-                );
+                console.warn('[ZENVIZ] 工作区存储读取失败，将尝试旧版迁移：', e)
               }
             }
 
-            let engineStoreLoaded = false;
+            let engineStoreLoaded = false
             ENGINE_IDS.forEach((id) => {
-              const currentKey = ENGINE_PERSIST_PREFIX + id;
-              let raw = localStorage.getItem(currentKey);
-              let rawVersion = STORAGE_VERSION;
+              const currentKey = ENGINE_PERSIST_PREFIX + id
+              let raw = localStorage.getItem(currentKey)
+              let rawVersion = STORAGE_VERSION
               if (!raw) {
                 for (const legacyPrefix of LEGACY_ENGINE_PERSIST_PREFIXES) {
-                  const candidate = localStorage.getItem(legacyPrefix + id);
+                  const candidate = localStorage.getItem(legacyPrefix + id)
                   if (candidate) {
-                    raw = candidate;
-                    rawVersion = legacyPrefix.endsWith(".v3.") ? 3 : 2;
-                    break;
+                    raw = candidate
+                    rawVersion = legacyPrefix.endsWith('.v3.') ? 3 : 2
+                    break
                   }
                 }
               }
-              if (!raw) return;
+              if (!raw) return
               try {
-                const saved = JSON.parse(raw);
-                if (!saved || typeof saved !== "object") return;
-                const store = enginePropertyStores[id];
+                const saved = JSON.parse(raw)
+                if (!saved || typeof saved !== 'object') return
+                const store = enginePropertyStores[id]
                 if (
                   (saved.version === STORAGE_VERSION || saved.version === 3) &&
                   saved.typeStates
                 ) {
-                  store.typeStates = sanitizeTypeStates(
-                    saved.typeStates,
-                    null,
-                    id,
-                  );
-                  store.chartProps = sanitizeChartProps(saved.chartProps, id);
-                  store.dataSelections = sanitizeDataSelections(
-                    saved.dataSelections,
-                  );
-                  if (saved.version === 3) migratedFromLegacy = true;
-                  engineStoreLoaded = true;
-                  return;
+                  store.typeStates = sanitizeTypeStates(saved.typeStates, null, id)
+                  store.chartProps = sanitizeChartProps(saved.chartProps, id)
+                  store.dataSelections = sanitizeDataSelections(saved.dataSelections)
+                  if (saved.version === 3) migratedFromLegacy = true
+                  engineStoreLoaded = true
+                  return
                 }
                 // 兼容 v2：state 是引擎级共享属性，升级后复制到该引擎所有图表作为初始独立值。
                 if (saved.version === 2 && saved.state) {
-                  store.typeStates = sanitizeTypeStates(null, saved.state, id);
-                  store.chartProps = sanitizeChartProps(saved.chartProps, id);
-                  store.dataSelections = createDataSelectionStore();
-                  migratedFromLegacy = true;
-                  engineStoreLoaded = true;
+                  store.typeStates = sanitizeTypeStates(null, saved.state, id)
+                  store.chartProps = sanitizeChartProps(saved.chartProps, id)
+                  store.dataSelections = createDataSelectionStore()
+                  migratedFromLegacy = true
+                  engineStoreLoaded = true
                 }
               } catch (e) {
-                console.warn(
-                  `[ZENVIZ] ${id} 属性存储读取失败，将使用默认属性：`,
-                  e,
-                );
+                console.warn(`[ZENVIZ] ${id} 属性存储读取失败，将使用默认属性：`, e)
               }
-            });
+            })
 
             if (!workspaceLoaded || !engineStoreLoaded) {
-              const raw = localStorage.getItem(LEGACY_PERSIST_KEY);
+              const raw = localStorage.getItem(LEGACY_PERSIST_KEY)
               if (raw) {
                 try {
-                  const saved = JSON.parse(raw);
+                  const saved = JSON.parse(raw)
                   if (saved && saved.version === 1 && saved.state) {
-                    const common = saved.state;
+                    const common = saved.state
                     GLOBAL_PERSIST_KEYS.forEach((k) => {
                       if (
                         Object.prototype.hasOwnProperty.call(common, k) &&
                         validPersistValue(k, common[k])
                       )
-                        state[k] = structuredClone(common[k]);
-                    });
-                    legacyDataSelection = {};
+                        state[k] = structuredClone(common[k])
+                    })
+                    legacyDataSelection = {}
                     LEGACY_DATA_SELECTION_KEYS.forEach((k) => {
                       if (
                         Object.prototype.hasOwnProperty.call(common, k) &&
                         validPersistValue(k, common[k])
                       ) {
-                        legacyDataSelection[k] = structuredClone(common[k]);
+                        legacyDataSelection[k] = structuredClone(common[k])
                       }
-                    });
+                    })
 
-                    if (
-                      saved.enginePrefs &&
-                      typeof saved.enginePrefs === "object"
-                    ) {
+                    if (saved.enginePrefs && typeof saved.enginePrefs === 'object') {
                       ENGINE_IDS.forEach((id) => {
-                        const incoming = saved.enginePrefs[id];
-                        if (!incoming || typeof incoming !== "object") return;
-                        const store = enginePropertyStores[id];
-                        store.typeStates = sanitizeTypeStates(
-                          null,
-                          incoming.state,
-                          id,
-                        );
-                        store.chartProps = sanitizeChartProps(
-                          incoming.chartProps,
-                          id,
-                        );
-                        store.dataSelections = sanitizeDataSelections(
-                          incoming.dataSelections,
-                        );
-                        migratedFromLegacy = true;
-                        engineStoreLoaded = true;
-                      });
+                        const incoming = saved.enginePrefs[id]
+                        if (!incoming || typeof incoming !== 'object') return
+                        const store = enginePropertyStores[id]
+                        store.typeStates = sanitizeTypeStates(null, incoming.state, id)
+                        store.chartProps = sanitizeChartProps(incoming.chartProps, id)
+                        store.dataSelections = sanitizeDataSelections(incoming.dataSelections)
+                        migratedFromLegacy = true
+                        engineStoreLoaded = true
+                      })
                     } else {
-                      const target = enginePropertyStores[state.engine];
-                      target.typeStates = sanitizeTypeStates(
-                        null,
-                        common,
-                        state.engine,
-                      );
-                      target.dataSelections = sanitizeDataSelections(
-                        saved.dataSelections,
-                      );
+                      const target = enginePropertyStores[state.engine]
+                      target.typeStates = sanitizeTypeStates(null, common, state.engine)
+                      target.dataSelections = sanitizeDataSelections(saved.dataSelections)
                       if (saved.chartProps)
-                        target.chartProps = sanitizeChartProps(
-                          saved.chartProps,
-                          state.engine,
-                        );
-                      migratedFromLegacy = true;
-                      engineStoreLoaded = true;
+                        target.chartProps = sanitizeChartProps(saved.chartProps, state.engine)
+                      migratedFromLegacy = true
+                      engineStoreLoaded = true
                     }
                   }
                 } catch (e) {
-                  console.warn("[ZENVIZ] 旧版存储迁移失败：", e);
+                  console.warn('[ZENVIZ] 旧版存储迁移失败：', e)
                 }
               }
             }
 
             if (!engineReady(state.engine)) {
-              state.engine = ENGINE_IDS.find(engineReady) || "zen";
+              state.engine = ENGINE_IDS.find(engineReady) || 'zen'
             }
-            const supported = engineSupportedTypes(state.engine);
+            const supported = engineSupportedTypes(state.engine)
             if (!supported.includes(state.type)) {
               state.type =
-                categories[state.category]?.find((t) =>
-                  supported.includes(t),
-                ) ||
+                categories[state.category]?.find((t) => supported.includes(t)) ||
                 supported[0] ||
-                "line";
-              state.zenKind = state.type;
+                'line'
+              state.zenKind = state.type
             }
-            loadEnginePropertyStore(state.engine, state.type);
-            loadDataSelectionStore(state.engine, state.type);
-            if (
-              legacyDataSelection &&
-              Object.keys(legacyDataSelection).length
-            ) {
-              const currentSelection = getCurrentDataSelection();
-              Object.assign(
-                currentSelection,
-                sanitizeDataSelection(legacyDataSelection),
-              );
-              loadDataSelectionStore(state.engine, state.type);
-              migratedFromLegacy = true;
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
+            if (legacyDataSelection && Object.keys(legacyDataSelection).length) {
+              const currentSelection = getCurrentDataSelection()
+              Object.assign(currentSelection, sanitizeDataSelection(legacyDataSelection))
+              loadDataSelectionStore(state.engine, state.type)
+              migratedFromLegacy = true
             }
             if (migratedFromLegacy || !workspaceLoaded || !engineStoreLoaded) {
-              syncCurrentEnginePropertyStore();
-              ENGINE_IDS.forEach((id) => saveEngineStore(id));
-              saveWorkspaceState();
+              syncCurrentEnginePropertyStore()
+              ENGINE_IDS.forEach((id) => saveEngineStore(id))
+              saveWorkspaceState()
             }
           } catch (e) {
             // 读取异常时绝不能继续把默认值写回 Local Storage，否则会把原有用户设置覆盖掉。
-            persistenceRestoreFailed = true;
-            reportError("图表设置读取失败，已保留现有存储数据", e, true);
-            if (!engineReady(state.engine)) state.engine = "zen";
-            loadEnginePropertyStore(state.engine, state.type);
-            loadDataSelectionStore(state.engine, state.type);
+            persistenceRestoreFailed = true
+            reportError('图表设置读取失败，已保留现有存储数据', e, true)
+            if (!engineReady(state.engine)) state.engine = 'zen'
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
           }
         }
         function validPersistValue(key, value) {
-          if (key === "engine")
+          if (key === 'engine')
             return (
-              typeof value === "string" &&
-              Object.prototype.hasOwnProperty.call(engineInfo, value)
-            );
-          if (key === "type")
+              typeof value === 'string' && Object.prototype.hasOwnProperty.call(engineInfo, value)
+            )
+          if (key === 'type')
             return (
-              typeof value === "string" &&
-              Object.prototype.hasOwnProperty.call(chartNames, value)
-            );
-          if (key === "category")
+              typeof value === 'string' && Object.prototype.hasOwnProperty.call(chartNames, value)
+            )
+          if (key === 'category')
             return (
-              typeof value === "string" &&
-              Object.prototype.hasOwnProperty.call(categories, value)
-            );
-          if (key === "xCol") return Number.isInteger(value) && value >= 0;
-          if (key === "targetCol" || key === "y1Col" || key === "y2Col")
-            return value === null || (Number.isInteger(value) && value >= 0);
-          if (key === "yCols")
-            return (
-              Array.isArray(value) &&
-              value.every((v) => Number.isInteger(v) && v >= 0)
-            );
-          if (key === "palette")
-            return ["mono", "culture", "science", "editorial"].includes(value);
+              typeof value === 'string' && Object.prototype.hasOwnProperty.call(categories, value)
+            )
+          if (key === 'xCol') return Number.isInteger(value) && value >= 0
+          if (key === 'targetCol' || key === 'y1Col' || key === 'y2Col')
+            return value === null || (Number.isInteger(value) && value >= 0)
+          if (key === 'yCols')
+            return Array.isArray(value) && value.every((v) => Number.isInteger(v) && v >= 0)
+          if (key === 'palette') return ['mono', 'culture', 'science', 'editorial'].includes(value)
           if (
             [
-              "title",
-              "subtitle",
-              "titlePosition",
-              "titleOrientation",
-              "legendPosition",
-              "legendOrientation",
-              "xTitle",
-              "yTitle",
-              "artMode",
-              "pdfOrientation",
-              "fontFamily",
-              "xAxisFontFamily",
-              "yAxisFontFamily",
-              "tooltipFontFamily",
-              "legendFontFamily",
-              "titleFontFamily",
+              'title',
+              'subtitle',
+              'titlePosition',
+              'titleOrientation',
+              'legendPosition',
+              'legendOrientation',
+              'xTitle',
+              'yTitle',
+              'artMode',
+              'pdfOrientation',
+              'fontFamily',
+              'xAxisFontFamily',
+              'yAxisFontFamily',
+              'tooltipFontFamily',
+              'legendFontFamily',
+              'titleFontFamily',
             ].includes(key)
           )
-            return typeof value === "string";
+            return typeof value === 'string'
           if (
             [
-              "stacked",
-              "normalize",
-              "annotations",
-              "showValues",
-              "showTitle",
-              "border",
-              "showLegend",
-              "showGrid",
-              "smooth",
-              "showPoints",
-              "exportTransparent",
+              'stacked',
+              'normalize',
+              'annotations',
+              'showValues',
+              'showTitle',
+              'border',
+              'showLegend',
+              'showGrid',
+              'smooth',
+              'showPoints',
+              'exportTransparent',
             ].includes(key)
           )
-            return typeof value === "boolean";
+            return typeof value === 'boolean'
           if (
             [
-              "fontSize",
-              "axisSize",
-              "rotateLabels",
-              "tension",
-              "width",
-              "height",
-              "exportScale",
-              "paddingTop",
-              "paddingRight",
-              "paddingBottom",
-              "paddingLeft",
-              "positionTop",
-              "positionRight",
-              "positionBottom",
-              "positionLeft",
-              "contentScale",
-              "pointSize",
-              "lineWidth",
-              "opacity",
+              'fontSize',
+              'axisSize',
+              'rotateLabels',
+              'tension',
+              'width',
+              'height',
+              'exportScale',
+              'paddingTop',
+              'paddingRight',
+              'paddingBottom',
+              'paddingLeft',
+              'positionTop',
+              'positionRight',
+              'positionBottom',
+              'positionLeft',
+              'contentScale',
+              'pointSize',
+              'lineWidth',
+              'opacity',
             ].includes(key)
           )
-            return typeof value === "number" && Number.isFinite(value);
-          return true;
+            return typeof value === 'number' && Number.isFinite(value)
+          return true
         }
         function migrateOuterMarginLayout() {
           try {
-            const key = "zenviz.layout-margin-mode";
-            const mode = localStorage.getItem(key);
+            const key = 'zenviz.layout-margin-mode'
+            const mode = localStorage.getItem(key)
             // 从旧版本的默认值 20 / 20 / 24 / 20 迁移到新的默认值 4 / 4 / 4 / 4。
             // 只有四个值仍然全部等于旧默认值时才迁移，用户自行调过的留白不会被覆盖。
-            if (mode !== "content-safe-v3") {
+            if (mode !== 'content-safe-v3') {
               if (
                 state.paddingTop === 20 &&
                 state.paddingRight === 20 &&
                 state.paddingBottom === 24 &&
                 state.paddingLeft === 20
               ) {
-                state.paddingTop = 4;
-                state.paddingRight = 4;
-                state.paddingBottom = 4;
-                state.paddingLeft = 4;
+                state.paddingTop = 4
+                state.paddingRight = 4
+                state.paddingBottom = 4
+                state.paddingLeft = 4
               }
-              localStorage.setItem(key, "content-safe-v3");
+              localStorage.setItem(key, 'content-safe-v3')
             }
           } catch (e) {
-            console.warn("[ZENVIZ] 边界留白布局迁移失败，将使用当前值：", e);
+            console.warn('[ZENVIZ] 边界留白布局迁移失败，将使用当前值：', e)
           }
         }
         function migrateExportQuality() {
           try {
-            const key = "zenviz.export-quality";
-            if (localStorage.getItem(key) === "hd-v2") return;
+            const key = 'zenviz.export-quality'
+            if (localStorage.getItem(key) === 'hd-v2') return
             // 导出清晰度：旧默认 2 → 新默认 3，并对所有引擎、所有图表统一提升一次。
             // 只迁移仍等于旧默认 2 的值；用户自己调过的（1 / 1.5 / 4…）保持不变。
-            let changed = false;
+            let changed = false
             ENGINE_IDS.forEach((id) => {
-              const store = enginePropertyStores[id];
-              if (!store || !store.typeStates) return;
+              const store = enginePropertyStores[id]
+              if (!store || !store.typeStates) return
               Object.values(store.typeStates).forEach((ts) => {
                 if (ts && Number(ts.exportScale) === 2) {
-                  ts.exportScale = 3;
-                  changed = true;
+                  ts.exportScale = 3
+                  changed = true
                 }
-              });
-            });
+              })
+            })
             if (changed) {
-              if (Number(state.exportScale) === 2) state.exportScale = 3;
-              ENGINE_IDS.forEach((id) => saveEngineStore(id));
+              if (Number(state.exportScale) === 2) state.exportScale = 3
+              ENGINE_IDS.forEach((id) => saveEngineStore(id))
             }
-            localStorage.setItem(key, "hd-v2");
+            localStorage.setItem(key, 'hd-v2')
           } catch (e) {
-            console.warn("[ZENVIZ] 导出清晰度迁移失败，将使用当前值：", e);
+            console.warn('[ZENVIZ] 导出清晰度迁移失败，将使用当前值：', e)
           }
         }
         function normalizeLayoutPrefs() {
           state.titlePosition = [
-            "top-left",
-            "top",
-            "top-right",
-            "left",
-            "right",
-            "bottom-left",
-            "bottom",
-            "bottom-right",
+            'top-left',
+            'top',
+            'top-right',
+            'left',
+            'right',
+            'bottom-left',
+            'bottom',
+            'bottom-right',
           ].includes(state.titlePosition)
             ? state.titlePosition
-            : "top-left";
+            : 'top-left'
           state.legendPosition = [
-            "top-left",
-            "top",
-            "top-right",
-            "left",
-            "right",
-            "bottom-left",
-            "bottom",
-            "bottom-right",
+            'top-left',
+            'top',
+            'top-right',
+            'left',
+            'right',
+            'bottom-left',
+            'bottom',
+            'bottom-right',
           ].includes(state.legendPosition)
             ? state.legendPosition
-            : "top";
-          state.titleOrientation =
-            state.titleOrientation === "vertical" ? "vertical" : "horizontal";
+            : 'top'
+          state.titleOrientation = state.titleOrientation === 'vertical' ? 'vertical' : 'horizontal'
           state.legendOrientation =
-            state.legendOrientation === "vertical" ? "vertical" : "horizontal";
-          [
-            "paddingTop",
-            "paddingRight",
-            "paddingBottom",
-            "paddingLeft",
-          ].forEach((k) => {
-            const n = Number(state[k]);
-            state[k] = Number.isFinite(n) ? Math.max(0, Math.min(180, n)) : 4;
-          });
-          [
-            "positionTop",
-            "positionRight",
-            "positionBottom",
-            "positionLeft",
-          ].forEach((k) => {
-            const n = Number(state[k]);
-            state[k] = Number.isFinite(n) ? Math.max(0, Math.min(80, n)) : 0;
-          });
-          state.contentScale = Math.max(
-            60,
-            Math.min(180, Number(state.contentScale) || 100),
-          );
+            state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'
+          ;['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'].forEach((k) => {
+            const n = Number(state[k])
+            state[k] = Number.isFinite(n) ? Math.max(0, Math.min(180, n)) : 4
+          })
+          ;['positionTop', 'positionRight', 'positionBottom', 'positionLeft'].forEach((k) => {
+            const n = Number(state[k])
+            state[k] = Number.isFinite(n) ? Math.max(0, Math.min(80, n)) : 0
+          })
+          state.contentScale = Math.max(60, Math.min(180, Number(state.contentScale) || 100))
         }
-        normalizeLayoutPrefs();
+        normalizeLayoutPrefs()
 
-        function setStatus(msg, kind = "ok", notify = true) {
-          $("#status-text").textContent = msg;
-          const dot = $("#status-dot");
+        function setStatus(msg, kind = 'ok', notify = true) {
+          $('#status-text').textContent = msg
+          const dot = $('#status-dot')
           dot.style.background =
-            kind === "err"
-              ? "var(--err)"
-              : kind === "warn"
-                ? "var(--warn)"
-                : "var(--ok)";
-          state.status = msg;
-          if (notify) toast(msg);
+            kind === 'err' ? 'var(--err)' : kind === 'warn' ? 'var(--warn)' : 'var(--ok)'
+          state.status = msg
+          if (notify) toast(msg)
         }
-        let toastTimer = 0;
+        let toastTimer = 0
         function toast(msg) {
-          const el = $("#toast");
+          const el = $('#toast')
           if (!el) {
-            console.error("[ZENVIZ] Toast 元素不存在:", msg);
-            return;
+            console.error('[ZENVIZ] Toast 元素不存在:', msg)
+            return
           }
-          el.textContent = msg;
-          el.classList.add("show");
-          clearTimeout(toastTimer);
-          toastTimer = setTimeout(() => el.classList.remove("show"), 1600);
+          el.textContent = msg
+          el.classList.add('show')
+          clearTimeout(toastTimer)
+          toastTimer = setTimeout(() => el.classList.remove('show'), 1600)
         }
         function reportError(context, err, show = true) {
-          const message =
-            err && err.message ? err.message : String(err || "未知错误");
-          console.error(`[ZENVIZ] ${context}:`, err);
-          if (show) setStatus(`${context} · ${message}`, "err");
+          const message = err && err.message ? err.message : String(err || '未知错误')
+          console.error(`[ZENVIZ] ${context}:`, err)
+          if (show) setStatus(`${context} · ${message}`, 'err')
         }
-        window.addEventListener("error", (e) =>
-          reportError("脚本运行错误", e.error || e.message, true),
-        );
-        window.addEventListener("unhandledrejection", (e) => {
-          reportError("异步操作失败", e.reason, true);
-        });
+        window.addEventListener('error', (e) =>
+          reportError('脚本运行错误', e.error || e.message, true),
+        )
+        window.addEventListener('unhandledrejection', (e) => {
+          reportError('异步操作失败', e.reason, true)
+        })
         function escapeHtml(s) {
           return String(s).replace(
             /[&<>"']/g,
-            (m) =>
-              ({
-                "&": "&amp;",
-                "<": "&lt;",
-                ">": "&gt;",
-                '"': "&quot;",
-                "'": "&#039;",
-              })[m],
-          );
+            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m],
+          )
         }
         function numeric(v) {
-          if (v === null || v === "") return null;
-          const n = Number(String(v).replace(/,/g, ""));
-          return Number.isFinite(n) ? n : null;
+          if (v === null || v === '') return null
+          const n = Number(String(v).replace(/,/g, ''))
+          return Number.isFinite(n) ? n : null
         }
         function getChartDataRule(type = state.type) {
-          const base = chartDataRules[type] || {
-            x: "category",
-            minY: 1,
-            maxY: 8,
-            legend: "series",
-          };
-          if (type === "ribbon") {
+          const base = chartDataRules[type] || { x: 'category', minY: 1, maxY: 8, legend: 'series' }
+          if (type === 'ribbon') {
             const bands = Math.max(
               1,
               Math.min(8, Math.round(Number(chartProps.ribbon?.bands) || 5)),
-            );
-            return { ...base, maxY: bands };
+            )
+            return { ...base, maxY: bands }
           }
-          return base;
+          return base
         }
         function columnStats(index) {
-          const d = state.data || { headers: [], rows: [] };
-          const values = d.rows.map((r) => String(r?.[index] ?? "").trim());
-          const nonEmpty = values.filter(Boolean);
-          const numericValues = nonEmpty.map(numeric);
-          const invalidCount = numericValues.filter((v) => v === null).length;
+          const d = state.data || { headers: [], rows: [] }
+          const values = d.rows.map((r) => String(r?.[index] ?? '').trim())
+          const nonEmpty = values.filter(Boolean)
+          const numericValues = nonEmpty.map(numeric)
+          const invalidCount = numericValues.filter((v) => v === null).length
           return {
             index,
             name: String(d.headers[index] ?? `列${index + 1}`),
@@ -8220,655 +7417,504 @@
             invalidCount,
             isNumeric: nonEmpty.length > 0 && invalidCount === 0,
             isCompleteNumeric:
-              d.rows.length > 0 &&
-              nonEmpty.length === d.rows.length &&
-              invalidCount === 0,
+              d.rows.length > 0 && nonEmpty.length === d.rows.length && invalidCount === 0,
             hasAnyValue: nonEmpty.length > 0,
-          };
+          }
         }
         function isUsableNumericColumn(index) {
-          return columnStats(index).isNumeric;
+          return columnStats(index).isNumeric
         }
         function isUsableCategoryColumn(index) {
-          return columnStats(index).hasAnyValue;
+          return columnStats(index).hasAnyValue
         }
         function firstUsableNumericColumns(exclude = -1, max = 8) {
           return (state.data?.headers || [])
             .map((_, i) => i)
             .filter((i) => i !== exclude && isUsableNumericColumn(i))
-            .slice(0, max);
+            .slice(0, max)
         }
         function firstUsableCategoryColumn(exclude = -1) {
           const indexes = (state.data?.headers || [])
             .map((_, i) => i)
-            .filter((i) => i !== exclude && isUsableCategoryColumn(i));
-          return indexes.find((i) => !isUsableNumericColumn(i)) ?? null;
+            .filter((i) => i !== exclude && isUsableCategoryColumn(i))
+          return indexes.find((i) => !isUsableNumericColumn(i)) ?? null
         }
         function normalizeDataSelection({ fillDefaults = false } = {}) {
-          const d = state.data || { headers: [], rows: [] };
-          const count = d.headers.length;
+          const d = state.data || { headers: [], rows: [] }
+          const count = d.headers.length
           if (!count) {
-            state.xCol = 0;
-            state.targetCol = null;
-            state.yCols = [];
-            state.y1Col = null;
-            state.y2Col = null;
-            return;
+            state.xCol = 0
+            state.targetCol = null
+            state.yCols = []
+            state.y1Col = null
+            state.y2Col = null
+            return
           }
-          const rule = getChartDataRule(state.type);
-          let x = Number.isInteger(state.xCol)
-            ? state.xCol
-            : Number(state.xCol);
-          if (!Number.isInteger(x) || x < 0 || x >= count) x = 0;
-          state.xCol = x;
+          const rule = getChartDataRule(state.type)
+          let x = Number.isInteger(state.xCol) ? state.xCol : Number(state.xCol)
+          if (!Number.isInteger(x) || x < 0 || x >= count) x = 0
+          state.xCol = x
           if (rule.target) {
             let target = Number.isInteger(state.targetCol)
               ? state.targetCol
-              : Number(state.targetCol);
-            if (
-              !Number.isInteger(target) ||
-              target < 0 ||
-              target >= count ||
-              target === x
-            )
-              target = firstUsableCategoryColumn(x);
-            state.targetCol = target;
-          } else state.targetCol = null;
+              : Number(state.targetCol)
+            if (!Number.isInteger(target) || target < 0 || target >= count || target === x)
+              target = firstUsableCategoryColumn(x)
+            state.targetCol = target
+          } else state.targetCol = null
           if (rule.pairY) {
-            let y1 = Number.isInteger(state.y1Col)
-              ? state.y1Col
-              : Number(state.y1Col);
-            let y2 = Number.isInteger(state.y2Col)
-              ? state.y2Col
-              : Number(state.y2Col);
-            const excluded = new Set();
-            if (rule.x !== "none") excluded.add(x);
-            if (Number.isInteger(state.targetCol))
-              excluded.add(state.targetCol);
-            const defaults = firstUsableNumericColumns(-1, 8).filter(
-              (i) => !excluded.has(i),
-            );
-            if (
-              !Number.isInteger(y1) ||
-              y1 < 0 ||
-              y1 >= count ||
-              excluded.has(y1)
-            )
-              y1 = defaults[0] ?? null;
-            const fallback = defaults.find((i) => i !== y1);
-            if (
-              !Number.isInteger(y2) ||
-              y2 < 0 ||
-              y2 >= count ||
-              excluded.has(y2) ||
-              y2 === y1
-            )
-              y2 = fallback ?? null;
-            state.y1Col = y1;
-            state.y2Col = y2;
-            state.yCols = [y1, y2].filter((v) => Number.isInteger(v));
-            return;
+            let y1 = Number.isInteger(state.y1Col) ? state.y1Col : Number(state.y1Col)
+            let y2 = Number.isInteger(state.y2Col) ? state.y2Col : Number(state.y2Col)
+            const excluded = new Set()
+            if (rule.x !== 'none') excluded.add(x)
+            if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
+            const defaults = firstUsableNumericColumns(-1, 8).filter((i) => !excluded.has(i))
+            if (!Number.isInteger(y1) || y1 < 0 || y1 >= count || excluded.has(y1))
+              y1 = defaults[0] ?? null
+            const fallback = defaults.find((i) => i !== y1)
+            if (!Number.isInteger(y2) || y2 < 0 || y2 >= count || excluded.has(y2) || y2 === y1)
+              y2 = fallback ?? null
+            state.y1Col = y1
+            state.y2Col = y2
+            state.yCols = [y1, y2].filter((v) => Number.isInteger(v))
+            return
           }
-          let ys = Array.isArray(state.yCols) ? state.yCols.map(Number) : [];
-          ys = ys.filter((v) => Number.isInteger(v) && v >= 0 && v < count);
-          ys = ys.filter((v, i, a) => a.indexOf(v) === i);
-          const excluded = new Set();
-          if (rule.x !== "none") excluded.add(x);
-          if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol);
-          ys = ys.filter((v) => !excluded.has(v));
+          let ys = Array.isArray(state.yCols) ? state.yCols.map(Number) : []
+          ys = ys.filter((v) => Number.isInteger(v) && v >= 0 && v < count)
+          ys = ys.filter((v, i, a) => a.indexOf(v) === i)
+          const excluded = new Set()
+          if (rule.x !== 'none') excluded.add(x)
+          if (Number.isInteger(state.targetCol)) excluded.add(state.targetCol)
+          ys = ys.filter((v) => !excluded.has(v))
           if (fillDefaults && ys.length === 0)
-            ys = firstUsableNumericColumns(
-              rule.x === "none" ? -1 : x,
-              rule.maxY,
-            ).filter((i) => !excluded.has(i));
-          state.yCols = ys.slice(0, rule.maxY);
+            ys = firstUsableNumericColumns(rule.x === 'none' ? -1 : x, rule.maxY).filter(
+              (i) => !excluded.has(i),
+            )
+          state.yCols = ys.slice(0, rule.maxY)
         }
         function chartRoleLabel(type, key) {
-          const role = getChartDataRule(type).ui?.roles?.find(
-            (r) => r.key === key,
-          );
+          const role = getChartDataRule(type).ui?.roles?.find((r) => r.key === key)
           return (
             role?.label ||
-            (key === "x-col"
-              ? "分类列"
-              : key === "target-col"
-                ? "去向列"
-                : key === "y1-col"
-                  ? "第一数值列"
-                  : key === "y2-col"
-                    ? "第二数值列"
-                    : "数据列")
-          );
+            (key === 'x-col'
+              ? '分类列'
+              : key === 'target-col'
+                ? '去向列'
+                : key === 'y1-col'
+                  ? '第一数值列'
+                  : key === 'y2-col'
+                    ? '第二数值列'
+                    : '数据列')
+          )
         }
-        function validateDataMapping(
-          type = state.type,
-          { toastOnError = false } = {},
-        ) {
-          normalizeDataSelection();
-          const d = state.data || { headers: [], rows: [] };
-          const rule = getChartDataRule(type);
-          const errors = [];
-          if (!d.headers.length) errors.push("数据表没有列");
-          if (!d.rows.length) errors.push("数据表没有数据行");
-          const x = Number(state.xCol);
-          if (rule.x !== "none") {
-            const xs = columnStats(x);
+        function validateDataMapping(type = state.type, { toastOnError = false } = {}) {
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const rule = getChartDataRule(type)
+          const errors = []
+          if (!d.headers.length) errors.push('数据表没有列')
+          if (!d.rows.length) errors.push('数据表没有数据行')
+          const x = Number(state.xCol)
+          if (rule.x !== 'none') {
+            const xs = columnStats(x)
             if (!Number.isInteger(x) || x < 0 || x >= d.headers.length)
-              errors.push(`${chartRoleLabel(type, "x-col")}选择无效`);
-            else if (rule.x === "numeric" && !xs.isNumeric)
-              errors.push(`“${xs.name}”必须为数值列`);
-            else if (rule.x === "category" && !xs.hasAnyValue)
-              errors.push(
-                `“${xs.name}”没有可用的${chartRoleLabel(type, "x-col")}`,
-              );
+              errors.push(`${chartRoleLabel(type, 'x-col')}选择无效`)
+            else if (rule.x === 'numeric' && !xs.isNumeric)
+              errors.push(`“${xs.name}”必须为数值列`)
+            else if (rule.x === 'category' && !xs.hasAnyValue)
+              errors.push(`“${xs.name}”没有可用的${chartRoleLabel(type, 'x-col')}`)
           }
           if (rule.target) {
             const t = Number(state.targetCol),
-              ts = columnStats(t);
-            if (
-              !Number.isInteger(t) ||
-              t < 0 ||
-              t >= d.headers.length ||
-              t === x
-            )
-              errors.push("去向列选择无效，必须与来源列不同");
-            else if (!ts.hasAnyValue)
-              errors.push(`“${ts.name}”没有可用的去向数据`);
+              ts = columnStats(t)
+            if (!Number.isInteger(t) || t < 0 || t >= d.headers.length || t === x)
+              errors.push('去向列选择无效，必须与来源列不同')
+            else if (!ts.hasAnyValue) errors.push(`“${ts.name}”没有可用的去向数据`)
             if (!errors.length && getFlowRows().length === 0)
-              errors.push("没有有效的来源 → 去向 → 权重记录，请检查三列数据");
+              errors.push('没有有效的来源 → 去向 → 权重记录，请检查三列数据')
           }
-          const ys = state.yCols;
+          const ys = state.yCols
           if (ys.length < rule.minY || ys.length > rule.maxY)
             errors.push(
               `“${chartNames[type] || type}”需要 ${rule.minY === rule.maxY ? `恰好 ${rule.minY}` : `${rule.minY}–${rule.maxY}`} 个数值列，当前为 ${ys.length} 个`,
-            );
+            )
           ys.forEach((idx) => {
-            const stats = columnStats(idx);
-            if (!stats.isNumeric)
-              errors.push(`“${stats.name}”不是纯数值列，不能作为数值列使用`);
+            const stats = columnStats(idx)
+            if (!stats.isNumeric) errors.push(`“${stats.name}”不是纯数值列，不能作为数值列使用`)
             if (rule.completeY && !stats.isCompleteNumeric)
               errors.push(
                 `“${stats.name}”存在空白或非数值内容，当前“${chartNames[type] || type}”要求完整数值列`,
-              );
+              )
             if (rule.positiveY && stats.isNumeric) {
-              const vals = d.rows.map((r) => numeric(r?.[idx]));
+              const vals = d.rows.map((r) => numeric(r?.[idx]))
               if (vals.some((v) => v !== null && v < 0))
-                errors.push(`“${stats.name}”不能包含负数`);
+                errors.push(`“${stats.name}”不能包含负数`)
               if (!vals.some((v) => v !== null && v > 0))
-                errors.push(`“${stats.name}”必须至少包含一个大于 0 的值`);
+                errors.push(`“${stats.name}”必须至少包含一个大于 0 的值`)
             }
             if (
               rule.nonNegativeY &&
               stats.isNumeric &&
               d.rows.some((r) => {
-                const v = numeric(r?.[idx]);
-                return v !== null && v < 0;
+                const v = numeric(r?.[idx])
+                return v !== null && v < 0
               })
             )
-              errors.push(`“${stats.name}”不能包含负数`);
-          });
+              errors.push(`“${stats.name}”不能包含负数`)
+          })
           if (rule.nonNegativeError && ys.length === 2) {
-            const errCol = ys[1];
+            const errCol = ys[1]
             if (
               d.rows.some((r) => {
-                const v = numeric(r?.[errCol]);
-                return v !== null && v < 0;
+                const v = numeric(r?.[errCol])
+                return v !== null && v < 0
               })
             )
-              errors.push(
-                `“${columnStats(errCol).name}”作为误差列时不能包含负数`,
-              );
+              errors.push(`“${columnStats(errCol).name}”作为误差列时不能包含负数`)
           }
-          if (type === "pie" && ys.length === 1) {
-            const slices = getPieSlices();
-            if (!slices.length) errors.push("饼图没有可绘制的分类数据");
+          if (type === 'pie' && ys.length === 1) {
+            const slices = getPieSlices()
+            if (!slices.length) errors.push('饼图没有可绘制的分类数据')
             else if (slices.every((item) => item.value <= 0))
-              errors.push("饼图的数值总和必须大于 0");
+              errors.push('饼图的数值总和必须大于 0')
           }
           if (
-            type === "correlation" &&
+            type === 'correlation' &&
             ys.filter((idx) => columnStats(idx).numericCount >= 2).length < 2
           )
-            errors.push("相关矩阵至少需要 2 个具有有效数值的变量");
+            errors.push('相关矩阵至少需要 2 个具有有效数值的变量')
           if (
-            type === "histogram" &&
+            type === 'histogram' &&
             Number.isInteger(ys[0]) &&
             columnStats(ys[0]).numericCount < 2
           )
-            errors.push("直方图至少需要 2 个有效数值");
-          const message = errors[0] || "";
-          if (message && toastOnError) toast(message);
-          return { valid: errors.length === 0, message, errors, rule };
+            errors.push('直方图至少需要 2 个有效数值')
+          const message = errors[0] || ''
+          if (message && toastOnError) toast(message)
+          return { valid: errors.length === 0, message, errors, rule }
         }
         function getPieSlices() {
           const s = rowsToSeries(),
-            totals = new Map();
+            totals = new Map()
           s.labels.forEach((label, i) => {
-            const name = String(label ?? "").trim(),
-              value = numeric(s.series[0]?.data[i]);
-            if (!name || value === null) return;
-            totals.set(name, (totals.get(name) || 0) + value);
-          });
-          return Array.from(totals, ([name, value]) => ({ name, value }));
+            const name = String(label ?? '').trim(),
+              value = numeric(s.series[0]?.data[i])
+            if (!name || value === null) return
+            totals.set(name, (totals.get(name) || 0) + value)
+          })
+          return Array.from(totals, ([name, value]) => ({ name, value }))
         }
         function getPairSeries() {
-          normalizeDataSelection();
-          const d = state.data || { headers: [], rows: [] };
-          const y1 = Number.isInteger(state.y1Col)
-            ? state.y1Col
-            : state.yCols[0];
-          const y2 = Number.isInteger(state.y2Col)
-            ? state.y2Col
-            : state.yCols[1];
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const y1 = Number.isInteger(state.y1Col) ? state.y1Col : state.yCols[0]
+          const y2 = Number.isInteger(state.y2Col) ? state.y2Col : state.yCols[1]
           return {
             first: {
               index: y1,
-              name: String(d.headers[y1] ?? ""),
+              name: String(d.headers[y1] ?? ''),
               data: d.rows.map((r) => numeric(r?.[y1])),
             },
             second: {
               index: y2,
-              name: String(d.headers[y2] ?? ""),
+              name: String(d.headers[y2] ?? ''),
               data: d.rows.map((r) => numeric(r?.[y2])),
             },
-          };
+          }
         }
         function getFlowRows() {
-          normalizeDataSelection();
-          const d = state.data || { headers: [], rows: [] };
-          const sourceCol = Number.isInteger(state.xCol) ? state.xCol : 0;
-          const targetCol = Number.isInteger(state.targetCol)
-            ? state.targetCol
-            : null;
-          const weightCol = Array.isArray(state.yCols) ? state.yCols[0] : null;
-          const map = new Map();
-          if (targetCol === null || weightCol === null) return [];
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const sourceCol = Number.isInteger(state.xCol) ? state.xCol : 0
+          const targetCol = Number.isInteger(state.targetCol) ? state.targetCol : null
+          const weightCol = Array.isArray(state.yCols) ? state.yCols[0] : null
+          const map = new Map()
+          if (targetCol === null || weightCol === null) return []
           d.rows.forEach((r) => {
-            const source = String(r?.[sourceCol] ?? "").trim(),
-              target = String(r?.[targetCol] ?? "").trim(),
-              value = numeric(r?.[weightCol]);
-            if (!source || !target || value === null || value <= 0) return;
-            const key = source + "\u0000" + target;
-            const prev = map.get(key);
-            map.set(key, { source, target, value: (prev?.value || 0) + value });
-          });
-          return Array.from(map.values());
+            const source = String(r?.[sourceCol] ?? '').trim(),
+              target = String(r?.[targetCol] ?? '').trim(),
+              value = numeric(r?.[weightCol])
+            if (!source || !target || value === null || value <= 0) return
+            const key = source + '\u0000' + target
+            const prev = map.get(key)
+            map.set(key, { source, target, value: (prev?.value || 0) + value })
+          })
+          return Array.from(map.values())
         }
         function renderDataValidationState(message) {
-          const mount = $("#chart-mount");
-          if (!mount) return;
-          $("#zen-svg").style.display = "none";
-          mount.style.display = "block";
-          mount.innerHTML = `<div class="render-error"><strong>当前数据不能绘制“${escapeHtml(chartNames[state.type] || state.type)}”</strong><span>${escapeHtml(message || "请选择符合条件的 X 列和数值列。")}</span><span>打开“编辑数据”调整列选择，选择器会自动限制可用列。</span></div>`;
+          const mount = $('#chart-mount')
+          if (!mount) return
+          $('#zen-svg').style.display = 'none'
+          mount.style.display = 'block'
+          mount.innerHTML = `<div class="render-error"><strong>当前数据不能绘制“${escapeHtml(chartNames[state.type] || state.type)}”</strong><span>${escapeHtml(message || '请选择符合条件的 X 列和数值列。')}</span><span>打开“编辑数据”调整列选择，选择器会自动限制可用列。</span></div>`
         }
         function rowsToSeries() {
-          normalizeDataSelection();
-          const d = state.data || { headers: [], rows: [] };
-          const xCol = Number.isInteger(state.xCol) ? state.xCol : 0;
-          const yCols = Array.isArray(state.yCols) ? state.yCols : [];
-          const labels = d.rows.map((r) => String(r?.[xCol] ?? ""));
-          const xValues = d.rows.map((r) => numeric(r?.[xCol]));
+          normalizeDataSelection()
+          const d = state.data || { headers: [], rows: [] }
+          const xCol = Number.isInteger(state.xCol) ? state.xCol : 0
+          const yCols = Array.isArray(state.yCols) ? state.yCols : []
+          const labels = d.rows.map((r) => String(r?.[xCol] ?? ''))
+          const xValues = d.rows.map((r) => numeric(r?.[xCol]))
           const arr = yCols.map((ci) => ({
             name: String(d.headers[ci] ?? `列${ci + 1}`),
             data: d.rows.map((r) => numeric(r?.[ci])),
-          }));
-          return {
-            labels,
-            xValues,
-            xCol,
-            xName: String(d.headers[xCol] ?? ""),
-            series: arr,
-          };
+          }))
+          return { labels, xValues, xCol, xName: String(d.headers[xCol] ?? ''), series: arr }
         }
         function handleDataSelectionChange(key, value) {
-          const rule = getChartDataRule(state.type);
-          if (key === "x-col") {
-            if (rule.x === "none") return false;
-            const next = Number(value);
-            if (
-              !Number.isInteger(next) ||
-              next < 0 ||
-              next >= (state.data?.headers.length || 0)
-            )
-              return false;
-            const stats = columnStats(next);
-            if (rule.x === "numeric" && !stats.isNumeric) {
-              toast(
-                `“${stats.name}”不是纯数值列，当前图表的第一列必须为数值 X 轴`,
-              );
-              syncDataColumnSelects();
-              return false;
+          const rule = getChartDataRule(state.type)
+          if (key === 'x-col') {
+            if (rule.x === 'none') return false
+            const next = Number(value)
+            if (!Number.isInteger(next) || next < 0 || next >= (state.data?.headers.length || 0))
+              return false
+            const stats = columnStats(next)
+            if (rule.x === 'numeric' && !stats.isNumeric) {
+              toast(`“${stats.name}”不是纯数值列，当前图表的第一列必须为数值 X 轴`)
+              syncDataColumnSelects()
+              return false
             }
-            if (rule.x === "category" && !stats.hasAnyValue) {
-              toast(`“${stats.name}”没有可用的分类数据`);
-              syncDataColumnSelects();
-              return false;
+            if (rule.x === 'category' && !stats.hasAnyValue) {
+              toast(`“${stats.name}”没有可用的分类数据`)
+              syncDataColumnSelects()
+              return false
             }
-            state.xCol = next;
-            if (state.targetCol === next)
-              state.targetCol = firstUsableCategoryColumn(next);
+            state.xCol = next
+            if (state.targetCol === next) state.targetCol = firstUsableCategoryColumn(next)
             if (rule.pairY) {
-              state.y1Col = state.y1Col === next ? null : state.y1Col;
-              state.y2Col = state.y2Col === next ? null : state.y2Col;
-            } else
-              state.yCols = state.yCols.filter(
-                (v) => v !== next && v !== state.targetCol,
-              );
-          } else if (key === "target-col") {
-            const next = Number(value);
+              state.y1Col = state.y1Col === next ? null : state.y1Col
+              state.y2Col = state.y2Col === next ? null : state.y2Col
+            } else state.yCols = state.yCols.filter((v) => v !== next && v !== state.targetCol)
+          } else if (key === 'target-col') {
+            const next = Number(value)
             if (
               !Number.isInteger(next) ||
               next < 0 ||
               next >= (state.data?.headers.length || 0) ||
               next === state.xCol
             )
-              return false;
-            const stats = columnStats(next);
+              return false
+            const stats = columnStats(next)
             if (!stats.hasAnyValue) {
-              toast(`“${stats.name}”没有可用的去向数据`);
-              syncDataColumnSelects();
-              return false;
+              toast(`“${stats.name}”没有可用的去向数据`)
+              syncDataColumnSelects()
+              return false
             }
-            state.targetCol = next;
-            state.yCols = state.yCols.filter((v) => v !== next);
-          } else if (key === "y1-col" || key === "y2-col") {
+            state.targetCol = next
+            state.yCols = state.yCols.filter((v) => v !== next)
+          } else if (key === 'y1-col' || key === 'y2-col') {
             const next = Number(value),
-              targetKey = key === "y1-col" ? "y1Col" : "y2Col",
-              other = key === "y1-col" ? state.y2Col : state.y1Col;
-            if (
-              !Number.isInteger(next) ||
-              next < 0 ||
-              next >= (state.data?.headers.length || 0)
-            )
-              return false;
-            if (
-              (rule.x !== "none" && next === state.xCol) ||
-              next === state.targetCol
-            ) {
-              toast("该列当前承担其它数据角色，不能作为此数值角色");
-              syncDataColumnSelects();
-              return false;
+              targetKey = key === 'y1-col' ? 'y1Col' : 'y2Col',
+              other = key === 'y1-col' ? state.y2Col : state.y1Col
+            if (!Number.isInteger(next) || next < 0 || next >= (state.data?.headers.length || 0))
+              return false
+            if ((rule.x !== 'none' && next === state.xCol) || next === state.targetCol) {
+              toast('该列当前承担其它数据角色，不能作为此数值角色')
+              syncDataColumnSelects()
+              return false
             }
             if (next === other) {
-              toast("两个数值角色必须选择不同列");
-              syncDataColumnSelects();
-              return false;
+              toast('两个数值角色必须选择不同列')
+              syncDataColumnSelects()
+              return false
             }
-            const stats = columnStats(next);
+            const stats = columnStats(next)
             if (!stats.isNumeric) {
-              toast(`“${stats.name}”不是纯数值列`);
-              syncDataColumnSelects();
-              return false;
+              toast(`“${stats.name}”不是纯数值列`)
+              syncDataColumnSelects()
+              return false
             }
-            state[targetKey] = next;
-            state.yCols = [state.y1Col, state.y2Col].filter((v) =>
-              Number.isInteger(v),
-            );
-          } else if (key === "y-cols") {
-            const requested = (Array.isArray(value) ? value : [value]).map(
-                Number,
-              ),
-              unique = requested.filter(
-                (v, i, a) => Number.isInteger(v) && a.indexOf(v) === i,
-              ),
-              valid = [];
+            state[targetKey] = next
+            state.yCols = [state.y1Col, state.y2Col].filter((v) => Number.isInteger(v))
+          } else if (key === 'y-cols') {
+            const requested = (Array.isArray(value) ? value : [value]).map(Number),
+              unique = requested.filter((v, i, a) => Number.isInteger(v) && a.indexOf(v) === i),
+              valid = []
             for (const idx of unique) {
-              if (
-                (rule.x !== "none" && idx === state.xCol) ||
-                idx === state.targetCol
-              ) {
-                toast(
-                  `“${columnStats(idx).name}”当前承担其它数据角色，不能同时作为数值列`,
-                );
-                continue;
+              if ((rule.x !== 'none' && idx === state.xCol) || idx === state.targetCol) {
+                toast(`“${columnStats(idx).name}”当前承担其它数据角色，不能同时作为数值列`)
+                continue
               }
-              const stats = columnStats(idx);
+              const stats = columnStats(idx)
               if (!stats.isNumeric) {
-                toast(`“${stats.name}”不是纯数值列，不能作为数值列`);
-                continue;
+                toast(`“${stats.name}”不是纯数值列，不能作为数值列`)
+                continue
               }
               if (valid.length >= rule.maxY) {
-                toast(
-                  `“${chartNames[state.type] || state.type}”最多选择 ${rule.maxY} 个数值列`,
-                );
-                break;
+                toast(`“${chartNames[state.type] || state.type}”最多选择 ${rule.maxY} 个数值列`)
+                break
               }
-              valid.push(idx);
+              valid.push(idx)
             }
-            state.yCols = valid;
-          } else return false;
-          normalizeDataSelection();
-          schedulePersist();
-          syncDataColumnSelects();
-          const validation = validateDataMapping(state.type);
-          updateMeta();
-          renderChart(false);
-          if (!validation.valid) setStatus(validation.message, "warn");
-          else setStatus("数据列选择已更新");
-          return true;
+            state.yCols = valid
+          } else return false
+          normalizeDataSelection()
+          schedulePersist()
+          syncDataColumnSelects()
+          const validation = validateDataMapping(state.type)
+          updateMeta()
+          renderChart(false)
+          if (!validation.valid) setStatus(validation.message, 'warn')
+          else setStatus('数据列选择已更新')
+          return true
         }
         const FONT_FAMILY_OPTIONS = [
-          ["literata", "Literata · 编辑衬线"],
-          ["georgia", "Georgia · 经典衬线"],
-          ["arial", "Arial · 无衬线"],
-          ["yahei", "微软雅黑 · 中文无衬线"],
-          ["simsun", "宋体 · 中文衬线"],
-        ];
+          ['literata', 'Literata · 编辑衬线'],
+          ['georgia', 'Georgia · 经典衬线'],
+          ['arial', 'Arial · 无衬线'],
+          ['yahei', '微软雅黑 · 中文无衬线'],
+          ['simsun', '宋体 · 中文衬线'],
+        ]
         const FONT_FAMILY_CSS = {
-          literata: "Literata, Georgia, SimSun, serif",
-          georgia: "Georgia, Times New Roman, serif",
-          arial: "Arial, Helvetica, sans-serif",
-          yahei: "Microsoft YaHei, 微软雅黑, Noto Sans SC, sans-serif",
-          simsun: "SimSun, 宋体, Songti SC, serif",
-        };
-        function getChartFontFamily(kind = "xAxis") {
+          literata: 'Literata, Georgia, SimSun, serif',
+          georgia: 'Georgia, Times New Roman, serif',
+          arial: 'Arial, Helvetica, sans-serif',
+          yahei: 'Microsoft YaHei, 微软雅黑, Noto Sans SC, sans-serif',
+          simsun: 'SimSun, 宋体, Songti SC, serif',
+        }
+        function getChartFontFamily(kind = 'xAxis') {
           const key =
             {
-              xAxis: "xAxisFontFamily",
-              yAxis: "yAxisFontFamily",
-              tooltip: "tooltipFontFamily",
-              legend: "legendFontFamily",
-              title: "titleFontFamily",
-            }[kind] || "xAxisFontFamily";
-          const value = state[key] || state.fontFamily || "simsun";
-          return FONT_FAMILY_CSS[value] || FONT_FAMILY_CSS.simsun;
+              xAxis: 'xAxisFontFamily',
+              yAxis: 'yAxisFontFamily',
+              tooltip: 'tooltipFontFamily',
+              legend: 'legendFontFamily',
+              title: 'titleFontFamily',
+            }[kind] || 'xAxisFontFamily'
+          const value = state[key] || state.fontFamily || 'simsun'
+          return FONT_FAMILY_CSS[value] || FONT_FAMILY_CSS.simsun
         }
         function fontOptionList() {
-          return FONT_FAMILY_OPTIONS.map(([value, label]) => [value, label]);
+          return FONT_FAMILY_OPTIONS.map(([value, label]) => [value, label])
         }
         function palette() {
           const base = {
-            mono: [
-              "#151515",
-              "#555555",
-              "#777777",
-              "#999999",
-              "#b5b5b5",
-              "#3c3c3c",
-            ],
-            culture: [
-              "#7B2D26",
-              "#C66B3D",
-              "#B28A3E",
-              "#5F6B5D",
-              "#6B4C5B",
-              "#8A6A4A",
-            ],
-            science: [
-              "#155EEF",
-              "#009688",
-              "#2E7D32",
-              "#6A5ACD",
-              "#F28E2B",
-              "#607487",
-            ],
-            editorial: [
-              "#E76F51",
-              "#2A9D8F",
-              "#E9C46A",
-              "#6C5CE7",
-              "#F72585",
-              "#264653",
-            ],
-          };
-          return base[state.palette] || base.science;
+            mono: ['#151515', '#555555', '#777777', '#999999', '#b5b5b5', '#3c3c3c'],
+            culture: ['#7B2D26', '#C66B3D', '#B28A3E', '#5F6B5D', '#6B4C5B', '#8A6A4A'],
+            science: ['#155EEF', '#009688', '#2E7D32', '#6A5ACD', '#F28E2B', '#607487'],
+            editorial: ['#E76F51', '#2A9D8F', '#E9C46A', '#6C5CE7', '#F72585', '#264653'],
+          }
+          return base[state.palette] || base.science
         }
         function palettePreview(id) {
           const colors =
             {
-              mono: [
-                "#151515",
-                "#555555",
-                "#777777",
-                "#999999",
-                "#b5b5b5",
-                "#3c3c3c",
-              ],
-              culture: [
-                "#7B2D26",
-                "#C66B3D",
-                "#B28A3E",
-                "#5F6B5D",
-                "#6B4C5B",
-                "#8A6A4A",
-              ],
-              science: [
-                "#155EEF",
-                "#009688",
-                "#2E7D32",
-                "#6A5ACD",
-                "#F28E2B",
-                "#607487",
-              ],
-              editorial: [
-                "#E76F51",
-                "#2A9D8F",
-                "#E9C46A",
-                "#6C5CE7",
-                "#F72585",
-                "#264653",
-              ],
-            }[id] || [];
-          return colors.map((c, i) => `<i class="p-${id}-${i}"></i>`).join("");
+              mono: ['#151515', '#555555', '#777777', '#999999', '#b5b5b5', '#3c3c3c'],
+              culture: ['#7B2D26', '#C66B3D', '#B28A3E', '#5F6B5D', '#6B4C5B', '#8A6A4A'],
+              science: ['#155EEF', '#009688', '#2E7D32', '#6A5ACD', '#F28E2B', '#607487'],
+              editorial: ['#E76F51', '#2A9D8F', '#E9C46A', '#6C5CE7', '#F72585', '#264653'],
+            }[id] || []
+          return colors.map((c, i) => `<i class="p-${id}-${i}"></i>`).join('')
         }
         function applyBg(cls) {
-          const bg = cls || "plain";
-          document.body.classList.remove(
-            "body-grid",
-            "body-dots",
-            "body-cross",
-            "body-diagonal",
-          );
-          if (
-            ["body-grid", "body-dots", "body-cross", "body-diagonal"].includes(
-              bg,
-            )
-          )
-            document.body.classList.add(bg);
-          state.bg = bg;
-          $$(".settings-bg-dot").forEach((el) => {
-            const active = el.dataset.bg === bg;
-            el.classList.toggle("active", active);
-            el.setAttribute("aria-pressed", active ? "true" : "false");
-          });
+          const bg = cls || 'plain'
+          document.body.classList.remove('body-grid', 'body-dots', 'body-cross', 'body-diagonal')
+          if (['body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg))
+            document.body.classList.add(bg)
+          state.bg = bg
+          $$('.settings-bg-dot').forEach((el) => {
+            const active = el.dataset.bg === bg
+            el.classList.toggle('active', active)
+            el.setAttribute('aria-pressed', active ? 'true' : 'false')
+          })
         }
         function updateMeta() {
           const s = rowsToSeries(),
-            ready = engineReady(state.engine);
-          const a = $("#meta-rows"),
-            b = $("#meta-series"),
-            e = $("#engine-status");
-          if (a) a.textContent = state.data.rows.length;
-          if (b) b.textContent = s.series.length;
+            ready = engineReady(state.engine)
+          const a = $('#meta-rows'),
+            b = $('#meta-series'),
+            c = $('#meta-engine'),
+            e = $('#engine-status')
+          if (a) a.textContent = state.data.rows.length
+          if (b) b.textContent = s.series.length
+          if (c)
+            c.textContent =
+              state.engine === 'zen'
+                ? 'ZEN'
+                : state.engine === 'chartjs'
+                  ? 'Chart.js'
+                  : state.engine === 'apexcharts'
+                    ? 'ApexCharts'
+                    : 'ECharts'
           if (e) {
             e.textContent =
-              (state.engine === "zen"
-                ? "ZEN 自绘"
-                : state.engine === "echarts"
-                  ? "ECharts"
-                  : state.engine === "chartjs"
-                    ? "Chart.js"
-                    : "ApexCharts") +
-              " · " +
-              (ready ? "可用" : "不可用");
-            e.style.color = ready ? "var(--faint)" : "var(--err)";
+              (state.engine === 'zen'
+                ? 'ZEN 自绘'
+                : state.engine === 'echarts'
+                  ? 'ECharts'
+                  : state.engine === 'chartjs'
+                    ? 'Chart.js'
+                    : 'ApexCharts') +
+              ' · ' +
+              (ready ? '可用' : '不可用')
+            e.style.color = ready ? 'var(--faint)' : 'var(--err)'
           }
         }
-        function renderCategories(active = "统计") {
-          const host = $("#category-list");
-          host.innerHTML = "";
+        function renderCategories(active = '统计') {
+          const host = $('#category-list')
+          host.innerHTML = ''
           Object.keys(categories).forEach((c) => {
-            const b = document.createElement("button");
-            b.className = "lib-btn" + (c === active ? " active" : "");
-            b.innerHTML =
-              escapeHtml(c) + `<small>${categories[c].length} 种</small>`;
+            const b = document.createElement('button')
+            b.className = 'lib-btn' + (c === active ? ' active' : '')
+            b.innerHTML = escapeHtml(c) + `<small>${categories[c].length} 种</small>`
             b.onclick = () => {
-              renderCategories(c);
-              renderTypeList(categories[c]);
-            };
-            host.appendChild(b);
-          });
+              renderCategories(c)
+              renderTypeList(categories[c])
+            }
+            host.appendChild(b)
+          })
         }
         function renderTypeList(types) {
-          const host = $("#type-list");
-          host.innerHTML = "";
+          const host = $('#type-list')
+          host.innerHTML = ''
           types.forEach((t) => {
             const m = typeMeta[t],
-              supported = typeSupported(t);
-            const b = document.createElement("button");
+              supported = typeSupported(t)
+            const b = document.createElement('button')
             b.className =
-              "lib-btn" +
-              (state.type === t ? " active" : "") +
-              (supported ? "" : " disabled");
-            b.setAttribute("aria-disabled", String(!supported));
+              'lib-btn' + (state.type === t ? ' active' : '') + (supported ? '' : ' disabled')
+            b.setAttribute('aria-disabled', String(!supported))
             b.innerHTML =
               escapeHtml(chartNames[t]) +
-              `<small>${escapeHtml(m?.desc || "")}${supported ? "" : " · 当前引擎不可用"}</small>`;
+              `<small>${escapeHtml(m?.desc || '')}${supported ? '' : ' · 当前引擎不可用'}</small>`
             b.title = supported
-              ? ""
-              : `${engineInfo[state.engine].short} 不支持“${chartNames[t]}”`;
+              ? ''
+              : `${engineInfo[state.engine].short} 不支持“${chartNames[t]}”`
             b.onclick = () =>
               supported
                 ? selectType(t)
                 : setStatus(
                     `${engineInfo[state.engine].short} 不支持“${chartNames[t]}” · 请切换引擎`,
-                    "warn",
-                  );
-            host.appendChild(b);
-          });
+                    'warn',
+                  )
+            host.appendChild(b)
+          })
         }
         function renderEngines() {
-          const host = $("#engine-list");
-          if (!host) return;
-          host.innerHTML = "";
+          const host = $('#engine-list')
+          if (!host) return
+          host.innerHTML = ''
           Object.entries(engineInfo).forEach(([id, info]) => {
-            const ready = engineReady(id);
-            const current = state.engine === id;
-            const currentSupported = typeSupported(state.type, id);
-            const el = document.createElement("button");
-            el.type = "button";
-            el.className =
-              "engine-item" +
-              (current ? " active" : "") +
-              (!ready ? " disabled" : "");
-            el.disabled = !ready;
-            const stateText = !ready
-              ? "不可用"
-              : currentSupported
-                ? "就绪"
-                : "将切换图表";
+            const ready = engineReady(id)
+            const current = state.engine === id
+            const currentSupported = typeSupported(state.type, id)
+            const el = document.createElement('button')
+            el.type = 'button'
+            el.className = 'engine-item' + (current ? ' active' : '') + (!ready ? ' disabled' : '')
+            el.disabled = !ready
+            const stateText = !ready ? '不可用' : currentSupported ? '就绪' : '将切换图表'
             const desc =
-              id === "zen"
-                ? "自由构图与叙事表达"
-                : id === "echarts"
-                  ? "科学图表与交互分析"
-                  : id === "chartjs"
-                    ? "轻量图表绘制"
-                    : "系列图表与统计分析";
-            el.innerHTML = `<span class="engine-mark">${id === "zen" ? "Z" : "·"}</span><span>${info.short}<small class="engine-detail ${ready ? "" : "is-error"}">${desc} · ${stateText}</small></span>`;
-            el.onclick = () => ready && selectEngine(id);
-            host.appendChild(el);
-          });
+              id === 'zen'
+                ? '自由构图与叙事表达'
+                : id === 'echarts'
+                  ? '科学图表与交互分析'
+                  : id === 'chartjs'
+                    ? '轻量图表绘制'
+                    : '系列图表与统计分析'
+            el.innerHTML = `<span class="engine-mark">${id === 'zen' ? 'Z' : '·'}</span><span>${info.short}<small class="engine-detail ${ready ? '' : 'is-error'}">${desc} · ${stateText}</small></span>`
+            el.onclick = () => ready && selectEngine(id)
+            host.appendChild(el)
+          })
         }
         // 引擎属性完全独立保存。引擎切换时只读取目标引擎自己的 store，
         // 不再把当前引擎的标题、字体、尺寸、留白、位置、图表比例等覆盖到目标引擎。
@@ -8876,596 +7922,630 @@
 
         function selectEngine(id) {
           if (!engineReady(id)) {
-            setStatus(
-              `${engineInfo[id]?.short || id} 不可用 · 请检查网络或脚本加载`,
-              "err",
-            );
-            return;
+            setStatus(`${engineInfo[id]?.short || id} 不可用 · 请检查网络或脚本加载`, 'err')
+            return
           }
           // 离开当前“引擎 + 图表类型”前先保存这一张图的全部右侧属性。
-          syncCurrentEnginePropertyStore();
-          const oldType = state.type;
-          state.engine = id;
-          const supported = engineSupportedTypes(id);
+          syncCurrentEnginePropertyStore()
+          const oldType = state.type
+          state.engine = id
+          const supported = engineSupportedTypes(id)
           const nextType = supported.includes(state.type)
             ? state.type
-            : categories[state.category]?.find((t) => supported.includes(t)) ||
-              supported[0];
-          state.type = nextType || "line";
-          state.zenKind = state.type;
+            : categories[state.category]?.find((t) => supported.includes(t)) || supported[0]
+          state.type = nextType || 'line'
+          state.zenKind = state.type
           // 关键：先确定目标引擎下的目标图表，再读取对应的独立属性，绝不读取该引擎其它图表的属性。
-          loadEnginePropertyStore(id, state.type);
-          loadDataSelectionStore(id, state.type);
+          loadEnginePropertyStore(id, state.type)
+          loadDataSelectionStore(id, state.type)
           if (state.type !== oldType) {
             setStatus(
               `${engineInfo[id].short} 已切换 · “${chartNames[oldType]}”不可用，已改为“${chartNames[state.type]}”`,
-              "warn",
-            );
+              'warn',
+            )
           } else {
-            setStatus(
-              `绘图引擎 · ${engineInfo[id].short} · “${chartNames[state.type]}”`,
-            );
+            setStatus(`绘图引擎 · ${engineInfo[id].short} · “${chartNames[state.type]}”`)
           }
 
-          renderEngines();
-          renderCategories(getActiveCategory());
-          renderTypeList(categories[getActiveCategory()] || []);
-          renderInspector();
-          if ($("#data-modal")?.classList.contains("open"))
-            syncDataColumnSelects();
-          renderChart();
-          schedulePersist();
+          renderEngines()
+          renderCategories(getActiveCategory())
+          renderTypeList(categories[getActiveCategory()] || [])
+          renderInspector()
+          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
+          renderChart()
+          schedulePersist()
         }
         function selectType(t) {
           if (!typeSupported(t)) {
             setStatus(
               `${engineInfo[state.engine].short} 不支持“${chartNames[t]}” · 请先切换引擎`,
-              "warn",
-            );
-            return;
+              'warn',
+            )
+            return
           }
           // 保存离开前图表的右侧属性，再读取同一引擎下新图表自己的属性。
-          syncCurrentEnginePropertyStore();
-          state.type = t;
-          state.zenKind = t;
-          state.category = getActiveCategoryForType(t);
-          loadEnginePropertyStore(state.engine, state.type);
-          loadDataSelectionStore(state.engine, state.type);
-          const rule = getChartDataRule(t);
-          normalizeDataSelection({ fillDefaults: true });
-          syncDataColumnSelects();
-          const previousYCount = Array.isArray(state.yCols)
-            ? state.yCols.length
-            : 0;
-          normalizeDataSelection();
+          syncCurrentEnginePropertyStore()
+          state.type = t
+          state.zenKind = t
+          state.category = getActiveCategoryForType(t)
+          loadEnginePropertyStore(state.engine, state.type)
+          loadDataSelectionStore(state.engine, state.type)
+          const rule = getChartDataRule(t)
+          normalizeDataSelection({ fillDefaults: true })
+          syncDataColumnSelects()
+          const previousYCount = Array.isArray(state.yCols) ? state.yCols.length : 0
+          normalizeDataSelection()
           if (previousYCount > state.yCols.length) {
             toast(
               `“${chartNames[t]}”最多使用 ${rule.maxY} 个数值列，已自动保留前 ${rule.maxY} 个`,
-            );
+            )
           }
-          syncDataColumnSelects();
-          $("#stage-title").textContent = chartNames[t];
+          syncDataColumnSelects()
+          $('#stage-title').textContent = chartNames[t]
 
-          updateMeta();
-          renderInspector();
-          if ($("#data-modal")?.classList.contains("open"))
-            syncDataColumnSelects();
-          renderEngines();
-          renderCategories(state.category);
-          renderTypeList(categories[state.category] || []);
-          renderChart();
-          schedulePersist();
+          updateMeta()
+          renderInspector()
+          if ($('#data-modal')?.classList.contains('open')) syncDataColumnSelects()
+          renderEngines()
+          renderCategories(state.category)
+          renderTypeList(categories[state.category] || [])
+          renderChart()
+          schedulePersist()
         }
         function getActiveCategoryForType(t) {
           return (
             Object.keys(categories).find((c) => categories[c].includes(t)) ||
             Object.keys(categories)[0]
-          );
+          )
         }
         function getActiveCategory() {
-          if (categories[state.category]?.includes(state.type))
-            return state.category;
-          const a = Object.keys(categories).find((c) =>
-            categories[c].includes(state.type),
-          );
-          return a || Object.keys(categories)[0];
+          if (categories[state.category]?.includes(state.type)) return state.category
+          const a = Object.keys(categories).find((c) => categories[c].includes(state.type))
+          return a || Object.keys(categories)[0]
         }
         function openDropdown(menu, btn) {
-          closeDropdowns();
-          const el = document.createElement("div");
-          el.className = "dropdown open";
-          el.id = "dd-" + menu;
-          el.dataset.menu = menu;
-          el.innerHTML = menuHtml(menu);
-          document.body.appendChild(el);
-          const r = btn.getBoundingClientRect();
-          el.style.left =
-            Math.min(r.left, innerWidth - el.offsetWidth - 8) + "px";
-          el.style.top = r.bottom + 3 + "px";
+          closeDropdowns()
+          const el = document.createElement('div')
+          el.className = 'dropdown open'
+          el.id = 'dd-' + menu
+          el.dataset.menu = menu
+          el.innerHTML = menuHtml(menu)
+          document.body.appendChild(el)
+          const r = btn.getBoundingClientRect()
+          el.style.left = Math.min(r.left, innerWidth - el.offsetWidth - 8) + 'px'
+          el.style.top = r.bottom + 3 + 'px'
           setTimeout(() => {
-            document.body.classList.add("submenu-open");
-          }, 0);
-          el.addEventListener("click", (e) => {
-            const b = e.target.closest("[data-dd]");
-            if (!b) return;
-            e.stopPropagation();
-            handleDropdown(b.dataset.dd);
-          });
+            document.body.classList.add('submenu-open')
+          }, 0)
+          el.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-dd]')
+            if (!b) return
+            e.stopPropagation()
+            handleDropdown(b.dataset.dd)
+          })
         }
         function refreshOpenDropdown(menu) {
-          const el = $("#dd-" + menu);
-          if (!el) return;
-          el.innerHTML = menuHtml(menu);
+          const el = $('#dd-' + menu)
+          if (!el) return
+          el.innerHTML = menuHtml(menu)
         }
         function closeDropdowns() {
-          $$(".dropdown").forEach((e) => e.remove());
-          $(".menu-btn.active")?.classList.remove("active");
-          document.body.classList.remove("submenu-open");
+          $$('.dropdown').forEach((e) => e.remove())
+          $('.menu-btn.active')?.classList.remove('active')
+          document.body.classList.remove('submenu-open')
         }
         function menuHtml(menu) {
-          const current = engineInfo[state.engine];
+          const current = engineInfo[state.engine]
           const items = {
             engine: Object.entries(engineInfo)
               .map(([id, info]) => [
                 `engine:${id}`,
-                `${info.short} · ${engineReady(id) ? (state.engine === id ? "当前" : "可用") : "不可用"}`,
+                `${info.short} · ${engineReady(id) ? (state.engine === id ? '当前' : '可用') : '不可用'}`,
                 engineReady(id),
                 state.engine === id,
               ])
               .concat([
-                ["sep"],
-                [
-                  "engine-help",
-                  `当前：${current.short} · ${current.version}`,
-                  true,
-                  false,
-                ],
+                ['sep'],
+                ['engine-help', `当前：${current.short} · ${current.version}`, true, false],
               ]),
             data: [
-              ["import", "导入数据"],
-              ["edit", "编辑数据"],
+              ['import', '导入数据'],
+              ['edit', '编辑数据'],
             ],
             style: [
-              ["bgrow", "背景"],
-              ["radiusrow", "圆角"],
-              ["sep"],
-              ["toggle:grid", "显示网格"],
-              ["toggle:legend", "显示图例"],
-              ["toggle:points", "显示数据点"],
-              ["toggle:values", "显示数值"],
+              ['bgrow', '背景'],
+              ['radiusrow', '圆角'],
+              ['sep'],
+              ['toggle:grid', '显示网格'],
+              ['toggle:legend', '显示图例'],
+              ['toggle:points', '显示数据点'],
+              ['toggle:values', '显示数值'],
+              ['sep'],
+              ['shortcuts', '快捷键'],
             ],
             export: [
-              ["png", "导出 PNG"],
-              ["svg", "导出 SVG"],
-              ["pdf", "导出 PDF"],
-              ["sep"],
-              ["export-transparency", "透明背景"],
-              ["sep"],
-              ["export-properties", "导出右侧属性设置"],
-              ["import-properties", "导入右侧属性设置"],
-              ["sep"],
-              ["print", "打印 / PDF"],
+              ['png', '导出 PNG'],
+              ['svg', '导出 SVG'],
+              ['pdf', '导出 PDF'],
+              ['sep'],
+              ['export-transparency', '透明背景'],
+              ['sep'],
+              ['export-properties', '导出右侧属性设置'],
+              ['import-properties', '导入右侧属性设置'],
+              ['sep'],
+              ['print', '打印 / PDF'],
             ],
-          };
+          }
           return (items[menu] || [])
             .map((it) => {
-              if (it[0] === "sep") return '<div class="dd-divider"></div>';
-              if (it[0] === "bgrow")
-                return `<div class="dd-item-row"><span>背景</span><div class="settings-bg-options">${bgDot("plain", "纯白")}${bgDot("body-grid", "网格")}${bgDot("body-dots", "圆点")}${bgDot("body-cross", "十字")}${bgDot("body-diagonal", "斜线")}</div></div>`;
-              if (it[0] === "radiusrow")
-                return `<div class="dd-item-row"><span>圆角</span><div class="settings-control"><span class="settings-value">${state.radius}px</span><button class="settings-btn" type="button" data-dd="radius:down">−</button><button class="settings-btn" type="button" data-dd="radius:up">+</button></div></div>`;
+              if (it[0] === 'sep') return '<div class="dd-divider"></div>'
+              if (it[0] === 'bgrow')
+                return `<div class="dd-item-row"><span>背景</span><div class="settings-bg-options">${bgDot('plain', '纯白')}${bgDot('body-grid', '网格')}${bgDot('body-dots', '圆点')}${bgDot('body-cross', '十字')}${bgDot('body-diagonal', '斜线')}</div></div>`
+              if (it[0] === 'radiusrow')
+                return `<div class="dd-item-row"><span>圆角</span><div class="settings-control"><span class="settings-value">${state.radius}px</span><button class="settings-btn" type="button" data-dd="radius:down">−</button><button class="settings-btn" type="button" data-dd="radius:up">+</button></div></div>`
               // 透明背景显示当前状态，方便和右侧属性栏对照
-              if (it[0] === "export-transparency")
-                return `<button class="dd-item${exportTransparent() ? " selected" : ""}" type="button" data-dd="export-transparency"><span>透明背景</span><span class="muted">${exportTransparent() ? "开" : "关"}</span></button>`;
-              return `<button class="dd-item${it[3] ? " selected" : ""}" type="button"${it[2] === false ? " disabled" : ""} data-dd="${it[0]}"><span>${it[1]}</span><span class="muted">${shortcut(it[0])}</span></button>`;
+              if (it[0] === 'export-transparency')
+                return `<button class="dd-item${exportTransparent() ? ' selected' : ''}" type="button" data-dd="export-transparency"><span>透明背景</span><span class="muted">${exportTransparent() ? '开' : '关'}</span></button>`
+              return `<button class="dd-item${it[3] ? ' selected' : ''}" type="button"${it[2] === false ? ' disabled' : ''} data-dd="${it[0]}"><span>${it[1]}</span><span class="muted">${shortcut(it[0])}</span></button>`
             })
-            .join("");
+            .join('')
         }
         function bgDot(cls, label) {
-          const active = (state.bg || "plain") === cls;
-          return `<button class="settings-bg-dot${active ? " active" : ""}" type="button" title="${label}" data-dd="bg:${cls}" data-bg="${cls}" aria-pressed="${active ? "true" : "false"}"></button>`;
+          const active = (state.bg || 'plain') === cls
+          return `<button class="settings-bg-dot${active ? ' active' : ''}" type="button" title="${label}" data-dd="bg:${cls}" data-bg="${cls}" aria-pressed="${active ? 'true' : 'false'}"></button>`
         }
+        /* 修饰键字形跟随平台：处理器同时接受 Ctrl 与 ⌘，标签不该只写 ⌘ */
+        const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+        const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl'
         function shortcut(id) {
           return (
             {
-              png: "⌘P",
-              pdf: "⌘⇧P",
-              edit: "D",
-              import: "I",
-              "radius:down": "",
-              "radius:show": "",
-              "radius:up": "",
-              "zoom:down": "",
-              "zoom:show": "",
-              "zoom:up": "",
-            }[id] || ""
-          );
+              png: MOD_LABEL + ' P',
+              pdf: MOD_LABEL + ' ⇧ P',
+              edit: 'D',
+              import: 'I',
+              shortcuts: '?',
+              'radius:down': '',
+              'radius:show': '',
+              'radius:up': '',
+              'zoom:down': '',
+              'zoom:show': '',
+              'zoom:up': '',
+            }[id] || ''
+          )
+        }
+        /* 快捷键说明面板：所有对用户有意义的键位，一行一条。
+           分组 = 生效范围；顺序与 keydown 处理器的判断顺序一致。 */
+        function esc(s) {
+          return String(s == null ? '' : s).replace(
+            /[&<>"']/g,
+            (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m],
+          )
+        }
+        function hkRow(desc, keys) {
+          return `<div class="hk-row"><span>${esc(desc)}</span><span class="hk-key">${esc(keys)}</span></div>`
+        }
+        function hkSection(title, rows) {
+          return `<div class="hk-section"><div class="hk-section-title">${esc(title)}</div>${rows.join('')}</div>`
+        }
+        function hkNote(html) {
+          return `<div class="hk-section"><div class="hk-note">${html}</div></div>`
+        }
+        function openShortcuts() {
+          const mod = MOD_LABEL
+          const rows = [
+            hkSection('全局', [
+              hkRow('导出当前图表为 PNG', mod + ' P'),
+              hkRow('导出当前图表为 PDF', mod + ' ⇧ P'),
+              hkRow('打开数据文件（CSV / TSV / TXT / XLSX）', 'I'),
+              hkRow('编辑当前图表的数据表', 'D'),
+              hkRow('打开 / 重新载入本说明', '?'),
+              hkRow('关闭下拉菜单 / 数据表 / 图表放大查看', 'Esc'),
+            ]),
+            hkNote(
+              '焦点停在任意输入框里时，<b>I</b> 与 <b>D</b> 不会触发，可以正常打字；带 <b>' +
+                esc(mod) +
+                '</b> 的导出键位不受影响。<br />导出 SVG、打印、以及“样式 → 背景 / 圆角”目前只能点击操作，暂无键位。',
+            ),
+          ]
+          const grid = $('#shortcuts-body')
+          if (grid) grid.innerHTML = rows.join('')
+          const modal = $('#shortcuts-modal')
+          if (modal) modal.classList.add('open')
+        }
+        function closeShortcuts() {
+          const modal = $('#shortcuts-modal')
+          if (modal) modal.classList.remove('open')
+        }
+        $('#shortcuts-close').onclick = closeShortcuts
+        $('#shortcuts-modal').addEventListener('click', (e) => {
+          if (e.target === e.currentTarget) closeShortcuts()
+        })
+        // 导出菜单里的“高清 / 透明背景”快捷项：改的是当前图表自己的输出设置
+        function toggleExportTransparent() {
+          const next = !exportTransparent()
+          setEngineStateProp('exportTransparent', next)
+          renderInspector()
+          // 引擎画布自身的白底由这个开关控制，改完要重绘一次
+          flushRender()
+          return setStatus(next ? '导出背景 · 透明' : '导出背景 · 白底')
         }
         function downloadJsonFile(filename, payload) {
           const blob = new Blob([JSON.stringify(payload, null, 2)], {
-            type: "application/json;charset=utf-8",
-          });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 0);
+            type: 'application/json;charset=utf-8',
+          })
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = filename
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 0)
         }
 
         function exportPropertySettings() {
           try {
-            syncCurrentEnginePropertyStore();
-            const engines = {};
+            syncCurrentEnginePropertyStore()
+            const engines = {}
             ENGINE_IDS.forEach((id) => {
-              const store =
-                enginePropertyStores[id] || createEnginePropertyStore(id);
+              const store = enginePropertyStores[id] || createEnginePropertyStore(id)
               engines[id] = {
                 typeStates: structuredClone(store.typeStates || {}),
                 chartProps: structuredClone(store.chartProps || {}),
-              };
-            });
+              }
+            })
             downloadJsonFile(
               `zenviz-right-properties-${new Date().toISOString().slice(0, 10)}.json`,
               {
-                kind: "zenviz-right-properties",
+                kind: 'zenviz-right-properties',
                 version: PROPERTY_EXPORT_VERSION,
                 exportedAt: new Date().toISOString(),
                 engines,
               },
-            );
-            setStatus("右侧属性设置已导出");
+            )
+            setStatus('右侧属性设置已导出')
           } catch (e) {
-            reportError("右侧属性设置导出失败", e, true);
+            reportError('右侧属性设置导出失败', e, true)
           }
         }
 
         async function importPropertySettings(file) {
-          if (!file) return;
+          if (!file) return
           try {
-            const text = await file.text();
-            const payload = JSON.parse(text);
+            const text = await file.text()
+            const payload = JSON.parse(text)
             if (
-              payload?.kind !== "zenviz-right-properties" ||
+              payload?.kind !== 'zenviz-right-properties' ||
               payload?.version !== PROPERTY_EXPORT_VERSION
             ) {
-              throw Error("不是有效的 ZENVIZ 右侧属性设置文件");
+              throw Error('不是有效的 ZENVIZ 右侧属性设置文件')
             }
-            const incomingEngines = payload.engines;
-            if (!incomingEngines || typeof incomingEngines !== "object") {
-              throw Error("属性设置文件缺少引擎数据");
+            const incomingEngines = payload.engines
+            if (!incomingEngines || typeof incomingEngines !== 'object') {
+              throw Error('属性设置文件缺少引擎数据')
             }
-            const nextStores = {};
+            const nextStores = {}
             ENGINE_IDS.forEach((id) => {
-              const incoming = incomingEngines[id];
-              const store = createEnginePropertyStore(id);
-              if (incoming && typeof incoming === "object") {
-                store.typeStates = sanitizeTypeStates(
-                  incoming.typeStates,
-                  null,
-                  id,
-                );
-                store.chartProps = sanitizeChartProps(incoming.chartProps, id);
+              const incoming = incomingEngines[id]
+              const store = createEnginePropertyStore(id)
+              if (incoming && typeof incoming === 'object') {
+                store.typeStates = sanitizeTypeStates(incoming.typeStates, null, id)
+                store.chartProps = sanitizeChartProps(incoming.chartProps, id)
               }
-              nextStores[id] = store;
-            });
+              nextStores[id] = store
+            })
             ENGINE_IDS.forEach((id) => {
-              enginePropertyStores[id] = nextStores[id];
-              saveEngineStore(id);
-            });
-            loadEnginePropertyStore(state.engine, state.type);
-            loadDataSelectionStore(state.engine, state.type);
-            normalizeLayoutPrefs();
-            renderInspector();
-            applyChartMountLayout();
-            resizeChart();
-            renderChart(false);
-            saveWorkspaceState();
-            setStatus(`右侧属性设置已导入 · ${file.name}`);
+              enginePropertyStores[id] = nextStores[id]
+              saveEngineStore(id)
+            })
+            loadEnginePropertyStore(state.engine, state.type)
+            loadDataSelectionStore(state.engine, state.type)
+            normalizeLayoutPrefs()
+            renderInspector()
+            applyChartMountLayout()
+            resizeChart()
+            renderChart(false)
+            saveWorkspaceState()
+            setStatus(`右侧属性设置已导入 · ${file.name}`)
           } catch (e) {
-            reportError("右侧属性设置导入失败", e, true);
+            reportError('右侧属性设置导入失败', e, true)
           }
         }
 
         function handleDropdown(id) {
-          if (id === "import") return $("#file-input").click();
-          if (id === "import-properties") {
-            const input = $("#property-import-input");
-            if (!input) return;
-            input.value = "";
-            return input.click();
+          if (id === 'shortcuts') return openShortcuts()
+          if (id === 'import') return $('#file-input').click()
+          if (id === 'import-properties') {
+            const input = $('#property-import-input')
+            if (!input) return
+            input.value = ''
+            return input.click()
           }
-          if (id === "export-properties") return exportPropertySettings();
-          if (id === "edit") return openDataModal();
-          if (id === "print") {
+          if (id === 'export-properties') return exportPropertySettings()
+          if (id === 'edit') return openDataModal()
+          if (id === 'print') {
             try {
-              window.print();
+              window.print()
             } catch (e) {
-              reportError("打印失败", e, true);
+              reportError('打印失败', e, true)
             }
-            return;
+            return
           }
-          if (id.startsWith("bg:")) {
-            const v = id.split(":")[1];
-            const cls = v || "plain";
-            state.bg = cls;
+          if (id.startsWith('bg:')) {
+            const v = id.split(':')[1]
+            const cls = v || 'plain'
+            state.bg = cls
             try {
-              localStorage.setItem("zenviz.bg", cls);
+              localStorage.setItem('zenviz.bg', cls)
             } catch (e) {
-              reportError("背景设置保存失败", e, false);
+              reportError('背景设置保存失败', e, false)
             }
-            applyBg(cls);
-            refreshOpenDropdown("style");
+            applyBg(cls)
+            refreshOpenDropdown('style')
             return setStatus(
-              "背景 · " +
-                (v === "plain"
-                  ? "纯白"
-                  : v === "grid"
-                    ? "网格"
-                    : v === "dots"
-                      ? "圆点"
-                      : v === "cross"
-                        ? "十字"
-                        : "斜线"),
-            );
-          }
-          if (id.startsWith("engine:")) {
-            selectEngine(id.split(":")[1]);
-            refreshOpenDropdown("engine");
-            return;
-          }
-          if (id.startsWith("radius:")) {
-            changeRadius(id.endsWith("up") ? 2 : -2);
-            refreshOpenDropdown("style");
-            return;
-          }
-          if (id.startsWith("toggle:")) {
-            const k = id.split(":")[1],
-              map = {
-                grid: "showGrid",
-                legend: "showLegend",
-                points: "showPoints",
-                values: "showValues",
-              },
-              prop = map[k];
-            if (
-              prop &&
-              chartProps[state.type] &&
-              prop in chartProps[state.type]
+              '背景 · ' +
+                (v === 'plain'
+                  ? '纯白'
+                  : v === 'grid'
+                    ? '网格'
+                    : v === 'dots'
+                      ? '圆点'
+                      : v === 'cross'
+                        ? '十字'
+                        : '斜线'),
             )
-              setChartProp(prop, !chartProp(prop, false));
-            else if (k === "grid") state.showGrid = !state.showGrid;
-            else if (k === "legend") state.showLegend = !state.showLegend;
-            else if (k === "points") state.showPoints = !state.showPoints;
-            else if (k === "values") state.showValues = !state.showValues;
-            renderInspector();
-            renderChart();
-            refreshOpenDropdown("style");
-            return;
           }
-          if (id === "export-transparency") {
-            toggleExportTransparent();
-            return refreshOpenDropdown("export");
+          if (id.startsWith('engine:')) {
+            selectEngine(id.split(':')[1])
+            refreshOpenDropdown('engine')
+            return
           }
-          if (id === "png") return exportPNG();
-          if (id === "svg") return exportSVG();
-          if (id === "pdf") return exportPDF();
+          if (id.startsWith('radius:')) {
+            changeRadius(id.endsWith('up') ? 2 : -2)
+            refreshOpenDropdown('style')
+            return
+          }
+          if (id.startsWith('toggle:')) {
+            const k = id.split(':')[1],
+              map = {
+                grid: 'showGrid',
+                legend: 'showLegend',
+                points: 'showPoints',
+                values: 'showValues',
+              },
+              prop = map[k]
+            if (prop && chartProps[state.type] && prop in chartProps[state.type])
+              setChartProp(prop, !chartProp(prop, false))
+            else if (k === 'grid') state.showGrid = !state.showGrid
+            else if (k === 'legend') state.showLegend = !state.showLegend
+            else if (k === 'points') state.showPoints = !state.showPoints
+            else if (k === 'values') state.showValues = !state.showValues
+            renderInspector()
+            renderChart()
+            refreshOpenDropdown('style')
+            return
+          }
+          if (id === 'export-transparency') {
+            toggleExportTransparent()
+            return refreshOpenDropdown('export')
+          }
+          if (id === 'png') return exportPNG()
+          if (id === 'svg') return exportSVG()
+          if (id === 'pdf') return exportPDF()
         }
-        $$(".menu-btn").forEach(
+        $$('.menu-btn').forEach(
           (btn) =>
             (btn.onclick = (e) => {
-              e.stopPropagation();
-              const menu = btn.dataset.menu;
-              if ($("#dd-" + menu)) {
-                closeDropdowns();
+              e.stopPropagation()
+              const menu = btn.dataset.menu
+              if ($('#dd-' + menu)) {
+                closeDropdowns()
               } else {
-                openDropdown(menu, btn);
-                btn.classList.add("active");
+                openDropdown(menu, btn)
+                btn.classList.add('active')
               }
             }),
-        );
-        $("#pin-btn").onclick = () => {
-          const on = !$("#top-menu").classList.contains("pinned");
-          $("#top-menu").classList.toggle("pinned", on);
-          document.body.classList.toggle("menu-pinned", on);
-          $("#pin-btn").classList.toggle("pinned", on);
-          $("#pin-btn").setAttribute("aria-pressed", on ? "true" : "false");
-          $("#pin-btn").setAttribute("title", on ? "取消固定菜单" : "固定菜单");
-          if (!on) closeDropdowns();
+        )
+        $('#pin-btn').onclick = () => {
+          const on = !$('#top-menu').classList.contains('pinned')
+          $('#top-menu').classList.toggle('pinned', on)
+          document.body.classList.toggle('menu-pinned', on)
+          $('#pin-btn').classList.toggle('pinned', on)
+          $('#pin-btn').setAttribute('aria-pressed', on ? 'true' : 'false')
+          $('#pin-btn').setAttribute('title', on ? '取消固定菜单' : '固定菜单')
+          if (!on) closeDropdowns()
           try {
-            localStorage.setItem("zenviz.menuPinned", on ? "1" : "0");
+            localStorage.setItem('zenviz.menuPinned', on ? '1' : '0')
           } catch (e) {
-            reportError("菜单固定状态保存失败", e, false);
+            reportError('菜单固定状态保存失败', e, false)
           }
-        };
-        try {
-          const on = localStorage.getItem("zenviz.menuPinned") === "1";
-          $("#top-menu").classList.toggle("pinned", on);
-          document.body.classList.toggle("menu-pinned", on);
-          $("#pin-btn").classList.toggle("pinned", on);
-          $("#pin-btn").setAttribute("aria-pressed", on ? "true" : "false");
-          $("#pin-btn").setAttribute("title", on ? "取消固定菜单" : "固定菜单");
-        } catch (e) {
-          reportError("菜单固定状态读取失败", e, false);
         }
-        document.addEventListener("click", (e) => {
-          if (!e.target.closest("#top-menu") && !e.target.closest(".dropdown"))
-            closeDropdowns();
-        });
+        try {
+          const on = localStorage.getItem('zenviz.menuPinned') === '1'
+          $('#top-menu').classList.toggle('pinned', on)
+          document.body.classList.toggle('menu-pinned', on)
+          $('#pin-btn').classList.toggle('pinned', on)
+          $('#pin-btn').setAttribute('aria-pressed', on ? 'true' : 'false')
+          $('#pin-btn').setAttribute('title', on ? '取消固定菜单' : '固定菜单')
+        } catch (e) {
+          reportError('菜单固定状态读取失败', e, false)
+        }
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('#top-menu') && !e.target.closest('.dropdown')) closeDropdowns()
+        })
 
         function renderInspector() {
-          const host = $("#inspector-body");
+          const host = $('#inspector-body')
           const type = state.type,
-            p = chartProps[type] || {};
-          const axisTypes = ["line", "bar", "area", "scatter"];
+            p = chartProps[type] || {}
+          const axisTypes = ['line', 'bar', 'area', 'scatter']
           const common = `<section class="ins-group"><div class="ins-head"><b>内容</b><span>01</span></div>
-  ${field("标题", "text", "title", state.title)}${field("副标题", "text", "subtitle", state.subtitle)}
-  ${axisTypes.includes(type) ? field("横轴标题", "text", "xTitle", state.xTitle) : ""}${axisTypes.includes(type) ? field("纵轴标题", "text", "yTitle", state.yTitle) : ""}
+  ${field('标题', 'text', 'title', state.title)}${field('副标题', 'text', 'subtitle', state.subtitle)}
+  ${axisTypes.includes(type) ? field('横轴标题', 'text', 'xTitle', state.xTitle) : ''}${axisTypes.includes(type) ? field('纵轴标题', 'text', 'yTitle', state.yTitle) : ''}
  </section>
  <section class="ins-group"><div class="ins-head"><b>字体</b><span>02</span></div>
-  ${fieldSelect("X轴文字", "xAxisFontFamily", state.xAxisFontFamily, fontOptionList())}
-  ${fieldSelect("Y轴文字", "yAxisFontFamily", state.yAxisFontFamily, fontOptionList())}
-  ${fieldSelect("Tooltips", "tooltipFontFamily", state.tooltipFontFamily, fontOptionList())}
-  ${fieldSelect("图例", "legendFontFamily", state.legendFontFamily, fontOptionList())}
-  ${fieldSelect("标题", "titleFontFamily", state.titleFontFamily, fontOptionList())}
+  ${fieldSelect('X轴文字', 'xAxisFontFamily', state.xAxisFontFamily, fontOptionList())}
+  ${fieldSelect('Y轴文字', 'yAxisFontFamily', state.yAxisFontFamily, fontOptionList())}
+  ${fieldSelect('Tooltips', 'tooltipFontFamily', state.tooltipFontFamily, fontOptionList())}
+  ${fieldSelect('图例', 'legendFontFamily', state.legendFontFamily, fontOptionList())}
+  ${fieldSelect('标题', 'titleFontFamily', state.titleFontFamily, fontOptionList())}
  </section>
  <section class="ins-group"><div class="ins-head"><b>构图</b><span>02</span></div>
-  ${fieldDirection("标题位置", "titlePosition", state.titlePosition)}
-  ${fieldSegment("标题排向", "titleOrientation", state.titleOrientation, [
-    ["horizontal", "横排"],
-    ["vertical", "竖排"],
+  ${fieldDirection('标题位置', 'titlePosition', state.titlePosition)}
+  ${fieldSegment('标题排向', 'titleOrientation', state.titleOrientation, [
+    ['horizontal', '横排'],
+    ['vertical', '竖排'],
   ])}
-  ${fieldDirection("图例位置", "legendPosition", state.legendPosition)}
-  ${fieldSegment("图例排向", "legendOrientation", state.legendOrientation, [
-    ["horizontal", "横排"],
-    ["vertical", "竖排"],
+  ${fieldDirection('图例位置', 'legendPosition', state.legendPosition)}
+  ${fieldSegment('图例排向', 'legendOrientation', state.legendOrientation, [
+    ['horizontal', '横排'],
+    ['vertical', '竖排'],
   ])}
   ${fieldPadding()}
   ${fieldPosition()}
-  ${fieldScale("图表比例", "contentScale", state.contentScale)}
+  ${fieldScale('图表比例', 'contentScale', state.contentScale)}
  </section>
  <section class="ins-group"><div class="ins-head"><b>尺寸</b><span>03</span></div>
-  ${fieldNumber("设计宽度", "width", state.width)}${fieldNumber("设计高度", "height", state.height)}
- </section>`;
+  ${fieldNumber('设计宽度', 'width', state.width)}${fieldNumber('设计高度', 'height', state.height)}
+ </section>`
           const specs = {
-            line: `<section class="ins-group"><div class="ins-head"><b>折线属性</b><span>03</span></div>${fieldRange("线宽", "lineWidth", 1, 8, 0.5, p.lineWidth)}${fieldSelect(
-              "线型",
-              "lineType",
+            line: `<section class="ins-group"><div class="ins-head"><b>折线属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 1, 8, 0.5, p.lineWidth)}${fieldSelect(
+              '线型',
+              'lineType',
               p.lineType,
               [
-                ["solid", "实线"],
-                ["dashed", "虚线"],
+                ['solid', '实线'],
+                ['dashed', '虚线'],
               ],
-            )}${fieldSelect("线条", "lineMode", p.lineMode, [
-              ["single", "单线"],
-              ["double", "双线"],
-            ])}${fieldRange("点大小", "pointSize", 1, 12, 1, p.pointSize)}${fieldRange("标签旋转", "rotateLabels", -45, 45, 1, p.rotateLabels)}${fieldToggle("显示数据点", "showPoints", p.showPoints)}${fieldToggle("平滑曲线", "smooth", p.smooth)}${fieldToggle("图例", "showLegend", p.showLegend)}${fieldToggle("网格", "showGrid", p.showGrid)}${fieldNumber("纵轴最小值", "yMin", p.yMin)}${fieldNumber("纵轴最大值", "yMax", p.yMax)}</section>`,
-            bar: `<section class="ins-group"><div class="ins-head"><b>柱状属性</b><span>03</span></div>${fieldRange("柱宽", "barWidth", 16, 80, 1, p.barWidth)}${fieldRange("柱间距", "gap", 0, 50, 1, p.gap)}${fieldRange("标签旋转", "rotateLabels", -45, 45, 1, p.rotateLabels)}${fieldToggle("显示数值", "showValues", p.showValues)}${fieldToggle("堆叠显示", "stacked", p.stacked)}${fieldToggle("图例", "showLegend", p.showLegend)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            area: `<section class="ins-group"><div class="ins-head"><b>面积属性</b><span>03</span></div>${fieldRange("线宽", "lineWidth", 1, 8, 0.5, p.lineWidth)}${fieldRange("点大小", "pointSize", 1, 12, 1, p.pointSize)}${fieldRange("填充透明度", "fillOpacity", 0.04, 0.7, 0.02, p.fillOpacity)}${fieldToggle("平滑曲线", "smooth", p.smooth)}${fieldToggle("显示数据点", "showPoints", p.showPoints)}${fieldToggle("堆叠面积", "stacked", p.stacked)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            scatter: `<section class="ins-group"><div class="ins-head"><b>散点属性</b><span>03</span></div>${fieldRange("点大小", "pointSize", 2, 18, 1, p.pointSize)}${fieldRange("标签旋转", "rotateLabels", -45, 45, 1, p.rotateLabels)}${fieldRange("透明度", "opacity", 0.15, 1, 0.05, p.opacity)}${fieldToggle("趋势提示线", "showTrend", p.showTrend)}${fieldToggle("图例", "showLegend", p.showLegend)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            pie: `<section class="ins-group"><div class="ins-head"><b>饼图属性</b><span>03</span></div>${fieldRange("内半径", "innerRadius", 0, 70, 1, p.innerRadius)}${fieldRange("外半径", "outerRadius", 40, 85, 1, p.outerRadius)}${fieldSelect(
-              "图形方式",
-              "rose",
+            )}${fieldSelect('线条', 'lineMode', p.lineMode, [
+              ['single', '单线'],
+              ['double', '双线'],
+            ])}${fieldRange('点大小', 'pointSize', 1, 12, 1, p.pointSize)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldToggle('平滑曲线', 'smooth', p.smooth)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}${fieldNumber('纵轴最小值', 'yMin', p.yMin)}${fieldNumber('纵轴最大值', 'yMax', p.yMax)}</section>`,
+            bar: `<section class="ins-group"><div class="ins-head"><b>柱状属性</b><span>03</span></div>${fieldRange('柱宽', 'barWidth', 16, 80, 1, p.barWidth)}${fieldRange('柱间距', 'gap', 0, 50, 1, p.gap)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldToggle('显示数值', 'showValues', p.showValues)}${fieldToggle('堆叠显示', 'stacked', p.stacked)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            area: `<section class="ins-group"><div class="ins-head"><b>面积属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 1, 8, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 12, 1, p.pointSize)}${fieldRange('填充透明度', 'fillOpacity', 0.04, 0.7, 0.02, p.fillOpacity)}${fieldToggle('平滑曲线', 'smooth', p.smooth)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldToggle('堆叠面积', 'stacked', p.stacked)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            scatter: `<section class="ins-group"><div class="ins-head"><b>散点属性</b><span>03</span></div>${fieldRange('点大小', 'pointSize', 2, 18, 1, p.pointSize)}${fieldRange('标签旋转', 'rotateLabels', -45, 45, 1, p.rotateLabels)}${fieldRange('透明度', 'opacity', 0.15, 1, 0.05, p.opacity)}${fieldToggle('趋势提示线', 'showTrend', p.showTrend)}${fieldToggle('图例', 'showLegend', p.showLegend)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            pie: `<section class="ins-group"><div class="ins-head"><b>饼图属性</b><span>03</span></div>${fieldRange('内半径', 'innerRadius', 0, 70, 1, p.innerRadius)}${fieldRange('外半径', 'outerRadius', 40, 85, 1, p.outerRadius)}${fieldSelect(
+              '图形方式',
+              'rose',
               p.rose,
               [
-                ["none", "环形扇区"],
-                ["radius", "半径玫瑰"],
-                ["area", "面积玫瑰"],
+                ['none', '环形扇区'],
+                ['radius', '半径玫瑰'],
+                ['area', '面积玫瑰'],
               ],
-            )}${fieldToggle("显示标签", "showLabels", p.showLabels)}${fieldToggle("图例", "showLegend", p.showLegend)}</section>`,
-            radar: `<section class="ins-group"><div class="ins-head"><b>雷达属性</b><span>05</span></div>${fieldRange("半径", "radius", 35, 80, 1, p.radius)}${fieldRange("线宽", "lineWidth", 1, 6, 0.5, p.lineWidth)}${fieldRange("点大小", "pointSize", 1, 14, 1, p.pointSize)}${fieldToggle("显示数据点", "showPoints", p.showPoints)}${fieldRange("填充透明度", "fillOpacity", 0.03, 0.5, 0.01, p.fillOpacity)}${fieldSelect(
-              "网格形状",
-              "shape",
+            )}${fieldToggle('显示标签', 'showLabels', p.showLabels)}${fieldToggle('图例', 'showLegend', p.showLegend)}</section>`,
+            radar: `<section class="ins-group"><div class="ins-head"><b>雷达属性</b><span>05</span></div>${fieldRange('半径', 'radius', 35, 80, 1, p.radius)}${fieldRange('线宽', 'lineWidth', 1, 6, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 14, 1, p.pointSize)}${fieldToggle('显示数据点', 'showPoints', p.showPoints)}${fieldRange('填充透明度', 'fillOpacity', 0.03, 0.5, 0.01, p.fillOpacity)}${fieldSelect(
+              '网格形状',
+              'shape',
               p.shape,
               [
-                ["polygon", "多边形"],
-                ["circle", "圆形"],
+                ['polygon', '多边形'],
+                ['circle', '圆形'],
               ],
-            )}${fieldToggle("网格", "showGrid", p.showGrid)}${fieldToggle("图例", "showLegend", p.showLegend)}</section>`,
-            heatmap: `<section class="ins-group"><div class="ins-head"><b>热图属性</b><span>03</span></div>${fieldRange("单元间距", "cellGap", 0, 8, 1, p.cellGap)}${fieldToggle("显示数值", "showValues", p.showValues)}${fieldToggle("网格", "showGrid", p.showGrid)}${fieldNumber("下限", "min", p.min)}${fieldNumber("上限", "max", p.max)}</section>`,
-            network: `<section class="ins-group"><div class="ins-head"><b>网络属性</b><span>03</span></div>${fieldRange("节点大小", "nodeSize", 6, 28, 1, p.nodeSize)}${fieldRange("节点间距", "edgeLength", 40, 220, 5, p.edgeLength)}${fieldRange("排斥强度", "repulsion", 40, 300, 10, p.repulsion)}${fieldRange("连线宽度", "lineWidth", 0.5, 5, 0.5, p.lineWidth)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-            sankey: `<section class="ins-group"><div class="ins-head"><b>桑基属性</b><span>03</span></div>${fieldRange("节点宽度", "nodeWidth", 8, 40, 1, p.nodeWidth)}${fieldRange("节点间距", "nodeGap", 4, 30, 1, p.nodeGap)}${fieldRange("流线透明度", "edgeOpacity", 0.05, 0.8, 0.05, p.edgeOpacity)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-            parallel: `<section class="ins-group"><div class="ins-head"><b>平行坐标属性</b><span>03</span></div>${fieldRange("线宽", "lineWidth", 0.5, 4, 0.5, p.lineWidth)}${fieldRange("线透明度", "lineOpacity", 0.04, 0.5, 0.02, p.lineOpacity)}${fieldRange("坐标字号", "axisFont", 7, 14, 1, p.axisFont)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            boxplot: `<section class="ins-group"><div class="ins-head"><b>箱线属性</b><span>03</span></div>${fieldRange("箱体宽度", "boxWidth", 12, 70, 1, p.boxWidth)}${fieldRange("边框宽度", "lineWidth", 1, 5, 0.5, p.lineWidth)}${fieldToggle("显示均值", "showMean", p.showMean)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            contour: `<section class="ins-group"><div class="ins-head"><b>等值属性</b><span>03</span></div>${fieldRange("网格密度", "resolution", 8, 24, 1, p.resolution)}${fieldRange("色阶对比", "contrast", 0.5, 2, 0.1, p.contrast)}${fieldToggle("显示数值", "showLabels", p.showLabels)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            slope: `<section class="ins-group"><div class="ins-head"><b>斜率属性</b><span>03</span></div>${fieldRange("连线宽度", "lineWidth", 1, 6, 0.5, p.lineWidth)}${fieldRange("节点大小", "pointSize", 2, 12, 1, p.pointSize)}${fieldRange("标签数量", "labelCount", 1, 12, 1, p.labelCount)}${fieldToggle("显示数值", "showValues", p.showValues)}</section>`,
-            lollipop: `<section class="ins-group"><div class="ins-head"><b>棒棒糖属性</b><span>03</span></div>${fieldRange("节点大小", "pointSize", 2, 14, 1, p.pointSize)}${fieldRange("连接线宽度", "stemWidth", 0.5, 5, 0.5, p.stemWidth)}${fieldRange("透明度", "opacity", 0.2, 1, 0.05, p.opacity)}${fieldSelect(
-              "排序",
-              "sort",
+            )}${fieldToggle('网格', 'showGrid', p.showGrid)}${fieldToggle('图例', 'showLegend', p.showLegend)}</section>`,
+            heatmap: `<section class="ins-group"><div class="ins-head"><b>热图属性</b><span>03</span></div>${fieldRange('单元间距', 'cellGap', 0, 8, 1, p.cellGap)}${fieldToggle('显示数值', 'showValues', p.showValues)}${fieldToggle('网格', 'showGrid', p.showGrid)}${fieldNumber('下限', 'min', p.min)}${fieldNumber('上限', 'max', p.max)}</section>`,
+            network: `<section class="ins-group"><div class="ins-head"><b>网络属性</b><span>03</span></div>${fieldRange('节点大小', 'nodeSize', 6, 28, 1, p.nodeSize)}${fieldRange('节点间距', 'edgeLength', 40, 220, 5, p.edgeLength)}${fieldRange('排斥强度', 'repulsion', 40, 300, 10, p.repulsion)}${fieldRange('连线宽度', 'lineWidth', 0.5, 5, 0.5, p.lineWidth)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            sankey: `<section class="ins-group"><div class="ins-head"><b>桑基属性</b><span>03</span></div>${fieldRange('节点宽度', 'nodeWidth', 8, 40, 1, p.nodeWidth)}${fieldRange('节点间距', 'nodeGap', 4, 30, 1, p.nodeGap)}${fieldRange('流线透明度', 'edgeOpacity', 0.05, 0.8, 0.05, p.edgeOpacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            parallel: `<section class="ins-group"><div class="ins-head"><b>平行坐标属性</b><span>03</span></div>${fieldRange('线宽', 'lineWidth', 0.5, 4, 0.5, p.lineWidth)}${fieldRange('线透明度', 'lineOpacity', 0.04, 0.5, 0.02, p.lineOpacity)}${fieldRange('坐标字号', 'axisFont', 7, 14, 1, p.axisFont)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            boxplot: `<section class="ins-group"><div class="ins-head"><b>箱线属性</b><span>03</span></div>${fieldRange('箱体宽度', 'boxWidth', 12, 70, 1, p.boxWidth)}${fieldRange('边框宽度', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldToggle('显示均值', 'showMean', p.showMean)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            contour: `<section class="ins-group"><div class="ins-head"><b>等值属性</b><span>03</span></div>${fieldRange('网格密度', 'resolution', 8, 24, 1, p.resolution)}${fieldRange('色阶对比', 'contrast', 0.5, 2, 0.1, p.contrast)}${fieldToggle('显示数值', 'showLabels', p.showLabels)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            slope: `<section class="ins-group"><div class="ins-head"><b>斜率属性</b><span>03</span></div>${fieldRange('连线宽度', 'lineWidth', 1, 6, 0.5, p.lineWidth)}${fieldRange('节点大小', 'pointSize', 2, 12, 1, p.pointSize)}${fieldRange('标签数量', 'labelCount', 1, 12, 1, p.labelCount)}${fieldToggle('显示数值', 'showValues', p.showValues)}</section>`,
+            lollipop: `<section class="ins-group"><div class="ins-head"><b>棒棒糖属性</b><span>03</span></div>${fieldRange('节点大小', 'pointSize', 2, 14, 1, p.pointSize)}${fieldRange('连接线宽度', 'stemWidth', 0.5, 5, 0.5, p.stemWidth)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldSelect(
+              '排序',
+              'sort',
               p.sort,
               [
-                ["原顺序", "原顺序"],
-                ["升序", "升序"],
-                ["降序", "降序"],
+                ['原顺序', '原顺序'],
+                ['升序', '升序'],
+                ['降序', '降序'],
               ],
             )}</section>`,
-            timeline: `<section class="ins-group"><div class="ins-head"><b>时间线属性</b><span>03</span></div>${fieldRange("节点大小", "pointSize", 2, 10, 1, p.pointSize)}${fieldRange("事件长度", "stemLength", 35, 150, 5, p.stemLength)}${fieldToggle("交错排布", "alternate", p.alternate)}${fieldToggle("显示数值", "showValues", p.showValues)}</section>`,
-            dotplot: `<section class="ins-group"><div class="ins-head"><b>点图属性</b><span>03</span></div>${fieldRange("点大小", "pointSize", 2, 12, 1, p.pointSize)}${fieldRange("行间距", "rowGap", 16, 55, 1, p.rowGap)}${fieldRange("透明度", "opacity", 0.2, 1, 0.05, p.opacity)}${fieldToggle("显示基线", "baseline", p.baseline)}</section>`,
-            wordfreq: `<section class="ins-group"><div class="ins-head"><b>词频属性</b><span>05</span></div>${fieldRange("最小字号", "minFont", 8, 24, 1, p.minFont)}${fieldRange("最大字号", "maxFont", 24, 64, 1, p.maxFont)}${fieldRange("词语数量", "maxWords", 12, 60, 1, p.maxWords)}${fieldRange("旋转角度", "rotation", -45, 45, 1, p.rotation)}${fieldRange("松散程度", "spacing", 0, 100, 1, p.spacing)}</section>`,
-            smallmultiples: `<section class="ins-group"><div class="ins-head"><b>小倍图属性</b><span>03</span></div>${fieldRange("列数", "columns", 2, 4, 1, p.columns)}${fieldRange("间距", "gap", 8, 48, 1, p.gap)}${fieldRange("线宽", "lineWidth", 1, 5, 0.5, p.lineWidth)}${fieldToggle("显示边框", "showFrame", p.showFrame)}</section>`,
-            correlation: `<section class="ins-group"><div class="ins-head"><b>相关矩阵属性</b><span>03</span></div>${fieldRange("单元尺寸", "cellSize", 42, 90, 1, p.cellSize)}${fieldRange("小数位数", "precision", 0, 4, 1, p.precision)}${fieldRange("色彩强度", "intensity", 0.4, 1.6, 0.1, p.intensity)}${fieldSelect(
-              "显示范围",
-              "mode",
+            timeline: `<section class="ins-group"><div class="ins-head"><b>时间线属性</b><span>03</span></div>${fieldRange('节点大小', 'pointSize', 2, 10, 1, p.pointSize)}${fieldRange('事件长度', 'stemLength', 35, 150, 5, p.stemLength)}${fieldToggle('交错排布', 'alternate', p.alternate)}${fieldToggle('显示数值', 'showValues', p.showValues)}</section>`,
+            dotplot: `<section class="ins-group"><div class="ins-head"><b>点图属性</b><span>03</span></div>${fieldRange('点大小', 'pointSize', 2, 12, 1, p.pointSize)}${fieldRange('行间距', 'rowGap', 16, 55, 1, p.rowGap)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示基线', 'baseline', p.baseline)}</section>`,
+            wordfreq: `<section class="ins-group"><div class="ins-head"><b>词频属性</b><span>05</span></div>${fieldRange('最小字号', 'minFont', 8, 24, 1, p.minFont)}${fieldRange('最大字号', 'maxFont', 24, 64, 1, p.maxFont)}${fieldRange('词语数量', 'maxWords', 12, 60, 1, p.maxWords)}${fieldRange('旋转角度', 'rotation', -45, 45, 1, p.rotation)}${fieldRange('松散程度', 'spacing', 0, 100, 1, p.spacing)}</section>`,
+            smallmultiples: `<section class="ins-group"><div class="ins-head"><b>小倍图属性</b><span>03</span></div>${fieldRange('列数', 'columns', 2, 4, 1, p.columns)}${fieldRange('间距', 'gap', 8, 48, 1, p.gap)}${fieldRange('线宽', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldToggle('显示边框', 'showFrame', p.showFrame)}</section>`,
+            correlation: `<section class="ins-group"><div class="ins-head"><b>相关矩阵属性</b><span>03</span></div>${fieldRange('单元尺寸', 'cellSize', 42, 90, 1, p.cellSize)}${fieldRange('小数位数', 'precision', 0, 4, 1, p.precision)}${fieldRange('色彩强度', 'intensity', 0.4, 1.6, 0.1, p.intensity)}${fieldSelect(
+              '显示范围',
+              'mode',
               p.mode,
               [
-                ["全部", "全部"],
-                ["下三角", "下三角"],
-                ["上三角", "上三角"],
+                ['全部', '全部'],
+                ['下三角', '下三角'],
+                ['上三角', '上三角'],
               ],
-            )}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            histogram: `<section class="ins-group"><div class="ins-head"><b>直方属性</b><span>03</span></div>${fieldRange("分组数量", "bins", 4, 20, 1, p.bins)}${fieldRange("柱间距", "barGap", 0, 8, 1, p.barGap)}${fieldRange("透明度", "opacity", 0.2, 1, 0.05, p.opacity)}${fieldToggle("显示数值", "showValues", p.showValues)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            errorbar: `<section class="ins-group"><div class="ins-head"><b>误差棒属性</b><span>03</span></div>${fieldRange("节点大小", "pointSize", 2, 12, 1, p.pointSize)}${fieldRange("误差长度", "errorSize", 4, 30, 1, p.errorSize)}${fieldRange("线宽", "lineWidth", 0.5, 4, 0.5, p.lineWidth)}${fieldToggle("网格", "showGrid", p.showGrid)}</section>`,
-            bump: `<section class="ins-group"><div class="ins-head"><b>排名属性</b><span>03</span></div>${fieldRange("最多系列", "maxLines", 2, 6, 1, p.maxLines)}${fieldRange("排名间距", "rowGap", 45, 100, 1, p.rowGap)}${fieldRange("线宽", "lineWidth", 1, 5, 0.5, p.lineWidth)}${fieldToggle("显示标签", "showLabels", p.showLabels)}</section>`,
-            ribbon: `<section class="ins-group"><div class="ins-head"><b>带状属性</b><span>03</span></div>${fieldRange("带状数量", "bands", 2, 8, 1, p.bands)}${fieldRange("带宽", "width", 6, 22, 1, p.width)}${fieldRange("摆幅", "amplitude", 10, 70, 1, p.amplitude)}${fieldRange("透明度", "opacity", 0.08, 0.7, 0.02, p.opacity)}</section>`,
-            radial: `<section class="ins-group"><div class="ins-head"><b>径向属性</b><span>03</span></div>${fieldRange("半径", "radius", 90, 260, 5, p.radius)}${fieldRange("射线宽度", "spokeWidth", 0.5, 5, 0.5, p.spokeWidth)}${fieldRange("节点大小", "nodeSize", 2, 10, 1, p.nodeSize)}</section>`,
-            poster: `<section class="ins-group"><div class="ins-head"><b>海报属性</b><span>03</span></div>${fieldRange("柱数量", "barCount", 3, 8, 1, p.barCount)}${fieldRange("柱宽", "barWidth", 28, 80, 1, p.barWidth)}${fieldRange("柱高度", "barHeight", 80, 260, 5, p.barHeight)}${fieldRange("主标题字号", "headlineSize", 36, 96, 2, p.headlineSize)}</section>`,
-            field: `<section class="ins-group"><div class="ins-head"><b>粒子场属性</b><span>03</span></div>${fieldRange("粒子数量", "count", 60, 360, 10, p.count)}${fieldRange("粒子大小", "size", 1, 6, 0.5, p.size)}${fieldRange("粒子透明度", "opacity", 0.05, 0.7, 0.02, p.opacity)}</section>`,
-            chord: `<section class="ins-group"><div class="ins-head"><b>弦线艺术</b><span>04</span></div>${fieldRange("环形半径", "radius", 140, 250, 5, p.radius)}${fieldRange("弦线宽度", "lineWidth", 1, 12, 0.5, p.lineWidth)}${fieldRange("节点大小", "nodeSize", 2, 10, 1, p.nodeSize)}${fieldRange("透明度", "opacity", 0.15, 0.9, 0.05, p.opacity)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-            spiral: `<section class="ins-group"><div class="ins-head"><b>螺旋构图</b><span>04</span></div>${fieldRange("旋转圈数", "turns", 1.5, 5, 0.1, p.turns)}${fieldRange("线宽", "lineWidth", 1, 5, 0.5, p.lineWidth)}${fieldRange("点大小", "pointSize", 1, 10, 1, p.pointSize)}${fieldRange("透明度", "opacity", 0.2, 1, 0.05, p.opacity)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-            swarm: `<section class="ins-group"><div class="ins-head"><b>蜂群艺术</b><span>04</span></div>${fieldRange("最大气泡", "maxRadius", 10, 42, 1, p.maxRadius)}${fieldRange("横向展开", "spread", 220, 500, 10, p.spread)}${fieldRange("随机感", "jitter", 20, 110, 5, p.jitter)}${fieldRange("透明度", "opacity", 0.2, 1, 0.05, p.opacity)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-            stream: `<section class="ins-group"><div class="ins-head"><b>流带艺术</b><span>04</span></div>${fieldRange("最多带状", "bands", 2, 8, 1, p.bands)}${fieldRange("摆幅", "amplitude", 35, 120, 1, p.amplitude)}${fieldRange("带宽", "width", 8, 32, 1, p.width)}${fieldRange("透明度", "opacity", 0.08, 0.7, 0.02, p.opacity)}${fieldToggle("显示名称", "showLabels", p.showLabels)}</section>`,
-          };
+            )}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            histogram: `<section class="ins-group"><div class="ins-head"><b>直方属性</b><span>03</span></div>${fieldRange('分组数量', 'bins', 4, 20, 1, p.bins)}${fieldRange('柱间距', 'barGap', 0, 8, 1, p.barGap)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示数值', 'showValues', p.showValues)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            errorbar: `<section class="ins-group"><div class="ins-head"><b>误差棒属性</b><span>03</span></div>${fieldRange('节点大小', 'pointSize', 2, 12, 1, p.pointSize)}${fieldRange('误差长度', 'errorSize', 4, 30, 1, p.errorSize)}${fieldRange('线宽', 'lineWidth', 0.5, 4, 0.5, p.lineWidth)}${fieldToggle('网格', 'showGrid', p.showGrid)}</section>`,
+            bump: `<section class="ins-group"><div class="ins-head"><b>排名属性</b><span>03</span></div>${fieldRange('最多系列', 'maxLines', 2, 6, 1, p.maxLines)}${fieldRange('排名间距', 'rowGap', 45, 100, 1, p.rowGap)}${fieldRange('线宽', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldToggle('显示标签', 'showLabels', p.showLabels)}</section>`,
+            ribbon: `<section class="ins-group"><div class="ins-head"><b>带状属性</b><span>03</span></div>${fieldRange('带状数量', 'bands', 2, 8, 1, p.bands)}${fieldRange('带宽', 'width', 6, 22, 1, p.width)}${fieldRange('摆幅', 'amplitude', 10, 70, 1, p.amplitude)}${fieldRange('透明度', 'opacity', 0.08, 0.7, 0.02, p.opacity)}</section>`,
+            radial: `<section class="ins-group"><div class="ins-head"><b>径向属性</b><span>03</span></div>${fieldRange('半径', 'radius', 90, 260, 5, p.radius)}${fieldRange('射线宽度', 'spokeWidth', 0.5, 5, 0.5, p.spokeWidth)}${fieldRange('节点大小', 'nodeSize', 2, 10, 1, p.nodeSize)}</section>`,
+            poster: `<section class="ins-group"><div class="ins-head"><b>海报属性</b><span>03</span></div>${fieldRange('柱数量', 'barCount', 3, 8, 1, p.barCount)}${fieldRange('柱宽', 'barWidth', 28, 80, 1, p.barWidth)}${fieldRange('柱高度', 'barHeight', 80, 260, 5, p.barHeight)}${fieldRange('主标题字号', 'headlineSize', 36, 96, 2, p.headlineSize)}</section>`,
+            field: `<section class="ins-group"><div class="ins-head"><b>粒子场属性</b><span>03</span></div>${fieldRange('粒子数量', 'count', 60, 360, 10, p.count)}${fieldRange('粒子大小', 'size', 1, 6, 0.5, p.size)}${fieldRange('粒子透明度', 'opacity', 0.05, 0.7, 0.02, p.opacity)}</section>`,
+            chord: `<section class="ins-group"><div class="ins-head"><b>弦线艺术</b><span>04</span></div>${fieldRange('环形半径', 'radius', 140, 250, 5, p.radius)}${fieldRange('弦线宽度', 'lineWidth', 1, 12, 0.5, p.lineWidth)}${fieldRange('节点大小', 'nodeSize', 2, 10, 1, p.nodeSize)}${fieldRange('透明度', 'opacity', 0.15, 0.9, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            spiral: `<section class="ins-group"><div class="ins-head"><b>螺旋构图</b><span>04</span></div>${fieldRange('旋转圈数', 'turns', 1.5, 5, 0.1, p.turns)}${fieldRange('线宽', 'lineWidth', 1, 5, 0.5, p.lineWidth)}${fieldRange('点大小', 'pointSize', 1, 10, 1, p.pointSize)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            swarm: `<section class="ins-group"><div class="ins-head"><b>蜂群艺术</b><span>04</span></div>${fieldRange('最大气泡', 'maxRadius', 10, 42, 1, p.maxRadius)}${fieldRange('横向展开', 'spread', 220, 500, 10, p.spread)}${fieldRange('随机感', 'jitter', 20, 110, 5, p.jitter)}${fieldRange('透明度', 'opacity', 0.2, 1, 0.05, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+            stream: `<section class="ins-group"><div class="ins-head"><b>流带艺术</b><span>04</span></div>${fieldRange('最多带状', 'bands', 2, 8, 1, p.bands)}${fieldRange('摆幅', 'amplitude', 35, 120, 1, p.amplitude)}${fieldRange('带宽', 'width', 8, 32, 1, p.width)}${fieldRange('透明度', 'opacity', 0.08, 0.7, 0.02, p.opacity)}${fieldToggle('显示名称', 'showLabels', p.showLabels)}</section>`,
+          }
           const extra =
             specs[type] ||
-            `<section class="ins-group"><div class="ins-head"><b>图形属性</b><span>02</span></div><div class="muted">当前图表没有额外属性。</div></section>`;
+            `<section class="ins-group"><div class="ins-head"><b>图形属性</b><span>02</span></div><div class="muted">当前图表没有额外属性。</div></section>`
           const paletteSec = `<section class="ins-group"><div class="ins-head"><b>配色</b><span>04</span></div><div class="palette-picks">${[
-            ["mono", "论文黑白"],
-            ["culture", "文化叙事"],
-            ["science", "科学研究"],
-            ["editorial", "艺术编辑"],
+            ['mono', '论文黑白'],
+            ['culture', '文化叙事'],
+            ['science', '科学研究'],
+            ['editorial', '艺术编辑'],
           ]
             .map(
               ([v, n]) =>
-                `<button class="palette-pick ${state.palette === v ? "active" : ""}" type="button" data-palette="${v}"><span class="palette-pick-title">${n}</span><span class="palette-preview">${palettePreview(v)}</span></button>`,
+                `<button class="palette-pick ${state.palette === v ? 'active' : ''}" type="button" data-palette="${v}"><span class="palette-pick-title">${n}</span><span class="palette-preview">${palettePreview(v)}</span></button>`,
             )
-            .join("")}</div></section>`;
-          const exportSec = `<section class="ins-group"><div class="ins-head"><b>输出</b><span>05</span></div>${fieldRange("导出倍数", "exportScale", 1, 8, 0.5, state.exportScale)}${fieldStateToggle("透明背景", "exportTransparent", state.exportTransparent)}<div class="field"><label>PDF方向</label>${zenSelect(
-            "orientation",
+            .join('')}</div></section>`
+          const exportSec = `<section class="ins-group"><div class="ins-head"><b>输出</b><span>05</span></div>${fieldRange('导出倍数', 'exportScale', 1, 8, 0.5, state.exportScale)}${fieldStateToggle('透明背景', 'exportTransparent', state.exportTransparent)}<div class="field"><label>PDF方向</label>${zenSelect(
+            'orientation',
             state.pdfOrientation,
             [
-              ["landscape", "横向"],
-              ["portrait", "纵向"],
+              ['landscape', '横向'],
+              ['portrait', '纵向'],
             ],
             false,
-          )}</div></section>`;
-          host.innerHTML = common + extra + paletteSec + exportSec;
-          bindInspector();
+          )}</div></section>`
+          host.innerHTML = common + extra + paletteSec + exportSec
+          bindInspector()
         }
         function directionButtons(key, value) {
           const dirs = [
-            ["top-left", "↖"],
-            ["top", "↑"],
-            ["top-right", "↗"],
-            ["right", "→"],
-            ["bottom-right", "↘"],
-            ["bottom", "↓"],
-            ["bottom-left", "↙"],
-            ["left", "←"],
-          ];
+            ['top-left', '↖'],
+            ['top', '↑'],
+            ['top-right', '↗'],
+            ['right', '→'],
+            ['bottom-right', '↘'],
+            ['bottom', '↓'],
+            ['bottom-left', '↙'],
+            ['left', '←'],
+          ]
           const names = {
-            "top-left": "左上",
-            top: "上",
-            "top-right": "右上",
-            left: "左",
-            right: "右",
-            "bottom-left": "左下",
-            bottom: "下",
-            "bottom-right": "右下",
-          };
+            'top-left': '左上',
+            top: '上',
+            'top-right': '右上',
+            left: '左',
+            right: '右',
+            'bottom-left': '左下',
+            bottom: '下',
+            'bottom-right': '右下',
+          }
           return dirs
             .map(
               ([v, label]) =>
-                `<button type="button" class="direction-btn${value === v ? " active" : ""}" data-direction-key="${escapeHtml(key)}" data-direction="${v}" title="${names[v]}">${label}</button>`,
+                `<button type="button" class="direction-btn${value === v ? ' active' : ''}" data-direction-key="${escapeHtml(key)}" data-direction="${v}" title="${names[v]}">${label}</button>`,
             )
-            .join("");
+            .join('')
         }
         function fieldDirection(label, key, value) {
-          return `<div class="field"><label>${label}</label><div class="direction-grid" role="group" aria-label="${label}">${directionButtons(key, value)}</div></div>`;
+          return `<div class="field"><label>${label}</label><div class="direction-grid" role="group" aria-label="${label}">${directionButtons(key, value)}</div></div>`
         }
         function fieldSegment(label, key, value, opts) {
-          return `<div class="field"><label>${label}</label><div class="layout-segment" role="group" aria-label="${label}">${opts.map(([v, n]) => `<button type="button" class="${String(value) === String(v) ? "active" : ""}" data-choice-key="${escapeHtml(key)}" data-choice="${escapeHtml(v)}">${escapeHtml(n)}</button>`).join("")}</div></div>`;
+          return `<div class="field"><label>${label}</label><div class="layout-segment" role="group" aria-label="${label}">${opts.map(([v, n]) => `<button type="button" class="${String(value) === String(v) ? 'active' : ''}" data-choice-key="${escapeHtml(key)}" data-choice="${escapeHtml(v)}">${escapeHtml(n)}</button>`).join('')}</div></div>`
         }
         function fieldPadding() {
           return `<div class="field"><label>边界留白</label><div class="layout-pad-grid">
@@ -9473,7 +8553,7 @@
   <div class="layout-pad-cell"><span>右</span><input type="range" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-prop="paddingRight"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingRight}" data-layout-number-prop="paddingRight" aria-label="右边界留白"></div>
   <div class="layout-pad-cell"><span>下</span><input type="range" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-prop="paddingBottom"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingBottom}" data-layout-number-prop="paddingBottom" aria-label="下边界留白"></div>
   <div class="layout-pad-cell"><span>左</span><input type="range" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-prop="paddingLeft"><input class="layout-value-input" type="number" min="0" max="180" step="2" value="${state.paddingLeft}" data-layout-number-prop="paddingLeft" aria-label="左边界留白"></div>
- </div></div>`;
+ </div></div>`
         }
         function fieldPosition() {
           return `<div class="field"><label>图表位置</label><div class="layout-offset-grid">
@@ -9481,729 +8561,644 @@
   <div class="layout-offset-cell"><span>右移</span><input type="range" min="0" max="80" step="1" value="${state.positionRight}" data-layout-prop="positionRight"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionRight}" data-layout-number-prop="positionRight" aria-label="图表右移"></div>
   <div class="layout-offset-cell"><span>下移</span><input type="range" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-prop="positionBottom"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionBottom}" data-layout-number-prop="positionBottom" aria-label="图表下移"></div>
   <div class="layout-offset-cell"><span>左移</span><input type="range" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-prop="positionLeft"><input class="layout-value-input" type="number" min="0" max="80" step="1" value="${state.positionLeft}" data-layout-number-prop="positionLeft" aria-label="图表左移"></div>
- </div></div>`;
+ </div></div>`
         }
         function fieldScale(label, key, value) {
           const safeValue =
-            value == null || value === "" || !Number.isFinite(Number(value))
-              ? 100
-              : value;
-          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${safeValue}" data-layout-prop="${key}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${safeValue}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`;
+            value == null || value === '' || !Number.isFinite(Number(value)) ? 100 : value
+          return `<div class="field"><label>${label}</label><div class="layout-scale"><input type="range" min="60" max="180" step="5" value="${safeValue}" data-layout-prop="${key}"><input class="layout-value-input" type="number" min="60" max="180" step="5" value="${safeValue}" data-layout-number-prop="${key}" aria-label="${label}"><span class="layout-value-unit">%</span></div></div>`
         }
         function field(label, type, key, value) {
-          return `<div class="field"><label>${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value ?? "")}"></div>`;
+          return `<div class="field"><label>${label}</label><input type="${type}" id="field-${key}" value="${escapeHtml(value ?? '')}"></div>`
         }
         function fieldNumber(label, key, value) {
-          return `<div class="field"><label>${label}</label><input type="number" step="any" id="field-${key}" value="${value ?? ""}" placeholder="自动"></div>`;
+          return `<div class="field"><label>${label}</label><input type="number" step="any" id="field-${key}" value="${value ?? ''}" placeholder="自动"></div>`
         }
         function fieldRange(label, key, min, max, step, value) {
           const safeValue =
-            value == null || value === "" || !Number.isFinite(Number(value))
-              ? min
-              : value;
-          return `<div class="field"><label>${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${safeValue}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${safeValue}" data-range-number-for="${key}" aria-label="${label}"></div></div>`;
+            value == null || value === '' || !Number.isFinite(Number(value)) ? min : value
+          return `<div class="field"><label>${label}</label><div class="range-wrap"><input id="field-${key}" data-prop="${key}" type="range" min="${min}" max="${max}" step="${step}" value="${safeValue}"><input class="range-number" type="number" min="${min}" max="${max}" step="${step}" value="${safeValue}" data-range-number-for="${key}" aria-label="${label}"></div></div>`
         }
         function fieldToggle(label, key, value) {
-          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? "on" : ""}" data-prop-toggle="${key}">${value ? "开启" : "关闭"}</button></div>`;
+          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-prop-toggle="${key}">${value ? '开启' : '关闭'}</button></div>`
         }
         // 属于“引擎 + 图表”属性（而不是图表私有属性）的开关，例如导出透明背景
         function fieldStateToggle(label, key, value) {
-          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? "on" : ""}" data-state-toggle="${escapeHtml(key)}">${value ? "开启" : "关闭"}</button></div>`;
+          return `<div class="field"><label>${label}</label><button class="toggle single ${value ? 'on' : ''}" data-state-toggle="${escapeHtml(key)}">${value ? '开启' : '关闭'}</button></div>`
         }
         function fieldSelect(label, key, value, opts) {
-          return `<div class="field"><label>${label}</label>${zenSelect(key, value, opts, false)}</div>`;
+          return `<div class="field"><label>${label}</label>${zenSelect(key, value, opts, false)}</div>`
         }
         function zenSelect(key, value, opts, multiple = false) {
           const current = multiple
-            ? String(value || "")
-                .split(",")
+            ? String(value || '')
+                .split(',')
                 .filter(Boolean)
-            : [String(value ?? "")];
+            : [String(value ?? '')]
           const label = multiple
             ? opts
                 .filter((o) => current.includes(String(o[0])))
                 .map((o) => o[1])
-                .join("、") || "请选择"
-            : opts.find((o) => String(o[0]) === String(value))?.[1] || "请选择";
-          return `<div class="zen-select${multiple ? " multi" : ""}" id="zen-select-${key}" data-select-key="${escapeHtml(key)}" data-multiple="${multiple ? "true" : "false"}" data-value="${escapeHtml(String(value ?? ""))}" aria-expanded="false"><button type="button" class="zen-select-button">${escapeHtml(label)}</button><div class="zen-select-menu">${opts.length ? opts.map(([v, n]) => `<button type="button" class="zen-select-option${current.includes(String(v)) ? " active" : ""}" data-value="${escapeHtml(v)}">${escapeHtml(n)}</button>`).join("") : '<div class="zen-select-empty">暂无选项</div>'}</div></div>`;
+                .join('、') || '请选择'
+            : opts.find((o) => String(o[0]) === String(value))?.[1] || '请选择'
+          return `<div class="zen-select${multiple ? ' multi' : ''}" id="zen-select-${key}" data-select-key="${escapeHtml(key)}" data-multiple="${multiple ? 'true' : 'false'}" data-value="${escapeHtml(String(value ?? ''))}" aria-expanded="false"><button type="button" class="zen-select-button">${escapeHtml(label)}</button><div class="zen-select-menu">${opts.length ? opts.map(([v, n]) => `<button type="button" class="zen-select-option${current.includes(String(v)) ? ' active' : ''}" data-value="${escapeHtml(v)}">${escapeHtml(n)}</button>`).join('') : '<div class="zen-select-empty">暂无选项</div>'}</div></div>`
         }
         function closeCustomSelects(except) {
           $$('.zen-select[aria-expanded="true"]').forEach((x) => {
-            if (x !== except) x.setAttribute("aria-expanded", "false");
-          });
+            if (x !== except) x.setAttribute('aria-expanded', 'false')
+          })
         }
         function bindCustomSelects(host = document) {
           const selects =
-            host &&
-            typeof host.matches === "function" &&
-            host.matches(".zen-select")
+            host && typeof host.matches === 'function' && host.matches('.zen-select')
               ? [host]
-              : Array.from(host.querySelectorAll(".zen-select"));
+              : Array.from(host.querySelectorAll('.zen-select'))
           selects.forEach(function (sel) {
-            if (sel.dataset.bound) return;
-            sel.dataset.bound = "1";
-            sel.addEventListener("click", function (e) {
-              const btn = e.target.closest(".zen-select-button");
+            if (sel.dataset.bound) return
+            sel.dataset.bound = '1'
+            sel.addEventListener('click', function (e) {
+              const btn = e.target.closest('.zen-select-button')
               if (btn && sel.contains(btn)) {
-                e.stopPropagation();
-                const open = sel.getAttribute("aria-expanded") === "true";
-                closeCustomSelects(sel);
-                sel.setAttribute("aria-expanded", open ? "false" : "true");
-                return;
+                e.stopPropagation()
+                const open = sel.getAttribute('aria-expanded') === 'true'
+                closeCustomSelects(sel)
+                sel.setAttribute('aria-expanded', open ? 'false' : 'true')
+                return
               }
-              const opt = e.target.closest(".zen-select-option");
-              if (!opt || !sel.contains(opt)) return;
-              e.stopPropagation();
+              const opt = e.target.closest('.zen-select-option')
+              if (!opt || !sel.contains(opt)) return
+              e.stopPropagation()
               if (
-                opt.dataset.selectDisabled === "true" ||
-                opt.getAttribute("aria-disabled") === "true"
+                opt.dataset.selectDisabled === 'true' ||
+                opt.getAttribute('aria-disabled') === 'true'
               ) {
-                toast(
-                  opt.dataset.reason || opt.title || "当前图表不能使用此列",
-                );
-                return;
+                toast(opt.dataset.reason || opt.title || '当前图表不能使用此列')
+                return
               }
-              const multi = sel.dataset.multiple === "true";
-              const options = () =>
-                Array.from(sel.querySelectorAll(".zen-select-option"));
+              const multi = sel.dataset.multiple === 'true'
+              const options = () => Array.from(sel.querySelectorAll('.zen-select-option'))
               if (multi) {
                 const next = options()
                   .filter((x) =>
-                    x === opt
-                      ? !x.classList.contains("active")
-                      : x.classList.contains("active"),
+                    x === opt ? !x.classList.contains('active') : x.classList.contains('active'),
                   )
-                  .map((x) => x.dataset.value);
+                  .map((x) => x.dataset.value)
                 options().forEach((x) =>
-                  x.classList.toggle("active", next.includes(x.dataset.value)),
-                );
-                sel.dataset.value = next.join(",");
-                const button = sel.querySelector(".zen-select-button");
+                  x.classList.toggle('active', next.includes(x.dataset.value)),
+                )
+                sel.dataset.value = next.join(',')
+                const button = sel.querySelector('.zen-select-button')
                 if (button)
                   button.textContent =
                     options()
-                      .filter((x) => x.classList.contains("active"))
+                      .filter((x) => x.classList.contains('active'))
                       .map((x) => x.textContent.trim())
-                      .join("、") || "请选择";
+                      .join('、') || '请选择'
                 sel.dispatchEvent(
-                  new CustomEvent("zenchange", {
-                    bubbles: true,
-                    detail: { value: next },
-                  }),
-                );
+                  new CustomEvent('zenchange', { bubbles: true, detail: { value: next } }),
+                )
               } else {
-                options().forEach((x) => x.classList.remove("active"));
-                opt.classList.add("active");
-                sel.dataset.value = opt.dataset.value;
-                const button = sel.querySelector(".zen-select-button");
-                if (button) button.textContent = opt.textContent.trim();
-                sel.setAttribute("aria-expanded", "false");
+                options().forEach((x) => x.classList.remove('active'))
+                opt.classList.add('active')
+                sel.dataset.value = opt.dataset.value
+                const button = sel.querySelector('.zen-select-button')
+                if (button) button.textContent = opt.textContent.trim()
+                sel.setAttribute('aria-expanded', 'false')
                 sel.dispatchEvent(
-                  new CustomEvent("zenchange", {
+                  new CustomEvent('zenchange', {
                     bubbles: true,
                     detail: { value: opt.dataset.value },
                   }),
-                );
+                )
               }
-            });
-          });
+            })
+          })
         }
-        document.addEventListener("click", function (e) {
-          if (!e.target.closest(".zen-select")) closeCustomSelects();
-        });
+        document.addEventListener('click', function (e) {
+          if (!e.target.closest('.zen-select')) closeCustomSelects()
+        })
         function getCustomValue(key) {
-          const el = document.querySelector(
-            `.zen-select[data-select-key="${CSS.escape(key)}"]`,
-          );
-          return el ? el.dataset.value : "";
+          const el = document.querySelector(`.zen-select[data-select-key="${CSS.escape(key)}"]`)
+          return el ? el.dataset.value : ''
         }
         function bindInspector() {
-          ["title", "subtitle", "xTitle", "yTitle"].forEach((k) => {
-            const el = $("#field-" + k);
-            if (!el) return;
+          ;['title', 'subtitle', 'xTitle', 'yTitle'].forEach((k) => {
+            const el = $('#field-' + k)
+            if (!el) return
             el.oninput = () => {
-              setEngineStateProp(k, el.value);
-              scheduleRender();
-            };
-            el.onchange = flushRender;
-          });
-          $$(".range-wrap input[type=range]").forEach((el) => {
+              setEngineStateProp(k, el.value)
+              scheduleRender()
+            }
+            el.onchange = flushRender
+          })
+          $$('.range-wrap input[type=range]').forEach((el) => {
             el.oninput = () => {
               const k = el.dataset.prop,
-                val = Number(el.value);
-              if (!Number.isFinite(val)) return;
-              if (k === "exportScale") setEngineStateProp("exportScale", val);
-              else setChartProp(k, val);
-              const v = el.parentElement.querySelector(
-                `[data-range-number-for="${CSS.escape(k)}"]`,
-              );
+                val = Number(el.value)
+              if (!Number.isFinite(val)) return
+              if (k === 'exportScale') setEngineStateProp('exportScale', val)
+              else setChartProp(k, val)
+              const v = el.parentElement.querySelector(`[data-range-number-for="${CSS.escape(k)}"]`)
               // 数字框正在编辑时绝不覆盖用户正在输入的内容。
-              if (v && document.activeElement !== v) v.value = el.value;
-              scheduleRender();
-            };
-            el.onchange = flushRender;
-          });
-          $$(".range-wrap .range-number").forEach((el) => {
+              if (v && document.activeElement !== v) v.value = el.value
+              scheduleRender()
+            }
+            el.onchange = flushRender
+          })
+          $$('.range-wrap .range-number').forEach((el) => {
             el.oninput = () => {
-              const k = el.dataset.rangeNumberFor;
-              const raw = el.value;
+              const k = el.dataset.rangeNumberFor
+              const raw = el.value
               // 允许真正的自由编辑：删除、清空、重新输入期间不回写输入框。
-              if (raw === "") return;
+              if (raw === '') return
               const range = el.parentElement.querySelector(
                 `input[type=range][data-prop="${CSS.escape(k)}"]`,
-              );
-              if (!range) return;
+              )
+              if (!range) return
               const min = Number(range.min),
-                max = Number(range.max);
-              const typed = Number(raw);
-              if (!Number.isFinite(typed)) return;
-              const val = Math.max(min, Math.min(max, typed));
-              if (k === "exportScale") setEngineStateProp("exportScale", val);
-              else setChartProp(k, val);
+                max = Number(range.max)
+              const typed = Number(raw)
+              if (!Number.isFinite(typed)) return
+              const val = Math.max(min, Math.min(max, typed))
+              if (k === 'exportScale') setEngineStateProp('exportScale', val)
+              else setChartProp(k, val)
               // 同步滑块，但不反向修改正在编辑的数字框。
-              range.value = String(val);
-              scheduleRender();
-            };
+              range.value = String(val)
+              scheduleRender()
+            }
             el.onchange = () => {
-              const k = el.dataset.rangeNumberFor;
+              const k = el.dataset.rangeNumberFor
               const range = el.parentElement.querySelector(
                 `input[type=range][data-prop="${CSS.escape(k)}"]`,
-              );
-              if (!range) return;
-              let val =
-                el.value.trim() === "" ? Number(range.value) : Number(el.value);
-              if (!Number.isFinite(val)) val = Number(range.value);
+              )
+              if (!range) return
+              let val = el.value.trim() === '' ? Number(range.value) : Number(el.value)
+              if (!Number.isFinite(val)) val = Number(range.value)
               const min = Number(range.min),
-                max = Number(range.max);
-              val = Math.max(min, Math.min(max, val));
-              el.value = String(val);
-              range.value = String(val);
-              if (k === "exportScale") setEngineStateProp("exportScale", val);
-              else setChartProp(k, val);
-              flushRender();
-            };
-          });
-          $$(
-            ".field input[type=number]:not(.range-number):not(.layout-value-input)",
-          ).forEach((el) => {
-            el.oninput = () => {
-              const k = el.id.replace("field-", "");
-              const raw = el.value;
-              if (k === "width" || k === "height") {
-                const v = Math.max(120, Math.min(5000, Number(raw) || 0));
-                setEngineStateProp(k, v);
-                scheduleRender();
-              } else {
-                const val = raw === "" ? "" : Number(raw);
-                setChartProp(k, val);
-                scheduleRender();
+                max = Number(range.max)
+              val = Math.max(min, Math.min(max, val))
+              el.value = String(val)
+              range.value = String(val)
+              if (k === 'exportScale') setEngineStateProp('exportScale', val)
+              else setChartProp(k, val)
+              flushRender()
+            }
+          })
+          $$('.field input[type=number]:not(.range-number):not(.layout-value-input)').forEach(
+            (el) => {
+              el.oninput = () => {
+                const k = el.id.replace('field-', '')
+                const raw = el.value
+                if (k === 'width' || k === 'height') {
+                  const v = Math.max(120, Math.min(5000, Number(raw) || 0))
+                  setEngineStateProp(k, v)
+                  scheduleRender()
+                } else {
+                  const val = raw === '' ? '' : Number(raw)
+                  setChartProp(k, val)
+                  scheduleRender()
+                }
               }
-            };
-            el.onchange = flushRender;
-          });
-          $$(".toggle[data-prop-toggle]").forEach(
+              el.onchange = flushRender
+            },
+          )
+          $$('.toggle[data-prop-toggle]').forEach(
             (b) =>
               (b.onclick = () => {
-                const k = b.dataset.propToggle;
-                setChartProp(k, !chartProp(k, false));
-                renderInspector();
-                flushRender();
+                const k = b.dataset.propToggle
+                setChartProp(k, !chartProp(k, false))
+                renderInspector()
+                flushRender()
               }),
-          );
-          $$(".toggle[data-state-toggle]").forEach(
+          )
+          $$('.toggle[data-state-toggle]').forEach(
             (b) =>
               (b.onclick = () => {
-                const k = b.dataset.stateToggle;
-                setEngineStateProp(k, !state[k]);
-                renderInspector();
+                const k = b.dataset.stateToggle
+                setEngineStateProp(k, !state[k])
+                renderInspector()
                 // 引擎画布自身的白底也受这个开关控制，必须重绘一次
-                flushRender();
+                flushRender()
               }),
-          );
-          bindCustomSelects(document);
-          $$(".zen-select[data-select-key]")
-            .filter((el) => !el.closest("#data-modal"))
+          )
+          bindCustomSelects(document)
+          $$('.zen-select[data-select-key]')
+            .filter((el) => !el.closest('#data-modal'))
             .forEach((el) => {
-              el.addEventListener("zenchange", () => {
-                const k = el.dataset.selectKey;
-                const val = el.dataset.value;
-                if (k === "orientation") {
-                  setEngineStateProp("pdfOrientation", val);
-                  flushRender();
-                  return;
+              el.addEventListener('zenchange', () => {
+                const k = el.dataset.selectKey
+                const val = el.dataset.value
+                if (k === 'orientation') {
+                  setEngineStateProp('pdfOrientation', val)
+                  flushRender()
+                  return
                 }
                 if (
                   [
-                    "fontFamily",
-                    "xAxisFontFamily",
-                    "yAxisFontFamily",
-                    "tooltipFontFamily",
-                    "legendFontFamily",
-                    "titleFontFamily",
+                    'fontFamily',
+                    'xAxisFontFamily',
+                    'yAxisFontFamily',
+                    'tooltipFontFamily',
+                    'legendFontFamily',
+                    'titleFontFamily',
                   ].includes(k)
                 )
-                  setEngineStateProp(k, val);
-                else setChartProp(k, val);
-                renderOverlay();
-                flushRender();
-              });
-            });
-          $$(".direction-btn").forEach(
+                  setEngineStateProp(k, val)
+                else setChartProp(k, val)
+                renderOverlay()
+                flushRender()
+              })
+            })
+          $$('.direction-btn').forEach(
             (b) =>
               (b.onclick = () => {
-                setEngineStateProp(b.dataset.directionKey, b.dataset.direction);
-                renderInspector();
-                flushRender();
+                setEngineStateProp(b.dataset.directionKey, b.dataset.direction)
+                renderInspector()
+                flushRender()
               }),
-          );
-          $$(".layout-segment button[data-choice-key]").forEach(
+          )
+          $$('.layout-segment button[data-choice-key]').forEach(
             (b) =>
               (b.onclick = () => {
-                setEngineStateProp(b.dataset.choiceKey, b.dataset.choice);
-                renderInspector();
-                flushRender();
+                setEngineStateProp(b.dataset.choiceKey, b.dataset.choice)
+                renderInspector()
+                flushRender()
               }),
-          );
-          $$("input[data-layout-prop]").forEach(
+          )
+          $$('input[data-layout-prop]').forEach(
             (el) =>
               (el.oninput = () => {
                 const k = el.dataset.layoutProp,
-                  v = Number(el.value);
-                if (!Number.isFinite(v)) return;
-                setEngineStateProp(k, v);
+                  v = Number(el.value)
+                if (!Number.isFinite(v)) return
+                setEngineStateProp(k, v)
                 const out = el.parentElement.querySelector(
                   `[data-layout-number-prop="${CSS.escape(k)}"]`,
-                );
+                )
                 // 数字框获得焦点时，不允许滑块事件覆盖正在编辑的文字。
-                if (out && document.activeElement !== out) out.value = el.value;
-                applyChartMountLayout();
+                if (out && document.activeElement !== out) out.value = el.value
+                applyChartMountLayout()
                 if (
-                  k === "contentScale" &&
+                  k === 'contentScale' &&
                   state.chart &&
-                  typeof state.chart.resize === "function"
+                  typeof state.chart.resize === 'function'
                 ) {
                   try {
-                    state.chart.resize();
+                    state.chart.resize()
                   } catch (e) {
-                    reportError("图表比例更新失败", e, false);
+                    reportError('图表比例更新失败', e, false)
                   }
                 }
                 // setEngineStateProp 已经立即持久化，这里只负责立即应用视觉变化。
               }),
-          );
-          $$("input[data-layout-prop]").forEach(
+          )
+          $$('input[data-layout-prop]').forEach(
             (el) =>
               (el.onchange = () => {
-                if (el.dataset.layoutProp === "contentScale") resizeChart();
-                schedulePersist();
+                if (el.dataset.layoutProp === 'contentScale') resizeChart()
+                schedulePersist()
               }),
-          );
-          $$("input[data-layout-number-prop]").forEach((el) => {
+          )
+          $$('input[data-layout-number-prop]').forEach((el) => {
             el.oninput = () => {
-              const k = el.dataset.layoutNumberProp;
+              const k = el.dataset.layoutNumberProp
               const range = el.parentElement.querySelector(
                 `input[type=range][data-layout-prop="${CSS.escape(k)}"]`,
-              );
+              )
               // 允许删除后重新编辑；空值阶段保持用户文字，不让滑块或状态把输入框抢回去。
-              if (!range || el.value === "") return;
-              const typed = Number(el.value);
-              if (!Number.isFinite(typed)) return;
+              if (!range || el.value === '') return
+              const typed = Number(el.value)
+              if (!Number.isFinite(typed)) return
               const min = Number(range.min),
-                max = Number(range.max);
-              const v = Math.max(min, Math.min(max, typed));
-              range.value = String(v);
+                max = Number(range.max)
+              const v = Math.max(min, Math.min(max, typed))
+              range.value = String(v)
               // 绝不在 input 事件里改写 el.value，保证可以连续输入/删除。
-              setEngineStateProp(k, v);
-              applyChartMountLayout();
-              if (
-                k === "contentScale" &&
-                state.chart &&
-                typeof state.chart.resize === "function"
-              ) {
+              setEngineStateProp(k, v)
+              applyChartMountLayout()
+              if (k === 'contentScale' && state.chart && typeof state.chart.resize === 'function') {
                 try {
-                  state.chart.resize();
+                  state.chart.resize()
                 } catch (e) {
-                  reportError("图表比例更新失败", e, false);
+                  reportError('图表比例更新失败', e, false)
                 }
               }
-            };
+            }
             el.onchange = () => {
-              const k = el.dataset.layoutNumberProp;
+              const k = el.dataset.layoutNumberProp
               const range = el.parentElement.querySelector(
                 `input[type=range][data-layout-prop="${CSS.escape(k)}"]`,
-              );
-              if (!range) return;
-              let v =
-                el.value.trim() === "" ? Number(range.value) : Number(el.value);
-              if (!Number.isFinite(v)) v = Number(range.value);
+              )
+              if (!range) return
+              let v = el.value.trim() === '' ? Number(range.value) : Number(el.value)
+              if (!Number.isFinite(v)) v = Number(range.value)
               const min = Number(range.min),
-                max = Number(range.max);
-              v = Math.max(min, Math.min(max, v));
-              el.value = String(v);
-              range.value = String(v);
-              setEngineStateProp(k, v);
-              applyChartMountLayout();
-              if (k === "contentScale") resizeChart();
-              else flushRender();
-            };
-          });
-          $$(".palette-pick").forEach(
+                max = Number(range.max)
+              v = Math.max(min, Math.min(max, v))
+              el.value = String(v)
+              range.value = String(v)
+              setEngineStateProp(k, v)
+              applyChartMountLayout()
+              if (k === 'contentScale') resizeChart()
+              else flushRender()
+            }
+          })
+          $$('.palette-pick').forEach(
             (b) =>
               (b.onclick = () => {
-                setEngineStateProp("palette", b.dataset.palette);
-                renderInspector();
-                flushRender();
+                setEngineStateProp('palette', b.dataset.palette)
+                renderInspector()
+                flushRender()
               }),
-          );
+          )
         }
         function clearMount() {
-          const mount = $("#chart-mount");
-          const old = state.chart;
-          state.chart = null;
+          const mount = $('#chart-mount')
+          const old = state.chart
+          state.chart = null
           if (old) {
             try {
-              if (typeof old.dispose === "function") old.dispose();
-              else if (typeof old.destroy === "function") old.destroy();
-              else
-                console.warn(
-                  "[ZENVIZ] 旧图表实例没有标准销毁方法，已跳过销毁：",
-                  old,
-                );
+              if (typeof old.dispose === 'function') old.dispose()
+              else if (typeof old.destroy === 'function') old.destroy()
+              else console.warn('[ZENVIZ] 旧图表实例没有标准销毁方法，已跳过销毁：', old)
             } catch (e) {
-              reportError("旧图表销毁失败", e, true);
+              reportError('旧图表销毁失败', e, true)
             }
           }
-          const apex = mount._apex;
+          const apex = mount._apex
           if (apex && apex !== old) {
             try {
-              if (typeof apex.destroy === "function") apex.destroy();
-              else
-                console.warn(
-                  "[ZENVIZ] ApexCharts 实例没有 destroy 方法，已跳过销毁：",
-                  apex,
-                );
+              if (typeof apex.destroy === 'function') apex.destroy()
+              else console.warn('[ZENVIZ] ApexCharts 实例没有 destroy 方法，已跳过销毁：', apex)
             } catch (e) {
-              reportError("旧 ApexCharts 图表销毁失败", e, true);
+              reportError('旧 ApexCharts 图表销毁失败', e, true)
             }
           }
-          mount._apex = null;
-          if (
-            window.echarts &&
-            typeof window.echarts.getInstanceByDom === "function"
-          ) {
+          mount._apex = null
+          if (window.echarts && typeof window.echarts.getInstanceByDom === 'function') {
             try {
-              const inst = window.echarts.getInstanceByDom(mount);
-              if (inst && inst !== old && typeof inst.dispose === "function")
-                inst.dispose();
+              const inst = window.echarts.getInstanceByDom(mount)
+              if (inst && inst !== old && typeof inst.dispose === 'function') inst.dispose()
             } catch (e) {
-              reportError("旧 ECharts 图表销毁失败", e, true);
+              reportError('旧 ECharts 图表销毁失败', e, true)
             }
           }
-          mount.innerHTML = "";
-          $("#zen-svg").style.display = "none";
-          mount.style.display = "block";
+          mount.innerHTML = ''
+          $('#zen-svg').style.display = 'none'
+          mount.style.display = 'block'
         }
         function renderChart(animate = true) {
           try {
-            updateMeta();
-            const dataValidation = validateDataMapping(state.type);
+            updateMeta()
+            const dataValidation = validateDataMapping(state.type)
             if (!dataValidation.valid) {
-              if (!fitChartFrame()) throw new Error("图表可用空间计算失败");
-              applyChartMountLayout();
-              clearMount();
-              renderDataValidationState(dataValidation.message);
-              setStatus(dataValidation.message, "warn", false);
-              renderOverlay();
-              return;
+              if (!fitChartFrame()) throw new Error('图表可用空间计算失败')
+              applyChartMountLayout()
+              clearMount()
+              renderDataValidationState(dataValidation.message)
+              setStatus(dataValidation.message, 'warn', false)
+              renderOverlay()
+              return
             }
-            const stageTitle = $("#stage-title");
-            if (stageTitle) stageTitle.textContent = state.title;
-            updateMeta();
-            if (!fitChartFrame()) throw new Error("图表可用空间计算失败");
-            applyChartMountLayout();
-            clearMount();
-            if (state.engine === "zen") {
-              renderZen();
-              renderOverlay();
-              return;
+            const stageTitle = $('#stage-title')
+            if (stageTitle) stageTitle.textContent = state.title
+            $('#meta-engine').textContent =
+              state.engine === 'zen'
+                ? 'ZEN'
+                : state.engine === 'chartjs'
+                  ? 'Chart.js'
+                  : state.engine === 'apexcharts'
+                    ? 'ApexCharts'
+                    : 'ECharts'
+            if (!fitChartFrame()) throw new Error('图表可用空间计算失败')
+            applyChartMountLayout()
+            clearMount()
+            if (state.engine === 'zen') {
+              renderZen()
+              renderOverlay()
+              return
             }
-            if (state.engine === "chartjs") {
-              renderChartJS();
-              renderOverlay();
-              return;
+            if (state.engine === 'chartjs') {
+              renderChartJS()
+              renderOverlay()
+              return
             }
-            if (state.engine === "apexcharts") {
-              renderApex();
-              renderOverlay();
-              return;
+            if (state.engine === 'apexcharts') {
+              renderApex()
+              renderOverlay()
+              return
             }
-            renderECharts();
-            renderOverlay();
+            renderECharts()
+            renderOverlay()
           } catch (err) {
-            console.error(err);
-            clearMount();
-            $("#chart-mount").innerHTML =
-              '<div class="render-error"><strong>图表暂时无法显示</strong><span>请检查当前绘图引擎是否支持此图表，或切换其他绘图引擎。</span></div>';
-            setStatus("图表渲染失败 · " + (err.message || "未知错误"), "err");
+            console.error(err)
+            clearMount()
+            $('#chart-mount').innerHTML =
+              '<div class="render-error"><strong>图表暂时无法显示</strong><span>请检查当前绘图引擎是否支持此图表，或切换其他绘图引擎。</span></div>'
+            setStatus('图表渲染失败 · ' + (err.message || '未知错误'), 'err')
           }
         }
 
         // 所有属性改变都立即应用。连续拖动也不再等待尾部防抖，确保状态、画布和存储始终同步。
         function scheduleRender() {
-          schedulePersist();
-          renderChart(false);
+          schedulePersist()
+          renderChart(false)
         }
         function flushRender() {
-          schedulePersist();
-          renderChart(false);
+          schedulePersist()
+          renderChart(false)
         }
         function echartsTitle() {
-          return { show: false, text: "", subtext: "" };
+          return { show: false, text: '', subtext: '' }
         }
         function legendVisible() {
-          const rule = getChartDataRule(state.type);
-          return (
-            rule.legend !== "none" &&
-            !!chartProp("showLegend", state.showLegend)
-          );
+          const rule = getChartDataRule(state.type)
+          return rule.legend !== 'none' && !!chartProp('showLegend', state.showLegend)
         }
         function currentLegendNames() {
-          const rule = getChartDataRule(state.type);
-          if (rule.legend === "none") return [];
-          if (rule.legend === "category")
-            return getPieSlices().map((slice) => slice.name);
+          const rule = getChartDataRule(state.type)
+          if (rule.legend === 'none') return []
+          if (rule.legend === 'category') return getPieSlices().map((slice) => slice.name)
           const series = rowsToSeries()
             .series.map((item) => item.name)
-            .filter(Boolean);
-          if (state.type === "stream") {
-            const maxBands = Math.max(
-              1,
-              Math.round(Number(chartProp("bands", 5)) || 5),
-            );
-            return series.slice(0, maxBands);
+            .filter(Boolean)
+          if (state.type === 'stream') {
+            const maxBands = Math.max(1, Math.round(Number(chartProp('bands', 5)) || 5))
+            return series.slice(0, maxBands)
           }
-          return series;
+          return series
         }
 
         function streamLegendRows() {
-          const p = chartProps.stream || {};
-          const s = rowsToSeries();
-          const maxBands = Math.max(1, Math.round(Number(p.bands) || 5));
-          const saved = legendSelectionByType.stream || {};
-          const source = s.series
-            .slice(0, maxBands)
-            .map((ser, index) => ({ ser, index }));
-          const selected = source.filter(
-            ({ ser }) => saved[ser.name] !== false,
-          );
+          const p = chartProps.stream || {}
+          const s = rowsToSeries()
+          const maxBands = Math.max(1, Math.round(Number(p.bands) || 5))
+          const saved = legendSelectionByType.stream || {}
+          const source = s.series.slice(0, maxBands).map((ser, index) => ({ ser, index }))
+          const selected = source.filter(({ ser }) => saved[ser.name] !== false)
           const totals = s.labels.map((_, j) =>
-            selected.reduce(
-              (sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0),
-              0,
-            ),
-          );
-          const maxTotal = Math.max(...totals, 1);
+            selected.reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0), 0),
+          )
+          const maxTotal = Math.max(...totals, 1)
           return selected.map(({ ser, index }, visibleIndex) => {
-            const value = Math.max(0, numeric(ser.data[0]) ?? 0);
-            const current = value / maxTotal;
+            const value = Math.max(0, numeric(ser.data[0]) ?? 0)
+            const current = value / maxTotal
             const stack =
               selected
                 .slice(0, visibleIndex)
-                .reduce(
-                  (sum, item) =>
-                    sum + Math.max(0, numeric(item.ser.data[0]) ?? 0),
-                  0,
-                ) / maxTotal;
-            const phase = Math.sin(index * 0.75) * 8;
-            const yCenter =
-              315 + (stack + current / 2 - 0.5) * p.amplitude * 1.35 + phase;
-            return { name: ser.name, index, y: yCenter };
-          });
+                .reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[0]) ?? 0), 0) /
+              maxTotal
+            const phase = Math.sin(index * 0.75) * 8
+            const yCenter = 315 + (stack + current / 2 - 0.5) * p.amplitude * 1.35 + phase
+            return { name: ser.name, index, y: yCenter }
+          })
         }
         function applyChartMountLayout() {
-          const frame = $("#chart-frame"),
-            mount = $("#chart-mount"),
-            svg = $("#zen-svg"),
-            overlay = $("#chart-overlay");
-          if (!frame) return;
-          const pt = Math.max(0, Math.min(180, Number(state.paddingTop) || 0));
-          const pr = Math.max(
-            0,
-            Math.min(180, Number(state.paddingRight) || 0),
-          );
-          const pb = Math.max(
-            0,
-            Math.min(180, Number(state.paddingBottom) || 0),
-          );
-          const pl = Math.max(0, Math.min(180, Number(state.paddingLeft) || 0));
-          const scale = Math.max(
-            0.6,
-            Math.min(1.8, (Number(state.contentScale) || 100) / 100),
-          );
+          const frame = $('#chart-frame'),
+            mount = $('#chart-mount'),
+            svg = $('#zen-svg'),
+            overlay = $('#chart-overlay')
+          if (!frame) return
+          const pt = Math.max(0, Math.min(180, Number(state.paddingTop) || 0))
+          const pr = Math.max(0, Math.min(180, Number(state.paddingRight) || 0))
+          const pb = Math.max(0, Math.min(180, Number(state.paddingBottom) || 0))
+          const pl = Math.max(0, Math.min(180, Number(state.paddingLeft) || 0))
+          const scale = Math.max(0.6, Math.min(1.8, (Number(state.contentScale) || 100) / 100))
           const moveX =
             Math.max(0, Math.min(80, Number(state.positionRight) || 0)) -
-            Math.max(0, Math.min(80, Number(state.positionLeft) || 0));
+            Math.max(0, Math.min(80, Number(state.positionLeft) || 0))
           const moveY =
             Math.max(0, Math.min(80, Number(state.positionBottom) || 0)) -
-            Math.max(0, Math.min(80, Number(state.positionTop) || 0));
+            Math.max(0, Math.min(80, Number(state.positionTop) || 0))
           if (overlay) {
-            overlay.style.setProperty(
-              "--chart-font-family",
-              getChartFontFamily("xAxis"),
-            );
-            overlay.style.setProperty(
-              "--chart-axis-x-font-family",
-              getChartFontFamily("xAxis"),
-            );
-            overlay.style.setProperty(
-              "--chart-axis-y-font-family",
-              getChartFontFamily("yAxis"),
-            );
-            overlay.style.setProperty(
-              "--chart-tooltip-font-family",
-              getChartFontFamily("tooltip"),
-            );
-            overlay.style.setProperty(
-              "--chart-legend-font-family",
-              getChartFontFamily("legend"),
-            );
-            overlay.style.setProperty(
-              "--chart-title-font-family",
-              getChartFontFamily("title"),
-            );
-            overlay.style.setProperty("--layout-pad-top", pt + "px");
-            overlay.style.setProperty("--layout-pad-right", pr + "px");
-            overlay.style.setProperty("--layout-pad-bottom", pb + "px");
-            overlay.style.setProperty("--layout-pad-left", pl + "px");
+            overlay.style.setProperty('--chart-font-family', getChartFontFamily('xAxis'))
+            overlay.style.setProperty('--chart-axis-x-font-family', getChartFontFamily('xAxis'))
+            overlay.style.setProperty('--chart-axis-y-font-family', getChartFontFamily('yAxis'))
+            overlay.style.setProperty('--chart-tooltip-font-family', getChartFontFamily('tooltip'))
+            overlay.style.setProperty('--chart-legend-font-family', getChartFontFamily('legend'))
+            overlay.style.setProperty('--chart-title-font-family', getChartFontFamily('title'))
+            overlay.style.setProperty('--layout-pad-top', pt + 'px')
+            overlay.style.setProperty('--layout-pad-right', pr + 'px')
+            overlay.style.setProperty('--layout-pad-bottom', pb + 'px')
+            overlay.style.setProperty('--layout-pad-left', pl + 'px')
           }
           // 四向“边界留白”只控制标题/图例与图表边界之间的安全距离，
           // 不再缩小 chart-mount / zen-svg 的可用绘图区，避免坐标轴与数据在四周被裁掉。
-          [mount, svg].forEach((el) => {
-            if (!el) return;
-            el.style.left = "0";
-            el.style.right = "auto";
-            el.style.top = "0";
-            el.style.bottom = "auto";
-            el.style.width = "100%";
-            el.style.height = "100%";
-            el.style.transformOrigin = "50% 50%";
+          ;[mount, svg].forEach((el) => {
+            if (!el) return
+            el.style.left = '0'
+            el.style.right = 'auto'
+            el.style.top = '0'
+            el.style.bottom = 'auto'
+            el.style.width = '100%'
+            el.style.height = '100%'
+            el.style.transformOrigin = '50% 50%'
             // Chart.js 使用独立的内部尺寸承载 contentScale，避免 Canvas 在页面刷新、resize
             // 或响应式重算时被二次 CSS 缩放，从而出现右侧明明是 95%、图形却按 100% 绘制的问题。
             // 其它引擎继续沿用工作区整体 scale。
-            const renderScale = state.engine === "chartjs" ? 1 : scale;
-            el.style.transform = `translate3d(${moveX}px, ${moveY}px, 0) scale(${renderScale})`;
-          });
-          if (state.engine === "chartjs" && mount) {
-            const host = mount.querySelector(".chartjs-scale-host");
+            const renderScale = state.engine === 'chartjs' ? 1 : scale
+            el.style.transform = `translate3d(${moveX}px, ${moveY}px, 0) scale(${renderScale})`
+          })
+          if (state.engine === 'chartjs' && mount) {
+            const host = mount.querySelector('.chartjs-scale-host')
             if (host) {
-              host.style.width = `${scale * 100}%`;
-              host.style.height = `${scale * 100}%`;
-              host.style.left = "50%";
-              host.style.top = "50%";
-              host.style.transform = "translate(-50%, -50%)";
+              host.style.width = `${scale * 100}%`
+              host.style.height = `${scale * 100}%`
+              host.style.left = '50%'
+              host.style.top = '50%'
+              host.style.transform = 'translate(-50%, -50%)'
             }
           }
         }
 
-        /* ── Legend wrapping ─────────────────────────────────────────────────
-
-           The legend is one flex line by default, so a chart with a dozen series
-           runs it off the edge — or leaves it scrolling sideways. Lay it out as
-           a balanced grid instead, but only once it actually has to wrap:
-           a horizontal legend wraps into rows, a vertical one into columns, and
-           the count per line is chosen so the lines come out even rather than
-           the last one trailing off with a single item.
-
-           Must run with the items already in the DOM — their measured size is
-           what the counts are derived from — and is re-run on resize. */
-        const LEGEND_GAP_X = 7;
-        const LEGEND_GAP_Y = 3;
+        const LEGEND_GAP_X = 7
+        const LEGEND_GAP_Y = 3
 
         /* Drop the grid a previous pass may have left behind, so what is measured
            next is the plain single line. The plain layout's gap is 7px and the
            grid's is 3px, so mistaking one for the other is how a vertical legend
            ends up taller than the chart it belongs to. */
         function resetLegendLayout(legend) {
-          if (!legend.classList.contains("legend-grid")) return;
-          legend.classList.remove("legend-grid");
-          legend.style.display = "";
-          legend.style.gap = "";
-          legend.style.gridAutoFlow = "";
-          legend.style.gridTemplateColumns = "";
-          legend.style.gridTemplateRows = "";
-          legend.style.justifyContent = "";
-          legend.style.alignContent = "";
+          if (!legend.classList.contains('legend-grid')) return
+          legend.classList.remove('legend-grid')
+          legend.style.display = ''
+          legend.style.gap = ''
+          legend.style.gridAutoFlow = ''
+          legend.style.gridTemplateColumns = ''
+          legend.style.gridTemplateRows = ''
+          legend.style.justifyContent = ''
+          legend.style.alignContent = ''
         }
 
         /* `perLine` items per line — columns of that many rows for a vertical
            legend (filled top to bottom, the reading order of a legend stacked
            downwards), rows of that many items for a horizontal one. */
         function applyLegendGrid(legend, perLine, vertical) {
-          legend.classList.add("legend-grid");
-          legend.style.display = "grid";
-          legend.style.gap = `${LEGEND_GAP_Y}px ${vertical ? 10 : LEGEND_GAP_X}px`;
+          legend.classList.add('legend-grid')
+          legend.style.display = 'grid'
+          legend.style.gap = `${LEGEND_GAP_Y}px ${vertical ? 10 : LEGEND_GAP_X}px`
           /* 居中 + 溢出时起始侧无法滚到（这里已不是滚动容器），
              下面 fitLegendLayout 会在放不下时改回 flex-start。 */
-          legend.style.justifyContent = "center";
-          legend.style.alignContent = "center";
+          legend.style.justifyContent = 'center'
+          legend.style.alignContent = 'center'
           if (vertical) {
-            legend.style.gridAutoFlow = "column";
-            legend.style.gridTemplateColumns = "";
-            legend.style.gridTemplateRows = `repeat(${perLine}, max-content)`;
+            legend.style.gridAutoFlow = 'column'
+            legend.style.gridTemplateColumns = ''
+            legend.style.gridTemplateRows = `repeat(${perLine}, max-content)`
           } else {
-            legend.style.gridAutoFlow = "row";
-            legend.style.gridTemplateRows = "";
-            legend.style.gridTemplateColumns = `repeat(${perLine}, max-content)`;
+            legend.style.gridAutoFlow = 'row'
+            legend.style.gridTemplateRows = ''
+            legend.style.gridTemplateColumns = `repeat(${perLine}, max-content)`
           }
         }
 
         function fitLegendLayout(legend, host) {
-          if (!legend || !host || !host.clientWidth) return false;
+          if (!legend || !host || !host.clientWidth) return false
           /* Stream legend items are positioned absolutely along the bands. */
-          if (legend.classList.contains("stream")) return false;
-          const items = [];
+          if (legend.classList.contains('stream')) return false
+          const items = []
           legend.childNodes.forEach((node) => {
             if (
               node.nodeType === 1 &&
-              node.classList.contains("layout-legend-item")
+              node.classList.contains('layout-legend-item')
             )
-              items.push(node);
-          });
-          if (items.length < 2) return false;
+              items.push(node)
+          })
+          if (items.length < 2) return false
 
           /* Measure from the plain single line: an earlier pass may have left a
-             grid in place, and the reset is what makes "how big is it really?"
+             grid in place, and the reset is what makes 'how big is it really?'
              an honest question. */
-          resetLegendLayout(legend);
+          resetLegendLayout(legend)
 
-          const cs = getComputedStyle(host);
-          const pad = (name) => parseFloat(cs.getPropertyValue(name)) || 0;
+          const cs = getComputedStyle(host)
+          const pad = (name) => parseFloat(cs.getPropertyValue(name)) || 0
           /* The same box the CSS `max-width` gives the legend, minus the
              legend's own padding and border. */
           const boxW = Math.max(
             80,
             host.clientWidth -
               24 -
-              pad("--layout-pad-left") -
-              pad("--layout-pad-right"),
-          );
+              pad('--layout-pad-left') -
+              pad('--layout-pad-right'),
+          )
           const boxH = Math.max(
             60,
             host.clientHeight -
               24 -
-              pad("--layout-pad-top") -
-              pad("--layout-pad-bottom"),
-          );
-          const innerW = Math.max(60, boxW - 12);
-          const innerH = Math.max(40, boxH - 8);
+              pad('--layout-pad-top') -
+              pad('--layout-pad-bottom'),
+          )
+          const innerW = Math.max(60, boxW - 12)
+          const innerH = Math.max(40, boxH - 8)
 
-          const widths = items.map((el) => el.offsetWidth || 0);
-          const heights = items.map((el) => el.offsetHeight || 0);
-          if (widths.some((w) => w <= 0)) return false;
-          const itemH = Math.max.apply(null, heights) || 0;
+          const widths = items.map((el) => el.offsetWidth || 0)
+          const heights = items.map((el) => el.offsetHeight || 0)
+          if (widths.some((w) => w <= 0)) return false
+          const itemH = Math.max.apply(null, heights) || 0
 
-          const vertical = legend.classList.contains("vertical");
-          const total = items.length;
+          const vertical = legend.classList.contains('vertical')
+          const total = items.length
 
           /* One line already fits — leave the plain row/column alone, where the
              items sit tight against each other. Measured, never counted: the
@@ -10214,302 +9209,259 @@
               ? legend.scrollHeight <= innerH
               : legend.scrollWidth <= innerW
           )
-            return false;
+            return false
 
-          const lcs = getComputedStyle(legend);
-          const num = (v) => parseFloat(v) || 0;
+          const lcs = getComputedStyle(legend)
+          const num = (v) => parseFloat(v) || 0
           const chromeY =
             num(lcs.paddingTop) +
             num(lcs.paddingBottom) +
             num(lcs.borderTopWidth) +
-            num(lcs.borderBottomWidth);
+            num(lcs.borderBottomWidth)
 
           /* Items per line. First how many the box takes, then even them out so
              every line carries a similar share. */
-          let perLine;
+          let perLine
           if (vertical) {
             /* Rows a single column can hold, then the fewest columns that fit —
                plus the next couple, in case one more column is what it takes to
                stop the last one trailing a single lonely item. */
-            const rowH = itemH + LEGEND_GAP_Y;
-            const roomH = Math.max(rowH, innerH - chromeY);
+            const rowH = itemH + LEGEND_GAP_Y
+            const roomH = Math.max(rowH, innerH - chromeY)
             const fitRows = Math.max(
               2,
               Math.floor((roomH + LEGEND_GAP_Y) / rowH),
-            );
-            const base = Math.max(2, Math.ceil(total / fitRows));
-            let best = null;
+            )
+            const base = Math.max(2, Math.ceil(total / fitRows))
+            let best = null
             for (let c = base; c <= Math.min(total, base + 2); c++) {
-              const rows = Math.ceil(total / c);
-              const cols = Math.ceil(total / rows);
-              if (cols > c) continue;
-              const spread = rows - (total - rows * (cols - 1));
-              if (!best || spread < best.spread) best = { rows, spread };
+              const rows = Math.ceil(total / c)
+              const cols = Math.ceil(total / rows)
+              if (cols > c) continue
+              const spread = rows - (total - rows * (cols - 1))
+              if (!best || spread < best.spread) best = { rows, spread }
             }
-            perLine = best ? best.rows : total;
+            perLine = best ? best.rows : total
           } else {
             const avg =
-              widths.reduce((a, b) => a + b, 0) / total + LEGEND_GAP_X;
-            const roomW = Math.max(avg, innerW);
+              widths.reduce((a, b) => a + b, 0) / total + LEGEND_GAP_X
+            const roomW = Math.max(avg, innerW)
             const n = Math.max(
               1,
               Math.min(total, Math.floor((roomW + LEGEND_GAP_X) / avg)),
-            );
-            const lines = Math.ceil(total / n);
-            perLine = Math.ceil(total / lines);
+            )
+            const lines = Math.ceil(total / n)
+            perLine = Math.ceil(total / lines)
           }
 
           /* A single item per line is not a wrap, it is a stack that would be
              worse than the scrolling row this replaces. */
-          if (perLine < 2 || perLine >= total) return false;
+          if (perLine < 2 || perLine >= total) return false
 
           /* The count above is arithmetic; the box is the truth. A column is as
              wide as its widest cell and a row as tall as its tallest, so a split
              that looks even on paper can still overshoot: follow the overshoot
              one line at a time until the measured block fits. */
-          applyLegendGrid(legend, perLine, vertical);
+          applyLegendGrid(legend, perLine, vertical)
           const fitsNow = () =>
             legend.scrollWidth <= innerW + 1 &&
-            (!vertical || legend.scrollHeight <= innerH + 1);
+            (!vertical || legend.scrollHeight <= innerH + 1)
           /* A legend that fits across but stands too tall is still the better of
              two bad options — worth keeping in case no split fits both ways. */
           let fallback =
-            vertical && legend.scrollWidth <= innerW + 1 ? perLine : 0;
-          let lines = Math.ceil(total / perLine);
-          const seen = { [perLine]: true };
+            vertical && legend.scrollWidth <= innerW + 1 ? perLine : 0
+          let lines = Math.ceil(total / perLine)
+          const seen = { [perLine]: true }
           for (let step = 0; step < 8; step++) {
-            const overW = legend.scrollWidth > innerW + 1;
-            const overH = vertical && legend.scrollHeight > innerH + 1;
-            if (!overW && !overH) break;
-            if (!overW && !fallback) fallback = perLine;
+            const overW = legend.scrollWidth > innerW + 1
+            const overH = vertical && legend.scrollHeight > innerH + 1
+            if (!overW && !overH) break
+            if (!overW && !fallback) fallback = perLine
             /* One axis too big wants longer lines and the other wants shorter
                ones: a vertical legend is where those two pull apart, and with
                both over the edge no split can satisfy either. */
-            if (overW === overH) break;
-            const next = vertical ? (overW ? lines - 1 : lines + 1) : lines + 1;
-            if (next < 2) break;
-            const rows = Math.ceil(total / next);
-            if (rows < 2 || rows >= total || seen[rows]) break;
-            seen[rows] = true;
-            perLine = rows;
-            lines = Math.ceil(total / rows);
-            applyLegendGrid(legend, perLine, vertical);
+            if (overW === overH) break
+            const next = vertical ? (overW ? lines - 1 : lines + 1) : lines + 1
+            if (next < 2) break
+            const rows = Math.ceil(total / next)
+            if (rows < 2 || rows >= total || seen[rows]) break
+            seen[rows] = true
+            perLine = rows
+            lines = Math.ceil(total / rows)
+            applyLegendGrid(legend, perLine, vertical)
           }
           if (!fitsNow()) {
             if (fallback) {
-              applyLegendGrid(legend, fallback, vertical);
-              alignLegendToStart(legend);
-              return true;
+              applyLegendGrid(legend, fallback, vertical)
+              alignLegendToStart(legend)
+              return true
             }
             /* Nothing fits — better the plain, single line than a grid
                clipped on both axes. */
-            resetLegendLayout(legend);
-            return false;
+            resetLegendLayout(legend)
+            return false
           }
-          alignLegendToStart(legend);
-          return true;
+          alignLegendToStart(legend)
+          return true
         }
 
         /* 居中 + 溢出时起始侧无法滚到（图例已不是滚动容器），
            落位后仍然超宽 / 超高就改为从头对齐，保证起始侧的图例项完整可见。 */
         function alignLegendToStart(legend) {
-          legend.style.justifyContent = "flex-start";
-          legend.style.alignContent = "flex-start";
+          legend.style.justifyContent = 'flex-start'
+          legend.style.alignContent = 'flex-start'
+        }
+        function rebalanceOverlayLegend() {
+          const legend = document.querySelector('#chart-overlay .layout-legend')
+          if (!legend || legend.classList.contains('stream')) return
+          try {
+            fitLegendLayout(legend, legend.parentElement)
+          } catch (e) {}
         }
 
-        /* The frame is re-fitted on resize without a full re-render, so redo the
-           legend's own layout once the new size has been applied. */
-        window.addEventListener("resize", () => {
-          requestAnimationFrame(() => {
-            const overlay = $("#chart-overlay");
-            if (overlay)
-              fitLegendLayout(overlay.querySelector(".layout-legend"), overlay);
-          });
-        });
-
         function renderOverlay() {
-          const host = $("#chart-overlay");
-          if (!host) return;
-          host.innerHTML = "";
-          host.style.setProperty(
-            "--chart-title-font-family",
-            getChartFontFamily("title"),
-          );
-          host.style.setProperty(
-            "--chart-legend-font-family",
-            getChartFontFamily("legend"),
-          );
+          const host = $('#chart-overlay')
+          if (!host) return
+          host.innerHTML = ''
+          host.style.setProperty('--chart-title-font-family', getChartFontFamily('title'))
+          host.style.setProperty('--chart-legend-font-family', getChartFontFamily('legend'))
           if (state.showTitle && state.title) {
-            const title = document.createElement("div");
-            title.className = `layout-title ${state.titleOrientation === "vertical" ? "vertical" : "horizontal"}`;
-            title.dataset.pos = state.titlePosition || "top-left";
-            title.innerHTML = `<div class="layout-title-main">${escapeHtml(state.title)}</div>${state.subtitle ? `<div class="layout-title-sub">${escapeHtml(state.subtitle)}</div>` : ""}`;
-            host.appendChild(title);
+            const title = document.createElement('div')
+            title.className = `layout-title ${state.titleOrientation === 'vertical' ? 'vertical' : 'horizontal'}`
+            title.dataset.pos = state.titlePosition || 'top-left'
+            title.innerHTML = `<div class="layout-title-main">${escapeHtml(state.title)}</div>${state.subtitle ? `<div class="layout-title-sub">${escapeHtml(state.subtitle)}</div>` : ''}`
+            host.appendChild(title)
           }
           if (legendVisible()) {
-            const names = currentLegendNames();
+            const names = currentLegendNames()
             if (names.length) {
-              const saved = legendSelectionByType[state.type] || {};
-              const legend = document.createElement("div");
+              const saved = legendSelectionByType[state.type] || {}
+              const legend = document.createElement('div')
               const streamMode =
-                state.engine === "zen" &&
-                state.type === "stream" &&
-                (state.legendPosition === "left" ||
-                  state.legendPosition === "top-left");
-              legend.className = `layout-legend ${state.legendOrientation === "vertical" ? "vertical" : "horizontal"}${state.type === "pie" ? " pie" : ""}${streamMode ? " stream" : ""}`;
-              legend.dataset.pos = state.legendPosition || "top";
-              const streamRows = streamMode ? streamLegendRows() : [];
+                state.engine === 'zen' &&
+                state.type === 'stream' &&
+                (state.legendPosition === 'left' || state.legendPosition === 'top-left')
+              legend.className = `layout-legend ${state.legendOrientation === 'vertical' ? 'vertical' : 'horizontal'}${state.type === 'pie' ? ' pie' : ''}${streamMode ? ' stream' : ''}`
+              legend.dataset.pos = state.legendPosition || 'top'
+              const streamRows = streamMode ? streamLegendRows() : []
               names.forEach((name, index) => {
-                const on = Object.prototype.hasOwnProperty.call(saved, name)
-                  ? !!saved[name]
-                  : true;
-                const item = document.createElement("button");
-                item.type = "button";
-                item.className = `layout-legend-item${on ? "" : " off"}`;
-                item.dataset.legendName = name;
-                item.dataset.legendIndex = String(index);
-                item.style.setProperty(
-                  "--legend-color",
-                  palette()[index % palette().length],
-                );
-                item.innerHTML = `<span class="layout-legend-mark"></span><span>${escapeHtml(name)}</span>`;
+                const on = Object.prototype.hasOwnProperty.call(saved, name) ? !!saved[name] : true
+                const item = document.createElement('button')
+                item.type = 'button'
+                item.className = `layout-legend-item${on ? '' : ' off'}`
+                item.dataset.legendName = name
+                item.dataset.legendIndex = String(index)
+                item.style.setProperty('--legend-color', palette()[index % palette().length])
+                item.innerHTML = `<span class="layout-legend-mark"></span><span>${escapeHtml(name)}</span>`
                 if (streamMode) {
-                  const row = streamRows.find((entry) => entry.name === name);
+                  const row = streamRows.find((entry) => entry.name === name)
                   if (row) {
-                    item.classList.add("stream-item");
-                    item.style.position = "absolute";
-                    item.style.left = "0px";
-                    item.style.top = `${Math.max(0, row.y - 10)}px`;
+                    item.classList.add('stream-item')
+                    item.style.position = 'absolute'
+                    item.style.left = '0px'
+                    item.style.top = `${Math.max(0, row.y - 10)}px`
                   }
                 }
                 item.onclick = (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  toggleCustomLegend(name, index);
-                };
-                legend.appendChild(item);
-              });
-              host.appendChild(legend);
-              /* Now that the items have a box, wrap them if the line is full. */
-              fitLegendLayout(legend, host);
+                  e.preventDefault()
+                  e.stopPropagation()
+                  toggleCustomLegend(name, index)
+                }
+                legend.appendChild(item)
+              })
+              host.appendChild(legend)
+              fitLegendLayout(legend, host)
             }
           }
         }
         function refreshOverlayLegendState() {
-          const host = $("#chart-overlay");
-          if (!host) return;
-          const saved = legendSelectionByType[state.type] || {};
-          host.querySelectorAll(".layout-legend-item").forEach((item) => {
-            const name = item.dataset.legendName;
-            const on = Object.prototype.hasOwnProperty.call(saved, name)
-              ? !!saved[name]
-              : true;
-            item.classList.toggle("off", !on);
-          });
+          const host = $('#chart-overlay')
+          if (!host) return
+          const saved = legendSelectionByType[state.type] || {}
+          host.querySelectorAll('.layout-legend-item').forEach((item) => {
+            const name = item.dataset.legendName
+            const on = Object.prototype.hasOwnProperty.call(saved, name) ? !!saved[name] : true
+            item.classList.toggle('off', !on)
+          })
         }
         function toggleCustomLegend(name, index) {
-          const saved = { ...(legendSelectionByType[state.type] || {}) };
-          const current = Object.prototype.hasOwnProperty.call(saved, name)
-            ? !!saved[name]
-            : true;
-          saved[name] = !current;
-          legendSelectionByType[state.type] = saved;
+          const saved = { ...(legendSelectionByType[state.type] || {}) }
+          const current = Object.prototype.hasOwnProperty.call(saved, name) ? !!saved[name] : true
+          saved[name] = !current
+          legendSelectionByType[state.type] = saved
           try {
-            const rule = getChartDataRule(state.type);
-            if (rule.legend === "none") return;
-            if (rule.legend === "category") {
-              const slices = getPieSlices();
-              const sliceIndex = slices.findIndex(
-                (slice) => slice.name === name,
-              );
-              if (sliceIndex < 0) return;
+            const rule = getChartDataRule(state.type)
+            if (rule.legend === 'none') return
+            if (rule.legend === 'category') {
+              const slices = getPieSlices()
+              const sliceIndex = slices.findIndex((slice) => slice.name === name)
+              if (sliceIndex < 0) return
               if (
                 !saved[name] &&
-                slices.filter((slice) => saved[slice.name] !== false).length ===
-                  0
+                slices.filter((slice) => saved[slice.name] !== false).length === 0
               ) {
-                toast("饼图至少需要保留一个扇区");
-                saved[name] = true;
-                legendSelectionByType[state.type] = saved;
-                refreshOverlayLegendState();
-                return;
+                toast('饼图至少需要保留一个扇区')
+                saved[name] = true
+                legendSelectionByType[state.type] = saved
+                refreshOverlayLegendState()
+                return
               }
-              if (state.engine === "echarts" && state.chart?.dispatchAction)
+              if (state.engine === 'echarts' && state.chart?.dispatchAction)
                 state.chart.dispatchAction({
-                  type: saved[name] ? "legendSelect" : "legendUnSelect",
+                  type: saved[name] ? 'legendSelect' : 'legendUnSelect',
                   name,
-                });
-              else if (
-                state.engine === "chartjs" &&
-                state.chart?.toggleDataVisibility
-              ) {
-                state.chart.toggleDataVisibility(sliceIndex);
-                state.chart.update("none");
-              } else if (
-                state.engine === "apexcharts" &&
-                state.chart?.updateSeries
-              ) {
+                })
+              else if (state.engine === 'chartjs' && state.chart?.toggleDataVisibility) {
+                state.chart.toggleDataVisibility(sliceIndex)
+                state.chart.update('none')
+              } else if (state.engine === 'apexcharts' && state.chart?.updateSeries) {
                 state.chart.updateSeries(
-                  slices.map((slice) =>
-                    saved[slice.name] === false ? 0 : slice.value,
-                  ),
+                  slices.map((slice) => (saved[slice.name] === false ? 0 : slice.value)),
                   true,
-                );
+                )
               }
-            } else if (state.engine === "zen") {
-              renderChart(false);
-            } else if (
-              state.engine === "echarts" &&
-              state.chart?.dispatchAction
-            ) {
+            } else if (state.engine === 'zen') {
+              renderChart(false)
+            } else if (state.engine === 'echarts' && state.chart?.dispatchAction) {
               state.chart.dispatchAction({
-                type: saved[name] ? "legendSelect" : "legendUnSelect",
+                type: saved[name] ? 'legendSelect' : 'legendUnSelect',
                 name,
-              });
-            } else if (state.engine === "chartjs" && state.chart) {
+              })
+            } else if (state.engine === 'chartjs' && state.chart) {
               if (state.chart.setDatasetVisibility)
-                state.chart.setDatasetVisibility(index, saved[name]);
-              state.chart.update("none");
-            } else if (
-              state.engine === "apexcharts" &&
-              state.chart?.toggleSeries
-            ) {
-              state.chart.toggleSeries(name);
+                state.chart.setDatasetVisibility(index, saved[name])
+              state.chart.update('none')
+            } else if (state.engine === 'apexcharts' && state.chart?.toggleSeries) {
+              state.chart.toggleSeries(name)
             }
           } catch (e) {
-            reportError("图例状态更新失败", e, true);
+            reportError('图例状态更新失败', e, true)
           }
-          refreshOverlayLegendState();
-          schedulePersist();
+          refreshOverlayLegendState()
+          schedulePersist()
         }
 
         function baseECharts() {
           const s = rowsToSeries(),
-            c = palette();
+            c = palette()
           return {
             animation: true,
             animationDuration: 240,
-            animationEasing: "cubicOut",
+            animationEasing: 'cubicOut',
             // 开启透明导出时不铺白底，导出的 SVG / PNG 才是真透明
-            backgroundColor: exportTransparent() ? "transparent" : "#ffffff",
-            textStyle: {
-              fontFamily: getChartFontFamily("xAxis"),
-              color: "#151515",
-            },
+            backgroundColor: exportTransparent() ? 'transparent' : '#ffffff',
+            textStyle: { fontFamily: getChartFontFamily('xAxis'), color: '#151515' },
             color: c,
             tooltip: {
-              trigger: "axis",
-              backgroundColor: "#fff",
-              borderColor: "#151515",
+              trigger: 'axis',
+              backgroundColor: '#fff',
+              borderColor: '#151515',
               textStyle: {
-                fontFamily: getChartFontFamily("tooltip"),
+                fontFamily: getChartFontFamily('tooltip'),
                 fontSize: 10,
-                color: "#151515",
+                color: '#151515',
               },
-              axisPointer: {
-                type: "line",
-                lineStyle: { color: "rgba(21,21,21,.2)" },
-              },
+              axisPointer: { type: 'line', lineStyle: { color: 'rgba(21,21,21,.2)' } },
             },
             legend: { show: false, selectedMode: true },
             grid: {
@@ -10518,148 +9470,130 @@
               top: 54,
               bottom: 64,
               containLabel: true,
-              borderColor: "rgba(21,21,21,.12)",
+              borderColor: 'rgba(21,21,21,.12)',
             },
             xAxis: {
-              type: "category",
+              type: 'category',
               data: s.labels,
               name: state.xTitle,
-              nameLocation: "middle",
+              nameLocation: 'middle',
               nameGap: 30,
               nameTextStyle: {
-                fontFamily: getChartFontFamily("xAxis"),
+                fontFamily: getChartFontFamily('xAxis'),
                 fontSize: state.axisSize,
-                color: "rgba(21,21,21,.5)",
+                color: 'rgba(21,21,21,.5)',
               },
-              axisLine: { lineStyle: { color: "rgba(21,21,21,.35)" } },
+              axisLine: { lineStyle: { color: 'rgba(21,21,21,.35)' } },
               axisTick: { show: false },
               axisLabel: {
-                fontFamily: getChartFontFamily("xAxis"),
+                fontFamily: getChartFontFamily('xAxis'),
                 fontSize: state.axisSize,
-                color: "rgba(21,21,21,.58)",
+                color: 'rgba(21,21,21,.58)',
                 rotate: state.rotateLabels,
                 margin: 10,
               },
             },
             yAxis: {
-              type: "value",
+              type: 'value',
               name: state.yTitle,
-              nameLocation: "middle",
+              nameLocation: 'middle',
               nameGap: 48,
               nameRotate: 90,
               nameTextStyle: {
-                fontFamily: getChartFontFamily("yAxis"),
+                fontFamily: getChartFontFamily('yAxis'),
                 fontSize: state.axisSize,
-                color: "rgba(21,21,21,.5)",
+                color: 'rgba(21,21,21,.5)',
               },
               axisLine: { show: false },
               axisTick: { show: false },
               axisLabel: {
-                fontFamily: getChartFontFamily("yAxis"),
+                fontFamily: getChartFontFamily('yAxis'),
                 fontSize: state.axisSize,
-                color: "rgba(21,21,21,.58)",
+                color: 'rgba(21,21,21,.58)',
                 margin: 10,
               },
               min:
-                state.type === "line" && chartProp("yMin", "") !== ""
-                  ? Number(chartProp("yMin", ""))
+                state.type === 'line' && chartProp('yMin', '') !== ''
+                  ? Number(chartProp('yMin', ''))
                   : undefined,
               max:
-                state.type === "line" && chartProp("yMax", "") !== ""
-                  ? Number(chartProp("yMax", ""))
+                state.type === 'line' && chartProp('yMax', '') !== ''
+                  ? Number(chartProp('yMax', ''))
                   : undefined,
               splitLine: {
-                show: chartProp("showGrid", state.showGrid),
-                lineStyle: { color: "rgba(21,21,21,.08)", type: "solid" },
+                show: chartProp('showGrid', state.showGrid),
+                lineStyle: { color: 'rgba(21,21,21,.08)', type: 'solid' },
               },
             },
             title: echartsTitle(),
             series: s.series.map((v, i) => {
-              const isArea = state.type === "area";
-              const cp = isArea ? chartProps.area : chartProps.line;
+              const isArea = state.type === 'area'
+              const cp = isArea ? chartProps.area : chartProps.line
               return {
                 name: v.name,
-                type: "line",
-                symbol: cp.showPoints ? "circle" : "none",
+                type: 'line',
+                symbol: cp.showPoints ? 'circle' : 'none',
                 symbolSize: cp.pointSize,
-                symbolOffset:
-                  cp.lineMode === "double" && cp.showPoints ? [0, 2] : [0, 0],
+                symbolOffset: cp.lineMode === 'double' && cp.showPoints ? [0, 2] : [0, 0],
                 lineStyle: {
                   width: cp.lineWidth,
                   opacity: state.opacity,
-                  type: cp.lineType === "dashed" ? "dashed" : "solid",
-                  shadowBlur: cp.lineMode === "double" ? 0 : 0,
-                  shadowColor:
-                    cp.lineMode === "double" ? palette()[i] : "transparent",
-                  shadowOffsetY: cp.lineMode === "double" ? 4 : 0,
+                  type: cp.lineType === 'dashed' ? 'dashed' : 'solid',
+                  shadowBlur: cp.lineMode === 'double' ? 0 : 0,
+                  shadowColor: cp.lineMode === 'double' ? palette()[i] : 'transparent',
+                  shadowOffsetY: cp.lineMode === 'double' ? 4 : 0,
                 },
                 itemStyle: { opacity: state.opacity },
                 areaStyle: isArea ? { opacity: cp.fillOpacity } : undefined,
                 smooth: cp.smooth,
-                stack: cp.stacked ? "total" : undefined,
+                stack: cp.stacked ? 'total' : undefined,
                 data: v.data.map((x) => numeric(x)),
-              };
+              }
             }),
-          };
+          }
         }
         function renderECharts() {
           if (!window.echarts) {
-            return setStatus("ECharts 未加载，请检查网络", "err");
+            return setStatus('ECharts 未加载，请检查网络', 'err')
           }
-          const el = $("#chart-mount");
-          const ch = echarts.init(el, null, { renderer: "svg" });
-          state.chart = ch;
-          let opt = baseECharts();
+          const el = $('#chart-mount')
+          const ch = echarts.init(el, null, { renderer: 'svg' })
+          state.chart = ch
+          let opt = baseECharts()
           const names =
-            state.type === "pie"
-              ? currentLegendNames()
-              : rowsToSeries().series.map((s) => s.name);
-          const savedLegend = legendSelectionByType[state.type] || {};
+            state.type === 'pie' ? currentLegendNames() : rowsToSeries().series.map((s) => s.name)
+          const savedLegend = legendSelectionByType[state.type] || {}
           const selected = Object.fromEntries(
             names.map((name) => [
               name,
-              Object.prototype.hasOwnProperty.call(savedLegend, name)
-                ? !!savedLegend[name]
-                : true,
+              Object.prototype.hasOwnProperty.call(savedLegend, name) ? !!savedLegend[name] : true,
             ]),
-          );
-          opt.legend = {
-            ...opt.legend,
-            show: false,
-            selectedMode: true,
-            selected,
-          };
-          if (state.type === "bar") {
-            const p = chartProps.bar;
-            opt.xAxis.type = "category";
-            opt.xAxis.axisLabel.rotate = p.rotateLabels;
+          )
+          opt.legend = { ...opt.legend, show: false, selectedMode: true, selected }
+          if (state.type === 'bar') {
+            const p = chartProps.bar
+            opt.xAxis.type = 'category'
+            opt.xAxis.axisLabel.rotate = p.rotateLabels
             opt.series = opt.series.map((x) => ({
               ...x,
-              type: "bar",
+              type: 'bar',
               barMaxWidth: p.barWidth,
-              barCategoryGap: p.gap + "%",
+              barCategoryGap: p.gap + '%',
               itemStyle: { opacity: state.opacity },
-              label: {
-                show: p.showValues,
-                fontSize: 9,
-                color: "#151515",
-                position: "top",
-              },
-            }));
-            opt.legend.show = false;
-            opt.yAxis.splitLine.show = p.showGrid;
-            opt.series.forEach(
-              (x) => (x.stack = p.stacked ? "total" : undefined),
-            );
+              label: { show: p.showValues, fontSize: 9, color: '#151515', position: 'top' },
+            }))
+            opt.legend.show = false
+            opt.yAxis.splitLine.show = p.showGrid
+            opt.series.forEach((x) => (x.stack = p.stacked ? 'total' : undefined))
           }
-          if (state.type === "scatter") {
-            const p = chartProps.scatter;
-            const s = rowsToSeries();
+          if (state.type === 'scatter') {
+            const p = chartProps.scatter
+            const s = rowsToSeries()
             opt = {
               ...opt,
               xAxis: {
                 ...opt.xAxis,
-                type: "category",
+                type: 'category',
                 data: s.labels,
                 axisLabel: {
                   ...(opt.xAxis?.axisLabel || {}),
@@ -10668,74 +9602,63 @@
               },
               series: s.series.map((ss, i) => ({
                 name: ss.name,
-                type: "scatter",
+                type: 'scatter',
                 symbolSize: p.pointSize,
                 itemStyle: { color: palette()[i], opacity: p.opacity },
                 data: ss.data
                   .map((v, j) => ({ value: [s.labels[j], v] }))
                   .filter((pt) => numeric(pt.value[1]) !== null),
               })),
-            };
-            opt.legend.show = false;
-            opt.yAxis.splitLine.show = p.showGrid;
+            }
+            opt.legend.show = false
+            opt.yAxis.splitLine.show = p.showGrid
             if (p.showTrend && s.series.length) {
               s.series.forEach((ss, i) => {
-                const lineColor = palette()[i % palette().length];
+                const lineColor = palette()[i % palette().length]
                 opt.series.push({
                   name: `${ss.name} · 趋势`,
-                  type: "line",
+                  type: 'line',
                   data: ss.data
                     .map((y, j) => ({ value: [s.labels[j], y] }))
                     .filter((pt) => numeric(pt.value[1]) !== null),
-                  symbol: "none",
+                  symbol: 'none',
                   silent: true,
-                  lineStyle: {
-                    type: "dashed",
-                    color: lineColor,
-                    width: 1,
-                    opacity: 0.72,
-                  },
-                });
-              });
+                  lineStyle: { type: 'dashed', color: lineColor, width: 1, opacity: 0.72 },
+                })
+              })
             }
           }
-          if (state.type === "pie") {
+          if (state.type === 'pie') {
             const p = chartProps.pie,
-              slices = getPieSlices();
+              slices = getPieSlices()
             opt = {
               animation: true,
               tooltip: {
-                trigger: "item",
-                backgroundColor: "#fff",
-                borderColor: "#151515",
-                textStyle: {
-                  fontFamily: getChartFontFamily("tooltip"),
-                  fontSize: 10,
-                },
-                formatter: (params) =>
-                  `${params.name}<br/>${params.value} · ${params.percent}%`,
+                trigger: 'item',
+                backgroundColor: '#fff',
+                borderColor: '#151515',
+                textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 10 },
+                formatter: (params) => `${params.name}<br/>${params.value} · ${params.percent}%`,
               },
               title: echartsTitle(),
               legend: { show: false },
               series: [
                 {
-                  type: "pie",
+                  type: 'pie',
                   radius: [
-                    Math.min(p.innerRadius, Math.max(0, p.outerRadius - 5)) +
-                      "%",
-                    Math.max(p.outerRadius, Math.min(95, p.innerRadius + 5)) +
-                      "%",
+                    Math.min(p.innerRadius, Math.max(0, p.outerRadius - 5)) + '%',
+                    Math.max(p.outerRadius, Math.min(95, p.innerRadius + 5)) + '%',
                   ],
-                  center: ["50%", "51%"],
-                  roseType: p.rose === "none" ? false : p.rose,
+                  center: ['50%', '51%'],
+                  roseType: p.rose === 'none' ? false : p.rose,
                   avoidLabelOverlap: true,
                   label: {
                     show: p.showLabels,
-                    fontFamily: getChartFontFamily("xAxis"),
+                    fontFamily: getChartFontFamily('xAxis'),
                     fontSize: 10,
-                    color: "#151515",
+                    color: '#151515',
                   },
-                  itemStyle: { borderColor: "#fff", borderWidth: 1 },
+                  itemStyle: { borderColor: '#fff', borderWidth: 1 },
                   data: slices.map((slice, i) => ({
                     name: slice.name,
                     value: slice.value,
@@ -10743,48 +9666,42 @@
                   })),
                 },
               ],
-            };
+            }
           }
-          if (state.type === "radar") {
-            const p = chartProps.radar;
-            const s = rowsToSeries();
+          if (state.type === 'radar') {
+            const p = chartProps.radar
+            const s = rowsToSeries()
             opt = {
               animation: true,
               title: echartsTitle(),
               legend: { show: false },
               radar: {
-                center: ["50%", "53%"],
-                radius: p.radius + "%",
+                center: ['50%', '53%'],
+                radius: p.radius + '%',
                 shape: p.shape,
                 indicator: s.labels.map((x, i) => ({
                   name: x,
-                  max:
-                    Math.max(...s.series.flatMap((a) => a.data.map(numeric))) ||
-                    100,
+                  max: Math.max(...s.series.flatMap((a) => a.data.map(numeric))) || 100,
                 })),
                 axisName: {
-                  color: "rgba(21,21,21,.65)",
-                  fontFamily: getChartFontFamily("xAxis"),
+                  color: 'rgba(21,21,21,.65)',
+                  fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: ["rgba(21,21,21,.1)"] },
+                  lineStyle: { color: ['rgba(21,21,21,.1)'] },
                 },
                 splitArea: {
                   show: p.showGrid !== false,
-                  areaStyle: {
-                    color: ["rgba(21,21,21,.01)", "rgba(21,21,21,.035)"],
-                  },
+                  areaStyle: { color: ['rgba(21,21,21,.01)', 'rgba(21,21,21,.035)'] },
                 },
               },
               series: [
                 {
-                  type: "radar",
-                  symbol: p.showPoints === false ? "none" : "circle",
-                  symbolSize: Number.isFinite(Number(p.pointSize))
-                    ? Number(p.pointSize)
-                    : 5,
+                  type: 'radar',
+                  symbol: p.showPoints === false ? 'none' : 'circle',
+                  symbolSize: Number.isFinite(Number(p.pointSize)) ? Number(p.pointSize) : 5,
                   data: s.series.map((a, i) => ({
                     name: a.name,
                     value: a.data,
@@ -10794,138 +9711,128 @@
                   })),
                 },
               ],
-            };
+            }
           }
-          if (state.type === "heatmap") {
-            const p = chartProps.heatmap;
-            const s = rowsToSeries();
-            const nums = s.series.flatMap((a) =>
-              a.data.map(numeric).filter((v) => v != null),
-            );
+          if (state.type === 'heatmap') {
+            const p = chartProps.heatmap
+            const s = rowsToSeries()
+            const nums = s.series.flatMap((a) => a.data.map(numeric).filter((v) => v != null))
             opt = {
               animation: true,
               title: echartsTitle(),
               tooltip: {
-                position: "top",
-                backgroundColor: "#fff",
-                borderColor: "#151515",
-                textStyle: {
-                  fontFamily: getChartFontFamily("tooltip"),
-                  fontSize: 9,
-                },
+                position: 'top',
+                backgroundColor: '#fff',
+                borderColor: '#151515',
+                textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
               },
               grid: { left: 70, right: 28, top: 65, bottom: 55 },
               xAxis: {
-                type: "category",
+                type: 'category',
                 data: s.labels,
-                axisLine: { lineStyle: { color: "rgba(21,21,21,.25)" } },
+                axisLine: { lineStyle: { color: 'rgba(21,21,21,.25)' } },
                 axisTick: { show: false },
                 axisLabel: {
-                  fontFamily: getChartFontFamily("xAxis"),
+                  fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
-                  color: "rgba(21,21,21,.58)",
+                  color: 'rgba(21,21,21,.58)',
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: "rgba(21,21,21,.06)" },
+                  lineStyle: { color: 'rgba(21,21,21,.06)' },
                 },
               },
               yAxis: {
-                type: "category",
+                type: 'category',
                 data: s.series.map((a) => a.name),
                 axisLine: { show: false },
                 axisTick: { show: false },
                 axisLabel: {
-                  fontFamily: getChartFontFamily("yAxis"),
+                  fontFamily: getChartFontFamily('yAxis'),
                   fontSize: 9,
-                  color: "rgba(21,21,21,.58)",
+                  color: 'rgba(21,21,21,.58)',
                 },
                 splitLine: {
                   show: p.showGrid !== false,
-                  lineStyle: { color: "rgba(21,21,21,.06)" },
+                  lineStyle: { color: 'rgba(21,21,21,.06)' },
                 },
               },
               visualMap: {
-                min: p.min === "" ? Math.min(...nums) : Number(p.min),
-                max: p.max === "" ? Math.max(...nums) : Number(p.max),
+                min: p.min === '' ? Math.min(...nums) : Number(p.min),
+                max: p.max === '' ? Math.max(...nums) : Number(p.max),
                 calculable: false,
-                orient: "horizontal",
-                left: "center",
+                orient: 'horizontal',
+                left: 'center',
                 bottom: 8,
                 inRange: { color: heatmapColors() },
-                textStyle: {
-                  fontFamily: getChartFontFamily("xAxis"),
-                  fontSize: 8,
-                },
+                textStyle: { fontFamily: getChartFontFamily('xAxis'), fontSize: 8 },
               },
               series: [
                 {
-                  type: "heatmap",
-                  data: s.series.flatMap((a, yi) =>
-                    a.data.map((v, xi) => [xi, yi, numeric(v)]),
-                  ),
+                  type: 'heatmap',
+                  data: s.series.flatMap((a, yi) => a.data.map((v, xi) => [xi, yi, numeric(v)])),
                   label: {
                     show: p.showValues,
-                    fontFamily: getChartFontFamily("xAxis"),
+                    fontFamily: getChartFontFamily('xAxis'),
                     fontSize: 9,
-                    color: "#151515",
+                    color: '#151515',
                   },
                   itemStyle: {
-                    borderColor: p.showGrid !== false ? "#fff" : "transparent",
+                    borderColor: p.showGrid !== false ? '#fff' : 'transparent',
                     borderWidth: p.showGrid !== false ? p.cellGap : 0,
                   },
                 },
               ],
-            };
+            }
           }
-          if (state.type === "network") {
-            opt = networkOption();
+          if (state.type === 'network') {
+            opt = networkOption()
           }
-          if (state.type === "sankey") {
-            opt = sankeyOption();
+          if (state.type === 'sankey') {
+            opt = sankeyOption()
           }
-          if (state.type === "parallel") {
-            opt = parallelOption();
+          if (state.type === 'parallel') {
+            opt = parallelOption()
           }
-          if (state.type === "boxplot") {
-            opt = boxOption();
+          if (state.type === 'boxplot') {
+            opt = boxOption()
           }
-          if (state.type === "contour") {
-            opt = contourOption();
+          if (state.type === 'contour') {
+            opt = contourOption()
           }
           if (
-            state.type === "line" ||
-            state.type === "bar" ||
-            state.type === "area" ||
-            state.type === "scatter"
+            state.type === 'line' ||
+            state.type === 'bar' ||
+            state.type === 'area' ||
+            state.type === 'scatter'
           ) {
             const applyAxisTitle = (axis, isX) => {
-              if (!axis || typeof axis !== "object") return axis;
+              if (!axis || typeof axis !== 'object') return axis
               return {
                 ...axis,
                 name: isX ? state.xTitle : state.yTitle,
-                nameLocation: "middle",
+                nameLocation: 'middle',
                 nameGap: isX ? 30 : 48,
                 nameRotate: isX ? 0 : 90,
                 nameTextStyle: {
                   ...(axis.nameTextStyle || {}),
-                  fontFamily: getChartFontFamily(isX ? "xAxis" : "yAxis"),
+                  fontFamily: getChartFontFamily(isX ? 'xAxis' : 'yAxis'),
                   fontSize: state.axisSize,
                   fontWeight: 400,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                 },
-              };
-            };
+              }
+            }
             opt.xAxis = Array.isArray(opt.xAxis)
               ? opt.xAxis.map((a) => applyAxisTitle(a, true))
-              : applyAxisTitle(opt.xAxis, true);
+              : applyAxisTitle(opt.xAxis, true)
             opt.yAxis = Array.isArray(opt.yAxis)
               ? opt.yAxis.map((a) => applyAxisTitle(a, false))
-              : applyAxisTitle(opt.yAxis, false);
+              : applyAxisTitle(opt.yAxis, false)
           }
           if (opt.grid) {
             const normalizeGrid = (g) => {
-              const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+              const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
               return {
                 ...g,
                 left: Math.max(82, n(g.left)),
@@ -10933,91 +9840,85 @@
                 top: Math.max(54, n(g.top)),
                 bottom: Math.max(64, n(g.bottom)),
                 containLabel: true,
-              };
-            };
+              }
+            }
             opt.grid = Array.isArray(opt.grid)
               ? opt.grid.map(normalizeGrid)
-              : normalizeGrid(opt.grid);
+              : normalizeGrid(opt.grid)
           }
-          if (opt.title) opt.title = { ...opt.title, show: false };
-          if (opt.legend) opt.legend = { ...opt.legend, show: false };
-          ch.setOption(opt, true);
-          if (state.type === "pie") {
-            const pieSaved = legendSelectionByType.pie || {};
+          if (opt.title) opt.title = { ...opt.title, show: false }
+          if (opt.legend) opt.legend = { ...opt.legend, show: false }
+          ch.setOption(opt, true)
+          if (state.type === 'pie') {
+            const pieSaved = legendSelectionByType.pie || {}
             Object.entries(pieSaved).forEach(([name, visible]) => {
               if (visible === false) {
                 try {
-                  ch.dispatchAction({ type: "legendUnSelect", name });
+                  ch.dispatchAction({ type: 'legendUnSelect', name })
                 } catch (_) {}
               }
-            });
+            })
           }
-          ch.on("legendselectchanged", (params) => {
+          ch.on('legendselectchanged', (params) => {
             try {
-              legendSelectionByType[state.type] = { ...params.selected };
-              refreshOverlayLegendState();
-              schedulePersist();
+              legendSelectionByType[state.type] = { ...params.selected }
+              refreshOverlayLegendState()
+              schedulePersist()
             } catch (e) {
-              reportError("图例状态保存失败", e, true);
+              reportError('图例状态保存失败', e, true)
             }
-          });
-          window.addEventListener("resize", resizeHandler, { once: true });
+          })
+          window.addEventListener('resize', resizeHandler, { once: true })
         }
         function mixHex(a, b, t) {
           const parse = (hex) => {
-            const raw = String(hex || "").replace("#", "");
-            if (!/^[0-9a-f]{6}$/i.test(raw)) return null;
-            return [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16));
-          };
+            const raw = String(hex || '').replace('#', '')
+            if (!/^[0-9a-f]{6}$/i.test(raw)) return null
+            return [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
+          }
           const ca = parse(a),
-            cb = parse(b);
-          if (!ca || !cb) return b || a || "#777777";
-          const ratio = Math.max(0, Math.min(1, Number(t) || 0));
-          const rgb = ca.map((v, i) => Math.round(v + (cb[i] - v) * ratio));
-          return "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+            cb = parse(b)
+          if (!ca || !cb) return b || a || '#777777'
+          const ratio = Math.max(0, Math.min(1, Number(t) || 0))
+          const rgb = ca.map((v, i) => Math.round(v + (cb[i] - v) * ratio))
+          return '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('')
         }
         function heatmapColors() {
           // 热图与等值矩阵只受当前图表“配色”控制，不再存在独立色阶选择。
-          const colors = palette();
-          if (!colors.length)
-            return ["#f7f7f7", "#dddddd", "#aaaaaa", "#777777", "#444444"];
-          const dominant = colors[0];
-          const stops = 7;
+          const colors = palette()
+          if (!colors.length) return ['#f7f7f7', '#dddddd', '#aaaaaa', '#777777', '#444444']
+          const dominant = colors[0]
+          const stops = 7
           return Array.from({ length: stops }, (_, i) => {
-            const t = 0.06 + (0.94 * i) / (stops - 1);
-            return mixHex("#ffffff", dominant, t);
-          });
+            const t = 0.06 + (0.94 * i) / (stops - 1)
+            return mixHex('#ffffff', dominant, t)
+          })
         }
 
         function networkOption() {
           const p = chartProps.network,
             rows = getFlowRows(),
-            nodeMap = new Map();
+            nodeMap = new Map()
           rows.forEach(({ source, target, value }) => {
-            if (!nodeMap.has(source))
-              nodeMap.set(source, { name: source, value: 0 });
-            if (!nodeMap.has(target))
-              nodeMap.set(target, { name: target, value: 0 });
-            nodeMap.get(source).value += value;
-            nodeMap.get(target).value += value;
-          });
+            if (!nodeMap.has(source)) nodeMap.set(source, { name: source, value: 0 })
+            if (!nodeMap.has(target)) nodeMap.set(target, { name: target, value: 0 })
+            nodeMap.get(source).value += value
+            nodeMap.get(target).value += value
+          })
           const nodes = Array.from(nodeMap.values()),
-            maxValue = Math.max(...nodes.map((n) => n.value), 1);
+            maxValue = Math.max(...nodes.map((n) => n.value), 1)
           return {
             animation: true,
             title: echartsTitle(),
             tooltip: {
-              backgroundColor: "#fff",
-              borderColor: "#151515",
-              textStyle: {
-                fontFamily: getChartFontFamily("tooltip"),
-                fontSize: 9,
-              },
+              backgroundColor: '#fff',
+              borderColor: '#151515',
+              textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
             },
             series: [
               {
-                type: "graph",
-                layout: "force",
+                type: 'graph',
+                layout: 'force',
                 roam: true,
                 draggable: true,
                 data: nodes.map((n, i) => ({
@@ -11027,55 +9928,46 @@
                   itemStyle: { color: palette()[i % palette().length] },
                   label: {
                     show: p.showLabels,
-                    fontFamily: getChartFontFamily("xAxis"),
+                    fontFamily: getChartFontFamily('xAxis'),
                     fontSize: 9,
                   },
                 })),
-                links: rows.map((r) => ({
-                  source: r.source,
-                  target: r.target,
-                  value: r.value,
-                })),
+                links: rows.map((r) => ({ source: r.source, target: r.target, value: r.value })),
                 force: { repulsion: p.repulsion, edgeLength: p.edgeLength },
-                lineStyle: { color: "rgba(21,21,21,.2)", width: p.lineWidth },
+                lineStyle: { color: 'rgba(21,21,21,.2)', width: p.lineWidth },
                 label: {
                   show: p.showLabels,
-                  color: "rgba(21,21,21,.72)",
-                  fontFamily: getChartFontFamily("xAxis"),
+                  color: 'rgba(21,21,21,.72)',
+                  fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
                 },
-                emphasis: { focus: "adjacency" },
+                emphasis: { focus: 'adjacency' },
               },
             ],
-          };
+          }
         }
         function sankeyOption() {
           const p = chartProps.sankey,
             rows = getFlowRows(),
-            names = new Set();
+            names = new Set()
           rows.forEach(({ source, target }) => {
-            names.add(source);
-            names.add(target);
-          });
-          const nodeNames = Array.from(names);
-          const colors = palette();
-          const colorByNode = new Map(
-            nodeNames.map((name, i) => [name, colors[i % colors.length]]),
-          );
+            names.add(source)
+            names.add(target)
+          })
+          const nodeNames = Array.from(names)
+          const colors = palette()
+          const colorByNode = new Map(nodeNames.map((name, i) => [name, colors[i % colors.length]]))
           return {
             animation: true,
             title: echartsTitle(),
             tooltip: {
-              backgroundColor: "#fff",
-              borderColor: "#151515",
-              textStyle: {
-                fontFamily: getChartFontFamily("tooltip"),
-                fontSize: 9,
-              },
+              backgroundColor: '#fff',
+              borderColor: '#151515',
+              textStyle: { fontFamily: getChartFontFamily('tooltip'), fontSize: 9 },
             },
             series: [
               {
-                type: "sankey",
+                type: 'sankey',
                 data: nodeNames.map((name) => ({
                   name,
                   itemStyle: { color: colorByNode.get(name) },
@@ -11084,29 +9976,26 @@
                   source: r.source,
                   target: r.target,
                   value: r.value,
-                  lineStyle: {
-                    color: colorByNode.get(r.source),
-                    opacity: p.edgeOpacity,
-                  },
+                  lineStyle: { color: colorByNode.get(r.source), opacity: p.edgeOpacity },
                 })),
                 nodeWidth: p.nodeWidth,
                 nodeGap: p.nodeGap,
-                emphasis: { focus: "adjacency" },
+                emphasis: { focus: 'adjacency' },
                 lineStyle: { opacity: p.edgeOpacity },
                 label: {
                   show: p.showLabels,
-                  fontFamily: getChartFontFamily("xAxis"),
+                  fontFamily: getChartFontFamily('xAxis'),
                   fontSize: 9,
-                  color: "#151515",
+                  color: '#151515',
                 },
               },
             ],
-          };
+          }
         }
         function parallelOption() {
-          const p = chartProps.parallel;
-          const s = rowsToSeries();
-          const colors = palette();
+          const p = chartProps.parallel
+          const s = rowsToSeries()
+          const colors = palette()
           return {
             animation: true,
             title: echartsTitle(),
@@ -11114,22 +10003,22 @@
             parallelAxis: s.series.map((a, i) => ({
               dim: i,
               name: a.name,
-              type: "value",
-              nameLocation: "end",
+              type: 'value',
+              nameLocation: 'end',
               axisLine: { show: p.showGrid !== false },
               axisLabel: {
-                fontFamily: getChartFontFamily("yAxis"),
+                fontFamily: getChartFontFamily('yAxis'),
                 fontSize: p.axisFont,
-                color: "rgba(21,21,21,.5)",
+                color: 'rgba(21,21,21,.5)',
               },
               nameTextStyle: {
-                fontFamily: getChartFontFamily("xAxis"),
+                fontFamily: getChartFontFamily('xAxis'),
                 fontSize: p.axisFont,
-                color: "rgba(21,21,21,.5)",
+                color: 'rgba(21,21,21,.5)',
               },
             })),
             series: s.labels.map((_, ri) => ({
-              type: "parallel",
+              type: 'parallel',
               data: [s.series.map((a) => numeric(a.data[ri]) || 0)],
               lineStyle: {
                 width: p.lineWidth,
@@ -11137,63 +10026,49 @@
                 color: colors[ri % colors.length],
               },
             })),
-          };
+          }
         }
         function boxOption() {
-          const p = chartProps.boxplot;
-          const s = rowsToSeries();
+          const p = chartProps.boxplot
+          const s = rowsToSeries()
           const data = s.series.map((a) =>
             a.data
               .map(numeric)
               .filter((v) => v != null)
               .sort((a, b) => a - b),
-          );
+          )
           function q(arr, pct) {
             const idx = (arr.length - 1) * pct,
               lo = Math.floor(idx),
-              hi = Math.ceil(idx);
-            return arr[lo] + (arr[hi] - arr[lo]) * (idx - lo);
+              hi = Math.ceil(idx)
+            return arr[lo] + (arr[hi] - arr[lo]) * (idx - lo)
           }
-          const boxes = data.map((a) => [
-            a[0],
-            q(a, 0.25),
-            q(a, 0.5),
-            q(a, 0.75),
-            a[a.length - 1],
-          ]);
-          const means = data.map(
-            (a) => a.reduce((x, y) => x + y, 0) / (a.length || 1),
-          );
-          const colors = palette();
+          const boxes = data.map((a) => [a[0], q(a, 0.25), q(a, 0.5), q(a, 0.75), a[a.length - 1]])
+          const means = data.map((a) => a.reduce((x, y) => x + y, 0) / (a.length || 1))
+          const colors = palette()
           return {
             animation: true,
             title: echartsTitle(),
             grid: { left: 55, right: 25, top: 66, bottom: 52 },
             xAxis: {
-              type: "category",
+              type: 'category',
               data: s.series.map((a) => a.name),
-              axisLine: { lineStyle: { color: "rgba(21,21,21,.3)" } },
+              axisLine: { lineStyle: { color: 'rgba(21,21,21,.3)' } },
               axisTick: { show: false },
               axisLabel: {
-                fontFamily: getChartFontFamily("xAxis"),
+                fontFamily: getChartFontFamily('xAxis'),
                 fontSize: 9,
-                color: "rgba(21,21,21,.58)",
+                color: 'rgba(21,21,21,.58)',
               },
             },
             yAxis: {
-              type: "value",
-              splitLine: {
-                show: p.showGrid,
-                lineStyle: { color: "rgba(21,21,21,.08)" },
-              },
-              axisLabel: {
-                fontFamily: getChartFontFamily("yAxis"),
-                fontSize: 9,
-              },
+              type: 'value',
+              splitLine: { show: p.showGrid, lineStyle: { color: 'rgba(21,21,21,.08)' } },
+              axisLabel: { fontFamily: getChartFontFamily('yAxis'), fontSize: 9 },
             },
             series: [
               {
-                type: "boxplot",
+                type: 'boxplot',
                 data: boxes.map((values, i) => ({
                   value: values,
                   itemStyle: {
@@ -11207,309 +10082,254 @@
               ...(p.showMean
                 ? [
                     {
-                      type: "scatter",
+                      type: 'scatter',
                       data: means.map((v, i) => [i, v]),
                       symbolSize: 5,
-                      itemStyle: {
-                        color: (params) =>
-                          colors[params.dataIndex % colors.length],
-                      },
+                      itemStyle: { color: (params) => colors[params.dataIndex % colors.length] },
                     },
                   ]
                 : []),
             ],
-          };
+          }
         }
         function contrastGray(hex, factor) {
-          const raw = String(hex || "#808080").replace("#", "");
-          if (!/^[0-9a-f]{6}$/i.test(raw)) return hex;
-          const f = Math.max(0.5, Math.min(2, Number(factor) || 1));
-          const rgb = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16));
-          const next = rgb.map((v) =>
-            Math.max(0, Math.min(255, Math.round(128 + (v - 128) * f))),
-          );
-          return (
-            "#" + next.map((v) => v.toString(16).padStart(2, "0")).join("")
-          );
+          const raw = String(hex || '#808080').replace('#', '')
+          if (!/^[0-9a-f]{6}$/i.test(raw)) return hex
+          const f = Math.max(0.5, Math.min(2, Number(factor) || 1))
+          const rgb = [0, 2, 4].map((i) => parseInt(raw.slice(i, i + 2), 16))
+          const next = rgb.map((v) => Math.max(0, Math.min(255, Math.round(128 + (v - 128) * f))))
+          return '#' + next.map((v) => v.toString(16).padStart(2, '0')).join('')
         }
         function contourOption() {
           const p = chartProps.contour,
             s = rowsToSeries(),
             series = s.series,
             vals = [],
-            xs = s.labels;
+            xs = s.labels
           series.forEach((a, yi) => {
             a.data.forEach((v, xi) => {
-              const n = numeric(v);
-              if (n !== null) vals.push([xi, yi, n]);
-            });
-          });
-          const nums = vals.map((v) => v[2]);
-          const minV = nums.length ? Math.min(...nums) : 0;
-          const maxV = nums.length ? Math.max(...nums) : 1;
+              const n = numeric(v)
+              if (n !== null) vals.push([xi, yi, n])
+            })
+          })
+          const nums = vals.map((v) => v[2])
+          const minV = nums.length ? Math.min(...nums) : 0
+          const maxV = nums.length ? Math.max(...nums) : 1
           return {
             animation: true,
             title: echartsTitle(),
             grid: { left: 80, right: 25, top: 64, bottom: 64 },
             xAxis: {
-              type: "category",
+              type: 'category',
               data: xs,
               axisTick: { show: false },
               axisLabel: {
-                fontFamily: getChartFontFamily("xAxis"),
+                fontFamily: getChartFontFamily('xAxis'),
                 fontSize: 8,
                 interval: Math.max(0, Math.ceil(xs.length / p.resolution) - 1),
               },
-              splitLine: {
-                show: p.showGrid !== false,
-                lineStyle: { color: "rgba(21,21,21,.06)" },
-              },
+              splitLine: { show: p.showGrid !== false, lineStyle: { color: 'rgba(21,21,21,.06)' } },
             },
             yAxis: {
-              type: "category",
+              type: 'category',
               data: series.map((a) => a.name),
               axisTick: { show: false },
-              axisLabel: {
-                fontFamily: getChartFontFamily("yAxis"),
-                fontSize: 8,
-              },
-              splitLine: {
-                show: p.showGrid !== false,
-                lineStyle: { color: "rgba(21,21,21,.06)" },
-              },
+              axisLabel: { fontFamily: getChartFontFamily('yAxis'), fontSize: 8 },
+              splitLine: { show: p.showGrid !== false, lineStyle: { color: 'rgba(21,21,21,.06)' } },
             },
             visualMap: {
               min: minV,
               max: maxV === minV ? minV + 1 : maxV,
               calculable: false,
-              inRange: {
-                color: heatmapColors().map((c) => contrastGray(c, p.contrast)),
-              },
+              inRange: { color: heatmapColors().map((c) => contrastGray(c, p.contrast)) },
               bottom: 14,
-              left: "center",
-              orient: "horizontal",
+              left: 'center',
+              orient: 'horizontal',
             },
             series: [
               {
-                type: "heatmap",
+                type: 'heatmap',
                 data: vals,
-                label: {
-                  show: p.showLabels,
-                  fontFamily: getChartFontFamily("xAxis"),
-                  fontSize: 7,
-                },
+                label: { show: p.showLabels, fontFamily: getChartFontFamily('xAxis'), fontSize: 7 },
                 itemStyle: {
-                  borderColor: p.showGrid !== false ? "#ffffff" : "transparent",
+                  borderColor: p.showGrid !== false ? '#ffffff' : 'transparent',
                   borderWidth: p.showGrid !== false ? 1 : 0,
                 },
-                emphasis: {
-                  itemStyle: { shadowBlur: 3, shadowColor: "rgba(0,0,0,.08)" },
-                },
+                emphasis: { itemStyle: { shadowBlur: 3, shadowColor: 'rgba(0,0,0,.08)' } },
               },
             ],
-          };
+          }
         }
         function rgbaColor(color, alpha = 1) {
-          const value = String(color || "").trim();
-          const a = Math.max(0, Math.min(1, Number(alpha)));
+          const value = String(color || '').trim()
+          const a = Math.max(0, Math.min(1, Number(alpha)))
           if (/^#[0-9a-f]{3}$/i.test(value)) {
-            const hex = value.slice(1);
-            return `rgba(${parseInt(hex[0] + hex[0], 16)},${parseInt(hex[1] + hex[1], 16)},${parseInt(hex[2] + hex[2], 16)},${a})`;
+            const hex = value.slice(1)
+            return `rgba(${parseInt(hex[0] + hex[0], 16)},${parseInt(hex[1] + hex[1], 16)},${parseInt(hex[2] + hex[2], 16)},${a})`
           }
           if (/^#[0-9a-f]{6}$/i.test(value)) {
-            const hex = value.slice(1);
-            return `rgba(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)},${a})`;
+            const hex = value.slice(1)
+            return `rgba(${parseInt(hex.slice(0, 2), 16)},${parseInt(hex.slice(2, 4), 16)},${parseInt(hex.slice(4, 6), 16)},${a})`
           }
-          return value;
+          return value
         }
         const zenvizChartJsValueLabels = {
-          id: "zenvizValueLabels",
+          id: 'zenvizValueLabels',
           afterDatasetsDraw(chart) {
-            const cfg = chart.options?.plugins?.zenvizValueLabels;
-            if (!cfg?.enabled) return;
-            const ctx = chart.ctx;
-            ctx.save();
-            ctx.font = `9px ${getChartFontFamily("xAxis")}`;
-            ctx.fillStyle = "rgba(21,21,21,.72)";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "bottom";
-            if (chart.config.type === "bar") {
+            const cfg = chart.options?.plugins?.zenvizValueLabels
+            if (!cfg?.enabled) return
+            const ctx = chart.ctx
+            ctx.save()
+            ctx.font = `9px ${getChartFontFamily('xAxis')}`
+            ctx.fillStyle = 'rgba(21,21,21,.72)'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'bottom'
+            if (chart.config.type === 'bar') {
               chart.data.datasets.forEach((dataset, datasetIndex) => {
-                const meta = chart.getDatasetMeta(datasetIndex);
+                const meta = chart.getDatasetMeta(datasetIndex)
                 meta.data.forEach((bar, index) => {
-                  const raw = dataset.data?.[index];
-                  const value = Number(raw);
-                  if (!Number.isFinite(value)) return;
-                  const { x, y } = bar.getProps(["x", "y"], true);
-                  ctx.fillText(String(value), x, y - 5);
-                });
-              });
-            } else if (chart.config.type === "doughnut") {
-              const meta = chart.getDatasetMeta(0);
-              const labels = chart.data.labels || [];
+                  const raw = dataset.data?.[index]
+                  const value = Number(raw)
+                  if (!Number.isFinite(value)) return
+                  const { x, y } = bar.getProps(['x', 'y'], true)
+                  ctx.fillText(String(value), x, y - 5)
+                })
+              })
+            } else if (chart.config.type === 'doughnut') {
+              const meta = chart.getDatasetMeta(0)
+              const labels = chart.data.labels || []
               meta.data.forEach((arc, index) => {
-                const pos = arc.tooltipPosition(true);
-                const label = String(labels[index] ?? "");
-                if (label) ctx.fillText(label, pos.x, pos.y - 2);
-              });
+                const pos = arc.tooltipPosition(true)
+                const label = String(labels[index] ?? '')
+                if (label) ctx.fillText(label, pos.x, pos.y - 2)
+              })
             }
-            ctx.restore();
+            ctx.restore()
           },
-        };
+        }
         const zenvizChartJsPieShape = {
-          id: "zenvizPieShape",
+          id: 'zenvizPieShape',
           beforeDatasetsDraw(chart) {
-            const mode = chart.options?.plugins?.zenvizPieShape?.rose;
-            if (!mode || mode === "none" || chart.config.type !== "doughnut")
-              return;
-            const meta = chart.getDatasetMeta(0);
-            const values = (chart.data.datasets?.[0]?.data || []).map(Number);
-            const maxValue = Math.max(
-              ...values.filter((v) => Number.isFinite(v)),
-              1,
-            );
-            const baseOuter = Math.max(
-              ...meta.data.map((arc) => Number(arc.outerRadius) || 0),
-              0,
-            );
-            if (!baseOuter) return;
+            const mode = chart.options?.plugins?.zenvizPieShape?.rose
+            if (!mode || mode === 'none' || chart.config.type !== 'doughnut') return
+            const meta = chart.getDatasetMeta(0)
+            const values = (chart.data.datasets?.[0]?.data || []).map(Number)
+            const maxValue = Math.max(...values.filter((v) => Number.isFinite(v)), 1)
+            const baseOuter = Math.max(...meta.data.map((arc) => Number(arc.outerRadius) || 0), 0)
+            if (!baseOuter) return
             meta.data.forEach((arc, index) => {
-              const value = Number(values[index]);
-              if (!Number.isFinite(value) || value < 0) return;
-              const ratio = Math.max(0.12, Math.min(1, value / maxValue));
-              const factor = mode === "area" ? Math.sqrt(ratio) : ratio;
-              const inner = Number(arc.innerRadius) || 0;
-              arc.outerRadius = inner + (baseOuter - inner) * factor;
-            });
+              const value = Number(values[index])
+              if (!Number.isFinite(value) || value < 0) return
+              const ratio = Math.max(0.12, Math.min(1, value / maxValue))
+              const factor = mode === 'area' ? Math.sqrt(ratio) : ratio
+              const inner = Number(arc.innerRadius) || 0
+              arc.outerRadius = inner + (baseOuter - inner) * factor
+            })
           },
-        };
+        }
         const zenvizChartJsDoubleLine = {
-          id: "zenvizChartJsDoubleLine",
+          id: 'zenvizChartJsDoubleLine',
           afterDatasetsDraw(chart) {
-            if (state.type !== "line") return;
-            const p = chartProps.line || {};
-            if (p.lineMode !== "double") return;
-            const ctx = chart.ctx;
+            if (state.type !== 'line') return
+            const p = chartProps.line || {}
+            if (p.lineMode !== 'double') return
+            const ctx = chart.ctx
             chart.data.datasets.forEach((dataset, i) => {
-              if (dataset._zenLineMode !== "double") return;
-              const meta = chart.getDatasetMeta(i);
-              if (
-                !meta ||
-                meta.hidden ||
-                !meta.dataset ||
-                typeof meta.dataset.draw !== "function"
-              )
-                return;
+              if (dataset._zenLineMode !== 'double') return
+              const meta = chart.getDatasetMeta(i)
+              if (!meta || meta.hidden || !meta.dataset || typeof meta.dataset.draw !== 'function')
+                return
               // 保持两条线的原有间距，数据点单独下移到两条线的正中间。
-              ctx.save();
-              ctx.translate(0, 4);
-              meta.dataset.draw(ctx);
-              ctx.restore();
-              if (
-                dataset._zenShowPoints &&
-                Number(dataset._zenPointRadius) > 0
-              ) {
-                ctx.save();
-                ctx.translate(0, 2);
+              ctx.save()
+              ctx.translate(0, 4)
+              meta.dataset.draw(ctx)
+              ctx.restore()
+              if (dataset._zenShowPoints && Number(dataset._zenPointRadius) > 0) {
+                ctx.save()
+                ctx.translate(0, 2)
                 meta.data.forEach((point) => {
-                  if (
-                    !point ||
-                    point.skip ||
-                    !point.options ||
-                    typeof point.draw !== "function"
-                  )
-                    return;
-                  const oldRadius = point.options.radius;
-                  const oldHoverRadius = point.options.hoverRadius;
-                  const oldHitRadius = point.options.hitRadius;
-                  point.options.radius = dataset._zenPointRadius;
-                  point.options.hoverRadius = dataset._zenPointRadius;
-                  point.options.hitRadius = 0;
-                  point.draw(ctx);
-                  point.options.radius = oldRadius;
-                  point.options.hoverRadius = oldHoverRadius;
-                  point.options.hitRadius = oldHitRadius;
-                });
-                ctx.restore();
+                  if (!point || point.skip || !point.options || typeof point.draw !== 'function')
+                    return
+                  const oldRadius = point.options.radius
+                  const oldHoverRadius = point.options.hoverRadius
+                  const oldHitRadius = point.options.hitRadius
+                  point.options.radius = dataset._zenPointRadius
+                  point.options.hoverRadius = dataset._zenPointRadius
+                  point.options.hitRadius = 0
+                  point.draw(ctx)
+                  point.options.radius = oldRadius
+                  point.options.hoverRadius = oldHoverRadius
+                  point.options.hitRadius = oldHitRadius
+                })
+                ctx.restore()
               }
-            });
+            })
           },
-        };
+        }
         function getChartJsDevicePixelRatio() {
-          const nativeDpr = Math.max(1, Number(window.devicePixelRatio) || 1);
+          const nativeDpr = Math.max(1, Number(window.devicePixelRatio) || 1)
           const contentScale = Math.max(
             0.6,
             Math.min(1.8, (Number(state.contentScale) || 100) / 100),
-          );
+          )
           // Chart.js 使用 Canvas。工作区还会对 chart-mount 做 CSS scale，
           // 因此仅跟随浏览器 DPR 在放大状态下仍可能产生明显的文字软化。
           // 按最终显示比例预留更高的内部像素密度，并设置上限避免超大画布带来过高内存占用。
-          return Math.min(4, Math.max(nativeDpr, 2, 2.25 * contentScale));
+          return Math.min(4, Math.max(nativeDpr, 2, 2.25 * contentScale))
         }
 
         // Chart.js 使用与其它引擎相同的工作区布局状态；引擎切换时这些状态由 selectEngine 保持。
         function renderChartJS() {
           if (!window.Chart) {
-            setStatus("Chart.js 未加载，请检查网络", "err");
-            return;
+            setStatus('Chart.js 未加载，请检查网络', 'err')
+            return
           }
-          const scale = Math.max(
-            0.6,
-            Math.min(1.8, (Number(state.contentScale) || 100) / 100),
-          );
-          const mount = $("#chart-mount");
-          const scaleHost = document.createElement("div");
-          scaleHost.className = "chartjs-scale-host";
-          scaleHost.style.position = "absolute";
-          scaleHost.style.left = "50%";
-          scaleHost.style.top = "50%";
-          scaleHost.style.width = `${scale * 100}%`;
-          scaleHost.style.height = `${scale * 100}%`;
-          scaleHost.style.transform = "translate(-50%, -50%)";
-          scaleHost.style.transformOrigin = "50% 50%";
-          scaleHost.style.overflow = "hidden";
-          const can = document.createElement("canvas");
-          can.style.display = "block";
-          can.style.width = "100%";
-          can.style.height = "100%";
-          scaleHost.appendChild(can);
-          mount.appendChild(scaleHost);
-          const ctx = can.getContext("2d"),
+          const scale = Math.max(0.6, Math.min(1.8, (Number(state.contentScale) || 100) / 100))
+          const mount = $('#chart-mount')
+          const scaleHost = document.createElement('div')
+          scaleHost.className = 'chartjs-scale-host'
+          scaleHost.style.position = 'absolute'
+          scaleHost.style.left = '50%'
+          scaleHost.style.top = '50%'
+          scaleHost.style.width = `${scale * 100}%`
+          scaleHost.style.height = `${scale * 100}%`
+          scaleHost.style.transform = 'translate(-50%, -50%)'
+          scaleHost.style.transformOrigin = '50% 50%'
+          scaleHost.style.overflow = 'hidden'
+          const can = document.createElement('canvas')
+          can.style.display = 'block'
+          can.style.width = '100%'
+          can.style.height = '100%'
+          scaleHost.appendChild(can)
+          mount.appendChild(scaleHost)
+          const ctx = can.getContext('2d'),
             s = rowsToSeries(),
             c = palette(),
             t = state.type,
-            p = chartProps[t] || {};
+            p = chartProps[t] || {}
           let type =
-            t === "area" || t === "line" || t === "scatter"
-              ? "line"
-              : t === "pie"
-                ? "doughnut"
-                : t;
+            t === 'area' || t === 'line' || t === 'scatter' ? 'line' : t === 'pie' ? 'doughnut' : t
           const datasets = s.series.map((a, i) => ({
             label: a.name,
             data: a.data,
             borderColor: c[i % c.length],
             backgroundColor:
-              type === "bar"
+              type === 'bar'
                 ? c[i % c.length]
-                : rgbaColor(
-                    c[i % c.length],
-                    t === "scatter" ? (p.opacity ?? 0.72) : 0.27,
-                  ),
+                : rgbaColor(c[i % c.length], t === 'scatter' ? (p.opacity ?? 0.72) : 0.27),
             borderWidth: p.lineWidth ?? state.lineWidth,
-            borderDash: t === "line" && p.lineType === "dashed" ? [7, 5] : [],
-            _zenLineMode: t === "line" ? p.lineMode || "single" : "single",
-            _zenShowPoints: t === "line" && p.showPoints !== false,
-            _zenPointRadius:
-              t === "line" ? (p.pointSize ?? state.pointSize) : null,
+            borderDash: t === 'line' && p.lineType === 'dashed' ? [7, 5] : [],
+            _zenLineMode: t === 'line' ? p.lineMode || 'single' : 'single',
+            _zenShowPoints: t === 'line' && p.showPoints !== false,
+            _zenPointRadius: t === 'line' ? (p.pointSize ?? state.pointSize) : null,
             pointRadius:
-              t === "line"
-                ? p.lineMode === "double"
+              t === 'line'
+                ? p.lineMode === 'double'
                   ? 0
                   : p.showPoints === false
                     ? 0
                     : (p.pointSize ?? state.pointSize)
-                : t === "area"
+                : t === 'area'
                   ? p.showPoints === false
                     ? 0
                     : (p.pointSize ?? state.pointSize)
@@ -11517,16 +10337,13 @@
             pointHoverRadius: (p.pointSize ?? state.pointSize) + 2,
             pointBackgroundColor: rgbaColor(
               c[i % c.length],
-              t === "scatter" ? (p.opacity ?? 0.72) : 1,
+              t === 'scatter' ? (p.opacity ?? 0.72) : 1,
             ),
-            pointBorderColor: rgbaColor(
-              c[i % c.length],
-              t === "scatter" ? (p.opacity ?? 0.72) : 1,
-            ),
-            fill: t === "area",
+            pointBorderColor: rgbaColor(c[i % c.length], t === 'scatter' ? (p.opacity ?? 0.72) : 1),
+            fill: t === 'area',
             tension: p.smooth ? 0.32 : 0,
-            showLine: type !== "scatter",
-          }));
+            showLine: type !== 'scatter',
+          }))
           const common = {
             responsive: true,
             maintainAspectRatio: false,
@@ -11534,43 +10351,41 @@
             devicePixelRatio: getChartJsDevicePixelRatio(),
             animation: { duration: 220 },
             font: {
-              family: getChartFontFamily("xAxis"),
+              family: getChartFontFamily('xAxis'),
               size: Number(state.axisSize) || 10,
-              weight: "400",
+              weight: '400',
             },
             plugins: {
               title: { display: false },
               legend: { display: false },
               tooltip: {
-                titleFont: { family: getChartFontFamily("tooltip") },
-                bodyFont: { family: getChartFontFamily("tooltip") },
-                footerFont: { family: getChartFontFamily("tooltip") },
+                titleFont: { family: getChartFontFamily('tooltip') },
+                bodyFont: { family: getChartFontFamily('tooltip') },
+                footerFont: { family: getChartFontFamily('tooltip') },
               },
               zenvizValueLabels: { enabled: false },
-              zenvizPieShape: { rose: "none" },
+              zenvizPieShape: { rose: 'none' },
             },
             elements: { line: { tension: p.smooth ? 0.3 : 0 } },
-          };
-          if (type === "doughnut") {
-            const slices = getPieSlices();
+          }
+          if (type === 'doughnut') {
+            const slices = getPieSlices()
             datasets[0] = {
-              label: "饼图",
+              label: '饼图',
               data: slices.map((slice) => slice.value),
               backgroundColor: slices.map((_, i) => c[i % c.length]),
-              borderColor: slices.map(() => "#ffffff"),
+              borderColor: slices.map(() => '#ffffff'),
               borderWidth: 1,
               hoverBackgroundColor: slices.map((_, i) => c[i % c.length]),
-            };
-            datasets.length = 1;
-            common.cutout = (p.innerRadius ?? 32) + "%";
-            common.radius = (p.outerRadius ?? 62) + "%";
-            common.plugins.legend.display = false;
-            common.plugins.zenvizValueLabels.enabled = !!p.showLabels;
-            common.plugins.zenvizPieShape.rose = p.rose || "none";
-          } else if (type === "radar") {
-            common.layout = {
-              padding: Math.max(0, Math.round((80 - (p.radius ?? 58)) * 1.15)),
-            };
+            }
+            datasets.length = 1
+            common.cutout = (p.innerRadius ?? 32) + '%'
+            common.radius = (p.outerRadius ?? 62) + '%'
+            common.plugins.legend.display = false
+            common.plugins.zenvizValueLabels.enabled = !!p.showLabels
+            common.plugins.zenvizPieShape.rose = p.rose || 'none'
+          } else if (type === 'radar') {
+            common.layout = { padding: Math.max(0, Math.round((80 - (p.radius ?? 58)) * 1.15)) }
             common.scales = {
               r: {
                 alignToPixels: true,
@@ -11578,45 +10393,41 @@
                 ticks: { display: false },
                 grid: {
                   display: p.showGrid !== false,
-                  color: "rgba(21,21,21,.1)",
-                  circular: p.shape === "circle",
+                  color: 'rgba(21,21,21,.1)',
+                  circular: p.shape === 'circle',
                 },
-                angleLines: { color: "rgba(21,21,21,.12)" },
+                angleLines: { color: 'rgba(21,21,21,.12)' },
                 pointLabels: {
-                  font: { family: getChartFontFamily("xAxis"), size: 9 },
-                  color: "rgba(21,21,21,.65)",
+                  font: { family: getChartFontFamily('xAxis'), size: 9 },
+                  color: 'rgba(21,21,21,.65)',
                 },
               },
-            };
+            }
             datasets.forEach((d, i) => {
-              d.borderWidth = p.lineWidth ?? 2;
-              d.backgroundColor = c[i % c.length] + "22";
-              d.pointRadius = p.showPoints === false ? 0 : (p.pointSize ?? 4);
-              d.pointHoverRadius =
-                p.showPoints === false ? 0 : (p.pointSize ?? 4) + 2;
-            });
-          } else if (type === "bar") {
-            common.plugins.zenvizValueLabels.enabled = !!p.showValues;
+              d.borderWidth = p.lineWidth ?? 2
+              d.backgroundColor = c[i % c.length] + '22'
+              d.pointRadius = p.showPoints === false ? 0 : (p.pointSize ?? 4)
+              d.pointHoverRadius = p.showPoints === false ? 0 : (p.pointSize ?? 4) + 2
+            })
+          } else if (type === 'bar') {
+            common.plugins.zenvizValueLabels.enabled = !!p.showValues
             common.scales = {
               x: {
                 alignToPixels: true,
                 title: {
                   display: !!state.xTitle,
                   text: state.xTitle,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                   font: {
-                    family: getChartFontFamily("xAxis"),
+                    family: getChartFontFamily('xAxis'),
                     size: state.axisSize,
-                    weight: "400",
+                    weight: '400',
                   },
                 },
-                grid: {
-                  display: p.showGrid ?? true,
-                  color: "rgba(21,21,21,.08)",
-                },
+                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: {
-                  color: "rgba(21,21,21,.55)",
-                  font: { family: getChartFontFamily("xAxis") },
+                  color: 'rgba(21,21,21,.55)',
+                  font: { family: getChartFontFamily('xAxis') },
                   maxRotation: p.rotateLabels ?? 0,
                   minRotation: p.rotateLabels ?? 0,
                 },
@@ -11629,45 +10440,39 @@
                 title: {
                   display: !!state.yTitle,
                   text: state.yTitle,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                   font: {
-                    family: getChartFontFamily("yAxis"),
+                    family: getChartFontFamily('yAxis'),
                     size: state.axisSize,
-                    weight: "400",
+                    weight: '400',
                   },
                 },
-                grid: {
-                  display: p.showGrid ?? true,
-                  color: "rgba(21,21,21,.08)",
-                },
+                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: {
-                  color: "rgba(21,21,21,.55)",
-                  font: { family: getChartFontFamily("yAxis") },
+                  color: 'rgba(21,21,21,.55)',
+                  font: { family: getChartFontFamily('yAxis') },
                 },
                 stacked: !!p.stacked,
               },
-            };
+            }
           } else {
             common.scales = {
               x: {
-                stacked: t === "area" ? !!p.stacked : false,
+                stacked: t === 'area' ? !!p.stacked : false,
                 title: {
                   display: !!state.xTitle,
                   text: state.xTitle,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                   font: {
-                    family: getChartFontFamily("xAxis"),
+                    family: getChartFontFamily('xAxis'),
                     size: state.axisSize,
-                    weight: "400",
+                    weight: '400',
                   },
                 },
-                grid: {
-                  display: p.showGrid ?? true,
-                  color: "rgba(21,21,21,.08)",
-                },
+                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: {
-                  color: "rgba(21,21,21,.55)",
-                  font: { family: getChartFontFamily("xAxis") },
+                  color: 'rgba(21,21,21,.55)',
+                  font: { family: getChartFontFamily('xAxis') },
                   maxRotation: p.rotateLabels ?? 0,
                   minRotation: p.rotateLabels ?? 0,
                 },
@@ -11677,69 +10482,60 @@
                 title: {
                   display: !!state.yTitle,
                   text: state.yTitle,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                   font: {
-                    family: getChartFontFamily("yAxis"),
+                    family: getChartFontFamily('yAxis'),
                     size: state.axisSize,
-                    weight: "400",
+                    weight: '400',
                   },
                 },
-                grid: {
-                  display: p.showGrid ?? true,
-                  color: "rgba(21,21,21,.08)",
-                },
+                grid: { display: p.showGrid ?? true, color: 'rgba(21,21,21,.08)' },
                 ticks: {
-                  color: "rgba(21,21,21,.55)",
-                  font: { family: getChartFontFamily("yAxis") },
+                  color: 'rgba(21,21,21,.55)',
+                  font: { family: getChartFontFamily('yAxis') },
                 },
-                stacked: t === "area" ? !!p.stacked : false,
-                min: t === "line" && p.yMin !== "" ? Number(p.yMin) : undefined,
-                max: t === "line" && p.yMax !== "" ? Number(p.yMax) : undefined,
+                stacked: t === 'area' ? !!p.stacked : false,
+                min: t === 'line' && p.yMin !== '' ? Number(p.yMin) : undefined,
+                max: t === 'line' && p.yMax !== '' ? Number(p.yMax) : undefined,
               },
-            };
+            }
           }
-          if (t === "scatter") {
-            common.scales.x.type = "category";
-            common.scales.x.labels = s.labels;
-            common.scales.x.offset = true;
+          if (t === 'scatter') {
+            common.scales.x.type = 'category'
+            common.scales.x.labels = s.labels
+            common.scales.x.offset = true
             common.scales.x.title = {
               display: !!state.xTitle,
               text: state.xTitle,
-              color: "rgba(21,21,21,.5)",
+              color: 'rgba(21,21,21,.5)',
               font: {
-                family: getChartFontFamily("xAxis"),
+                family: getChartFontFamily('xAxis'),
                 size: state.axisSize,
-                weight: "400",
+                weight: '400',
               },
-            };
+            }
             common.scales.x.ticks = {
-              color: "rgba(21,21,21,.55)",
-              font: { family: getChartFontFamily("xAxis") },
+              color: 'rgba(21,21,21,.55)',
+              font: { family: getChartFontFamily('xAxis') },
               maxRotation: state.rotateLabels ?? 0,
               minRotation: state.rotateLabels ?? 0,
-            };
+            }
             datasets.forEach((d, i) => {
-              d.backgroundColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72);
-              d.pointBackgroundColor = rgbaColor(
-                c[i % c.length],
-                p.opacity ?? 0.72,
-              );
-              d.pointBorderColor = rgbaColor(
-                c[i % c.length],
-                p.opacity ?? 0.72,
-              );
-              d.pointRadius = p.pointSize ?? 7;
-              d.borderWidth = 0;
-              d.showLine = false;
-            });
+              d.backgroundColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
+              d.pointBackgroundColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
+              d.pointBorderColor = rgbaColor(c[i % c.length], p.opacity ?? 0.72)
+              d.pointRadius = p.pointSize ?? 7
+              d.borderWidth = 0
+              d.showLine = false
+            })
             if (p.showTrend && s.series.length) {
               s.series.forEach((ss, i) => {
-                const lineColor = c[i % c.length];
+                const lineColor = c[i % c.length]
                 datasets.push({
                   label: `${ss.name} · 趋势`,
                   data: ss.data,
                   borderColor: lineColor,
-                  backgroundColor: "transparent",
+                  backgroundColor: 'transparent',
                   borderWidth: 1,
                   borderDash: [5, 4],
                   pointRadius: 0,
@@ -11748,262 +10544,216 @@
                   fill: false,
                   tension: 0,
                   spanGaps: true,
-                });
-              });
+                })
+              })
             }
           }
-          if (t === "area") {
+          if (t === 'area') {
             datasets.forEach((d, i) => {
-              d.backgroundColor = rgbaColor(
-                c[i % c.length],
-                p.fillOpacity ?? 0.18,
-              );
-              d.borderColor = c[i % c.length];
-            });
+              d.backgroundColor = rgbaColor(c[i % c.length], p.fillOpacity ?? 0.18)
+              d.borderColor = c[i % c.length]
+            })
           }
-          const saved = legendSelectionByType[state.type] || {};
+          const saved = legendSelectionByType[state.type] || {}
           datasets.forEach((d, i) => {
-            if (Object.prototype.hasOwnProperty.call(saved, d.label))
-              d.hidden = !saved[d.label];
-          });
+            if (Object.prototype.hasOwnProperty.call(saved, d.label)) d.hidden = !saved[d.label]
+          })
           state.chart = new Chart(ctx, {
             type,
             data: { labels: s.labels, datasets },
             options: common,
-            plugins: [
-              zenvizChartJsValueLabels,
-              zenvizChartJsPieShape,
-              zenvizChartJsDoubleLine,
-            ],
-          });
-          if (type === "doughnut") {
-            const pieSaved = legendSelectionByType.pie || {};
+            plugins: [zenvizChartJsValueLabels, zenvizChartJsPieShape, zenvizChartJsDoubleLine],
+          })
+          if (type === 'doughnut') {
+            const pieSaved = legendSelectionByType.pie || {}
             getPieSlices().forEach((slice, i) => {
               if (
                 pieSaved[slice.name] === false &&
-                typeof state.chart.toggleDataVisibility === "function"
+                typeof state.chart.toggleDataVisibility === 'function'
               )
-                state.chart.toggleDataVisibility(i);
-            });
-            state.chart.update("none");
+                state.chart.toggleDataVisibility(i)
+            })
+            state.chart.update('none')
           }
         }
         function renderApex() {
           if (!window.ApexCharts) {
-            setStatus("ApexCharts 未加载，请检查网络", "err");
-            return;
+            setStatus('ApexCharts 未加载，请检查网络', 'err')
+            return
           }
           const s = rowsToSeries(),
             c = palette(),
             t = state.type,
-            p = chartProps[t] || {};
+            p = chartProps[t] || {}
           const apexType =
-            t === "pie" && p.rose && p.rose !== "none"
-              ? "polarArea"
+            t === 'pie' && p.rose && p.rose !== 'none'
+              ? 'polarArea'
               : {
-                  line: "line",
-                  area: "area",
-                  bar: "bar",
-                  scatter: "line",
-                  pie: "donut",
-                  radar: "radar",
-                }[t] || "line";
-          const mount = $("#chart-mount");
+                  line: 'line',
+                  area: 'area',
+                  bar: 'bar',
+                  scatter: 'line',
+                  pie: 'donut',
+                  radar: 'radar',
+                }[t] || 'line'
+          const mount = $('#chart-mount')
           const chartW = Math.max(1, mount.clientWidth || 0),
-            chartH = Math.max(1, mount.clientHeight || 0);
-          if (!chartW || !chartH)
-            throw new Error("ApexCharts 图表容器尺寸无效");
+            chartH = Math.max(1, mount.clientHeight || 0)
+          if (!chartW || !chartH) throw new Error('ApexCharts 图表容器尺寸无效')
           const safeSeries = s.series.map((a) => ({
             name: a.name,
             data: a.data.map((v) => {
-              const n = numeric(v);
-              return n === null ? 0 : n;
+              const n = numeric(v)
+              return n === null ? 0 : n
             }),
-          }));
-          mount.style.setProperty(
-            "--apex-tooltip-font-family",
-            getChartFontFamily("tooltip"),
-          );
-          mount.style.setProperty(
-            "--apex-axis-x-font-family",
-            getChartFontFamily("xAxis"),
-          );
-          mount.style.setProperty(
-            "--apex-axis-y-font-family",
-            getChartFontFamily("yAxis"),
-          );
+          }))
+          mount.style.setProperty('--apex-tooltip-font-family', getChartFontFamily('tooltip'))
+          mount.style.setProperty('--apex-axis-x-font-family', getChartFontFamily('xAxis'))
+          mount.style.setProperty('--apex-axis-y-font-family', getChartFontFamily('yAxis'))
           const opt = {
             chart: {
               type: apexType,
               width: chartW,
               height: chartH,
-              stacked: t === "bar" || t === "area" ? !!p.stacked : false,
+              stacked: t === 'bar' || t === 'area' ? !!p.stacked : false,
               toolbar: { show: false },
-              fontFamily: getChartFontFamily("xAxis"),
+              fontFamily: getChartFontFamily('xAxis'),
               animations: { enabled: true, speed: 220 },
             },
             series: safeSeries,
             colors: c,
             stroke: {
-              curve: p.smooth ? "smooth" : "straight",
-              width: t === "scatter" ? 0 : (p.lineWidth ?? state.lineWidth),
-              dashArray: t === "line" && p.lineType === "dashed" ? 6 : 0,
+              curve: p.smooth ? 'smooth' : 'straight',
+              width: t === 'scatter' ? 0 : (p.lineWidth ?? state.lineWidth),
+              dashArray: t === 'line' && p.lineType === 'dashed' ? 6 : 0,
             },
             markers: {
               size:
-                t === "line" || t === "area"
+                t === 'line' || t === 'area'
                   ? p.showPoints === false
                     ? 0
                     : (p.pointSize ?? state.pointSize)
                   : (p.pointSize ?? state.pointSize),
-              offsetY:
-                t === "line" &&
-                p.lineMode === "double" &&
-                p.showPoints !== false
-                  ? 2
-                  : 0,
+              offsetY: t === 'line' && p.lineMode === 'double' && p.showPoints !== false ? 2 : 0,
             },
             fill: {
               opacity:
-                t === "area"
+                t === 'area'
                   ? (p.fillOpacity ?? 0.16)
-                  : t === "scatter"
+                  : t === 'scatter'
                     ? (p.opacity ?? 0.72)
                     : state.opacity,
             },
             grid: {
               show: p.showGrid ?? state.showGrid,
-              borderColor: "rgba(21,21,21,.08)",
+              borderColor: 'rgba(21,21,21,.08)',
               strokeDashArray: 0,
             },
             legend: { show: false },
-            title: { text: "" },
-            subtitle: { text: "" },
+            title: { text: '' },
+            subtitle: { text: '' },
             xaxis: {
               categories: s.labels,
               title: {
                 text: state.xTitle,
                 style: {
-                  fontFamily: getChartFontFamily("xAxis"),
-                  fontSize: "9px",
+                  fontFamily: getChartFontFamily('xAxis'),
+                  fontSize: '9px',
                   fontWeight: 400,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                 },
               },
               labels: {
                 style: {
-                  fontFamily: getChartFontFamily("xAxis"),
-                  colors: Array(s.labels.length).fill("rgba(21,21,21,.55)"),
-                  fontSize: "9px",
+                  fontFamily: getChartFontFamily('xAxis'),
+                  colors: Array(s.labels.length).fill('rgba(21,21,21,.55)'),
+                  fontSize: '9px',
                 },
                 rotate:
-                  t === "bar" || t === "scatter"
-                    ? (p.rotateLabels ?? state.rotateLabels ?? 0)
-                    : 0,
+                  t === 'bar' || t === 'scatter' ? (p.rotateLabels ?? state.rotateLabels ?? 0) : 0,
               },
-              axisBorder: { color: "rgba(21,21,21,.25)" },
+              axisBorder: { color: 'rgba(21,21,21,.25)' },
               axisTicks: { show: false },
             },
             yaxis: {
               title: {
                 text: state.yTitle,
                 style: {
-                  fontFamily: getChartFontFamily("yAxis"),
-                  fontSize: "9px",
+                  fontFamily: getChartFontFamily('yAxis'),
+                  fontSize: '9px',
                   fontWeight: 400,
-                  color: "rgba(21,21,21,.5)",
+                  color: 'rgba(21,21,21,.5)',
                 },
               },
               labels: {
                 style: {
-                  fontFamily: getChartFontFamily("yAxis"),
-                  colors: ["rgba(21,21,21,.55)"],
-                  fontSize: "9px",
+                  fontFamily: getChartFontFamily('yAxis'),
+                  colors: ['rgba(21,21,21,.55)'],
+                  fontSize: '9px',
                 },
               },
-              min: t === "line" && p.yMin !== "" ? Number(p.yMin) : undefined,
-              max: t === "line" && p.yMax !== "" ? Number(p.yMax) : undefined,
+              min: t === 'line' && p.yMin !== '' ? Number(p.yMin) : undefined,
+              max: t === 'line' && p.yMax !== '' ? Number(p.yMax) : undefined,
             },
-            tooltip: {
-              theme: "light",
-              style: { fontFamily: getChartFontFamily("tooltip") },
-            },
-          };
-          if (t === "line" && p.lineMode === "double") {
-            opt.chart = { ...opt.chart, animations: { enabled: false } };
+            tooltip: { theme: 'light', style: { fontFamily: getChartFontFamily('tooltip') } },
+          }
+          if (t === 'line' && p.lineMode === 'double') {
+            opt.chart = { ...opt.chart, animations: { enabled: false } }
           }
           function applyApexDoubleLine() {
-            if (t !== "line" || p.lineMode !== "double") return;
-            const svg = mount.querySelector(".apexcharts-svg");
-            if (!svg) return;
-            svg
-              .querySelectorAll('[data-zen-double-line="true"]')
-              .forEach((node) => node.remove());
+            if (t !== 'line' || p.lineMode !== 'double') return
+            const svg = mount.querySelector('.apexcharts-svg')
+            if (!svg) return
+            svg.querySelectorAll('[data-zen-double-line="true"]').forEach((node) => node.remove())
             const paths = Array.from(
-              svg.querySelectorAll(".apexcharts-series path.apexcharts-line"),
-            );
+              svg.querySelectorAll('.apexcharts-series path.apexcharts-line'),
+            )
             paths.forEach((path) => {
-              const clone = path.cloneNode(true);
-              clone.setAttribute("data-zen-double-line", "true");
-              clone.setAttribute("transform", "translate(0 4)");
-              clone.setAttribute("pointer-events", "none");
-              clone.setAttribute(
-                "opacity",
-                path.getAttribute("opacity") || "1",
-              );
-              path.parentNode?.appendChild(clone);
-            });
+              const clone = path.cloneNode(true)
+              clone.setAttribute('data-zen-double-line', 'true')
+              clone.setAttribute('transform', 'translate(0 4)')
+              clone.setAttribute('pointer-events', 'none')
+              clone.setAttribute('opacity', path.getAttribute('opacity') || '1')
+              path.parentNode?.appendChild(clone)
+            })
           }
-          if (t === "bar")
+          if (t === 'bar')
             opt.plotOptions = {
               bar: {
-                columnWidth: Math.max(20, 100 - (p.gap ?? 24)) + "%",
-                dataLabels: { position: "top" },
+                columnWidth: Math.max(20, 100 - (p.gap ?? 24)) + '%',
+                dataLabels: { position: 'top' },
               },
-            };
-          if (t === "bar")
-            opt.dataLabels = {
-              enabled: !!p.showValues,
-              formatter: (v) => String(v),
-            };
-          if (t === "scatter" && p.showTrend && s.series.length) {
+            }
+          if (t === 'bar') opt.dataLabels = { enabled: !!p.showValues, formatter: (v) => String(v) }
+          if (t === 'scatter' && p.showTrend && s.series.length) {
             const trendSeries = safeSeries.map((ss) => ({
               name: `${ss.name} · 趋势`,
               data: ss.data,
-            }));
-            opt.series = safeSeries.flatMap((ss, i) => [ss, trendSeries[i]]);
-            opt.colors = safeSeries.flatMap((ss, i) => [
-              c[i % c.length],
-              c[i % c.length],
-            ]);
+            }))
+            opt.series = safeSeries.flatMap((ss, i) => [ss, trendSeries[i]])
+            opt.colors = safeSeries.flatMap((ss, i) => [c[i % c.length], c[i % c.length]])
             opt.stroke = {
               width: safeSeries.flatMap(() => [0, 1]),
               dashArray: safeSeries.flatMap(() => [0, 5]),
-              curve: "straight",
-            };
-            opt.markers = { size: p.pointSize ?? 7 };
+              curve: 'straight',
+            }
+            opt.markers = { size: p.pointSize ?? 7 }
           }
-          if (t === "radar") {
+          if (t === 'radar') {
             opt.plotOptions = {
               radar: {
                 size: Number.isFinite(Number(p.radius)) ? Number(p.radius) : 58,
                 polygons: {
-                  strokeColors:
-                    p.showGrid !== false ? "rgba(21,21,21,.1)" : "transparent",
+                  strokeColors: p.showGrid !== false ? 'rgba(21,21,21,.1)' : 'transparent',
                   strokeWidth: p.showGrid !== false ? 1 : 0,
-                  connectorColors:
-                    p.showGrid !== false ? "rgba(21,21,21,.12)" : "transparent",
-                  fill: {
-                    colors: ["rgba(21,21,21,.01)", "rgba(21,21,21,.035)"],
-                  },
+                  connectorColors: p.showGrid !== false ? 'rgba(21,21,21,.12)' : 'transparent',
+                  fill: { colors: ['rgba(21,21,21,.01)', 'rgba(21,21,21,.035)'] },
                 },
               },
-            };
+            }
             opt.fill = {
-              opacity: Number.isFinite(Number(p.fillOpacity))
-                ? Number(p.fillOpacity)
-                : 0.12,
-            };
+              opacity: Number.isFinite(Number(p.fillOpacity)) ? Number(p.fillOpacity) : 0.12,
+            }
             opt.markers = {
               size:
                 p.showPoints === false
@@ -12019,274 +10769,247 @@
                       ? Number(p.pointSize) + 2
                       : 7,
               },
-            };
-            opt.labels = s.labels;
+            }
+            opt.labels = s.labels
             opt.xaxis = {
               labels: {
                 show: true,
                 style: {
-                  fontFamily: getChartFontFamily("xAxis"),
-                  colors: Array(s.labels.length).fill("rgba(21,21,21,.58)"),
-                  fontSize: "9px",
+                  fontFamily: getChartFontFamily('xAxis'),
+                  colors: Array(s.labels.length).fill('rgba(21,21,21,.58)'),
+                  fontSize: '9px',
                 },
               },
-            };
-            opt.yaxis = { show: false };
-            opt.dataLabels = { enabled: false };
+            }
+            opt.yaxis = { show: false }
+            opt.dataLabels = { enabled: false }
           }
-          if (t === "pie") {
+          if (t === 'pie') {
             const pieSaved = legendSelectionByType.pie || {},
-              slices = getPieSlices();
-            opt.series = slices.map((slice) =>
-              pieSaved[slice.name] === false ? 0 : slice.value,
-            );
-            opt.labels = slices.map((slice) => slice.name);
-            opt.colors = slices.map((_, i) => c[i % c.length]);
-            if (p.rose && p.rose !== "none") {
+              slices = getPieSlices()
+            opt.series = slices.map((slice) => (pieSaved[slice.name] === false ? 0 : slice.value))
+            opt.labels = slices.map((slice) => slice.name)
+            opt.colors = slices.map((_, i) => c[i % c.length])
+            if (p.rose && p.rose !== 'none') {
               opt.plotOptions = {
-                polarArea: {
-                  rings: { strokeWidth: 1 },
-                  spokes: { strokeWidth: 0 },
-                },
-              };
-              opt.chart = { ...opt.chart, type: "polarArea" };
-              opt.stroke = { width: 1, colors: ["#ffffff"] };
+                polarArea: { rings: { strokeWidth: 1 }, spokes: { strokeWidth: 0 } },
+              }
+              opt.chart = { ...opt.chart, type: 'polarArea' }
+              opt.stroke = { width: 1, colors: ['#ffffff'] }
             } else {
               opt.plotOptions = {
                 pie: {
-                  donut: { size: (p.innerRadius ?? 32) + "%" },
-                  customScale: Math.max(
-                    0.45,
-                    Math.min(1.4, (p.outerRadius ?? 62) / 62),
-                  ),
+                  donut: { size: (p.innerRadius ?? 32) + '%' },
+                  customScale: Math.max(0.45, Math.min(1.4, (p.outerRadius ?? 62) / 62)),
                   expandOnClick: true,
                 },
-              };
-              opt.stroke = { width: 1, colors: ["#ffffff"] };
+              }
+              opt.stroke = { width: 1, colors: ['#ffffff'] }
             }
-            opt.fill = { opacity: 1 };
+            opt.fill = { opacity: 1 }
             opt.dataLabels = {
               enabled: !!p.showLabels,
-              formatter: (_val, opts) =>
-                String(opts.w.globals.labels?.[opts.seriesIndex] ?? ""),
-            };
-            opt.tooltip = {
-              theme: "light",
-              y: { formatter: (v) => String(v) },
-            };
-            opt.legend = { show: false };
+              formatter: (_val, opts) => String(opts.w.globals.labels?.[opts.seriesIndex] ?? ''),
+            }
+            opt.tooltip = { theme: 'light', y: { formatter: (v) => String(v) } }
+            opt.legend = { show: false }
           }
-          const ap = new ApexCharts(mount, opt);
-          mount._apex = ap;
-          state.chart = ap;
+          const ap = new ApexCharts(mount, opt)
+          mount._apex = ap
+          state.chart = ap
           try {
-            const r = ap.render();
-            if (r && typeof r.then === "function")
+            const r = ap.render()
+            if (r && typeof r.then === 'function')
               r.then(() => {
-                applyApexDoubleLine();
-                const saved = legendSelectionByType[state.type] || {};
-                if (state.type !== "pie")
+                applyApexDoubleLine()
+                const saved = legendSelectionByType[state.type] || {}
+                if (state.type !== 'pie')
                   Object.keys(saved).forEach((name) => {
                     if (saved[name] === false) {
                       try {
-                        ap.toggleSeries(name);
+                        ap.toggleSeries(name)
                       } catch (_) {}
                     }
-                  });
-                applyApexDoubleLine();
+                  })
+                applyApexDoubleLine()
               }).catch((e) => {
-                reportError("ApexCharts 图表渲染失败", e, true);
-              });
-            else if (r && typeof r.catch === "function")
+                reportError('ApexCharts 图表渲染失败', e, true)
+              })
+            else if (r && typeof r.catch === 'function')
               r.catch((e) => {
-                reportError("ApexCharts 图表渲染失败", e, true);
-              });
+                reportError('ApexCharts 图表渲染失败', e, true)
+              })
           } catch (e) {
-            reportError("ApexCharts 图表渲染失败", e, true);
+            reportError('ApexCharts 图表渲染失败', e, true)
           }
         }
         function drawZenGrid(svg, x0, x1, y0, y1, rows = 5, cols = 8) {
-          const stroke = "rgba(21,21,21,.075)";
+          const stroke = 'rgba(21,21,21,.075)'
           for (let i = 1; i < rows; i++) {
-            const y = y0 + ((y1 - y0) * i) / rows;
-            svg.appendChild(
-              svgEl("line", { x1: x0, y1: y, x2: x1, y2: y, stroke }),
-            );
+            const y = y0 + ((y1 - y0) * i) / rows
+            svg.appendChild(svgEl('line', { x1: x0, y1: y, x2: x1, y2: y, stroke }))
           }
           for (let i = 1; i < cols; i++) {
-            const x = x0 + ((x1 - x0) * i) / cols;
-            svg.appendChild(
-              svgEl("line", { x1: x, y1: y0, x2: x, y2: y1, stroke }),
-            );
+            const x = x0 + ((x1 - x0) * i) / cols
+            svg.appendChild(svgEl('line', { x1: x, y1: y0, x2: x, y2: y1, stroke }))
           }
         }
         function renderZen() {
-          const svg = $("#zen-svg");
-          $("#chart-mount").style.display = "none";
-          svg.style.display = "block";
-          svg.innerHTML = "";
+          const svg = $('#zen-svg')
+          $('#chart-mount').style.display = 'none'
+          svg.style.display = 'block'
+          svg.innerHTML = ''
           const W = 1000,
-            H = 620;
-          svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-          if (state.type === "slope") drawSlope(svg, W, H);
-          else if (state.type === "timeline") drawTimeline(svg, W, H);
-          else if (state.type === "dotplot") drawDotplot(svg, W, H);
-          else if (state.type === "wordfreq") drawWordfreq(svg, W, H);
-          else if (state.type === "smallmultiples")
-            drawSmallMultiples(svg, W, H);
-          else if (state.type === "network") drawZenNetwork(svg, W, H);
-          else if (state.type === "correlation") drawCorrelation(svg, W, H);
-          else if (state.type === "histogram") drawHistogram(svg, W, H);
-          else if (state.type === "errorbar") drawErrorbar(svg, W, H);
-          else if (state.type === "bump") drawBump(svg, W, H);
-          else if (state.type === "ribbon") drawRibbon(svg, W, H);
-          else if (state.type === "radial") drawRadial(svg, W, H);
-          else if (state.type === "poster") drawPoster(svg, W, H);
-          else if (state.type === "field") drawField(svg, W, H);
-          else if (state.type === "chord") drawChord(svg, W, H);
-          else if (state.type === "spiral") drawSpiral(svg, W, H);
-          else if (state.type === "swarm") drawSwarm(svg, W, H);
-          else if (state.type === "stream") drawStream(svg, W, H);
-          else drawLollipop(svg, W, H);
-          svg.querySelectorAll("text").forEach((el) => {
-            el.style.fontFamily = getChartFontFamily("xAxis");
-          });
+            H = 620
+          svg.setAttribute('viewBox', `0 0 ${W} ${H}`)
+          if (state.type === 'slope') drawSlope(svg, W, H)
+          else if (state.type === 'timeline') drawTimeline(svg, W, H)
+          else if (state.type === 'dotplot') drawDotplot(svg, W, H)
+          else if (state.type === 'wordfreq') drawWordfreq(svg, W, H)
+          else if (state.type === 'smallmultiples') drawSmallMultiples(svg, W, H)
+          else if (state.type === 'network') drawZenNetwork(svg, W, H)
+          else if (state.type === 'correlation') drawCorrelation(svg, W, H)
+          else if (state.type === 'histogram') drawHistogram(svg, W, H)
+          else if (state.type === 'errorbar') drawErrorbar(svg, W, H)
+          else if (state.type === 'bump') drawBump(svg, W, H)
+          else if (state.type === 'ribbon') drawRibbon(svg, W, H)
+          else if (state.type === 'radial') drawRadial(svg, W, H)
+          else if (state.type === 'poster') drawPoster(svg, W, H)
+          else if (state.type === 'field') drawField(svg, W, H)
+          else if (state.type === 'chord') drawChord(svg, W, H)
+          else if (state.type === 'spiral') drawSpiral(svg, W, H)
+          else if (state.type === 'swarm') drawSwarm(svg, W, H)
+          else if (state.type === 'stream') drawStream(svg, W, H)
+          else drawLollipop(svg, W, H)
+          svg.querySelectorAll('text').forEach((el) => {
+            el.style.fontFamily = getChartFontFamily('xAxis')
+          })
         }
-        function svgEl(tag, attrs = {}, text = "") {
-          const el = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            tag,
-          );
-          Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
-          if (text !== undefined) el.textContent = text;
-          return el;
+        function svgEl(tag, attrs = {}, text = '') {
+          const el = document.createElementNS('http://www.w3.org/2000/svg', tag)
+          Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v))
+          if (text !== undefined) el.textContent = text
+          return el
         }
         function drawZenHeader(svg, W) {
-          if (!state.showTitle) return;
+          if (!state.showTitle) return
           svg.appendChild(
             svgEl(
-              "text",
+              'text',
               {
                 x: 32,
                 y: 36,
-                "font-family": getChartFontFamily("title"),
-                "font-size": 18,
-                "font-weight": 500,
-                fill: "#151515",
+                'font-family': getChartFontFamily('title'),
+                'font-size': 18,
+                'font-weight': 500,
+                fill: '#151515',
               },
               state.title,
             ),
-          );
+          )
           svg.appendChild(
             svgEl(
-              "text",
+              'text',
               {
                 x: 32,
                 y: 54,
-                "font-family": getChartFontFamily("title"),
-                "font-size": 9,
-                fill: "rgba(21,21,21,.48)",
-                "letter-spacing": 0.8,
+                'font-family': getChartFontFamily('title'),
+                'font-size': 9,
+                fill: 'rgba(21,21,21,.48)',
+                'letter-spacing': 0.8,
               },
               state.subtitle,
             ),
-          );
+          )
           svg.appendChild(
-            svgEl("line", {
-              x1: 32,
-              y1: 68,
-              x2: W - 32,
-              y2: 68,
-              stroke: "rgba(21,21,21,.12)",
-            }),
-          );
+            svgEl('line', { x1: 32, y1: 68, x2: W - 32, y2: 68, stroke: 'rgba(21,21,21,.12)' }),
+          )
         }
         function drawSlope(svg, W, H) {
           const p = chartProps.slope,
             s = rowsToSeries(),
             a = s.series[0]?.data.map(numeric) || [],
-            b = s.series[1]?.data.map(numeric) || [];
-          const finite = a.concat(b).filter((v) => v !== null);
-          if (s.series.length !== 2 || !finite.length) return;
+            b = s.series[1]?.data.map(numeric) || []
+          const finite = a.concat(b).filter((v) => v !== null)
+          if (s.series.length !== 2 || !finite.length) return
           const min = Math.min(...finite),
             max = Math.max(...finite),
             left = 180,
             right = 760,
             top = 115,
-            bottom = 510;
+            bottom = 510
           for (let i = 0; i < s.labels.length; i++) {
-            if (a[i] === null || b[i] === null) continue;
-            const y1 =
-                bottom - ((a[i] - min) / (max - min || 1)) * (bottom - top),
+            if (a[i] === null || b[i] === null) continue
+            const y1 = bottom - ((a[i] - min) / (max - min || 1)) * (bottom - top),
               y2 = bottom - ((b[i] - min) / (max - min || 1)) * (bottom - top),
-              col = palette()[i % palette().length];
+              col = palette()[i % palette().length]
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: left,
                 y1: y1,
                 x2: right,
                 y2: y2,
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
                 opacity: state.opacity,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: left,
                 cy: y1,
                 r: p.pointSize,
-                fill: "#fff",
+                fill: '#fff',
                 stroke: col,
-                "stroke-width": 1.5,
+                'stroke-width': 1.5,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: right,
                 cy: y2,
                 r: p.pointSize,
                 fill: col,
                 stroke: col,
-                "stroke-width": 1,
+                'stroke-width': 1,
               }),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: left - 12,
                   y: y1 + 3,
-                  "text-anchor": "end",
-                  "font-size": 9,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'end',
+                  'font-size': 9,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 s.labels[i],
               ),
-            );
+            )
             if (p.showValues && i < p.labelCount)
               svg.appendChild(
                 svgEl(
-                  "text",
-                  { x: right + 12, y: y2 + 3, "font-size": 9, fill: "#151515" },
+                  'text',
+                  { x: right + 12, y: y2 + 3, 'font-size': 9, fill: '#151515' },
                   String(b[i]),
                 ),
-              );
+              )
           }
           svg.appendChild(
             svgEl(
-              "text",
-              { x: left, y: 550, "font-size": 9, fill: "rgba(21,21,21,.4)" },
+              'text',
+              { x: left, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
               s.series[0].name,
             ),
-          );
+          )
           svg.appendChild(
             svgEl(
-              "text",
-              { x: right, y: 550, "font-size": 9, fill: "rgba(21,21,21,.4)" },
+              'text',
+              { x: right, y: 550, 'font-size': 9, fill: 'rgba(21,21,21,.4)' },
               s.series[1].name,
             ),
-          );
+          )
         }
         function drawTimeline(svg, W, H) {
           const p = chartProps.timeline,
@@ -12294,132 +11017,126 @@
             y = 335,
             x0 = 82,
             x1 = 918,
-            n = s.labels.length;
+            n = s.labels.length
           svg.appendChild(
-            svgEl("line", {
+            svgEl('line', {
               x1: x0,
               y1: y,
               x2: x1,
               y2: y,
-              stroke: "rgba(21,21,21,.28)",
-              "stroke-width": 1.2,
+              stroke: 'rgba(21,21,21,.28)',
+              'stroke-width': 1.2,
             }),
-          );
+          )
           s.labels.forEach((l, i) => {
             const x = x0 + (i * (x1 - x0)) / (n - 1 || 1),
               val = numeric(s.series[0].data[i]) || 0,
-              up = p.alternate ? (i % 2 ? 1 : -1) : 1;
+              up = p.alternate ? (i % 2 ? 1 : -1) : 1
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: x,
                 y1: y,
                 x2: x,
                 y2: y + up * p.stemLength,
-                stroke: "rgba(21,21,21,.45)",
-                "stroke-width": 1,
+                stroke: 'rgba(21,21,21,.45)',
+                'stroke-width': 1,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: x,
                 cy: y,
                 r: p.pointSize,
                 fill: palette()[i % palette().length],
               }),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x,
                   y: y + up * (p.stemLength + 15),
-                  "text-anchor": "middle",
-                  "font-size": 9,
-                  fill: "rgba(21,21,21,.6)",
+                  'text-anchor': 'middle',
+                  'font-size': 9,
+                  fill: 'rgba(21,21,21,.6)',
                 },
                 l,
               ),
-            );
+            )
             if (p.showValues)
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x,
                     y: y + up * (p.stemLength - 12),
-                    "text-anchor": "middle",
-                    "font-size": 9,
-                    fill: "#151515",
+                    'text-anchor': 'middle',
+                    'font-size': 9,
+                    fill: '#151515',
                   },
                   String(val),
                 ),
-              );
-          });
+              )
+          })
         }
         function drawDotplot(svg, W, H) {
           const p = chartProps.dotplot,
             s = rowsToSeries(),
-            a = s.series[0]?.data.map(numeric) || [];
-          const finite = a.filter((v) => v !== null);
-          if (!finite.length) return;
+            a = s.series[0]?.data.map(numeric) || []
+          const finite = a.filter((v) => v !== null)
+          if (!finite.length) return
           const min = Math.min(...finite),
             max = Math.max(...finite),
             x0 = 120,
             x1 = 860,
-            rowGap = Math.min(p.rowGap, 430 / Math.max(1, s.labels.length - 1));
+            rowGap = Math.min(p.rowGap, 430 / Math.max(1, s.labels.length - 1))
           if (p.baseline && min <= 0 && max >= 0) {
-            const bx = x0 + ((0 - min) / (max - min || 1)) * (x1 - x0);
+            const bx = x0 + ((0 - min) / (max - min || 1)) * (x1 - x0)
             svg.appendChild(
-              svgEl("line", {
-                x1: bx,
-                y1: 95,
-                x2: bx,
-                y2: 520,
-                stroke: "rgba(21,21,21,.25)",
-              }),
-            );
+              svgEl('line', { x1: bx, y1: 95, x2: bx, y2: 520, stroke: 'rgba(21,21,21,.25)' }),
+            )
           }
           s.labels.forEach((label, i) => {
-            const v = numeric(a[i]);
-            if (v === null) return;
+            const v = numeric(a[i])
+            if (v === null) return
             const x = x0 + ((v - min) / (max - min || 1)) * (x1 - x0),
-              y = 120 + i * rowGap;
+              y = 120 + i * rowGap
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: x,
                 cy: y,
                 r: p.pointSize,
                 fill: palette()[i % palette().length],
                 opacity: p.opacity,
               }),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: 80,
                   y: y + 3,
-                  "text-anchor": "end",
-                  "font-size": 9,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'end',
+                  'font-size': 9,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 label,
               ),
-            );
-          });
+            )
+          })
         }
         function getWordFreqEntries() {
           const s = rowsToSeries(),
-            totals = new Map();
+            totals = new Map()
           s.labels.forEach((label, i) => {
-            const word = String(label ?? "").trim(),
-              value = numeric(s.series[0]?.data[i]);
-            if (!word || value === null || value < 0) return;
-            totals.set(word, (totals.get(word) || 0) + value);
-          });
+            const word = String(label ?? '').trim(),
+              value = numeric(s.series[0]?.data[i])
+            if (!word || value === null || value < 0) return
+            totals.set(word, (totals.get(word) || 0) + value)
+          })
           return Array.from(totals, ([word, value]) => ({ word, value })).sort(
             (a, b) => b.value - a.value,
-          );
+          )
         }
         function drawWordfreq(svg, W, H) {
           const p = chartProps.wordfreq || {},
@@ -12430,20 +11147,14 @@
             legacyColumns = Number(p.columns) || 4,
             maxWords = Math.max(
               12,
-              Math.min(
-                80,
-                Number(p.maxWords) || Math.round(legacyColumns * 10 + 8),
-              ),
+              Math.min(80, Number(p.maxWords) || Math.round(legacyColumns * 10 + 8)),
             ),
             rotation = Number(p.rotation) || 0,
             spacing = Math.max(
               0,
-              Math.min(
-                100,
-                Number.isFinite(Number(p.spacing)) ? Number(p.spacing) : 32,
-              ),
-            );
-          if (!entries.length) return;
+              Math.min(100, Number.isFinite(Number(p.spacing)) ? Number(p.spacing) : 32),
+            )
+          if (!entries.length) return
 
           const words = entries.slice(0, Math.min(entries.length, maxWords)),
             maxValue = Math.max(...words.map((d) => d.value), 1),
@@ -12457,31 +11168,23 @@
             // 0 更紧凑，100 更舒展；范围被限制，避免出现极端稀疏布局。
             gap = 1.5 + spacing * 0.075,
             radialScale = 0.72 + spacing * 0.004,
-            angularStep = 0.28 - spacing * 0.0008;
+            angularStep = 0.28 - spacing * 0.0008
 
           const normalize = (value) => {
-            if (maxValue === minValue) return 1;
-            return Math.max(
-              0,
-              Math.min(1, (value - minValue) / (maxValue - minValue)),
-            );
-          };
+            if (maxValue === minValue) return 1
+            return Math.max(0, Math.min(1, (value - minValue) / (maxValue - minValue)))
+          }
           const intersects = (a, b) =>
-            !(
-              a.right <= b.left ||
-              a.left >= b.right ||
-              a.bottom <= b.top ||
-              a.top >= b.bottom
-            );
+            !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)
           const rotatedBox = (width, height, angle) => {
             const rad = (Math.abs(angle) * Math.PI) / 180,
               cs = Math.cos(rad),
-              sn = Math.sin(rad);
+              sn = Math.sin(rad)
             return {
               width: Math.abs(width * cs) + Math.abs(height * sn),
               height: Math.abs(width * sn) + Math.abs(height * cs),
-            };
-          };
+            }
+          }
           const canPlace = (box) => {
             if (
               box.left < areaX ||
@@ -12489,56 +11192,50 @@
               box.top < areaY ||
               box.bottom > areaY + areaH
             )
-              return false;
-            for (const other of placed)
-              if (intersects(box, other)) return false;
-            return true;
-          };
+              return false
+            for (const other of placed) if (intersects(box, other)) return false
+            return true
+          }
           const estimateBBox = (fontSize, text) => {
             const ghost = svgEl(
-              "text",
+              'text',
               {
                 x: 0,
                 y: 0,
-                "font-family": getChartFontFamily("xAxis"),
-                "font-size": fontSize,
-                "font-weight":
-                  fontSize >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
-                visibility: "hidden",
+                'font-family': getChartFontFamily('xAxis'),
+                'font-size': fontSize,
+                'font-weight': fontSize >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
+                visibility: 'hidden',
               },
               text,
-            );
-            svg.appendChild(ghost);
-            let box;
+            )
+            svg.appendChild(ghost)
+            let box
             try {
-              const b = ghost.getBBox();
-              box = {
-                width: Math.max(2, b.width),
-                height: Math.max(2, b.height),
-              };
+              const b = ghost.getBBox()
+              box = { width: Math.max(2, b.width), height: Math.max(2, b.height) }
             } catch (e) {
               box = {
                 width: Math.max(2, text.length * fontSize * 0.72),
                 height: Math.max(2, fontSize),
-              };
+              }
             }
-            ghost.remove();
-            return box;
-          };
+            ghost.remove()
+            return box
+          }
 
           words.forEach((item, index) => {
             const t = normalize(item.value),
               // 标准词云的核心仍然是字号表达频率，而不是矩形面积。
               fs = minFont + Math.pow(t, 0.62) * (maxFont - minFont),
-              angle =
-                rotation === 0 ? 0 : index % 2 === 0 ? rotation : -rotation,
+              angle = rotation === 0 ? 0 : index % 2 === 0 ? rotation : -rotation,
               measured = estimateBBox(fs, item.word),
               rotated = rotatedBox(measured.width, measured.height, angle),
               halfW = rotated.width / 2 + gap,
               halfH = rotated.height / 2 + gap,
               cx = areaX + areaW / 2,
-              cy = areaY + areaH / 2;
-            let found = null;
+              cy = areaY + areaH / 2
+            let found = null
 
             // 先做中心优先测试，让高频词稳定占据中心。
             const centerBox = {
@@ -12546,22 +11243,19 @@
               right: cx + halfW,
               top: cy - halfH,
               bottom: cy + halfH,
-            };
-            if (canPlace(centerBox)) found = { x: cx, y: cy, box: centerBox };
+            }
+            if (canPlace(centerBox)) found = { x: cx, y: cy, box: centerBox }
 
             // 多臂阿基米德螺线搜索。比单一螺线更容易填满空隙，减少局部过密/过疏。
             if (!found) {
               const armCount = 3,
-                maxRadius = Math.min(areaW, areaH) * 0.56;
+                maxRadius = Math.min(areaW, areaH) * 0.56
               outer: for (let step = 1; step < 2600 && !found; step++) {
-                const radius =
-                  3 + Math.pow(step, 0.86) * (1.52 + spacing * 0.018);
-                if (radius > maxRadius) break;
+                const radius = 3 + Math.pow(step, 0.86) * (1.52 + spacing * 0.018)
+                if (radius > maxRadius) break
                 for (let arm = 0; arm < armCount; arm++) {
                   const theta =
-                      step * angularStep +
-                      index * 0.61 +
-                      arm * ((Math.PI * 2) / armCount),
+                      step * angularStep + index * 0.61 + arm * ((Math.PI * 2) / armCount),
                     px = cx + Math.cos(theta) * radius,
                     py = cy + Math.sin(theta) * radius * radialScale,
                     box = {
@@ -12569,10 +11263,10 @@
                       right: px + halfW,
                       top: py - halfH,
                       bottom: py + halfH,
-                    };
+                    }
                   if (canPlace(box)) {
-                    found = { x: px, y: py, box };
-                    break outer;
+                    found = { x: px, y: py, box }
+                    break outer
                   }
                 }
               }
@@ -12582,7 +11276,7 @@
             if (!found) {
               const stepX = Math.max(10, rotated.width + gap * 2.2),
                 stepY = Math.max(10, rotated.height + gap * 2.2),
-                offset = (index % 2) * stepX * 0.5;
+                offset = (index % 2) * stepX * 0.5
               outer: for (
                 let yy = areaY + rotated.height / 2 + gap;
                 yy <= areaY + areaH - rotated.height / 2 - gap;
@@ -12598,43 +11292,40 @@
                     right: xx + halfW,
                     top: yy - halfH,
                     bottom: yy + halfH,
-                  };
+                  }
                   if (canPlace(box)) {
-                    found = { x: xx, y: yy, box };
-                    break outer;
+                    found = { x: xx, y: yy, box }
+                    break outer
                   }
                 }
               }
             }
 
-            if (!found) return;
-            placed.push(found.box);
+            if (!found) return
+            placed.push(found.box)
 
-            const group = svgEl("g", {
+            const group = svgEl('g', {
                 transform: `translate(${found.x} ${found.y}) rotate(${angle})`,
               }),
               label = svgEl(
-                "text",
+                'text',
                 {
                   x: 0,
                   y: 0,
-                  "text-anchor": "middle",
-                  "dominant-baseline": "middle",
-                  "font-family": getChartFontFamily("xAxis"),
-                  "font-size": fs,
-                  "font-weight":
-                    fs >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
+                  'text-anchor': 'middle',
+                  'dominant-baseline': 'middle',
+                  'font-family': getChartFontFamily('xAxis'),
+                  'font-size': fs,
+                  'font-weight': fs >= minFont + (maxFont - minFont) * 0.55 ? 650 : 500,
                   fill: c[index % c.length],
-                  "fill-opacity": 0.92,
+                  'fill-opacity': 0.92,
                 },
                 item.word,
-              );
-            group.appendChild(label);
-            group.appendChild(
-              svgEl("title", {}, `${item.word} · ${item.value}`),
-            );
-            svg.appendChild(group);
-          });
+              )
+            group.appendChild(label)
+            group.appendChild(svgEl('title', {}, `${item.word} · ${item.value}`))
+            svg.appendChild(group)
+          })
         }
         function drawSmallMultiples(svg, W, H) {
           const p = chartProps.smallmultiples,
@@ -12644,132 +11335,116 @@
             w = (880 - (cols - 1) * p.gap) / cols,
             h = 130,
             baseX = 50,
-            baseY = 95;
+            baseY = 95
           s.series.slice(0, 9).forEach((a, i) => {
             const cx = baseX + (i % cols) * (w + p.gap),
-              cy = baseY + Math.floor(i / cols) * (h + p.gap);
+              cy = baseY + Math.floor(i / cols) * (h + p.gap)
             if (p.showFrame)
               svg.appendChild(
-                svgEl("rect", {
+                svgEl('rect', {
                   x: cx,
                   y: cy,
                   width: w,
                   height: h,
-                  fill: "none",
-                  stroke: "rgba(21,21,21,.12)",
+                  fill: 'none',
+                  stroke: 'rgba(21,21,21,.12)',
                 }),
-              );
+              )
             svg.appendChild(
               svgEl(
-                "text",
-                {
-                  x: cx + 10,
-                  y: cy + 16,
-                  "font-size": 9,
-                  fill: "rgba(21,21,21,.55)",
-                },
+                'text',
+                { x: cx + 10, y: cy + 16, 'font-size': 9, fill: 'rgba(21,21,21,.55)' },
                 a.name,
               ),
-            );
+            )
             const vals = a.data.map(numeric),
               mn = Math.min(...vals),
-              mx = Math.max(...vals);
-            let d = "";
+              mx = Math.max(...vals)
+            let d = ''
             vals.forEach((v, j) => {
               const x = cx + 10 + (j * (w - 20)) / (vals.length - 1 || 1),
-                y = cy + h - 12 - ((v - mn) / (mx - mn || 1)) * (h - 34);
-              d += (j ? "L" : "M") + x + " " + y + " ";
-            });
+                y = cy + h - 12 - ((v - mn) / (mx - mn || 1)) * (h - 34)
+              d += (j ? 'L' : 'M') + x + ' ' + y + ' '
+            })
             svg.appendChild(
-              svgEl("path", {
+              svgEl('path', {
                 d,
-                fill: "none",
+                fill: 'none',
                 stroke: palette()[i % palette().length],
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
                 opacity: state.opacity,
               }),
-            );
-          });
+            )
+          })
         }
         function drawZenNetwork(svg, W, H) {
           const p = chartProps.network,
             rows = getFlowRows(),
-            nodeMap = new Map();
+            nodeMap = new Map()
           rows.forEach(({ source, target, value }) => {
-            if (!nodeMap.has(source))
-              nodeMap.set(source, { name: source, value: 0 });
-            if (!nodeMap.has(target))
-              nodeMap.set(target, { name: target, value: 0 });
-            nodeMap.get(source).value += value;
-            nodeMap.get(target).value += value;
-          });
-          const nodes = Array.from(nodeMap.values());
-          if (!nodes.length) return;
-          const maxValue = Math.max(...nodes.map((n) => n.value), 1);
-          const gap = Math.max(
-            90,
-            Math.min(280, Number(p.edgeLength) + Number(p.repulsion) * 0.32),
-          );
-          const cols = Math.max(2, Math.min(5, Math.floor(820 / gap) || 2));
-          const stepX = cols > 1 ? Math.min(gap, 820 / (cols - 1)) : 0;
-          const stepY = Math.max(100, Math.min(220, gap * 0.82));
+            if (!nodeMap.has(source)) nodeMap.set(source, { name: source, value: 0 })
+            if (!nodeMap.has(target)) nodeMap.set(target, { name: target, value: 0 })
+            nodeMap.get(source).value += value
+            nodeMap.get(target).value += value
+          })
+          const nodes = Array.from(nodeMap.values())
+          if (!nodes.length) return
+          const maxValue = Math.max(...nodes.map((n) => n.value), 1)
+          const gap = Math.max(90, Math.min(280, Number(p.edgeLength) + Number(p.repulsion) * 0.32))
+          const cols = Math.max(2, Math.min(5, Math.floor(820 / gap) || 2))
+          const stepX = cols > 1 ? Math.min(gap, 820 / (cols - 1)) : 0
+          const stepY = Math.max(100, Math.min(220, gap * 0.82))
           const pts = nodes.map((n, i) => ({
             ...n,
             x: 90 + (i % cols) * stepX,
             y: 100 + Math.floor(i / cols) * stepY,
-            radius: Math.max(
-              4,
-              p.nodeSize * (0.7 + (n.value / maxValue) * 0.7),
-            ),
-          }));
-          const byName = new Map(pts.map((n) => [n.name, n]));
+            radius: Math.max(4, p.nodeSize * (0.7 + (n.value / maxValue) * 0.7)),
+          }))
+          const byName = new Map(pts.map((n) => [n.name, n]))
           rows.forEach((r) => {
             const a = byName.get(r.source),
-              b = byName.get(r.target);
-            if (!a || !b) return;
+              b = byName.get(r.target)
+            if (!a || !b) return
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: a.x,
                 y1: a.y,
                 x2: b.x,
                 y2: b.y,
-                stroke: "rgba(21,21,21,.18)",
-                "stroke-width": Math.max(
+                stroke: 'rgba(21,21,21,.18)',
+                'stroke-width': Math.max(
                   0.5,
-                  Math.min(
-                    5,
-                    Number(p.lineWidth) * (0.7 + Math.sqrt(r.value) * 0.08),
-                  ),
+                  Math.min(5, Number(p.lineWidth) * (0.7 + Math.sqrt(r.value) * 0.08)),
                 ),
               }),
-            );
-          });
+            )
+          })
           pts.forEach((n, i) => {
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: n.x,
                 cy: n.y,
                 r: n.radius,
-                fill: "#fff",
+                fill: '#fff',
                 stroke: palette()[i % palette().length],
-                "stroke-width": 1.4,
+                'stroke-width': 1.4,
               }),
-            );
+            )
             if (p.showLabels)
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: n.x,
                     y: n.y + 3,
-                    "text-anchor": "middle",
-                    "font-size": 8,
-                    fill: "#151515",
+                    'text-anchor': 'middle',
+                    'font-size': 8,
+                    fill: '#151515',
                   },
                   n.name,
                 ),
-              );
-          });
+              )
+          })
         }
         function drawCorrelation(svg, W, H) {
           const p = chartProps.correlation,
@@ -12778,102 +11453,94 @@
             n = names.length,
             cell = p.cellSize,
             x0 = 150,
-            y0 = 110;
+            y0 = 110
           const correlation = (a, b) => {
-            const pairs = [];
+            const pairs = []
             for (let k = 0; k < Math.max(a.length, b.length); k++) {
               const x = numeric(a[k]),
-                y = numeric(b[k]);
-              if (x !== null && y !== null) pairs.push([x, y]);
+                y = numeric(b[k])
+              if (x !== null && y !== null) pairs.push([x, y])
             }
-            if (pairs.length < 2) return 0;
-            const mx =
-                pairs.reduce((sum, pair) => sum + pair[0], 0) / pairs.length,
-              my = pairs.reduce((sum, pair) => sum + pair[1], 0) / pairs.length;
+            if (pairs.length < 2) return 0
+            const mx = pairs.reduce((sum, pair) => sum + pair[0], 0) / pairs.length,
+              my = pairs.reduce((sum, pair) => sum + pair[1], 0) / pairs.length
             let num = 0,
               dx = 0,
-              dy = 0;
+              dy = 0
             pairs.forEach(([x, y]) => {
               const vx = x - mx,
-                vy = y - my;
-              num += vx * vy;
-              dx += vx * vx;
-              dy += vy * vy;
-            });
-            const den = Math.sqrt(dx * dy);
-            return den > 0 ? Math.max(-1, Math.min(1, num / den)) : 0;
-          };
-          const colors = palette();
-          const positiveColor = colors[0] || "#155EEF";
-          const negativeColor =
-            colors[Math.max(0, colors.length - 1)] || "#607487";
+                vy = y - my
+              num += vx * vy
+              dx += vx * vx
+              dy += vy * vy
+            })
+            const den = Math.sqrt(dx * dy)
+            return den > 0 ? Math.max(-1, Math.min(1, num / den)) : 0
+          }
+          const colors = palette()
+          const positiveColor = colors[0] || '#155EEF'
+          const negativeColor = colors[Math.max(0, colors.length - 1)] || '#607487'
           const correlationFill = (v) => {
-            const strength = Math.min(1, Math.abs(Number(v) || 0));
-            const base = Number(v) >= 0 ? positiveColor : negativeColor;
-            return mixHex(
-              "#ffffff",
-              base,
-              Math.min(0.92, 0.08 + strength * 0.84 * p.intensity),
-            );
-          };
+            const strength = Math.min(1, Math.abs(Number(v) || 0))
+            const base = Number(v) >= 0 ? positiveColor : negativeColor
+            return mixHex('#ffffff', base, Math.min(0.92, 0.08 + strength * 0.84 * p.intensity))
+          }
           for (let i = 0; i < n; i++) {
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: x0 + i * cell + cell / 2,
                   y: y0 - 12,
-                  "text-anchor": "middle",
-                  "font-size": 8,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'middle',
+                  'font-size': 8,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 names[i],
               ),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: x0 - 10,
                   y: y0 + i * cell + cell / 2 + 3,
-                  "text-anchor": "end",
-                  "font-size": 8,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'end',
+                  'font-size': 8,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 names[i],
               ),
-            );
+            )
             for (let j = 0; j < n; j++) {
-              if (p.mode === "下三角" && j > i) continue;
-              if (p.mode === "上三角" && j < i) continue;
-              const v =
-                  i === j ? 1 : correlation(s.series[i].data, s.series[j].data),
-                strength = Math.abs(v);
+              if (p.mode === '下三角' && j > i) continue
+              if (p.mode === '上三角' && j < i) continue
+              const v = i === j ? 1 : correlation(s.series[i].data, s.series[j].data),
+                strength = Math.abs(v)
               svg.appendChild(
-                svgEl("rect", {
+                svgEl('rect', {
                   x: x0 + j * cell,
                   y: y0 + i * cell,
                   width: cell - 3,
                   height: cell - 3,
                   fill: correlationFill(v),
-                  stroke:
-                    p.showGrid !== false ? "rgba(255,255,255,.85)" : "none",
-                  "stroke-width": p.showGrid !== false ? 1 : 0,
+                  stroke: p.showGrid !== false ? 'rgba(255,255,255,.85)' : 'none',
+                  'stroke-width': p.showGrid !== false ? 1 : 0,
                 }),
-              );
+              )
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: x0 + j * cell + (cell - 3) / 2,
                     y: y0 + i * cell + (cell - 3) / 2 + 3,
-                    "text-anchor": "middle",
-                    "font-size": 8,
-                    fill: strength > 0.56 ? "#fff" : "#151515",
+                    'text-anchor': 'middle',
+                    'font-size': 8,
+                    fill: strength > 0.56 ? '#fff' : '#151515',
                   },
                   v.toFixed(p.precision),
                 ),
-              );
+              )
             }
           }
         }
@@ -12884,24 +11551,23 @@
             bins = p.bins,
             min = Math.min(...a),
             max = Math.max(...a),
-            counts = Array(bins).fill(0);
+            counts = Array(bins).fill(0)
           a.forEach((v) => {
-            let idx = Math.floor(((v - min) / (max - min || 1)) * bins);
-            if (idx === bins) idx = bins - 1;
-            counts[idx]++;
-          });
+            let idx = Math.floor(((v - min) / (max - min || 1)) * bins)
+            if (idx === bins) idx = bins - 1
+            counts[idx]++
+          })
           const maxC = Math.max(...counts),
             x0 = 80,
             y0 = 500,
-            ww = 820 / bins;
-          if (p.showGrid !== false)
-            drawZenGrid(svg, x0, x0 + 820, y0 - 330, y0, 6, bins);
+            ww = 820 / bins
+          if (p.showGrid !== false) drawZenGrid(svg, x0, x0 + 820, y0 - 330, y0, 6, bins)
           counts.forEach((c, i) => {
             const h = (c / maxC) * 330,
               x = x0 + i * ww + p.barGap / 2,
-              w = ww - p.barGap;
+              w = ww - p.barGap
             svg.appendChild(
-              svgEl("rect", {
+              svgEl('rect', {
                 x,
                 y: y0 - h,
                 width: w,
@@ -12909,232 +11575,211 @@
                 fill: palette()[i % palette().length],
                 opacity: p.opacity,
               }),
-            );
+            )
             if (p.showValues)
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: x + w / 2,
                     y: y0 - h - 6,
-                    "text-anchor": "middle",
-                    "font-size": 8,
-                    fill: "rgba(21,21,21,.7)",
+                    'text-anchor': 'middle',
+                    'font-size': 8,
+                    fill: 'rgba(21,21,21,.7)',
                   },
                   String(c),
                 ),
-              );
-          });
+              )
+          })
         }
         function drawErrorbar(svg, W, H) {
           const p = chartProps.errorbar,
             s = rowsToSeries(),
             center = s.series[0],
-            error = s.series[1];
-          if (!center || !error) return;
-          const points = [];
+            error = s.series[1]
+          if (!center || !error) return
+          const points = []
           center.data.forEach((raw, i) => {
             const v = numeric(raw),
-              e = numeric(error.data[i]);
-            if (v === null || e === null) return;
-            const absError = Math.abs(e);
-            points.push({
-              index: i,
-              value: v,
-              error: absError,
-              label: s.labels[i],
-            });
-          });
-          if (!points.length) return;
+              e = numeric(error.data[i])
+            if (v === null || e === null) return
+            const absError = Math.abs(e)
+            points.push({ index: i, value: v, error: absError, label: s.labels[i] })
+          })
+          if (!points.length) return
 
           const x0 = 110,
             x1 = 890,
             yTop = 92,
-            yBottom = 500;
-          let lower = Math.min(...points.map((d) => d.value - d.error));
-          let upper = Math.max(...points.map((d) => d.value + d.error));
-          if (!Number.isFinite(lower) || !Number.isFinite(upper)) return;
+            yBottom = 500
+          let lower = Math.min(...points.map((d) => d.value - d.error))
+          let upper = Math.max(...points.map((d) => d.value + d.error))
+          if (!Number.isFinite(lower) || !Number.isFinite(upper)) return
           if (lower === upper) {
-            const pad = Math.max(1, Math.abs(lower) * 0.05);
-            lower -= pad;
-            upper += pad;
+            const pad = Math.max(1, Math.abs(lower) * 0.05)
+            lower -= pad
+            upper += pad
           } else {
-            const pad = (upper - lower) * 0.08;
-            lower -= pad;
-            upper += pad;
+            const pad = (upper - lower) * 0.08
+            lower -= pad
+            upper += pad
           }
-          const range = upper - lower || 1;
-          const yOf = (v) => yBottom - ((v - lower) / range) * (yBottom - yTop);
+          const range = upper - lower || 1
+          const yOf = (v) => yBottom - ((v - lower) / range) * (yBottom - yTop)
           if (p.showGrid !== false)
-            drawZenGrid(
-              svg,
-              x0,
-              x1,
-              yTop,
-              yBottom,
-              6,
-              Math.min(10, Math.max(1, points.length)),
-            );
+            drawZenGrid(svg, x0, x1, yTop, yBottom, 6, Math.min(10, Math.max(1, points.length)))
 
           points.forEach((d, pi) => {
             const x =
-              points.length === 1
-                ? (x0 + x1) / 2
-                : x0 + (pi * (x1 - x0)) / (points.length - 1);
-            const y = yOf(d.value);
-            const top = yOf(d.value + d.error);
-            const bottom = yOf(d.value - d.error);
-            const col = palette()[pi % palette().length];
+              points.length === 1 ? (x0 + x1) / 2 : x0 + (pi * (x1 - x0)) / (points.length - 1)
+            const y = yOf(d.value)
+            const top = yOf(d.value + d.error)
+            const bottom = yOf(d.value - d.error)
+            const col = palette()[pi % palette().length]
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: x,
                 y1: top,
                 x2: x,
                 y2: bottom,
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: x - 6,
                 y1: top,
                 x2: x + 6,
                 y2: top,
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: x - 6,
                 y1: bottom,
                 x2: x + 6,
                 y2: bottom,
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: x,
                 cy: y,
                 r: p.pointSize,
-                fill: "#fff",
+                fill: '#fff',
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
               }),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x,
                   y: yBottom + 18,
-                  "text-anchor": "middle",
-                  "font-size": 8,
-                  fill: "rgba(21,21,21,.5)",
+                  'text-anchor': 'middle',
+                  'font-size': 8,
+                  fill: 'rgba(21,21,21,.5)',
                 },
                 d.label,
               ),
-            );
-          });
+            )
+          })
         }
         function drawBump(svg, W, H) {
           const p = chartProps.bump,
             s = rowsToSeries(),
             x0 = 80,
             x1 = 900,
-            yTop = 120;
-          const maxSeries = s.series.slice(0, p.maxLines);
+            yTop = 120
+          const maxSeries = s.series.slice(0, p.maxLines)
           maxSeries.forEach((ser, i) => {
-            const vals = ser.data.map(numeric);
-            let d = "";
+            const vals = ser.data.map(numeric)
+            let d = ''
             vals.forEach((v, j) => {
-              if (v === null) return;
+              if (v === null) return
               const ranked = s.series
-                .map((candidate, idx) => ({
-                  idx,
-                  value: numeric(candidate.data[j]),
-                }))
+                .map((candidate, idx) => ({ idx, value: numeric(candidate.data[j]) }))
                 .filter((candidate) => candidate.value !== null)
-                .sort((a, b) => b.value - a.value || a.idx - b.idx);
-              const pos = ranked.findIndex(
-                (candidate) => candidate.idx === s.series.indexOf(ser),
-              );
-              if (pos < 0) return;
+                .sort((a, b) => b.value - a.value || a.idx - b.idx)
+              const pos = ranked.findIndex((candidate) => candidate.idx === s.series.indexOf(ser))
+              if (pos < 0) return
               const rank = pos + 1,
                 x = x0 + (j * (x1 - x0)) / (vals.length - 1 || 1),
-                y = yTop + (rank - 1) * p.rowGap;
-              d += (d ? "L" : "M") + x + " " + y + " ";
-            });
-            const col = palette()[i % palette().length];
+                y = yTop + (rank - 1) * p.rowGap
+              d += (d ? 'L' : 'M') + x + ' ' + y + ' '
+            })
+            const col = palette()[i % palette().length]
             svg.appendChild(
-              svgEl("path", {
+              svgEl('path', {
                 d,
-                fill: "none",
+                fill: 'none',
                 stroke: col,
-                "stroke-width": p.lineWidth,
+                'stroke-width': p.lineWidth,
                 opacity: state.opacity,
               }),
-            );
+            )
             if (p.showLabels)
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: x0 - 8,
                     y: yTop + i * p.rowGap + 3,
-                    "text-anchor": "end",
-                    "font-size": 8,
-                    fill: "rgba(21,21,21,.55)",
+                    'text-anchor': 'end',
+                    'font-size': 8,
+                    fill: 'rgba(21,21,21,.55)',
                   },
                   ser.name,
                 ),
-              );
-          });
+              )
+          })
         }
         function drawRibbon(svg, W, H) {
           const p = chartProps.ribbon,
             s = rowsToSeries(),
             bands = s.series.slice(0, p.bands),
             x0 = 90,
-            x1 = 910;
+            x1 = 910
           bands.forEach((ser, i) => {
-            const vals = ser.data.map((v) => numeric(v));
-            const finite = vals.filter((v) => v !== null);
-            const mn = Math.min(...finite, 0);
-            const mx = Math.max(...finite, 1);
-            const base = 150 + i * 75;
-            const d = [];
+            const vals = ser.data.map((v) => numeric(v))
+            const finite = vals.filter((v) => v !== null)
+            const mn = Math.min(...finite, 0)
+            const mx = Math.max(...finite, 1)
+            const base = 150 + i * 75
+            const d = []
             for (let j = 0; j < vals.length; j++) {
-              const x = x0 + (j * (x1 - x0)) / Math.max(1, vals.length - 1);
-              const n = vals[j] ?? mn;
-              const norm = (n - mn) / (mx - mn || 1);
-              const yy =
-                base + (0.5 - norm) * p.amplitude + Math.sin(j * 0.6 + i) * 6;
-              d.push((d.length ? "L" : "M") + x + " " + yy);
+              const x = x0 + (j * (x1 - x0)) / Math.max(1, vals.length - 1)
+              const n = vals[j] ?? mn
+              const norm = (n - mn) / (mx - mn || 1)
+              const yy = base + (0.5 - norm) * p.amplitude + Math.sin(j * 0.6 + i) * 6
+              d.push((d.length ? 'L' : 'M') + x + ' ' + yy)
             }
-            const col = palette()[i % palette().length];
+            const col = palette()[i % palette().length]
             svg.appendChild(
-              svgEl("path", {
-                d: d.join(" "),
-                fill: "none",
+              svgEl('path', {
+                d: d.join(' '),
+                fill: 'none',
                 stroke: col,
-                "stroke-width": p.width,
+                'stroke-width': p.width,
                 opacity: p.opacity,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("path", {
-                d: d.join(" "),
-                fill: "none",
+              svgEl('path', {
+                d: d.join(' '),
+                fill: 'none',
                 stroke: col,
-                "stroke-width": 1.2,
+                'stroke-width': 1.2,
                 opacity: 0.72,
               }),
-            );
-          });
+            )
+          })
         }
         function drawRadial(svg, W, H) {
           const p = chartProps.radial,
@@ -13146,155 +11791,133 @@
             cx = 500,
             cy = 330,
             R = p.radius,
-            n = Math.max(1, vals.length);
+            n = Math.max(1, vals.length)
           for (let i = 0; i < n; i++) {
-            const a = (i / n) * Math.PI * 2;
-            const value = vals[i] ?? vMin;
-            const r =
-              40 + ((value - vMin) / (vMax - vMin || 1)) * Math.max(20, R - 55);
-            const x2 = cx + Math.cos(a) * r;
-            const y2 = cy + Math.sin(a) * r;
-            const col = palette()[i % palette().length];
+            const a = (i / n) * Math.PI * 2
+            const value = vals[i] ?? vMin
+            const r = 40 + ((value - vMin) / (vMax - vMin || 1)) * Math.max(20, R - 55)
+            const x2 = cx + Math.cos(a) * r
+            const y2 = cy + Math.sin(a) * r
+            const col = palette()[i % palette().length]
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: cx,
                 y1: cy,
                 x2,
                 y2,
                 stroke: col,
-                "stroke-width": p.spokeWidth,
+                'stroke-width': p.spokeWidth,
                 opacity: 0.52,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: x2,
                 cy: y2,
                 r: p.nodeSize,
-                fill: "#fff",
+                fill: '#fff',
                 stroke: col,
-                "stroke-width": 1.2,
+                'stroke-width': 1.2,
               }),
-            );
+            )
             if (s.labels[i])
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: x2,
                     y: y2 - 8,
-                    "text-anchor": "middle",
-                    "font-size": 7,
-                    fill: "rgba(21,21,21,.58)",
+                    'text-anchor': 'middle',
+                    'font-size': 7,
+                    fill: 'rgba(21,21,21,.58)',
                   },
                   s.labels[i],
                 ),
-              );
+              )
           }
           svg.appendChild(
-            svgEl("circle", {
-              cx,
-              cy,
-              r: R,
-              fill: "none",
-              stroke: "rgba(21,21,21,.12)",
-            }),
-          );
+            svgEl('circle', { cx, cy, r: R, fill: 'none', stroke: 'rgba(21,21,21,.12)' }),
+          )
         }
         function drawChord(svg, W, H) {
           const p = chartProps.chord,
             rows = getFlowRows(),
-            nodes = Array.from(
-              new Set(rows.flatMap((r) => [r.source, r.target])),
-            ).filter(Boolean),
+            nodes = Array.from(new Set(rows.flatMap((r) => [r.source, r.target]))).filter(Boolean),
             cx = 500,
             cy = 320,
             R = Math.min(p.radius, 260),
             c = palette(),
             n = Math.max(1, nodes.length),
-            pos = new Map();
+            pos = new Map()
           nodes.forEach((name, i) => {
-            const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
-            pos.set(name, {
-              x: cx + Math.cos(a) * R,
-              y: cy + Math.sin(a) * R,
-              a,
-            });
-          });
+            const a = -Math.PI / 2 + (i / n) * Math.PI * 2
+            pos.set(name, { x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R, a })
+          })
           svg.appendChild(
-            svgEl("circle", {
+            svgEl('circle', {
               cx,
               cy,
               r: R,
-              fill: "none",
-              stroke: "rgba(21,21,21,.10)",
-              "stroke-width": 1,
+              fill: 'none',
+              stroke: 'rgba(21,21,21,.10)',
+              'stroke-width': 1,
             }),
-          );
+          )
           rows.forEach((row, i) => {
             const a = pos.get(row.source),
-              b = pos.get(row.target);
-            if (!a || !b) return;
+              b = pos.get(row.target)
+            if (!a || !b) return
             const midX = cx + (a.x + b.x - 2 * cx) * 0.18,
               midY = cy + (a.y + b.y - 2 * cy) * 0.18,
               d = `M ${a.x} ${a.y} Q ${midX} ${midY} ${b.x} ${b.y}`,
               col = c[i % c.length],
               width = Math.max(
                 1,
-                p.lineWidth *
-                  (0.55 +
-                    Math.min(
-                      1.8,
-                      row.value / Math.max(1, rows[0]?.value || 1),
-                    )),
-              );
+                p.lineWidth * (0.55 + Math.min(1.8, row.value / Math.max(1, rows[0]?.value || 1))),
+              )
             svg.appendChild(
-              svgEl("path", {
+              svgEl('path', {
                 d,
-                fill: "none",
+                fill: 'none',
                 stroke: col,
-                "stroke-width": width,
+                'stroke-width': width,
                 opacity: p.opacity,
-                "stroke-linecap": "round",
+                'stroke-linecap': 'round',
               }),
-            );
-          });
+            )
+          })
           nodes.forEach((name, i) => {
             const q = pos.get(name),
-              col = c[i % c.length];
+              col = c[i % c.length]
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: q.x,
                 cy: q.y,
                 r: p.nodeSize,
-                fill: "#fff",
+                fill: '#fff',
                 stroke: col,
-                "stroke-width": 1.5,
+                'stroke-width': 1.5,
               }),
-            );
+            )
             if (p.showLabels) {
               const tx = cx + Math.cos(q.a) * (R + 18),
-                ty = cy + Math.sin(q.a) * (R + 18) + 3;
+                ty = cy + Math.sin(q.a) * (R + 18) + 3
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: tx,
                     y: ty,
-                    "text-anchor":
-                      Math.cos(q.a) > 0.35
-                        ? "start"
-                        : Math.cos(q.a) < -0.35
-                          ? "end"
-                          : "middle",
-                    "font-size": 9,
-                    fill: "rgba(21,21,21,.58)",
+                    'text-anchor':
+                      Math.cos(q.a) > 0.35 ? 'start' : Math.cos(q.a) < -0.35 ? 'end' : 'middle',
+                    'font-size': 9,
+                    fill: 'rgba(21,21,21,.58)',
                   },
                   name,
                 ),
-              );
+              )
             }
-          });
+          })
         }
         function drawSpiral(svg, W, H) {
           const p = chartProps.spiral,
@@ -13308,57 +11931,54 @@
             cy = 315,
             total = Math.max(1, vals.length),
             maxR = Math.min(245, 240),
-            d = [];
+            d = []
           vals.forEach((v, i) => {
             const norm = (v === null ? min : v - min) / (max - min || 1),
               t = (i / Math.max(1, total - 1)) * Math.PI * 2 * p.turns,
               r = 18 + (i / Math.max(1, total - 1)) * maxR,
               x = cx + Math.cos(t) * (r * (0.72 + norm * 0.28)),
-              y = cy + Math.sin(t) * (r * (0.55 + norm * 0.45));
-            d.push(`${d.length ? "L" : "M"}${x} ${y}`);
+              y = cy + Math.sin(t) * (r * (0.55 + norm * 0.45))
+            d.push(`${d.length ? 'L' : 'M'}${x} ${y}`)
             if (v !== null) {
-              const col = c[i % c.length];
+              const col = c[i % c.length]
               svg.appendChild(
-                svgEl("circle", {
+                svgEl('circle', {
                   cx: x,
                   cy: y,
                   r: p.pointSize * (0.75 + norm * 0.9),
-                  fill: "#fff",
+                  fill: '#fff',
                   stroke: col,
-                  "stroke-width": 1.2,
+                  'stroke-width': 1.2,
                   opacity: p.opacity,
                 }),
-              );
-              if (
-                p.showLabels &&
-                (i % Math.max(1, Math.ceil(total / 9)) === 0 || i === total - 1)
               )
+              if (p.showLabels && (i % Math.max(1, Math.ceil(total / 9)) === 0 || i === total - 1))
                 svg.appendChild(
                   svgEl(
-                    "text",
+                    'text',
                     {
                       x,
                       y: y - 9,
-                      "text-anchor": "middle",
-                      "font-size": 8,
-                      fill: "rgba(21,21,21,.54)",
+                      'text-anchor': 'middle',
+                      'font-size': 8,
+                      fill: 'rgba(21,21,21,.54)',
                     },
-                    s.labels[i] || "",
+                    s.labels[i] || '',
                   ),
-                );
+                )
             }
-          });
+          })
           svg.insertBefore(
-            svgEl("path", {
-              d: d.join(" "),
-              fill: "none",
+            svgEl('path', {
+              d: d.join(' '),
+              fill: 'none',
               stroke: c[0],
-              "stroke-width": p.lineWidth,
+              'stroke-width': p.lineWidth,
               opacity: p.opacity * 0.92,
-              "stroke-linecap": "round",
+              'stroke-linecap': 'round',
             }),
             svg.firstChild,
-          );
+          )
         }
         function drawSwarm(svg, W, H) {
           const p = chartProps.swarm,
@@ -13369,9 +11989,9 @@
             max = Math.max(...finite, 1),
             c = palette(),
             count = vals.length,
-            baseX = 500 - p.spread / 2;
+            baseX = 500 - p.spread / 2
           vals.forEach((v, i) => {
-            if (v === null) return;
+            if (v === null) return
             const norm = (v - min) / (max - min || 1),
               angle = i * 2.399963,
               radius = p.maxRadius * (0.38 + norm * 0.62),
@@ -13379,53 +11999,45 @@
                 baseX +
                 (i / Math.max(1, count - 1)) * p.spread +
                 Math.cos(angle) * p.jitter * (0.45 + norm * 0.55),
-              y =
-                320 +
-                Math.sin(angle * 1.7) * p.jitter * (0.72 + (1 - norm) * 0.35),
-              col = c[i % c.length];
+              y = 320 + Math.sin(angle * 1.7) * p.jitter * (0.72 + (1 - norm) * 0.35),
+              col = c[i % c.length]
             svg.appendChild(
-              svgEl("circle", {
-                cx: x,
-                cy: y,
-                r: radius,
-                fill: col,
-                opacity: p.opacity,
-              }),
-            );
+              svgEl('circle', { cx: x, cy: y, r: radius, fill: col, opacity: p.opacity }),
+            )
             svg.appendChild(
-              svgEl("circle", {
+              svgEl('circle', {
                 cx: x - radius * 0.22,
                 cy: y - radius * 0.28,
                 r: Math.max(1, radius * 0.16),
-                fill: "#fff",
+                fill: '#fff',
                 opacity: 0.42,
               }),
-            );
+            )
             if (p.showLabels && i % Math.max(1, Math.ceil(count / 10)) === 0)
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x,
                     y: y + radius + 12,
-                    "text-anchor": "middle",
-                    "font-size": 7.5,
-                    fill: "rgba(21,21,21,.50)",
+                    'text-anchor': 'middle',
+                    'font-size': 7.5,
+                    fill: 'rgba(21,21,21,.50)',
                   },
-                  s.labels[i] || "",
+                  s.labels[i] || '',
                 ),
-              );
-          });
+              )
+          })
           svg.appendChild(
-            svgEl("line", {
+            svgEl('line', {
               x1: baseX,
               y1: 320,
               x2: baseX + p.spread,
               y2: 320,
-              stroke: "rgba(21,21,21,.12)",
-              "stroke-width": 1,
+              stroke: 'rgba(21,21,21,.12)',
+              'stroke-width': 1,
             }),
-          );
+          )
         }
         function drawStream(svg, W, H) {
           const p = chartProps.stream,
@@ -13439,19 +12051,16 @@
             x0 = 65,
             x1 = 935,
             center = 315,
-            baseline = 0;
+            baseline = 0
           const totals = s.labels.map((_, j) =>
-            bands.reduce(
-              (sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0),
-              0,
-            ),
-          );
-          const maxTotal = Math.max(...totals, 1);
+            bands.reduce((sum, item) => sum + Math.max(0, numeric(item.ser.data[j]) ?? 0), 0),
+          )
+          const maxTotal = Math.max(...totals, 1)
           bands.forEach((item, i) => {
-            const ser = item.ser;
+            const ser = item.ser
             const top = [],
               bottom = [],
-              vals = ser.data.map((v) => Math.max(0, numeric(v) ?? 0));
+              vals = ser.data.map((v) => Math.max(0, numeric(v) ?? 0))
             for (let j = 0; j < vals.length; j++) {
               const x = x0 + (j * (x1 - x0)) / Math.max(1, vals.length - 1),
                 current = vals[j] / maxTotal,
@@ -13459,58 +12068,52 @@
                 stack =
                   bands
                     .slice(0, i)
-                    .reduce(
-                      (sum, prev) =>
-                        sum + Math.max(0, numeric(prev.ser.data[j]) ?? 0),
-                      0,
-                    ) / maxTotal,
-                yCenter =
-                  center +
-                  (stack + current / 2 - 0.5) * p.amplitude * 1.35 +
-                  phase,
-                h = Math.max(8, current * p.amplitude * 2.2);
-              top.push({ x, y: yCenter - h / 2 });
-              bottom.push({ x, y: yCenter + h / 2 });
+                    .reduce((sum, prev) => sum + Math.max(0, numeric(prev.ser.data[j]) ?? 0), 0) /
+                  maxTotal,
+                yCenter = center + (stack + current / 2 - 0.5) * p.amplitude * 1.35 + phase,
+                h = Math.max(8, current * p.amplitude * 2.2)
+              top.push({ x, y: yCenter - h / 2 })
+              bottom.push({ x, y: yCenter + h / 2 })
             }
-            let d = "";
+            let d = ''
             top.forEach((pt, j) => {
-              d += `${j ? "L" : "M"}${pt.x} ${pt.y} `;
-            });
+              d += `${j ? 'L' : 'M'}${pt.x} ${pt.y} `
+            })
             bottom
               .slice()
               .reverse()
               .forEach((pt) => {
-                d += `L${pt.x} ${pt.y} `;
-              });
-            d += "Z";
-            const col = c[item.index % c.length];
+                d += `L${pt.x} ${pt.y} `
+              })
+            d += 'Z'
+            const col = c[item.index % c.length]
             svg.appendChild(
-              svgEl("path", {
+              svgEl('path', {
                 d,
                 fill: col,
                 opacity: p.opacity,
                 stroke: col,
-                "stroke-width": p.width,
-                "stroke-opacity": Math.min(0.8, p.opacity + 0.1),
+                'stroke-width': p.width,
+                'stroke-opacity': Math.min(0.8, p.opacity + 0.1),
               }),
-            );
-          });
+            )
+          })
           if (p.showLabels)
             bands.forEach((item, i) =>
               svg.appendChild(
                 svgEl(
-                  "text",
+                  'text',
                   {
                     x: 55,
                     y: streamLegendRows()[i]?.y ?? 120 + i * 18,
-                    "text-anchor": "end",
-                    "font-size": 8,
-                    fill: "rgba(21,21,21,.52)",
+                    'text-anchor': 'end',
+                    'font-size': 8,
+                    fill: 'rgba(21,21,21,.52)',
                   },
                   item.ser.name,
                 ),
               ),
-            );
+            )
         }
         function drawPoster(svg, W, H) {
           const p = chartProps.poster,
@@ -13518,60 +12121,48 @@
             a = s.series[0]?.data.map(numeric) || [],
             finite = a.filter((v) => v !== null && v >= 0),
             total = a.reduce((x, y) => x + (y || 0), 0),
-            maxValue = Math.max(...finite, 1);
+            maxValue = Math.max(...finite, 1)
           svg.appendChild(
             svgEl(
-              "text",
-              {
-                x: 70,
-                y: 180,
-                "font-size": p.headlineSize,
-                "font-weight": 500,
-                fill: "#151515",
-              },
+              'text',
+              { x: 70, y: 180, 'font-size': p.headlineSize, 'font-weight': 500, fill: '#151515' },
               String(Math.round(total)),
             ),
-          );
+          )
           svg.appendChild(
             svgEl(
-              "text",
-              {
-                x: 72,
-                y: 210,
-                "font-size": 10,
-                "letter-spacing": 2,
-                fill: "rgba(21,21,21,.5)",
-              },
-              "观测总量",
+              'text',
+              { x: 72, y: 210, 'font-size': 10, 'letter-spacing': 2, fill: 'rgba(21,21,21,.5)' },
+              '观测总量',
             ),
-          );
+          )
           a.slice(0, p.barCount).forEach((v, i) => {
             const value = Math.max(0, numeric(v) ?? 0),
               barH = Math.max(4, (value / maxValue) * p.barHeight),
-              x = 70 + i * (p.barWidth + 32);
+              x = 70 + i * (p.barWidth + 32)
             svg.appendChild(
-              svgEl("rect", {
+              svgEl('rect', {
                 x,
                 y: 300 + p.barHeight - barH,
                 width: p.barWidth,
                 height: barH,
                 fill: palette()[i % palette().length],
               }),
-            );
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: x + p.barWidth / 2,
                   y: 324 + p.barHeight,
-                  "text-anchor": "middle",
-                  "font-size": 9,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'middle',
+                  'font-size': 9,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 s.labels[i],
               ),
-            );
-          });
+            )
+          })
         }
         function drawField(svg, W, H) {
           const p = chartProps.field,
@@ -13582,381 +12173,324 @@
             vMax = Math.max(...finite, 1),
             c = palette(),
             count = Math.max(30, Math.min(360, p.count)),
-            seed = values.length ? values : [0];
+            seed = values.length ? values : [0]
           for (let i = 0; i < count; i++) {
-            const base = numeric(seed[i % seed.length]) ?? 0;
-            const norm = (base - vMin) / (vMax - vMin || 1);
-            const x = 40 + ((i * 73 + Math.round(norm * 37)) % 920);
-            const y = 95 + ((i * 151 + Math.round(norm * 53)) % 460);
-            const r = p.size * ((i % 4) + 0.6) * (0.8 + norm * 0.5);
-            const o = Math.min(1, p.opacity + (i % 9) / 40);
-            svg.appendChild(
-              svgEl("circle", {
-                cx: x,
-                cy: y,
-                r,
-                fill: c[i % c.length],
-                opacity: o,
-              }),
-            );
+            const base = numeric(seed[i % seed.length]) ?? 0
+            const norm = (base - vMin) / (vMax - vMin || 1)
+            const x = 40 + ((i * 73 + Math.round(norm * 37)) % 920)
+            const y = 95 + ((i * 151 + Math.round(norm * 53)) % 460)
+            const r = p.size * ((i % 4) + 0.6) * (0.8 + norm * 0.5)
+            const o = Math.min(1, p.opacity + (i % 9) / 40)
+            svg.appendChild(svgEl('circle', { cx: x, cy: y, r, fill: c[i % c.length], opacity: o }))
           }
         }
         function drawLollipop(svg, W, H) {
           const p = chartProps.lollipop,
-            s = rowsToSeries();
+            s = rowsToSeries()
           let a = s.series[0].data
             .map(numeric)
             .map((v, i) => ({ v, i, label: s.labels[i] }))
-            .filter((d) => d.v !== null);
-          if (p.sort === "升序") a.sort((x, y) => x.v - y.v);
-          if (p.sort === "降序") a.sort((x, y) => y.v - x.v);
-          if (!a.length) return;
+            .filter((d) => d.v !== null)
+          if (p.sort === '升序') a.sort((x, y) => x.v - y.v)
+          if (p.sort === '降序') a.sort((x, y) => y.v - x.v)
+          if (!a.length) return
           const min = Math.min(...a.map((d) => d.v)),
             max = Math.max(...a.map((d) => d.v)),
             x0 = 100,
             x1 = 860,
             rowH = 30,
-            zeroX =
-              min > 0
-                ? x0
-                : max < 0
-                  ? x1
-                  : x0 + ((0 - min) / (max - min || 1)) * (x1 - x0);
+            zeroX = min > 0 ? x0 : max < 0 ? x1 : x0 + ((0 - min) / (max - min || 1)) * (x1 - x0)
           a.forEach((d, i) => {
             const y = 112 + i * rowH,
               xx = x0 + ((d.v - min) / (max - min || 1)) * (x1 - x0),
-              col = palette()[i % palette().length];
+              col = palette()[i % palette().length]
             svg.appendChild(
-              svgEl("line", {
+              svgEl('line', {
                 x1: zeroX,
                 y1: y,
                 x2: xx,
                 y2: y,
-                stroke: "rgba(21,21,21,.2)",
-                "stroke-width": p.stemWidth,
+                stroke: 'rgba(21,21,21,.2)',
+                'stroke-width': p.stemWidth,
                 opacity: p.opacity,
               }),
-            );
+            )
             svg.appendChild(
-              svgEl("circle", {
-                cx: xx,
-                cy: y,
-                r: p.pointSize,
-                fill: col,
-                opacity: p.opacity,
-              }),
-            );
+              svgEl('circle', { cx: xx, cy: y, r: p.pointSize, fill: col, opacity: p.opacity }),
+            )
             svg.appendChild(
               svgEl(
-                "text",
+                'text',
                 {
                   x: 82,
                   y: y + 3,
-                  "text-anchor": "end",
-                  "font-size": 8,
-                  fill: "rgba(21,21,21,.55)",
+                  'text-anchor': 'end',
+                  'font-size': 8,
+                  fill: 'rgba(21,21,21,.55)',
                 },
                 d.label,
               ),
-            );
-          });
+            )
+          })
         }
         function fitChartFrame() {
-          const stage = $("#chart-stage"),
-            frame = $("#chart-frame");
-          if (!stage || !frame) return false;
+          const stage = $('#chart-stage'),
+            frame = $('#chart-frame')
+          if (!stage || !frame) return false
           const baseW = Math.max(40, stage.clientWidth - 28),
-            baseH = Math.max(40, stage.clientHeight - 28);
+            baseH = Math.max(40, stage.clientHeight - 28)
           const targetW = Math.max(120, Number(state.width) || 1000),
-            targetH = Math.max(120, Number(state.height) || 620);
-          const scale = Math.min(baseW / targetW, baseH / targetH);
-          if (!Number.isFinite(scale) || scale <= 0) return false;
+            targetH = Math.max(120, Number(state.height) || 620)
+          const scale = Math.min(baseW / targetW, baseH / targetH)
+          if (!Number.isFinite(scale) || scale <= 0) return false
           const w = Math.max(1, Math.floor(targetW * scale)),
             h = Math.max(1, Math.floor(targetH * scale)),
             x = 14 + (baseW - w) / 2,
-            y = 14 + (baseH - h) / 2;
-          frame.style.position = "absolute";
-          frame.style.left = Math.round(x) + "px";
-          frame.style.top = Math.round(y) + "px";
-          frame.style.width = w + "px";
-          frame.style.height = h + "px";
-          return true;
+            y = 14 + (baseH - h) / 2
+          frame.style.position = 'absolute'
+          frame.style.left = Math.round(x) + 'px'
+          frame.style.top = Math.round(y) + 'px'
+          frame.style.width = w + 'px'
+          frame.style.height = h + 'px'
+          // 容器尺寸变化后（窗口缩放、全屏预览切换），重新均衡图例的换行/换列
+          rebalanceOverlayLegend()
+          return true
         }
         function resizeChart() {
-          const frame = $("#chart-frame");
-          if (!frame) return;
-          fitChartFrame();
-          applyChartMountLayout();
+          const frame = $('#chart-frame')
+          if (!frame) return
+          fitChartFrame()
+          applyChartMountLayout()
           try {
             if (
               state.chart &&
-              state.engine === "echarts" &&
-              typeof state.chart.resize === "function"
+              state.engine === 'echarts' &&
+              typeof state.chart.resize === 'function'
             )
-              state.chart.resize();
+              state.chart.resize()
             if (
               state.chart &&
-              state.engine === "chartjs" &&
-              typeof state.chart.resize === "function"
+              state.engine === 'chartjs' &&
+              typeof state.chart.resize === 'function'
             ) {
-              applyChartMountLayout();
-              const dpr = getChartJsDevicePixelRatio();
-              if (
-                state.chart.options &&
-                state.chart.options.devicePixelRatio !== dpr
-              )
-                state.chart.options.devicePixelRatio = dpr;
-              state.chart.resize();
+              applyChartMountLayout()
+              const dpr = getChartJsDevicePixelRatio()
+              if (state.chart.options && state.chart.options.devicePixelRatio !== dpr)
+                state.chart.options.devicePixelRatio = dpr
+              state.chart.resize()
             }
             if (
               state.chart &&
-              state.engine === "apexcharts" &&
-              typeof state.chart.updateOptions === "function"
+              state.engine === 'apexcharts' &&
+              typeof state.chart.updateOptions === 'function'
             )
-              state.chart.updateOptions(
-                { chart: { width: "100%", height: "100%" } },
-                false,
-                false,
-              );
+              state.chart.updateOptions({ chart: { width: '100%', height: '100%' } }, false, false)
           } catch (e) {
-            reportError("图表尺寸更新失败", e, false);
+            reportError('图表尺寸更新失败', e, false)
           }
         }
         function resizeHandler() {
-          if ($("#preview-modal")?.classList.contains("open")) {
-            if (fitPreviewFrame()) syncChartSize();
-          } else resizeChart();
+          if ($('#preview-modal')?.classList.contains('open')) {
+            if (fitPreviewFrame()) syncChartSize()
+          } else resizeChart()
         }
         function fitPreviewFrame() {
-          const body = $("#preview-body"),
-            frame = $("#chart-frame");
-          if (!body || !frame) return false;
+          const body = $('#preview-body'),
+            frame = $('#chart-frame')
+          if (!body || !frame) return false
           const baseW = Math.max(40, body.clientWidth - 28),
-            baseH = Math.max(40, body.clientHeight - 28);
+            baseH = Math.max(40, body.clientHeight - 28)
           const targetW = Math.max(120, Number(state.width) || 1000),
-            targetH = Math.max(120, Number(state.height) || 620);
-          const scale = Math.min(baseW / targetW, baseH / targetH);
-          if (!Number.isFinite(scale) || scale <= 0) return false;
+            targetH = Math.max(120, Number(state.height) || 620)
+          const scale = Math.min(baseW / targetW, baseH / targetH)
+          if (!Number.isFinite(scale) || scale <= 0) return false
           const w = Math.max(1, Math.floor(targetW * scale)),
             h = Math.max(1, Math.floor(targetH * scale)),
             x = 14 + (baseW - w) / 2,
-            y = 14 + (baseH - h) / 2;
-          frame.style.position = "absolute";
-          frame.style.left = Math.round(x) + "px";
-          frame.style.top = Math.round(y) + "px";
-          frame.style.width = w + "px";
-          frame.style.height = h + "px";
-          return true;
+            y = 14 + (baseH - h) / 2
+          frame.style.position = 'absolute'
+          frame.style.left = Math.round(x) + 'px'
+          frame.style.top = Math.round(y) + 'px'
+          frame.style.width = w + 'px'
+          frame.style.height = h + 'px'
+          // 全屏预览尺寸变化后，重新均衡图例的换行/换列
+          rebalanceOverlayLegend()
+          return true
         }
         function syncChartSize() {
           try {
             if (
               state.chart &&
-              state.engine === "echarts" &&
-              typeof state.chart.resize === "function"
+              state.engine === 'echarts' &&
+              typeof state.chart.resize === 'function'
             )
-              state.chart.resize();
+              state.chart.resize()
             if (
               state.chart &&
-              state.engine === "chartjs" &&
-              typeof state.chart.resize === "function"
+              state.engine === 'chartjs' &&
+              typeof state.chart.resize === 'function'
             ) {
-              applyChartMountLayout();
-              const dpr = getChartJsDevicePixelRatio();
-              if (
-                state.chart.options &&
-                state.chart.options.devicePixelRatio !== dpr
-              )
-                state.chart.options.devicePixelRatio = dpr;
-              state.chart.resize();
+              applyChartMountLayout()
+              const dpr = getChartJsDevicePixelRatio()
+              if (state.chart.options && state.chart.options.devicePixelRatio !== dpr)
+                state.chart.options.devicePixelRatio = dpr
+              state.chart.resize()
             }
             if (
               state.chart &&
-              state.engine === "apexcharts" &&
-              typeof state.chart.updateOptions === "function"
+              state.engine === 'apexcharts' &&
+              typeof state.chart.updateOptions === 'function'
             )
-              state.chart.updateOptions(
-                { chart: { width: "100%", height: "100%" } },
-                false,
-                false,
-              );
+              state.chart.updateOptions({ chart: { width: '100%', height: '100%' } }, false, false)
           } catch (e) {
-            reportError("图表尺寸更新失败", e, false);
+            reportError('图表尺寸更新失败', e, false)
           }
         }
         function openPreview() {
-          const modal = $("#preview-modal"),
-            body = $("#preview-body"),
-            frame = $("#chart-frame"),
-            stage = $("#chart-stage");
+          const modal = $('#preview-modal'),
+            body = $('#preview-body'),
+            frame = $('#chart-frame'),
+            stage = $('#chart-stage')
           if (!modal || !body || !frame || !stage) {
-            reportError(
-              "图表放大界面不存在",
-              new Error("预览容器或图表容器缺失"),
-              true,
-            );
-            return;
+            reportError('图表放大界面不存在', new Error('预览容器或图表容器缺失'), true)
+            return
           }
           try {
-            if (frame.parentElement !== body) body.appendChild(frame);
-            modal.classList.add("open");
-            if (!fitPreviewFrame()) throw new Error("图表放大空间计算失败");
-            requestAnimationFrame(() =>
-              requestAnimationFrame(() => syncChartSize()),
-            );
-            setStatus("已打开图表放大查看");
+            if (frame.parentElement !== body) body.appendChild(frame)
+            modal.classList.add('open')
+            if (!fitPreviewFrame()) throw new Error('图表放大空间计算失败')
+            requestAnimationFrame(() => requestAnimationFrame(() => syncChartSize()))
+            setStatus('已打开图表放大查看')
           } catch (e) {
             try {
-              stage.appendChild(frame);
-              fitChartFrame();
-              syncChartSize();
+              stage.appendChild(frame)
+              fitChartFrame()
+              syncChartSize()
             } catch (re) {
-              reportError("图表恢复失败", re, false);
+              reportError('图表恢复失败', re, false)
             }
-            modal.classList.remove("open");
-            reportError("图表放大查看失败", e, true);
+            modal.classList.remove('open')
+            reportError('图表放大查看失败', e, true)
           }
         }
         function closePreview() {
-          const modal = $("#preview-modal"),
-            body = $("#preview-body"),
-            stage = $("#chart-stage"),
-            frame = $("#chart-frame");
+          const modal = $('#preview-modal'),
+            body = $('#preview-body'),
+            stage = $('#chart-stage'),
+            frame = $('#chart-frame')
           try {
-            if (stage && frame && frame.parentElement !== stage)
-              stage.appendChild(frame);
-            if (modal) modal.classList.remove("open");
-            fitChartFrame();
-            syncChartSize();
+            if (stage && frame && frame.parentElement !== stage) stage.appendChild(frame)
+            if (modal) modal.classList.remove('open')
+            fitChartFrame()
+            syncChartSize()
           } catch (e) {
-            reportError("关闭图表放大查看失败", e, true);
+            reportError('关闭图表放大查看失败', e, true)
           }
         }
-        $("#fullscreen-btn").onclick = openPreview;
-        $("#preview-close").onclick = closePreview;
-        $("#preview-modal").addEventListener("click", (e) => {
-          if (e.target.id === "preview-modal") closePreview();
-        });
-        window.addEventListener("resize", resizeHandler);
+        $('#fullscreen-btn').onclick = openPreview
+        $('#preview-close').onclick = closePreview
+        $('#preview-modal').addEventListener('click', (e) => {
+          if (e.target.id === 'preview-modal') closePreview()
+        })
+        window.addEventListener('resize', resizeHandler)
 
         function applyRadius() {
-          document.documentElement.style.setProperty(
-            "--radius",
-            state.radius + "px",
-          );
+          document.documentElement.style.setProperty('--radius', state.radius + 'px')
         }
         function changeRadius(delta) {
-          state.radius = Math.min(12, Math.max(0, state.radius + delta));
-          applyRadius();
+          state.radius = Math.min(12, Math.max(0, state.radius + delta))
+          applyRadius()
           try {
-            localStorage.setItem("zenviz.radius", String(state.radius));
+            localStorage.setItem('zenviz.radius', String(state.radius))
           } catch (e) {
-            reportError("圆角设置保存失败", e, false);
+            reportError('圆角设置保存失败', e, false)
           }
-          renderInspector();
-          setStatus(`统一圆角 · ${state.radius}px`);
+          renderInspector()
+          setStatus(`统一圆角 · ${state.radius}px`)
         }
         function restoreStylePrefs() {
           try {
-            const r = Number(localStorage.getItem("zenviz.radius"));
-            if (Number.isFinite(r)) state.radius = Math.max(0, Math.min(12, r));
-            const bg = localStorage.getItem("zenviz.bg");
-            if (
-              [
-                "",
-                "plain",
-                "body-grid",
-                "body-dots",
-                "body-cross",
-                "body-diagonal",
-              ].includes(bg)
-            )
-              state.bg = bg || "plain";
+            const r = Number(localStorage.getItem('zenviz.radius'))
+            if (Number.isFinite(r)) state.radius = Math.max(0, Math.min(12, r))
+            const bg = localStorage.getItem('zenviz.bg')
+            if (['', 'plain', 'body-grid', 'body-dots', 'body-cross', 'body-diagonal'].includes(bg))
+              state.bg = bg || 'plain'
           } catch (e) {
-            reportError("样式设置读取失败", e, false);
+            reportError('样式设置读取失败', e, false)
           }
-          applyRadius();
-          applyBg(state.bg);
+          applyRadius()
+          applyBg(state.bg)
         }
 
         function openDataModal() {
-          normalizeDataSelection();
-          const title = $("#data-modal .modal-head h3");
-          if (title)
-            title.textContent = `数据表 · ${chartNames[state.type] || "图表"}`;
-          renderDataTable();
-          syncDataColumnSelects();
-          bindCustomSelects($("#data-modal"));
-          $("#data-modal").classList.add("open");
+          normalizeDataSelection()
+          const title = $('#data-modal .modal-head h3')
+          if (title) title.textContent = `数据表 · ${chartNames[state.type] || '图表'}`
+          renderDataTable()
+          syncDataColumnSelects()
+          bindCustomSelects($('#data-modal'))
+          $('#data-modal').classList.add('open')
         }
         function closeDataModal() {
-          $("#data-modal").classList.remove("open");
+          $('#data-modal').classList.remove('open')
         }
-        $("#edit-data-btn").onclick = openDataModal;
-        $("#data-close").onclick = closeDataModal;
-        $("#data-modal").addEventListener("click", (e) => {
-          if (e.target.id === "data-modal") closeDataModal();
-        });
-        $("#data-modal").addEventListener("zenchange", (e) => {
-          const el = e.target.closest?.(".zen-select[data-select-key]");
-          if (!el || !$("#data-modal").contains(el)) return;
-          const key = el.dataset.selectKey;
-          if (
-            !["x-col", "y-cols", "target-col", "y1-col", "y2-col"].includes(key)
-          )
-            return;
-          handleDataSelectionChange(
-            key,
-            e.detail?.value ?? (key === "y-cols" ? [] : ""),
-          );
-        });
+        $('#edit-data-btn').onclick = openDataModal
+        $('#data-close').onclick = closeDataModal
+        $('#data-modal').addEventListener('click', (e) => {
+          if (e.target.id === 'data-modal') closeDataModal()
+        })
+        $('#data-modal').addEventListener('zenchange', (e) => {
+          const el = e.target.closest?.('.zen-select[data-select-key]')
+          if (!el || !$('#data-modal').contains(el)) return
+          const key = el.dataset.selectKey
+          if (!['x-col', 'y-cols', 'target-col', 'y1-col', 'y2-col'].includes(key)) return
+          handleDataSelectionChange(key, e.detail?.value ?? (key === 'y-cols' ? [] : ''))
+        })
         function dataRoleFieldMarkup(role) {
-          const multiple = role.multiple === true;
-          const safeId = String(role.key).replace(/[^a-z0-9-]/gi, "-");
+          const multiple = role.multiple === true
+          const safeId = String(role.key).replace(/[^a-z0-9-]/gi, '-')
           return `<div class="field data-role-field" id="data-field-${safeId}">
   <label>${escapeHtml(role.label)}</label>
-  <div class="zen-select${multiple ? " multi" : ""}" id="zen-select-${safeId}" data-select-key="${escapeHtml(role.key)}" data-multiple="${multiple ? "true" : "false"}" data-value="" aria-expanded="false">
+  <div class="zen-select${multiple ? ' multi' : ''}" id="zen-select-${safeId}" data-select-key="${escapeHtml(role.key)}" data-multiple="${multiple ? 'true' : 'false'}" data-value="" aria-expanded="false">
     <button type="button" class="zen-select-button">请选择</button>
     <div class="zen-select-menu"><div class="zen-select-empty">暂无列</div></div>
   </div>
-</div>`;
+</div>`
         }
         function renderDataRoleFields() {
-          const host = $("#data-role-fields");
-          if (!host) return;
-          const rule = getChartDataRule(state.type);
+          const host = $('#data-role-fields')
+          if (!host) return
+          const rule = getChartDataRule(state.type)
           const roles = rule.ui?.roles || [
-            { key: "x-col", label: "分类列", kind: "category" },
-            { key: "y-cols", label: "系列列", kind: "numeric", multiple: true },
-          ];
-          host.innerHTML = roles.map(dataRoleFieldMarkup).join("");
-          const note = $("#data-role-note");
+            { key: 'x-col', label: '分类列', kind: 'category' },
+            { key: 'y-cols', label: '系列列', kind: 'numeric', multiple: true },
+          ]
+          host.innerHTML = roles.map(dataRoleFieldMarkup).join('')
+          const note = $('#data-role-note')
           if (note) {
             const legendNote =
-              rule.legend === "category"
-                ? "图例对应分类值。"
-                : rule.legend === "series"
-                  ? "图例对应所选系列列的列头。"
-                  : "此图表不使用图例。";
-            note.textContent = [rule.ui?.note, legendNote]
-              .filter(Boolean)
-              .join(" ");
-            note.classList.remove("is-hidden");
+              rule.legend === 'category'
+                ? '图例对应分类值。'
+                : rule.legend === 'series'
+                  ? '图例对应所选系列列的列头。'
+                  : '此图表不使用图例。'
+            note.textContent = [rule.ui?.note, legendNote].filter(Boolean).join(' ')
+            note.classList.remove('is-hidden')
           }
         }
         function renderRoleSelect(key, role, activeValue, blockFn) {
-          const el = $(`[data-select-key="${key}"]`);
-          if (!el) return;
-          const menu = el.querySelector(".zen-select-menu");
-          if (!menu) return;
-          const multiple = role.multiple === true;
-          const d = state.data || { headers: [], rows: [] };
+          const el = $(`[data-select-key="${key}"]`)
+          if (!el) return
+          const menu = el.querySelector('.zen-select-menu')
+          if (!menu) return
+          const multiple = role.multiple === true
+          const d = state.data || { headers: [], rows: [] }
           if (!d.headers.length) {
-            menu.innerHTML = '<div class="zen-select-empty">暂无列</div>';
-            el.dataset.value = "";
-            const btn = el.querySelector(".zen-select-button");
-            if (btn) btn.textContent = "请选择";
-            return;
+            menu.innerHTML = '<div class="zen-select-empty">暂无列</div>'
+            el.dataset.value = ''
+            const btn = el.querySelector('.zen-select-button')
+            if (btn) btn.textContent = '请选择'
+            return
           }
           const active = multiple
             ? new Set(
@@ -13965,414 +12499,344 @@
                   .filter(Number.isInteger),
               )
             : new Set(
-                Number.isInteger(
-                  Array.isArray(activeValue) ? activeValue[0] : activeValue,
-                )
-                  ? [
-                      Number(
-                        Array.isArray(activeValue)
-                          ? activeValue[0]
-                          : activeValue,
-                      ),
-                    ]
+                Number.isInteger(Array.isArray(activeValue) ? activeValue[0] : activeValue)
+                  ? [Number(Array.isArray(activeValue) ? activeValue[0] : activeValue)]
                   : [],
-              );
+              )
           menu.innerHTML = d.headers
             .map((h, i) => {
-              const stats = columnStats(i);
-              const isActive = active.has(i);
+              const stats = columnStats(i)
+              const isActive = active.has(i)
               let allowed = true,
-                reason = "";
+                reason = ''
               if (blockFn) {
-                const result = blockFn(i, stats, isActive);
+                const result = blockFn(i, stats, isActive)
                 if (result) {
-                  allowed = result.allowed !== false;
-                  reason = result.reason || "";
+                  allowed = result.allowed !== false
+                  reason = result.reason || ''
                 }
               }
-              if (
-                multiple &&
-                !isActive &&
-                role.max !== undefined &&
-                active.size >= role.max
-              ) {
-                allowed = false;
-                reason = `当前图表最多选择 ${role.max} 个列`;
+              if (multiple && !isActive && role.max !== undefined && active.size >= role.max) {
+                allowed = false
+                reason = `当前图表最多选择 ${role.max} 个列`
               }
-              const blocked = !allowed && !isActive;
-              return `<button type="button" class="zen-select-option${isActive ? " active" : ""}" data-value="${i}"${blocked ? ` aria-disabled="true" data-select-disabled="true" data-reason="${escapeHtml(reason)}" title="${escapeHtml(reason)}"` : ""}>${escapeHtml(h)}${blocked && multiple ? ` <span class="muted">· ${escapeHtml(reason)}</span>` : ""}</button>`;
+              const blocked = !allowed && !isActive
+              return `<button type="button" class="zen-select-option${isActive ? ' active' : ''}" data-value="${i}"${blocked ? ` aria-disabled="true" data-select-disabled="true" data-reason="${escapeHtml(reason)}" title="${escapeHtml(reason)}"` : ''}>${escapeHtml(h)}${blocked && multiple ? ` <span class="muted">· ${escapeHtml(reason)}</span>` : ''}</button>`
             })
-            .join("");
+            .join('')
           el.dataset.value = multiple
-            ? Array.from(active).join(",")
+            ? Array.from(active).join(',')
             : active.size
               ? String(Array.from(active)[0])
-              : "";
-          const btn = el.querySelector(".zen-select-button");
+              : ''
+          const btn = el.querySelector('.zen-select-button')
           if (btn) {
             const text = multiple
               ? Array.from(active)
                   .map((i) => d.headers[i])
                   .filter(Boolean)
-                  .join("、")
-              : d.headers[Array.from(active)[0]] || "";
-            btn.textContent = text || "请选择";
+                  .join('、')
+              : d.headers[Array.from(active)[0]] || ''
+            btn.textContent = text || '请选择'
           }
         }
         function syncDataColumnSelects() {
-          const rule = getChartDataRule(state.type);
-          normalizeDataSelection();
-          renderDataRoleFields();
-          const roles = rule.ui?.roles || [];
+          const rule = getChartDataRule(state.type)
+          normalizeDataSelection()
+          renderDataRoleFields()
+          const roles = rule.ui?.roles || []
           roles.forEach((role) => {
-            if (role.key === "x-col") {
-              renderRoleSelect("x-col", role, state.xCol, (i, stats) => {
-                if (rule.x === "numeric" && !stats.isNumeric)
-                  return { allowed: false, reason: "当前图表要求数值 X 轴" };
-                if (rule.x === "category" && !stats.hasAnyValue)
-                  return { allowed: false, reason: "该列没有可用的分类数据" };
-                return null;
-              });
-            } else if (role.key === "y-cols") {
-              role.max = rule.maxY;
-              renderRoleSelect("y-cols", role, state.yCols, (i, stats) => {
-                if (!stats.isNumeric)
-                  return { allowed: false, reason: "该列不是纯数值列" };
-                if (rule.x !== "none" && i === state.xCol)
-                  return { allowed: false, reason: "该列当前承担其它数据角色" };
+            if (role.key === 'x-col') {
+              renderRoleSelect('x-col', role, state.xCol, (i, stats) => {
+                if (rule.x === 'numeric' && !stats.isNumeric)
+                  return { allowed: false, reason: '当前图表要求数值 X 轴' }
+                if (rule.x === 'category' && !stats.hasAnyValue)
+                  return { allowed: false, reason: '该列没有可用的分类数据' }
+                return null
+              })
+            } else if (role.key === 'y-cols') {
+              role.max = rule.maxY
+              renderRoleSelect('y-cols', role, state.yCols, (i, stats) => {
+                if (!stats.isNumeric) return { allowed: false, reason: '该列不是纯数值列' }
+                if (rule.x !== 'none' && i === state.xCol)
+                  return { allowed: false, reason: '该列当前承担其它数据角色' }
                 if (rule.target && i === state.targetCol)
-                  return { allowed: false, reason: "该列当前承担去向角色" };
-                return null;
-              });
-            } else if (role.key === "target-col") {
-              renderRoleSelect(
-                "target-col",
-                role,
-                state.targetCol,
-                (i, stats) => {
-                  if (i === state.xCol)
-                    return { allowed: false, reason: "去向列必须与来源列不同" };
-                  if (!stats.hasAnyValue)
-                    return { allowed: false, reason: "该列没有可用的去向数据" };
-                  return null;
-                },
-              );
-            } else if (role.key === "y1-col" || role.key === "y2-col") {
-              const active = role.key === "y1-col" ? state.y1Col : state.y2Col;
-              const other = role.key === "y1-col" ? state.y2Col : state.y1Col;
+                  return { allowed: false, reason: '该列当前承担去向角色' }
+                return null
+              })
+            } else if (role.key === 'target-col') {
+              renderRoleSelect('target-col', role, state.targetCol, (i, stats) => {
+                if (i === state.xCol) return { allowed: false, reason: '去向列必须与来源列不同' }
+                if (!stats.hasAnyValue) return { allowed: false, reason: '该列没有可用的去向数据' }
+                return null
+              })
+            } else if (role.key === 'y1-col' || role.key === 'y2-col') {
+              const active = role.key === 'y1-col' ? state.y1Col : state.y2Col
+              const other = role.key === 'y1-col' ? state.y2Col : state.y1Col
               renderRoleSelect(role.key, role, active, (i, stats) => {
-                if (
-                  (rule.x !== "none" && i === state.xCol) ||
-                  i === state.targetCol
-                )
-                  return { allowed: false, reason: "该列当前承担其它数据角色" };
-                if (i === other)
-                  return {
-                    allowed: false,
-                    reason: "两个数值角色必须选择不同列",
-                  };
-                if (!stats.isNumeric)
-                  return { allowed: false, reason: "该列不是纯数值列" };
-                return null;
-              });
+                if ((rule.x !== 'none' && i === state.xCol) || i === state.targetCol)
+                  return { allowed: false, reason: '该列当前承担其它数据角色' }
+                if (i === other) return { allowed: false, reason: '两个数值角色必须选择不同列' }
+                if (!stats.isNumeric) return { allowed: false, reason: '该列不是纯数值列' }
+                return null
+              })
             }
-          });
-          bindCustomSelects($("#data-modal") || document);
+          })
+          bindCustomSelects($('#data-modal') || document)
         }
         function renderDataTable() {
-          const d = state.data;
-          const wrap = $("#table-wrap");
+          const d = state.data
+          const wrap = $('#table-wrap')
           let h =
             '<table class="csv-table"><thead><tr>' +
-            d.headers.map((x) => `<th>${escapeHtml(x)}</th>`).join("") +
-            "</tr></thead><tbody>";
+            d.headers.map((x) => `<th>${escapeHtml(x)}</th>`).join('') +
+            '</tr></thead><tbody>'
           d.rows.forEach((r, ri) => {
             h +=
-              "<tr>" +
+              '<tr>' +
               d.headers
                 .map(
                   (_, ci) =>
-                    `<td contenteditable="true" data-r="${ri}" data-c="${ci}">${escapeHtml(r[ci] ?? "")}</td>`,
+                    `<td contenteditable="true" data-r="${ri}" data-c="${ci}">${escapeHtml(r[ci] ?? '')}</td>`,
                 )
-                .join("") +
-              "</tr>";
-          });
-          wrap.innerHTML = h + "</tbody></table>";
-          $$(".csv-table td").forEach((td) => {
-            td.addEventListener("input", () => {
+                .join('') +
+              '</tr>'
+          })
+          wrap.innerHTML = h + '</tbody></table>'
+          $$('.csv-table td').forEach((td) => {
+            td.addEventListener('input', () => {
               const r = Number(td.dataset.r),
-                c = Number(td.dataset.c);
-              if (
-                !Number.isInteger(r) ||
-                !Number.isInteger(c) ||
-                !state.data.rows[r]
-              )
-                return;
-              state.data.rows[r][c] = td.textContent.trim();
-              normalizeDataSelection();
-              syncDataColumnSelects();
-              schedulePersist();
-              renderChart(false);
-            });
-          });
-          syncDataColumnSelects();
+                c = Number(td.dataset.c)
+              if (!Number.isInteger(r) || !Number.isInteger(c) || !state.data.rows[r]) return
+              state.data.rows[r][c] = td.textContent.trim()
+              normalizeDataSelection()
+              syncDataColumnSelects()
+              schedulePersist()
+              renderChart(false)
+            })
+          })
+          syncDataColumnSelects()
         }
-        $("#data-add-row").onclick = () => {
-          state.data.rows.push(new Array(state.data.headers.length).fill(""));
-          renderDataTable();
-          schedulePersist();
-          renderChart(false);
-        };
-        $("#data-add-col").onclick = () => {
-          state.data.headers.push("系列" + state.data.headers.length);
-          state.data.rows.forEach((r) => r.push(""));
-          renderDataTable();
-          schedulePersist();
-          renderChart(false);
-        };
-        $("#parse-paste").onclick = () => {
-          const raw = $("#paste-data").value.trim();
-          if (!raw) return;
+        $('#data-add-row').onclick = () => {
+          state.data.rows.push(new Array(state.data.headers.length).fill(''))
+          renderDataTable()
+          schedulePersist()
+          renderChart(false)
+        }
+        $('#data-add-col').onclick = () => {
+          state.data.headers.push('系列' + state.data.headers.length)
+          state.data.rows.forEach((r) => r.push(''))
+          renderDataTable()
+          schedulePersist()
+          renderChart(false)
+        }
+        $('#parse-paste').onclick = () => {
+          const raw = $('#paste-data').value.trim()
+          if (!raw) return
           try {
-            state.data = parseTextData(raw);
-            normalizeDataSelection({ fillDefaults: true });
-            renderDataTable();
-            schedulePersist();
-            renderChart(false);
-            setStatus("粘贴数据已解析");
+            state.data = parseTextData(raw)
+            normalizeDataSelection({ fillDefaults: true })
+            renderDataTable()
+            schedulePersist()
+            renderChart(false)
+            setStatus('粘贴数据已解析')
           } catch (e) {
-            reportError("数据解析失败", e, true);
+            reportError('数据解析失败', e, true)
           }
-        };
-        /* The parser lives in `js/zenviz-parse.js` (loaded before this file) so a test can run it.
-           Delegating keeps ONE implementation: an inlined copy here would drift from the tested one
-           the moment either changed, and the drift would be silent — a table that loads differently
-           on the page than in the suite. */
-        function parseTextData(raw) {
-          if (!window.ZenvizParse || typeof window.ZenvizParse.textData !== "function") {
-            throw new Error("zenviz-parse.js 未加载：无法解析粘贴的数据");
-          }
-          return window.ZenvizParse.textData(raw);
         }
-        $("#import-btn").onclick = () => $("#file-input").click();
-        $("#file-input").onchange = async (e) => {
-          const f = e.target.files?.[0];
-          if (!f) return;
+        function parseTextData(raw) {
+          if (!window.ZenvizParse || typeof window.ZenvizParse.textData !== 'function') {
+            throw new Error('zenviz-parse.js 未加载：无法解析粘贴的数据')
+          }
+          return window.ZenvizParse.textData(raw)
+        }
+
+        $('#import-btn').onclick = () => $('#file-input').click()
+        $('#file-input').onchange = async (e) => {
+          const f = e.target.files?.[0]
+          if (!f) return
           try {
-            const name = f.name.toLowerCase();
-            if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-              if (!window.XLSX) throw Error("SheetJS 未加载");
-              const ab = await f.arrayBuffer();
-              const wb = XLSX.read(ab, { type: "array" });
-              const ws = wb.Sheets[wb.SheetNames[0]];
-              const aoa = XLSX.utils.sheet_to_json(ws, {
-                header: 1,
-                defval: "",
-              });
-              state.data = aoaToData(aoa);
+            const name = f.name.toLowerCase()
+            if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+              if (!window.XLSX) throw Error('SheetJS 未加载')
+              const ab = await f.arrayBuffer()
+              const wb = XLSX.read(ab, { type: 'array' })
+              const ws = wb.Sheets[wb.SheetNames[0]]
+              const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+              state.data = aoaToData(aoa)
             } else {
-              const raw = await f.text();
-              state.data = parseTextData(raw);
+              const raw = await f.text()
+              state.data = parseTextData(raw)
             }
-            normalizeDataSelection({ fillDefaults: true });
-            renderDataTable();
-            const validation = validateDataMapping(state.type);
+            normalizeDataSelection({ fillDefaults: true })
+            renderDataTable()
+            const validation = validateDataMapping(state.type)
             if (validation.valid) {
-              renderChart();
-              setStatus("已导入 · " + f.name);
+              renderChart()
+              setStatus('已导入 · ' + f.name)
             } else {
-              renderChart(false);
-              setStatus(
-                "已导入 · " + f.name + " · " + validation.message,
-                "warn",
-              );
+              renderChart(false)
+              setStatus('已导入 · ' + f.name + ' · ' + validation.message, 'warn')
             }
           } catch (err) {
-            console.error(err);
-            setStatus("导入失败 · " + (err.message || err), "err");
+            console.error(err)
+            setStatus('导入失败 · ' + (err.message || err), 'err')
           } finally {
-            e.target.value = "";
+            e.target.value = ''
           }
-        };
+        }
         function aoaToData(a) {
           const rows = a
-            .filter((r) => r.some((v) => String(v ?? "").trim() !== ""))
-            .map((r) => r.map((v) => String(v ?? "")));
-          if (!rows.length) return structuredClone(sample);
-          const headers = rows.shift().map((v, i) => v || "列" + (i + 1));
-          const width = Math.max(headers.length, ...rows.map((r) => r.length));
-          while (headers.length < width)
-            headers.push("列" + (headers.length + 1));
+            .filter((r) => r.some((v) => String(v ?? '').trim() !== ''))
+            .map((r) => r.map((v) => String(v ?? '')))
+          if (!rows.length) return structuredClone(sample)
+          const headers = rows.shift().map((v, i) => v || '列' + (i + 1))
+          const width = Math.max(headers.length, ...rows.map((r) => r.length))
+          while (headers.length < width) headers.push('列' + (headers.length + 1))
           return {
             headers,
             rows: rows.map((r) => {
-              while (r.length < width) r.push("");
-              return r;
+              while (r.length < width) r.push('')
+              return r
             }),
-          };
+          }
         }
 
         // 导出时是否使用透明背景。PNG / SVG 生效；PDF 页面本身不透明，仍然铺白底。
         function exportTransparent() {
-          return state.exportTransparent === true;
-        }
-        // 导出菜单里的“透明背景”快捷项：改的是当前图表自己的输出设置
-        function toggleExportTransparent() {
-          const next = !exportTransparent();
-          setEngineStateProp("exportTransparent", next);
-          renderInspector();
-          // 引擎画布自身的白底由这个开关控制，改完要重绘一次
-          flushRender();
-          return setStatus(next ? "导出背景 · 透明" : "导出背景 · 白底");
+          return state.exportTransparent === true
         }
         /*
          * 导出清晰度：倍数越大越清晰，但栅格化画布的像素总数有上限，
          * 否则 8 倍在 1000 × 620 的设计上会直接撑爆浏览器画布。
          * 上限约 3200 万像素，超出时按上限收敛并在状态栏说明实际尺寸。
          */
-        const EXPORT_MAX_PIXELS = 32e6;
+        const EXPORT_MAX_PIXELS = 32e6
         function exportScaleFactor(baseW, baseH) {
-          const want = Math.max(1, Number(state.exportScale) || 1);
-          const area = Math.max(1, Math.round(baseW) * Math.round(baseH));
-          const limit = Math.sqrt(EXPORT_MAX_PIXELS / area);
-          if (want <= limit) return { scale: want, capped: false };
-          return {
-            scale: Math.max(1, Math.floor(limit * 10) / 10),
-            capped: true,
-          };
+          const want = Math.max(1, Number(state.exportScale) || 1)
+          const area = Math.max(1, Math.round(baseW) * Math.round(baseH))
+          const limit = Math.sqrt(EXPORT_MAX_PIXELS / area)
+          if (want <= limit) return { scale: want, capped: false }
+          return { scale: Math.max(1, Math.floor(limit * 10) / 10), capped: true }
         }
         function exportDone(label, canvas, capped, transparent) {
           setStatus(
             `${label} 已导出 · ${canvas.width} × ${canvas.height}` +
-              (capped ? " · 已达清晰度上限" : "") +
-              (transparent ? " · 透明背景" : ""),
-          );
+              (capped ? ' · 已达清晰度上限' : '') +
+              (transparent ? ' · 透明背景' : ''),
+          )
         }
         // transparent 缺省跟随右侧属性“透明背景”开关；PDF 会显式传 false。
-        async function getExportCanvas({
-          transparent = exportTransparent(),
-        } = {}) {
-          const frame = $("#chart-frame");
-          const mount = $("#chart-mount");
-          const host = mount?.querySelector(".chartjs-scale-host");
+        async function getExportCanvas({ transparent = exportTransparent() } = {}) {
+          const frame = $('#chart-frame')
+          const mount = $('#chart-mount')
+          const host = mount?.querySelector('.chartjs-scale-host')
           // 抓图前先摘掉工作区的 transform。
           // html2canvas 不解析 CSS transform，chart-mount 上的 scale()/translate()
           // 以及 Chart.js 缩放宿主上的 translate(-50%,-50%) 都会被忽略，
           // 结果就是导出图整体错位、只剩一角（等同于“导出变形”）。
           const saved = [
-            [mount, mount ? mount.getAttribute("style") : null],
-            [host, host ? host.getAttribute("style") : null],
-          ];
+            [mount, mount ? mount.getAttribute('style') : null],
+            [host, host ? host.getAttribute('style') : null],
+          ]
           const redraw = () => {
             try {
-              if (state.chart && typeof state.chart.resize === "function")
-                state.chart.resize();
+              if (state.chart && typeof state.chart.resize === 'function') state.chart.resize()
               else if (
                 state.chart &&
-                state.engine === "apexcharts" &&
-                typeof state.chart.updateOptions === "function"
+                state.engine === 'apexcharts' &&
+                typeof state.chart.updateOptions === 'function'
               )
                 state.chart.updateOptions(
-                  { chart: { width: "100%", height: "100%" } },
+                  { chart: { width: '100%', height: '100%' } },
                   false,
                   false,
-                );
+                )
             } catch (e) {
-              reportError("导出前图表重绘失败", e, false);
+              reportError('导出前图表重绘失败', e, false)
             }
-          };
+          }
           try {
             if (mount) {
-              mount.style.transform = "none";
-              mount.style.left = "0";
-              mount.style.top = "0";
+              mount.style.transform = 'none'
+              mount.style.left = '0'
+              mount.style.top = '0'
             }
             if (host) {
-              host.style.transform = "none";
-              host.style.left = "0";
-              host.style.top = "0";
-              host.style.width = "100%";
-              host.style.height = "100%";
+              host.style.transform = 'none'
+              host.style.left = '0'
+              host.style.top = '0'
+              host.style.width = '100%'
+              host.style.height = '100%'
             }
             // 画布自身是白底 + 浅边框，不处理的话 PNG 边角仍然是实色
-            if (transparent) frame.classList.add("is-export-transparent");
-            redraw();
-            await new Promise((r) =>
-              requestAnimationFrame(() => requestAnimationFrame(r)),
-            );
-            const factor = exportScaleFactor(
-              frame.offsetWidth,
-              frame.offsetHeight,
-            );
+            if (transparent) frame.classList.add('is-export-transparent')
+            redraw()
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+            const factor = exportScaleFactor(frame.offsetWidth, frame.offsetHeight)
             const canvas = await html2canvas(frame, {
               // html2canvas 省略 backgroundColor 时会默认铺一层不透明白底，
               // 必须显式传 rgba(0,0,0,0) 才能拿到真正透明的画布。
-              backgroundColor: transparent
-                ? "rgba(0,0,0,0)"
-                : exportPaperColor(),
+              backgroundColor: transparent ? 'rgba(0,0,0,0)' : exportPaperColor(),
               scale: factor.scale,
               useCORS: true,
               logging: false,
-            });
-            return { canvas, capped: factor.capped, transparent };
+            })
+            return { canvas, capped: factor.capped, transparent }
           } finally {
-            frame.classList.remove("is-export-transparent");
+            frame.classList.remove('is-export-transparent')
             saved.forEach(([el, style]) => {
-              if (!el) return;
-              if (style === null) el.removeAttribute("style");
-              else el.setAttribute("style", style);
-            });
-            applyChartMountLayout();
-            redraw();
+              if (!el) return
+              if (style === null) el.removeAttribute('style')
+              else el.setAttribute('style', style)
+            })
+            applyChartMountLayout()
+            redraw()
           }
         }
         async function exportPNG() {
           try {
             const { canvas, capped, transparent } =
-              state.engine === "zen"
-                ? await svgToCanvas()
-                : await getExportCanvas();
-            const a = document.createElement("a");
-            a.download = safeName(state.title) + ".png";
-            a.href = canvas.toDataURL("image/png");
-            a.click();
-            exportDone("PNG", canvas, capped, transparent);
+              state.engine === 'zen' ? await svgToCanvas() : await getExportCanvas()
+            const a = document.createElement('a')
+            a.download = safeName(state.title) + '.png'
+            a.href = canvas.toDataURL('image/png')
+            a.click()
+            exportDone('PNG', canvas, capped, transparent)
           } catch (e) {
-            reportError("PNG 导出失败", e, true);
+            reportError('PNG 导出失败', e, true)
           }
         }
         function safeName(s) {
-          return String(s || "zenviz")
-            .replace(/[\\/:*?"<>|]/g, "_")
-            .slice(0, 60);
+          return String(s || 'zenviz')
+            .replace(/[\\/:*?"<>|]/g, '_')
+            .slice(0, 60)
         }
         async function svgToCanvas({ transparent = exportTransparent() } = {}) {
-          const svgString = getRenderedSVGString({ transparent });
-          if (!svgString) throw Error("当前图表没有可栅格化的 SVG 画布");
-          const box = /viewBox="([^"]+)"/.exec(svgString);
-          const dims = box ? box[1].trim().split(/\s+/).map(Number) : [];
-          const baseW = Math.max(1, Math.round(dims[2] || state.width || 1000));
-          const baseH = Math.max(1, Math.round(dims[3] || state.height || 620));
+          const svgString = getRenderedSVGString({ transparent })
+          if (!svgString) throw Error('当前图表没有可栅格化的 SVG 画布')
+          const box = /viewBox="([^"]+)"/.exec(svgString)
+          const dims = box ? box[1].trim().split(/\s+/).map(Number) : []
+          const baseW = Math.max(1, Math.round(dims[2] || state.width || 1000))
+          const baseH = Math.max(1, Math.round(dims[3] || state.height || 620))
           return new Promise((resolve, reject) => {
-            const img = new Image();
+            const img = new Image()
             img.onload = () => {
-              const factor = exportScaleFactor(baseW, baseH);
-              const c = document.createElement("canvas");
-              c.width = Math.max(1, Math.round(baseW * factor.scale));
-              c.height = Math.max(1, Math.round(baseH * factor.scale));
-              const ctx = c.getContext("2d");
+              const factor = exportScaleFactor(baseW, baseH)
+              const c = document.createElement('canvas')
+              c.width = Math.max(1, Math.round(baseW * factor.scale))
+              c.height = Math.max(1, Math.round(baseH * factor.scale))
+              const ctx = c.getContext('2d')
               if (!transparent) {
-                ctx.fillStyle = exportPaperColor();
-                ctx.fillRect(0, 0, c.width, c.height);
+                ctx.fillStyle = exportPaperColor()
+                ctx.fillRect(0, 0, c.width, c.height)
               }
-              ctx.drawImage(img, 0, 0, c.width, c.height);
-              resolve({ canvas: c, capped: factor.capped, transparent });
-            };
-            img.onerror = reject;
-            img.src =
-              "data:image/svg+xml;charset=utf-8," +
-              encodeURIComponent(svgString);
-          });
+              ctx.drawImage(img, 0, 0, c.width, c.height)
+              resolve({ canvas: c, capped: factor.capped, transparent })
+            }
+            img.onerror = reject
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString)
+          })
         }
         /*
          * 显示与导出严格分离：
@@ -14380,16 +12844,20 @@
          * 2. PNG/PDF 的栅格化只发生在用户主动导出时。
          * 3. SVG 导出优先直接序列化当前引擎实际生成的 SVG；只有 Canvas 引擎
          *    （Chart.js）没有原生 SVG 时，才允许在导出文件中使用 PNG 作为后备。
+         *
+         * 导出文件必须与页面彻底解耦：不能把工作区写在 <svg> 上的行内样式
+         * （position / width:100% / transform:scale()）和 preserveAspectRatio="none"
+         * 一起写进文件，否则打开后整张图会被拉伸并偏移，也就是导出“变形”。
          */
         function exportPaperColor() {
           const paper = getComputedStyle(document.documentElement)
-            .getPropertyValue("--paper")
-            .trim();
-          return /^(#|rgb|hsl)/i.test(paper) ? paper : "#ffffff";
+            .getPropertyValue('--paper')
+            .trim()
+          return /^(#|rgb|hsl)/i.test(paper) ? paper : '#ffffff'
         }
         function svgNumber(value, fallback) {
-          const n = Number.parseFloat(String(value ?? "").replace(/px/i, ""));
-          return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback;
+          const n = Number.parseFloat(String(value ?? '').replace(/px/i, ''))
+          return Number.isFinite(n) && n > 0 ? Math.round(n) : fallback
         }
         function buildStandaloneSVGString(
           sourceSvg,
@@ -14398,309 +12866,1249 @@
           viewBox,
           { transparent = exportTransparent() } = {},
         ) {
-          const clone = sourceSvg.cloneNode(true);
-          clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-          clone.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink");
+          const clone = sourceSvg.cloneNode(true)
+          clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+          clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink')
           // 这些属性只对页面里的摆放有意义，带进导出文件就会变形
-          [
-            "id",
-            "class",
-            "style",
-            "tabindex",
-            "role",
-            "transform",
-            "preserveAspectRatio",
-          ].forEach((attr) => clone.removeAttribute(attr));
+          ;['id', 'class', 'style', 'tabindex', 'role', 'transform', 'preserveAspectRatio'].forEach(
+            (attr) => clone.removeAttribute(attr),
+          )
           // 引擎自己画的全幅白底 rect（例如 ECharts 的 backgroundColor）在透明导出时要去掉，
           // 否则 buildStandaloneSVGString 不铺底色也没有用，PNG 边角仍是实色。
           if (transparent) {
-            clone.querySelectorAll("rect").forEach((r) => {
-              const w = svgNumber(r.getAttribute("width"), 0);
-              const h = svgNumber(r.getAttribute("height"), 0);
-              const x = svgNumber(r.getAttribute("x"), 0);
-              const y = svgNumber(r.getAttribute("y"), 0);
-              const fill = String(r.getAttribute("fill") || "")
+            clone.querySelectorAll('rect').forEach((r) => {
+              const w = svgNumber(r.getAttribute('width'), 0)
+              const h = svgNumber(r.getAttribute('height'), 0)
+              const x = svgNumber(r.getAttribute('x'), 0)
+              const y = svgNumber(r.getAttribute('y'), 0)
+              const fill = String(r.getAttribute('fill') || '')
                 .trim()
-                .toLowerCase();
+                .toLowerCase()
               const isPaper =
-                fill === "#ffffff" ||
-                fill === "#fff" ||
-                fill === "white" ||
-                fill === "rgb(255,255,255)" ||
-                fill === "none" ||
-                fill === "transparent";
-              if (
-                isPaper &&
-                x <= 0 &&
-                y <= 0 &&
-                w >= Number(width) &&
-                h >= Number(height)
-              )
-                r.remove();
-            });
+                fill === '#ffffff' ||
+                fill === '#fff' ||
+                fill === 'white' ||
+                fill === 'rgb(255,255,255)' ||
+                fill === 'transparent'
+              if (isPaper && x <= 0 && y <= 0 && w >= Number(width) && h >= Number(height))
+                r.remove()
+            })
           }
-          const w = Math.max(1, Math.round(Number(width) || 0));
-          const h = Math.max(1, Math.round(Number(height) || 0));
+          const w = Math.max(1, Math.round(Number(width) || 0))
+          const h = Math.max(1, Math.round(Number(height) || 0))
           // 固定 viewBox + 显式宽高：任何查看器里都等比缩放，不会被拉伸
-          clone.setAttribute("viewBox", viewBox || `0 0 ${w} ${h}`);
-          clone.setAttribute("width", w);
-          clone.setAttribute("height", h);
+          clone.setAttribute('viewBox', viewBox || `0 0 ${w} ${h}`)
+          clone.setAttribute('width', w)
+          clone.setAttribute('height', h)
           // 补一层底色：SVG 本身透明，很多查看器会显示成黑底。
           // 开启“透明背景”时跳过，导出文件就是真正的透明底。
           if (!transparent) {
-            const bg = document.createElementNS(
-              "http://www.w3.org/2000/svg",
-              "rect",
-            );
-            bg.setAttribute("x", "0");
-            bg.setAttribute("y", "0");
-            bg.setAttribute("width", String(w));
-            bg.setAttribute("height", String(h));
-            bg.setAttribute("fill", exportPaperColor());
-            clone.insertBefore(bg, clone.firstChild);
+            const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+            bg.setAttribute('x', '0')
+            bg.setAttribute('y', '0')
+            bg.setAttribute('width', String(w))
+            bg.setAttribute('height', String(h))
+            bg.setAttribute('fill', exportPaperColor())
+            clone.insertBefore(bg, clone.firstChild)
           }
-          return new XMLSerializer().serializeToString(clone);
+          return (
+            '<?xml version="1.0" encoding="UTF-8"?>\n' +
+            new XMLSerializer().serializeToString(clone)
+          )
         }
-        function getRenderedSVGString({
-          transparent = exportTransparent(),
-        } = {}) {
-          const zenSvg = $("#zen-svg");
-          if (state.engine === "zen" && zenSvg?.style.display !== "none") {
+        function getRenderedSVGString({ transparent = exportTransparent() } = {}) {
+          const zenSvg = $('#zen-svg')
+          if (state.engine === 'zen' && zenSvg?.style.display !== 'none') {
             // 自绘引擎固定画在 1000 × 620 的坐标系里，直接沿用它自己的 viewBox
-            const raw = String(zenSvg.getAttribute("viewBox") || "").trim();
-            const box = raw.split(/\s+/).map(Number);
-            const w =
-              box.length === 4 && box[2] > 0
-                ? box[2]
-                : Number(state.width) || 1000;
-            const h =
-              box.length === 4 && box[3] > 0
-                ? box[3]
-                : Number(state.height) || 620;
-            return buildStandaloneSVGString(
-              zenSvg,
-              w,
-              h,
-              raw || `0 0 ${w} ${h}`,
-              { transparent },
-            );
+            const raw = String(zenSvg.getAttribute('viewBox') || '').trim()
+            const box = raw.split(/\s+/).map(Number)
+            const w = box.length === 4 && box[2] > 0 ? box[2] : Number(state.width) || 1000
+            const h = box.length === 4 && box[3] > 0 ? box[3] : Number(state.height) || 620
+            return buildStandaloneSVGString(zenSvg, w, h, raw || `0 0 ${w} ${h}`, { transparent })
           }
 
-          const mountSvg = $("#chart-mount")?.querySelector("svg");
-          if (
-            mountSvg &&
-            (state.engine === "echarts" || state.engine === "apexcharts")
-          ) {
+          const mountSvg = $('#chart-mount')?.querySelector('svg')
+          if (mountSvg && (state.engine === 'echarts' || state.engine === 'apexcharts')) {
             // 用布局尺寸（offsetWidth 不含 CSS transform）而不是 getBoundingClientRect，
             // 否则工作区的缩放与位移会被一起写进导出文件。
             const w = svgNumber(
-              mountSvg.getAttribute("width"),
+              mountSvg.getAttribute('width'),
               mountSvg.offsetWidth || Number(state.width) || 1000,
-            );
+            )
             const h = svgNumber(
-              mountSvg.getAttribute("height"),
+              mountSvg.getAttribute('height'),
               mountSvg.offsetHeight || Number(state.height) || 620,
-            );
-            return buildStandaloneSVGString(mountSvg, w, h, undefined, {
-              transparent,
-            });
+            )
+            return buildStandaloneSVGString(mountSvg, w, h, undefined, { transparent })
           }
 
-          return "";
+          return ''
         }
 
         async function exportSVG() {
           try {
-            let svgString = getRenderedSVGString();
-            let transparent = exportTransparent();
-            let size = "";
+            let svgString = getRenderedSVGString()
 
             // Chart.js 的官方绘图区是 Canvas，没有原生 SVG 输出。
             // 这里只在“导出”时把 Canvas 栅格化，绝不用于图表区域的日常显示。
+            let transparent = exportTransparent()
+            let size = ''
             if (!svgString) {
-              const shot = await getExportCanvas();
-              transparent = shot.transparent;
-              size = ` · ${shot.canvas.width} × ${shot.canvas.height}`;
-              const png = shot.canvas.toDataURL("image/png");
+              const shot = await getExportCanvas()
+              transparent = shot.transparent
+              size = ` · ${shot.canvas.width} × ${shot.canvas.height}`
+              const png = shot.canvas.toDataURL('image/png')
               const bg = transparent
-                ? ""
-                : `<rect width="${shot.canvas.width}" height="${shot.canvas.height}" fill="${exportPaperColor()}"/>`;
-              svgString = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${shot.canvas.width}" height="${shot.canvas.height}" viewBox="0 0 ${shot.canvas.width} ${shot.canvas.height}">${bg}<image href="${png}" width="${shot.canvas.width}" height="${shot.canvas.height}"/></svg>`;
+                ? ''
+                : `<rect width="${shot.canvas.width}" height="${shot.canvas.height}" fill="${exportPaperColor()}"/>`
+              svgString = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${shot.canvas.width}" height="${shot.canvas.height}" viewBox="0 0 ${shot.canvas.width} ${shot.canvas.height}">${bg}<image href="${png}" width="${shot.canvas.width}" height="${shot.canvas.height}"/></svg>`
             }
 
-            const blob = new Blob([svgString], {
-              type: "image/svg+xml;charset=utf-8",
-            });
-            const a = document.createElement("a");
-            a.download = safeName(state.title) + ".svg";
-            a.href = URL.createObjectURL(blob);
-            a.click();
-            setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-            setStatus(
-              "SVG 已导出" +
-                size +
-                (transparent ? " · 透明背景" : "") +
-                " · 矢量无限缩放",
-            );
+            const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' })
+            const a = document.createElement('a')
+            a.download = safeName(state.title) + '.svg'
+            a.href = URL.createObjectURL(blob)
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            setStatus('SVG 已导出' + size + (transparent ? ' · 透明背景' : '') + ' · 矢量无限缩放')
           } catch (e) {
-            reportError("SVG 导出失败", e, true);
+            reportError('SVG 导出失败', e, true)
           }
         }
         async function exportPDF() {
           try {
-            if (!window.jspdf) throw Error("jsPDF 未加载");
+            if (!window.jspdf) throw Error('jsPDF 未加载')
             // PDF 页面本身不透明，透明背景在这里没有意义，统一铺白底导出
             const { canvas, capped } =
-              state.engine === "zen"
+              state.engine === 'zen'
                 ? await svgToCanvas({ transparent: false })
-                : await getExportCanvas({ transparent: false });
-            const c = canvas;
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF({
-              orientation: state.pdfOrientation,
-              unit: "mm",
-              format: "a4",
-            });
-            const pageW = state.pdfOrientation === "landscape" ? 297 : 210,
-              pageH = state.pdfOrientation === "landscape" ? 210 : 297;
+                : await getExportCanvas({ transparent: false })
+            const c = canvas
+            const { jsPDF } = window.jspdf
+            const pdf = new jsPDF({ orientation: state.pdfOrientation, unit: 'mm', format: 'a4' })
+            const pageW = state.pdfOrientation === 'landscape' ? 297 : 210,
+              pageH = state.pdfOrientation === 'landscape' ? 210 : 297
             const margin = 12,
               maxW = pageW - margin * 2,
-              maxH = pageH - margin * 2;
-            const ratio = c.width / c.height;
+              maxH = pageH - margin * 2
+            const ratio = c.width / c.height
             let w = maxW,
-              h = w / ratio;
+              h = w / ratio
             if (h > maxH) {
-              h = maxH;
-              w = h * ratio;
+              h = maxH
+              w = h * ratio
             }
             pdf.addImage(
-              c.toDataURL("image/png"),
-              "PNG",
+              c.toDataURL('image/png'),
+              'PNG',
               (pageW - w) / 2,
               (pageH - h) / 2,
               w,
               h,
-              "chart",
-              "FAST",
-            );
+              'chart',
+              'FAST',
+            )
             // 页面上只保留图表本身，不再叠加任何 ZENVIZ 标识或页脚文字
-            pdf.save(safeName(state.title) + ".pdf");
-            exportDone("PDF", c, capped, false);
+            pdf.save(safeName(state.title) + '.pdf')
+            exportDone('PDF', c, capped, false)
           } catch (e) {
-            reportError("PDF 导出失败", e, true);
+            reportError('PDF 导出失败', e, true)
           }
         }
-        $("#property-import-input").onchange = async (e) => {
-          const f = e.target.files?.[0];
-          if (!f) return;
-          await importPropertySettings(f);
-          e.target.value = "";
-        };
 
-        $("#save-png-btn").onclick = exportPNG;
-        $("#save-svg-btn").onclick = exportSVG;
-        $("#save-pdf-btn").onclick = exportPDF;
-        $("#reset-inspector-btn").onclick = resetCurrentEngineProperties;
-        $("#reset-btn").onclick = () => {
+        /*
+         * LaTeX / PGFPlots 导出：把当前图表的数据编译成一份可被 MiKTeX
+         * （XeLaTeX）直接编译的 .tex 源码。与截图类导出不一样，这里导出的是
+         * “数据 + 矢量绘图代码”，放大不失真、可二次编辑。
+         * 说明：
+         * - 统一使用 standalone 文档类，编译后得到一张紧贴图表的独立图。
+         * - 中文依赖 ctex/xeCJK，默认 SimSun（宋体），Windows + MiKTeX 自带。
+         * - 折线/柱状/面积/散点/雷达/热图/箱线/直方/误差棒等使用 pgfplots 精确还原；
+         *   桑基/网络/弦线等没有通用矢量画法的类型，导出为可编译的数据表。
+         */
+        function texEscapeText(value) {
+          let s = String(value ?? '')
+          s = s.replace(/\u0000/g, '')
+          s = s.replace(/\\/g, '\u0000')
+          s = s.replace(/[&%$#_{}]/g, (c) => '\\' + c)
+          s = s.replace(/~/g, '\\textasciitilde{}').replace(/\^/g, '\\textasciicircum{}')
+          s = s.replace(/\u0000/g, '\\textbackslash{}')
+          s = s.replace(/\s+/g, ' ')
+          return s.trim()
+        }
+        function texNum(n) {
+          const v = Number(n)
+          if (!Number.isFinite(v)) return null
+          if (Number.isInteger(v)) return String(v)
+          let s = v.toFixed(6).replace(/0+$/, '').replace(/\.$/, '')
+          if (s === '' || s === '-0') s = '0'
+          return s
+        }
+        function texColorName(i) {
+          const len = palette().length || 1
+          return 'zenC' + (((i % len) + len) % len)
+        }
+        function texPreamble(libs) {
+          const L = []
+          L.push('% !TeX program = xelatex')
+          L.push('% 由 ZENVIZ 导出的图表 LaTeX 源码。')
+          L.push(
+            '% 请使用 XeLaTeX 编译（MiKTeX 自带）；中文默认字体 SimSun（宋体），可在下方 \\setCJKmainfont 修改。',
+          )
+          L.push('\\documentclass[border=12pt]{standalone}')
+          L.push('\\usepackage{xeCJK}')
+          L.push('\\setCJKmainfont{SimSun}')
+          L.push('\\usepackage{pgfplots}')
+          L.push('\\pgfplotsset{compat=1.18}')
+          Array.from(libs || []).forEach((lib) => L.push('\\usepgfplotslibrary{' + lib + '}'))
+          palette().forEach((hex, i) => {
+            const h = String(hex).replace('#', '').toUpperCase()
+            if (/^[0-9A-F]{6}$/.test(h)) L.push('\\definecolor{zenC' + i + '}{HTML}{' + h + '}')
+          })
+          L.push('\\begin{document}')
+          L.push('\\begin{tikzpicture}')
+          return L
+        }
+        function texFooter() {
+          return ['\\end{tikzpicture}', '\\end{document}']
+        }
+        function texQuantile(sorted, pct) {
+          if (!sorted.length) return 0
+          const idx = (sorted.length - 1) * pct
+          const lo = Math.floor(idx)
+          const hi = Math.ceil(idx)
+          return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+        }
+        function texHexToRgb(hex) {
+          const raw = String(hex).replace('#', '')
+          if (/^[0-9a-f]{6}$/i.test(raw))
+            return [
+              parseInt(raw.slice(0, 2), 16),
+              parseInt(raw.slice(2, 4), 16),
+              parseInt(raw.slice(4, 6), 16),
+            ]
+          return [128, 128, 128]
+        }
+        function texRampColor(stops, t) {
+          const arr = stops.map(texHexToRgb)
+          const tt = Math.max(0, Math.min(1, Number(t) || 0))
+          const seg = arr.length - 1
+          const scaled = tt * seg
+          const i = Math.min(arr.length - 2, Math.floor(scaled))
+          const f = scaled - i
+          const a = arr[i],
+            b = arr[i + 1]
+          const r = Math.round(a[0] + (b[0] - a[0]) * f)
+          const g = Math.round(a[1] + (b[1] - a[1]) * f)
+          const bl = Math.round(a[2] + (b[2] - a[2]) * f)
+          return r + ',' + g + ',' + bl
+        }
+
+        function buildTeX() {
+          const d = state.data
+          if (!d || !Array.isArray(d.rows) || d.rows.length === 0)
+            throw new Error('当前没有可导出的数据，请先导入或编辑数据')
+          const type = state.type
+          const libs = new Set()
+          const W = Math.max(8, Math.round(((Number(state.width) || 1000) / 96) * 2.54))
+          const H = Math.max(6, Math.round(((Number(state.height) || 620) / 96) * 2.54))
+          const showTitle = state.showTitle !== false
+          const figTitle = showTitle ? state.title || chartNames[type] || 'ZENVIZ' : ''
+          const legendOn = state.showLegend !== false
+          const gridOn = state.showGrid !== false
+
+          const coordsOf = (data) => {
+            const pts = []
+            data.forEach((v, i) => {
+              const n = numeric(v)
+              if (n !== null) pts.push('(' + (i + 1) + ',' + texNum(n) + ')')
+            })
+            return pts.join(' ')
+          }
+          const axisBase = (extra) => {
+            const opts = [
+              'width=' + W + 'cm',
+              'height=' + H + 'cm',
+              'axis lines=left',
+              gridOn ? 'grid=major' : 'grid=none',
+              'label style={font=\\small}',
+              'tick label style={font=\\footnotesize}',
+            ]
+            if (figTitle) opts.push('title={' + texEscapeText(figTitle) + '}')
+            if (Array.isArray(extra)) opts.push(...extra.filter(Boolean))
+            return opts
+          }
+          const catTicks = (labels) => {
+            if (!labels.length) return []
+            const ticks = labels.map((_, i) => i + 1).join(',')
+            const lstr = labels.map((l) => '{' + texEscapeText(l) + '}').join(',')
+            const out = ['xtick={' + ticks + '}', 'xticklabels={' + lstr + '}']
+            if (labels.length > 6)
+              out.push('xticklabel style={font=\\scriptsize, rotate=45, anchor=east}')
+            return out
+          }
+          const yTicks = (labels) => {
+            const ticks = labels.map((_, i) => i + 1).join(',')
+            const lstr = labels.map((l) => '{' + texEscapeText(l) + '}').join(',')
+            return ['ytick={' + ticks + '}', 'yticklabels={' + lstr + '}']
+          }
+          const legendOpt = () =>
+            legendOn
+              ? 'legend style={at={(0.5,-0.18)},anchor=north,legend columns=-1,draw=none,font=\\scriptsize}'
+              : null
+
+          // 热图/等值/相关矩阵：用核心 TikZ 手绘色块（不依赖 pgfplots matrix 库）
+          const rgbFill = (rgbStr) => {
+            const p = String(rgbStr).split(',')
+            return 'fill={rgb,255:red,' + p[0] + ';green,' + p[1] + ';blue,' + p[2] + '}'
+          }
+          const emitMatrix = (
+            xLabels,
+            yLabels,
+            M,
+            ramp,
+            pmin,
+            pmax,
+            xlabel,
+            ylabel,
+            showValues,
+          ) => {
+            const cw = 0.9,
+              ch = 0.6,
+              nx = xLabels.length,
+              ny = yLabels.length
+            const rotateX = nx > 6
+            const out = ['% —— 矩阵热图（核心 TikZ 手绘，不依赖 pgfplots matrix 库）——']
+            if (figTitle)
+              out.push(
+                '\\node[font=\\large, anchor=south] at (' +
+                  ((nx * cw) / 2).toFixed(2) +
+                  'cm,' +
+                  (ny * ch + 0.8).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(figTitle) +
+                  '};',
+              )
+            const centers = []
+            for (let yi = 0; yi < ny; yi++)
+              for (let xi = 0; xi < nx; xi++) {
+                const v = numeric(M[yi] ? M[yi][xi] : null)
+                const x = (xi * cw).toFixed(3),
+                  y = ((ny - 1 - yi) * ch).toFixed(3)
+                const rgb =
+                  v == null
+                    ? '230,230,230'
+                    : texRampColor(ramp, pmax > pmin ? (v - pmin) / (pmax - pmin) : 0.5)
+                out.push(
+                  '\\fill[' +
+                    rgbFill(rgb) +
+                    '] (' +
+                    x +
+                    'cm,' +
+                    y +
+                    'cm) rectangle +(' +
+                    cw +
+                    'cm,' +
+                    ch +
+                    'cm);',
+                )
+                centers.push({
+                  cx: (xi * cw + cw / 2).toFixed(3),
+                  cy: ((ny - 1 - yi) * ch + ch / 2).toFixed(3),
+                  v,
+                })
+              }
+            out.push(
+              '\\draw[white, line width=0.6pt] (0,0) grid (' +
+                (nx * cw).toFixed(3) +
+                ',' +
+                (ny * ch).toFixed(3) +
+                ');',
+            )
+            out.push(
+              '\\draw[black] (0,0) rectangle (' +
+                (nx * cw).toFixed(3) +
+                'cm,' +
+                (ny * ch).toFixed(3) +
+                'cm);',
+            )
+            if (showValues)
+              centers.forEach((c) => {
+                if (c.v != null)
+                  out.push(
+                    '\\node[font=\\tiny] at (' +
+                      c.cx +
+                      'cm,' +
+                      c.cy +
+                      'cm) {' +
+                      texNum(Math.round(c.v * 100) / 100) +
+                      '};',
+                  )
+              })
+            xLabels.forEach((l, xi) => {
+              const cx = (xi * cw + cw / 2).toFixed(3)
+              out.push(
+                '\\node[font=\\scriptsize,' +
+                  (rotateX ? 'rotate=45, anchor=north east' : 'anchor=north') +
+                  '] at (' +
+                  cx +
+                  'cm,-0.1cm) {' +
+                  texEscapeText(l) +
+                  '};',
+              )
+            })
+            yLabels.forEach((l, yi) => {
+              const cy = ((ny - 1 - yi) * ch + ch / 2).toFixed(3)
+              out.push(
+                '\\node[font=\\scriptsize, anchor=east] at (-0.15cm,' +
+                  cy +
+                  'cm) {' +
+                  texEscapeText(l) +
+                  '};',
+              )
+            })
+            if (xlabel)
+              out.push(
+                '\\node[font=\\small, anchor=north] at (' +
+                  ((nx * cw) / 2).toFixed(2) +
+                  'cm,' +
+                  (-1 - (rotateX ? 0.6 : 0)).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(xlabel) +
+                  '};',
+              )
+            if (ylabel)
+              out.push(
+                '\\node[font=\\small, rotate=90, anchor=south] at (-1.1cm,' +
+                  ((ny * ch) / 2).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(ylabel) +
+                  '};',
+              )
+            const cbx = (nx * cw + 0.5).toFixed(3),
+              steps = 24
+            for (let s = 0; s < steps; s++) {
+              const t = s / (steps - 1)
+              out.push(
+                '\\fill[' +
+                  rgbFill(texRampColor(ramp, t)) +
+                  '] (' +
+                  cbx +
+                  'cm,' +
+                  (t * ny * ch).toFixed(3) +
+                  'cm) rectangle +(0.35cm,' +
+                  ((ny * ch) / steps + 0.002).toFixed(3) +
+                  'cm);',
+              )
+            }
+            out.push(
+              '\\node[font=\\scriptsize, anchor=west] at (' +
+                (nx * cw + 0.9).toFixed(3) +
+                'cm, 0cm) {' +
+                texNum(pmin) +
+                '};',
+            )
+            out.push(
+              '\\node[font=\\scriptsize, anchor=west] at (' +
+                (nx * cw + 0.9).toFixed(3) +
+                'cm,' +
+                (ny * ch).toFixed(3) +
+                'cm) {' +
+                texNum(pmax) +
+                '};',
+            )
+            return out
+          }
+
+          const body = []
+          const stdPlot = (mode, s) => {
+            const labels = s.labels || []
+            const series = s.series || []
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '') + '}',
+              'ylabel={' + texEscapeText(state.yTitle || '') + '}',
+              ...catTicks(labels),
+            ]
+            if (mode === 'bar') {
+              extra.unshift('ybar')
+              extra.push('enlarge x limits={abs=0.6}', 'bar width=0.5cm')
+            } else {
+              extra.push('enlarge x limits=0.08')
+            }
+            const lg = legendOpt()
+            if (lg && series.length > 1) extra.push(lg)
+            if (mode === 'area') {
+              const nums = series.flatMap((a) => a.data.map(numeric).filter((v) => v != null))
+              var base = nums.length ? Math.min(0, Math.min(...nums)) : 0
+            }
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            series.forEach((sr, si) => {
+              const cn = texColorName(si)
+              let style,
+                pts = coordsOf(sr.data)
+              if (mode === 'line')
+                style =
+                  'color=' +
+                  cn +
+                  ', thick, mark=*, mark size=1.6pt' +
+                  (state.smooth ? ', smooth' : '')
+              else if (mode === 'scatter' || mode === 'dot')
+                style = 'only marks, mark=*, mark size=2.2pt, color=' + cn
+              else if (mode === 'lollipop')
+                style = 'ycomb, thick, mark=*, mark size=3pt, color=' + cn
+              else if (mode === 'bar') style = 'ybar, draw=' + cn + ', fill=' + cn + '!65'
+              else if (mode === 'area') {
+                const list = sr.data
+                  .map(numeric)
+                  .map((n, i) => [i + 1, n])
+                  .filter((p) => p[1] != null)
+                if (list.length) {
+                  const inner = list.map((p) => '(' + p[0] + ',' + texNum(p[1]) + ')')
+                  pts =
+                    '(' +
+                    list[0][0] +
+                    ',' +
+                    texNum(base) +
+                    ') ' +
+                    inner.join(' ') +
+                    ' (' +
+                    list[list.length - 1][0] +
+                    ',' +
+                    texNum(base) +
+                    ')'
+                }
+                style = 'color=' + cn + ', fill=' + cn + '!35, thick'
+              }
+              if (!pts) return
+              lines.push('\\addplot[' + style + '] coordinates {' + pts + '};')
+              if (legendOn && series.length > 1)
+                lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            return lines
+          }
+
+          if (type === 'line') body.push(...stdPlot('line', rowsToSeries()))
+          else if (type === 'bar') body.push(...stdPlot('bar', rowsToSeries()))
+          else if (type === 'area') body.push(...stdPlot('area', rowsToSeries()))
+          else if (type === 'scatter') body.push(...stdPlot('scatter', rowsToSeries()))
+          else if (type === 'stream' || type === 'ribbon')
+            body.push(...stdPlot('line', rowsToSeries()))
+          else if (type === 'lollipop') body.push(...stdPlot('lollipop', rowsToSeries()))
+          else if (type === 'dotplot' || type === 'swarm')
+            body.push(...stdPlot('dot', rowsToSeries()))
+          else if (type === 'pie') {
+            const slices = getPieSlices().filter((x) => x.value > 0)
+            if (!slices.length) throw new Error('饼图没有可绘制的正数值')
+            const total = slices.reduce((a, b) => a + b.value, 0)
+            const R = 3,
+              L2 = []
+            L2.push('% —— 饼图（TikZ 手绘扇区）——')
+            if (figTitle)
+              L2.push(
+                '\\node[font=\\large] at (' +
+                  R * 0.5 +
+                  'cm,' +
+                  (R + 1.3) +
+                  'cm) {' +
+                  texEscapeText(figTitle) +
+                  '};',
+              )
+            let start = 90
+            slices.forEach((sl, i) => {
+              const frac = sl.value / total,
+                end = start - frac * 360
+              const cn = texColorName(i),
+                mid = (start + end) / 2,
+                pct = (frac * 100).toFixed(1)
+              L2.push(
+                '\\draw[draw=white, very thick, fill=' +
+                  cn +
+                  '] (0,0) -- (' +
+                  start.toFixed(3) +
+                  ':' +
+                  R +
+                  'cm) arc (' +
+                  start.toFixed(3) +
+                  ':' +
+                  end.toFixed(3) +
+                  ':' +
+                  R +
+                  'cm) -- cycle;',
+              )
+              if (frac >= 0.045)
+                L2.push(
+                  '\\node[font=\\scriptsize, align=center] at (' +
+                    mid.toFixed(3) +
+                    ':' +
+                    R * 0.62 +
+                    'cm) {' +
+                    pct +
+                    '\\%};',
+                )
+              start = end
+            })
+            const lx = R + 1.1
+            let ly = slices.length / 2 - 0.25
+            slices.forEach((sl, i) => {
+              const cn = texColorName(i),
+                pct = ((sl.value / total) * 100).toFixed(1)
+              L2.push(
+                '\\draw[fill=' +
+                  cn +
+                  ', draw=none] (' +
+                  lx +
+                  'cm,' +
+                  ly.toFixed(2) +
+                  'cm) rectangle ++(0.35cm,0.35cm);',
+              )
+              L2.push(
+                '\\node[anchor=west, font=\\footnotesize] at (' +
+                  (lx + 0.45) +
+                  'cm,' +
+                  (ly + 0.18).toFixed(2) +
+                  'cm) {' +
+                  texEscapeText(sl.name) +
+                  ' (' +
+                  pct +
+                  '\\%)};',
+              )
+              ly -= 0.72
+            })
+            body.push(...L2)
+          } else if (
+            type === 'wordfreq' ||
+            type === 'poster' ||
+            type === 'timeline' ||
+            type === 'smallmultiples'
+          ) {
+            let s = rowsToSeries(),
+              labels = s.labels,
+              data = s.series[0] ? s.series[0].data : []
+            if (type === 'wordfreq') {
+              const tot = new Map()
+              labels.forEach((lb, i) => {
+                const key = String(lb || '').trim(),
+                  v = numeric(data[i])
+                if (key && v != null) tot.set(key, (tot.get(key) || 0) + v)
+              })
+              const arr = Array.from(tot, ([name, value]) => ({ name, value }))
+                .sort((a, b) => b.value - a.value)
+                .slice(0, 30)
+              labels = arr.map((a) => a.name)
+              data = arr.map((a) => a.value)
+            } else if (type === 'smallmultiples') {
+              const sums = new Map()
+              s.series.forEach((sr) => {
+                const t = sr.data.map(numeric).reduce((a, b) => a + (b == null ? 0 : b), 0)
+                sums.set(sr.name, t)
+              })
+              const best = s.series
+                .slice()
+                .sort((a, b) => (sums.get(b.name) || 0) - (sums.get(a.name) || 0))[0]
+              data = best ? best.data : []
+            }
+            const n = labels.length
+            const extra = [
+              'xbar',
+              'xlabel={' + texEscapeText(type === 'wordfreq' ? '词频' : '数值') + '}',
+              'ylabel={' + texEscapeText(state.xTitle || '') + '}',
+              ...yTicks(labels),
+              'enlarge y limits=true',
+              'xmin=0',
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            const cn = texColorName(0)
+            const pts = data
+              .map((v, i) => [v, i + 1])
+              .filter((p) => p[0] != null)
+              .map((p) => '(' + texNum(p[0]) + ',' + p[1] + ')')
+              .join(' ')
+            lines.push(
+              '\\addplot[draw=' +
+                cn +
+                ', fill=' +
+                cn +
+                '!65' +
+                (type === 'poster' ? ', nodes near coords' : '') +
+                '] coordinates {' +
+                pts +
+                '};',
+            )
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'heatmap' || type === 'contour') {
+            const s = rowsToSeries(),
+              xl = s.labels,
+              yl = s.series.map((a) => a.name)
+            const nums = []
+            s.series.forEach((a) =>
+              a.data.forEach((v) => {
+                const n = numeric(v)
+                if (n != null) nums.push(n)
+              }),
+            )
+            const mn = nums.length ? Math.min(...nums) : 0
+            const mx = nums.length ? Math.max(...nums) : 1
+            const M = s.series.map((a) => a.data)
+            body.push(
+              ...emitMatrix(
+                xl,
+                yl,
+                M,
+                ['#f7fbff', palette()[0] || '#155EEF'],
+                mn,
+                mx === mn ? mn + 1 : mx,
+                state.xTitle,
+                state.yTitle,
+                false,
+              ),
+            )
+          } else if (type === 'boxplot') {
+            libs.add('statistics')
+            const names = [],
+              stats = []
+            ;(state.yCols || []).forEach((ci) => {
+              const vals = (state.data.rows || [])
+                .map((r) => numeric(r?.[ci]))
+                .filter((v) => v != null)
+                .sort((a, b) => a - b)
+              if (!vals.length) return
+              names.push(String(state.data.headers[ci] ?? '列'))
+              stats.push({
+                min: vals[0],
+                q1: texQuantile(vals, 0.25),
+                med: texQuantile(vals, 0.5),
+                q3: texQuantile(vals, 0.75),
+                max: vals[vals.length - 1],
+              })
+            })
+            if (!stats.length) throw new Error('箱线图需要至少一个有效的数值列')
+            const allv = stats.flatMap((b) => [b.min, b.max])
+            const extra = [
+              'ylabel={' + texEscapeText(state.yTitle || '数值') + '}',
+              ...catTicks(names),
+              'enlarge x limits=0.3',
+              'boxplot/draw direction=y',
+              'ymin=' + texNum(Math.min(...allv)),
+              'ymax=' + texNum(Math.max(...allv)),
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            stats.forEach((b, i) => {
+              const cn = texColorName(i)
+              lines.push(
+                '\\addplot+[boxplot prepared={lower whisker=' +
+                  texNum(b.min) +
+                  ', lower quartile=' +
+                  texNum(b.q1) +
+                  ', median=' +
+                  texNum(b.med) +
+                  ', upper quartile=' +
+                  texNum(b.q3) +
+                  ', upper whisker=' +
+                  texNum(b.max) +
+                  '}, draw=' +
+                  cn +
+                  ', fill=' +
+                  cn +
+                  '!20] coordinates {};',
+              )
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'histogram' || type === 'field') {
+            libs.add('statistics')
+            const s = rowsToSeries(),
+              col = (s.series[0] ? s.series[0].data : []).map(numeric).filter((v) => v != null)
+            if (col.length < 2) throw new Error('直方图至少需要 2 个有效数值')
+            const mn = Math.min(...col),
+              mx = Math.max(...col)
+            const bins = Math.max(5, Math.min(20, Math.round(Math.sqrt(col.length))))
+            const dmin = texNum(mn - (mx - mn) * 0.05 - 0.5),
+              dmax = texNum(mx + (mx - mn) * 0.05 + 0.5)
+            const cn = texColorName(0)
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={' + texEscapeText(s.xName || '数值') + '}',
+                  'ylabel={频数}',
+                  mx > mn ? 'xmin=' + dmin : '',
+                  mx > mn ? 'xmax=' + dmax : '',
+                ]).join(',\n  ') +
+                ']',
+            ]
+            lines.push(
+              '\\addplot[draw=' +
+                cn +
+                ', fill=' +
+                cn +
+                '!55, hist={bins=' +
+                bins +
+                ', data min=' +
+                dmin +
+                ', data max=' +
+                dmax +
+                '}] table[row sep=\\\\, y index=0] {',
+            )
+            lines.push(...col.map((v) => texNum(v) + '\\\\'))
+            lines.push('};')
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'errorbar') {
+            const s = rowsToSeries(),
+              pair = getPairSeries(),
+              labels = s.labels || []
+            const vals = pair.first.data,
+              errs = pair.second.data
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '') + '}',
+              'ylabel={' + texEscapeText(state.yTitle || '') + '}',
+              ...catTicks(labels),
+              'enlarge x limits=0.1',
+            ]
+            const cn = texColorName(0)
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            const pts = []
+            labels.forEach((_, i) => {
+              const v = numeric(vals[i]),
+                e = numeric(errs[i])
+              if (v != null && e != null)
+                pts.push('(' + (i + 1) + ',' + texNum(v) + ') +- (0,' + texNum(e) + ')')
+            })
+            lines.push(
+              '\\addplot[only marks, mark=*, mark size=2pt, color=' +
+                cn +
+                ', error bars/.cd, y dir=both, y explicit] coordinates {',
+            )
+            lines.push(pts.join('\n'))
+            lines.push('};')
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'slope') {
+            const s = rowsToSeries(),
+              pair = getPairSeries(),
+              labels = s.labels || []
+            const objs = labels
+              .map((lb, i) => ({
+                name: String(lb || '对象' + (i + 1)),
+                a: numeric(pair.first.data[i]),
+                b: numeric(pair.second.data[i]),
+              }))
+              .filter((o) => o.a != null && o.b != null)
+            if (!objs.length) throw new Error('斜率图需要每个对象两端的数值')
+            const allv = objs.flatMap((o) => [o.a, o.b])
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={阶段}',
+                  'ylabel={' + texEscapeText(state.yTitle || '数值') + '}',
+                  'xtick={0,1}',
+                  'xticklabels={{起点},{终点}}',
+                  'enlarge x limits=0.3',
+                  'ymin=' + texNum(Math.min(...allv)),
+                  'ymax=' + texNum(Math.max(...allv)),
+                ]).join(',\n  ') +
+                ']',
+            ]
+            objs.forEach((o, i) => {
+              lines.push(
+                '\\addplot[mark=*, color=' +
+                  texColorName(i) +
+                  '] coordinates {(0,' +
+                  texNum(o.a) +
+                  ') (1,' +
+                  texNum(o.b) +
+                  ')};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(o.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'bump') {
+            const s = rowsToSeries(),
+              stages = s.labels || [],
+              series = s.series || []
+            const k = series.length,
+              rank = series.map(() => [])
+            stages.forEach((_, j) => {
+              const order = series
+                .map((sr, si) => ({ si, v: numeric(sr.data[j]) }))
+                .filter((x) => x.v != null)
+                .sort((a, b) => b.v - a.v)
+              order.forEach((x, idx) => (rank[x.si][j] = idx + 1))
+            })
+            const extra = [
+              'xlabel={' + texEscapeText(state.xTitle || '阶段') + '}',
+              'ylabel={排名}',
+              'y dir=reverse',
+              'ymin=0.5',
+              'ymax=' + (k + 0.5),
+              ...catTicks(stages),
+              'enlarge x limits=0.08',
+            ]
+            const lines = ['\\begin{axis}[' + axisBase(extra).join(',\n  ') + ']']
+            series.forEach((sr, si) => {
+              const pts = stages
+                .map((_, j) => (rank[si][j] ? '(' + (j + 1) + ',' + rank[si][j] + ')' : null))
+                .filter(Boolean)
+                .join(' ')
+              if (!pts) return
+              lines.push(
+                '\\addplot[mark=*, color=' + texColorName(si) + '] coordinates {' + pts + '};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'parallel') {
+            const s = rowsToSeries(),
+              dims = (s.series || []).map((a) => a.name),
+              nrows = (state.data.rows || []).length
+            if (dims.length < 2) throw new Error('平行坐标需要至少 2 个数值维度')
+            const lines = [
+              '\\begin{axis}[' +
+                axisBase([
+                  'xlabel={维度}',
+                  'ylabel={数值}',
+                  'xtick={' + dims.map((_, i) => i + 1).join(',') + '}',
+                  'xticklabels={' + dims.map((d) => '{' + texEscapeText(d) + '}').join(',') + '}',
+                  'enlarge x limits=0.08',
+                ]).join(',\n  ') +
+                ']',
+            ]
+            const cap = Math.min(nrows, 24)
+            for (let r = 0; r < cap; r++) {
+              const pts = s.series
+                .map((a, i) => {
+                  const v = numeric(a.data[r])
+                  return '(' + (i + 1) + ',' + texNum(v == null ? 0 : v) + ')'
+                })
+                .join(' ')
+              lines.push(
+                '\\addplot[thin, mark=*, mark size=1pt, color=' +
+                  texColorName(r) +
+                  ', opacity=0.8] coordinates {' +
+                  pts +
+                  '};',
+              )
+            }
+            lines.push('\\end{axis}')
+            body.push(...lines)
+          } else if (type === 'correlation') {
+            const cols = (state.yCols || []).map((ci) => ({
+              name: String(state.data.headers[ci] ?? '变量' + ci),
+              vals: (state.data.rows || []).map((r) => numeric(r?.[ci])),
+            }))
+            const m = cols.length
+            if (m < 2) throw new Error('相关矩阵需要至少 2 个数值变量')
+            const pear = (x, y) => {
+              const p = x.map((v, i) => [v, y[i]]).filter((q) => q[0] != null && q[1] != null)
+              if (p.length < 2) return 0
+              const n = p.length,
+                mx = p.reduce((a, q) => a + q[0], 0) / n,
+                my = p.reduce((a, q) => a + q[1], 0) / n
+              let sxy = 0,
+                sx = 0,
+                sy = 0
+              p.forEach((q) => {
+                const dx = q[0] - mx,
+                  dy = q[1] - my
+                sxy += dx * dy
+                sx += dx * dx
+                sy += dy * dy
+              })
+              return sx > 0 && sy > 0 ? sxy / Math.sqrt(sx * sy) : 0
+            }
+            const M = []
+            for (let a = 0; a < m; a++) {
+              M[a] = []
+              for (let b = 0; b < m; b++) M[a][b] = pear(cols[b].vals, cols[a].vals)
+            }
+            const names = cols.map((c) => c.name)
+            body.push(
+              ...emitMatrix(
+                names,
+                names,
+                M,
+                ['#2c7fb8', '#ffffff', '#d73027'],
+                -1,
+                1,
+                '',
+                '',
+                true,
+              ),
+            )
+          } else if (type === 'radial' || type === 'spiral') {
+            libs.add('polar')
+            const s = rowsToSeries(),
+              labels = s.labels || [],
+              data = s.series[0] ? s.series[0].data : []
+            const n = labels.length
+            const nums = data.map(numeric).filter((v) => v != null)
+            const maxv = Math.max(1, nums.length ? Math.max(...nums) : 100)
+            const lines = [
+              '% polaraxis：极角按序号等分；向径按最大值 ' + texNum(maxv) + ' 归一化到 0–10',
+            ]
+            lines.push(
+              '\\begin{polaraxis}[' +
+                axisBase([
+                  'ymin=0',
+                  'ymax=10',
+                  'xtick={0,90,180,270}',
+                  'xticklabel=\\empty',
+                  'minor tick num=0',
+                  'ytick={0,2,4,6,8,10}',
+                  'legend style={at={(1.15,1)},anchor=north,draw=none,font=\\scriptsize}',
+                ]).join(',\n  ') +
+                ']',
+            )
+            const pts = data
+              .map((v, i) => {
+                const x = numeric(v),
+                  ang = n ? (i / n) * 360 : 0
+                return x != null
+                  ? '(' + ang.toFixed(2) + ',' + texNum((Math.max(0, x) / maxv) * 10) + ')'
+                  : null
+              })
+              .filter(Boolean)
+            if (pts.length > 1) pts.push(pts[0])
+            lines.push(
+              '\\addplot[fill=' +
+                texColorName(0) +
+                '!30, draw=' +
+                texColorName(0) +
+                ', mark=*] coordinates {' +
+                pts.join(' ') +
+                '};',
+            )
+            lines.push('\\end{polaraxis}')
+            body.push(...lines)
+          } else if (type === 'radar') {
+            libs.add('polar')
+            const s = rowsToSeries(),
+              dims = s.labels || [],
+              series = s.series || []
+            const nums = series.flatMap((a) => a.data.map(numeric).filter((v) => v != null))
+            const maxv = Math.max(1, nums.length ? Math.max(...nums) : 100)
+            const n = dims.length
+            const lines = [
+              '% 雷达图：维度名见数据，极角按维度序号等分；向径按最大值 ' +
+                texNum(maxv) +
+                ' 归一化到 0–10',
+            ]
+            lines.push(
+              '\\begin{polaraxis}[' +
+                axisBase([
+                  'ymin=0',
+                  'ymax=10',
+                  'xtick={0,90,180,270}',
+                  'xticklabel=\\empty',
+                  'minor tick num=0',
+                  'ytick={0,2,4,6,8,10}',
+                  'legend style={at={(1.15,1)},anchor=north,draw=none,font=\\scriptsize}',
+                ]).join(',\n  ') +
+                ']',
+            )
+            series.forEach((sr, si) => {
+              const pts = sr.data
+                .map((v, i) => {
+                  const x = numeric(v),
+                    ang = n ? (i / n) * 360 : 0
+                  return x != null
+                    ? '(' + ang.toFixed(2) + ',' + texNum((Math.max(0, x) / maxv) * 10) + ')'
+                    : null
+                })
+                .filter(Boolean)
+              if (!pts.length) return
+              pts.push(pts[0])
+              lines.push(
+                '\\addplot[fill=' +
+                  texColorName(si) +
+                  '!20, draw=' +
+                  texColorName(si) +
+                  ', mark=*, mark size=1.2pt] coordinates {' +
+                  pts.join(' ') +
+                  '};',
+              )
+              if (legendOn) lines.push('\\addlegendentry{' + texEscapeText(sr.name) + '}')
+            })
+            lines.push('\\end{polaraxis}')
+            body.push(...lines)
+          } else if (type === 'network' || type === 'sankey' || type === 'chord') {
+            const rows = getFlowRows()
+            if (!rows.length) throw new Error('当前关系数据没有有效的“来源 → 去向 → 权重”记录')
+            const lines = ['% —— 关系数据（桑基/网络/弦线没有通用矢量画法，导出为可编译数据表）——']
+            lines.push(
+              '\\node[font=\\large, align=center] at (0,1.2cm) {' +
+                texEscapeText(figTitle || chartNames[type] || '关系数据') +
+                '};',
+            )
+            let tbl =
+              '\\begin{tabular}{llr}\n\\hline\n' +
+              texEscapeText(chartNames[type]) +
+              '来源 & 去向 & 数值\\\\\n\\hline\n'
+            rows.forEach((r) => {
+              tbl +=
+                texEscapeText(r.source) +
+                ' & ' +
+                texEscapeText(r.target) +
+                ' & ' +
+                texNum(r.value) +
+                '\\\\\n'
+            })
+            tbl += '\\hline\\end{tabular}'
+            lines.push('\\node[anchor=north, align=left, font=\\footnotesize] at (0,0.7cm) {')
+            lines.push(tbl)
+            lines.push('};')
+            body.push(...lines)
+          } else {
+            body.push(...stdPlot('line', rowsToSeries()))
+          }
+
+          const doc = [...texPreamble(libs), ...body, ...texFooter()]
+          return doc.join('\n') + '\n'
+        }
+
+        async function exportTeX() {
+          try {
+            const tex = buildTeX()
+            const blob = new Blob([tex], { type: 'text/x-tex;charset=utf-8' })
+            const a = document.createElement('a')
+            a.download = safeName(state.title) + '.tex'
+            a.href = URL.createObjectURL(blob)
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+            setStatus('TeX 已导出 · 请用 XeLaTeX 编译生成矢量图')
+          } catch (e) {
+            reportError('TeX 导出失败', e, true)
+          }
+        }
+
+        $('#property-import-input').onchange = async (e) => {
+          const f = e.target.files?.[0]
+          if (!f) return
+          await importPropertySettings(f)
+          e.target.value = ''
+        }
+
+        $('#save-png-btn').onclick = exportPNG
+        $('#save-svg-btn').onclick = exportSVG
+        $('#save-pdf-btn').onclick = exportPDF
+        $('#save-tex-btn').onclick = exportTeX
+        $('#reset-inspector-btn').onclick = resetCurrentEngineProperties
+        $('#reset-btn').onclick = () => {
           // 全局“重置”才会重置所有引擎、所有图表的独立属性；右侧“重置”只重置当前图表。
           ENGINE_IDS.forEach((id) => {
-            enginePropertyStores[id] = createEnginePropertyStore(id);
-          });
-          state.data = structuredClone(sample);
-          state.xCol = 0;
-          state.yCols = [1, 2, 3];
-          state.targetCol = null;
-          state.y1Col = 1;
-          state.y2Col = 2;
-          state.engine = "echarts";
-          state.type = "line";
-          state.category = "论文";
-          state.radius = 0;
-          state.bg = "body-grid";
-          loadEnginePropertyStore(state.engine, state.type);
-          applyRadius();
-          applyBg("body-grid");
-          renderCategories("论文");
-          renderTypeList(categories[state.category]);
-          renderEngines();
-          renderInspector();
-          renderChart();
-          schedulePersist();
-          setStatus("工作区已重置");
-        };
-        document.addEventListener("keydown", (e) => {
-          const mod = e.metaKey || e.ctrlKey;
-          if (mod && e.key.toLowerCase() === "p") {
-            e.preventDefault();
-            exportPNG();
+            enginePropertyStores[id] = createEnginePropertyStore(id)
+          })
+          state.data = structuredClone(sample)
+          state.xCol = 0
+          state.yCols = [1, 2, 3]
+          state.targetCol = null
+          state.y1Col = 1
+          state.y2Col = 2
+          state.engine = 'echarts'
+          state.type = 'line'
+          state.category = '论文'
+          state.radius = 0
+          state.bg = 'body-grid'
+          loadEnginePropertyStore(state.engine, state.type)
+          applyRadius()
+          applyBg('body-grid')
+          renderCategories('论文')
+          renderTypeList(categories[state.category])
+          renderEngines()
+          renderInspector()
+          renderChart()
+          schedulePersist()
+          setStatus('工作区已重置')
+        }
+        document.addEventListener('keydown', (e) => {
+          const mod = e.metaKey || e.ctrlKey
+          const k = (e.key || '').toLowerCase()
+          // 右侧属性栏与数据表里有不少输入框；I / D / ? 是可打印字符，
+          // 不挡住的话在这些框里打字就会误触发导入、编辑数据或说明面板。
+          const tag = (e.target && e.target.tagName) || ''
+          const typing =
+            tag === 'INPUT' ||
+            tag === 'TEXTAREA' ||
+            tag === 'SELECT' ||
+            !!e.target?.isContentEditable
+          if (mod && k === 'p' && !e.shiftKey) {
+            e.preventDefault()
+            exportPNG()
+            return
           }
-          if (mod && e.shiftKey && e.key.toLowerCase() === "p") {
-            e.preventDefault();
-            exportPDF();
+          if (mod && e.shiftKey && k === 'p') {
+            e.preventDefault()
+            exportPDF()
+            return
           }
-          if (!mod && e.key.toLowerCase() === "i") $("#file-input").click();
-          if (!mod && e.key.toLowerCase() === "d") openDataModal();
-          if (e.key === "Escape") {
-            closeDropdowns();
-            closeDataModal();
+          if (!typing) {
+            if (!mod && !e.altKey && k === 'i') $('#file-input').click()
+            if (!mod && !e.altKey && k === 'd') openDataModal()
+            if (!mod && !e.altKey && e.key === '?') openShortcuts()
           }
-        });
+          if (e.key === 'Escape') {
+            closeDropdowns()
+            closeDataModal()
+            closeShortcuts()
+            // 图表放大查看也是弹层，Esc 必须能关掉，否则只能用鼠标点 ×
+            if ($('#preview-modal').classList.contains('open')) closePreview()
+          }
+        })
 
-        document
-          .getElementById("splash-enter")
-          .addEventListener("click", () => {
-            const splash = document.getElementById("splash");
-            splash.classList.add("fade-out");
-            setTimeout(() => {
-              splash.style.display = "none";
-            }, 600);
-          });
+        document.getElementById('splash-enter').addEventListener('click', () => {
+          const splash = document.getElementById('splash')
+          splash.classList.add('fade-out')
+          setTimeout(() => {
+            splash.style.display = 'none'
+          }, 600)
+        })
 
         function init() {
           // 初始化顺序必须是：读取持久化数据 → 确认当前引擎 → 载入该引擎独立属性 → 规范化 → 首次绘制。
           // 首次绘制前不允许用默认属性先画一遍，否则页面刷新时会短暂或最终落到错误的属性状态。
-          restorePersistedState();
-          migrateOuterMarginLayout();
-          migrateExportQuality();
-          restoreStylePrefs();
+          restorePersistedState()
+          migrateOuterMarginLayout()
+          migrateExportQuality()
+          restoreStylePrefs()
 
-          const readyEngine =
-            ["echarts", "chartjs", "apexcharts", "zen"].find(engineReady) ||
-            "zen";
+          const readyEngine = ['echarts', 'chartjs', 'apexcharts', 'zen'].find(engineReady) || 'zen'
           if (!engineReady(state.engine)) {
-            state.engine = readyEngine;
+            state.engine = readyEngine
           }
 
           // 先确认刷新后要恢复的“引擎 + 图表类型”，再读取这一张图自己的右侧属性。
           const preferred = typeSupported(state.type, state.engine)
             ? state.type
-            : engineSupportedTypes(state.engine)[0] || "line";
-          state.type = preferred;
-          state.category = getActiveCategoryForType(preferred);
-          state.zenKind = preferred;
-          loadEnginePropertyStore(state.engine, state.type);
-          loadDataSelectionStore(state.engine, state.type);
-          normalizeLayoutPrefs();
-          normalizeDataSelection({ fillDefaults: true });
+            : engineSupportedTypes(state.engine)[0] || 'line'
+          state.type = preferred
+          state.category = getActiveCategoryForType(preferred)
+          state.zenKind = preferred
+          loadEnginePropertyStore(state.engine, state.type)
+          loadDataSelectionStore(state.engine, state.type)
+          normalizeLayoutPrefs()
+          normalizeDataSelection({ fillDefaults: true })
 
           // 将规范化后的当前图表状态立即回写，确保存储与首次绘制使用同一份状态。
           // 只有成功完成读取时才回写；若读取期间发生异常，禁止默认状态覆盖原有 Local Storage。
-          syncCurrentEnginePropertyStore();
-          if (!persistenceRestoreFailed) savePersistedState();
+          syncCurrentEnginePropertyStore()
+          if (!persistenceRestoreFailed) savePersistedState()
 
-          renderCategories(state.category);
-          renderTypeList(categories[state.category] || []);
-          renderEngines();
-          renderInspector();
-          resizeChart();
-          renderChart(false);
+          renderCategories(state.category)
+          renderTypeList(categories[state.category] || [])
+          renderEngines()
+          renderInspector()
+          resizeChart()
+          renderChart(false)
           setStatus(
             engineReady(state.engine)
-              ? "ZENVIZ 已就绪 · 可导入 CSV / TXT / XLSX"
-              : "ZENVIZ · 当前使用自绘引擎",
-          );
+              ? 'ZENVIZ 已就绪 · 可导入 CSV / TXT / XLSX'
+              : 'ZENVIZ · 当前使用自绘引擎',
+          )
         }
-        if (document.readyState === "loading")
-          document.addEventListener("DOMContentLoaded", init);
-        else init();
-      })();
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init)
+        else init()
+      })()
+    
