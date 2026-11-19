@@ -26,7 +26,7 @@ ARTIFACTS = (
 
 def test_studio_files_match_the_shared_core_generator():
     if not BUILD.is_file():
-        pytest.skip('zen viz-core submodule is not checked out (set its remote URL first)')
+        pytest.skip('zen viz-core submodule is not checked out (run git submodule update --init)')
     with tempfile.TemporaryDirectory() as tmp:
         result = subprocess.run(
             [sys.executable, str(BUILD), '--product', 'caixihui', '--root', tmp],
@@ -37,6 +37,10 @@ def test_studio_files_match_the_shared_core_generator():
         assert result.returncode == 0, result.stderr
         generated = pathlib.Path(tmp) / 'backend/static'
         for rel in ARTIFACTS:
-            assert (generated / rel).read_bytes() == (STATIC / rel).read_bytes(), (
+            # Windows checkouts turn the generated LF files into CRLF; compare
+            # content, not the working-tree line endings.
+            expected = (generated / rel).read_bytes().replace(b'\r\n', b'\n')
+            actual = (STATIC / rel).read_bytes().replace(b'\r\n', b'\n')
+            assert expected == actual, (
                 f'{rel} was not generated from zen viz-core; run build.py rather than editing it directly'
             )
