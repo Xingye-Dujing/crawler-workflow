@@ -493,6 +493,29 @@ def test_a_non_admin_may_not_install_a_process_wide_pack(client, clean_ai, monke
     assert client.delete('/api/ai/plugins/demo.ownskills').status_code == 200
 
 
+def test_a_non_admin_may_not_enable_or_delete_a_process_wide_pack(client, clean_ai, monkeypatch):
+    """Install wasn't the only door: enable re-registers and delete releases the same machine-wide
+    contributions, so both need the admin check install already had."""
+    import api.ai as ai_api
+    from ai import tools
+
+    assert (
+        client.post(
+            '/api/ai/plugins/install', json=_tool_pack([_http_tool('demo_guard_tool')], 'demo.guard')
+        ).status_code
+        == 200
+    )
+    try:
+        monkeypatch.setattr(ai_api, 'accounts_mode', lambda: True)
+        monkeypatch.setattr(ai_api, 'is_admin', lambda: False)
+        assert client.post('/api/ai/plugins/demo.guard/enable', json={'enabled': False}).status_code == 403
+        assert client.delete('/api/ai/plugins/demo.guard').status_code == 403
+        assert 'demo_guard_tool' in tools.TOOLS, 'a refused write must leave the pack callable'
+    finally:
+        monkeypatch.setattr(ai_api, 'is_admin', lambda: True)
+        client.delete('/api/ai/plugins/demo.guard')
+
+
 def test_the_provider_key_travels_in_a_header_not_the_url(client, fake_ai):
     """A documented deployment puts a reverse proxy in front: its access log writes the request
     line, so a ``?key=sk-…`` URL would put the user's credential in the operator's log file."""
@@ -540,6 +563,28 @@ def test_a_pack_installed_by_one_account_is_not_anothers_to_use(client, clean_ai
         with account_context.use(alice):
             plugins.uninstall('demo.scoped')
     assert 'demo_scoped_tool' not in tools.TOOLS
+
+
+def test_a_plugin_id_cannot_be_reused_by_another_account(client, clean_ai):
+    """Contributions are released by the bare ``plugin:<id>`` owner, so a second account installing
+    a different pack under the same id would have its uninstall clobber the first account's tools."""
+    from ai import plugins
+    from ai.errors import AIError
+    from runtime import account_context
+    from runtime.account_context import Account
+
+    alice = Account('u_' + 'a' * 12, 'alice')
+    bob = Account('u_' + 'b' * 12, 'bob')
+    with account_context.use(alice):
+        plugins.install(_tool_pack([_http_tool('demo_id_tool')], 'demo.sameid'))
+    try:
+        with account_context.use(bob):
+            with pytest.raises(AIError) as refusal:
+                plugins.install(_tool_pack([_http_tool('demo_other_tool')], 'demo.sameid'))
+            assert refusal.value.key == 'ai.pluginConflict'
+    finally:
+        with account_context.use(alice):
+            plugins.uninstall('demo.sameid')
 
 
 def test_a_provider_pack_is_invisible_to_another_account(client, clean_ai):

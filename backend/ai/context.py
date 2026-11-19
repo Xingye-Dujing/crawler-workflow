@@ -32,6 +32,10 @@ DOC_ROOTS = (
     'docs/analysis.md',
     'docs/crawler_rules.md',
     'docs/frontend_modules.md',
+    # The authoritative CatBus skill (copied from catbus/.claude/skills/catbus). A directory root
+    # expands to every .md under it, so the catbus skill can read the one platform/workflow file it
+    # needs without a second hand-written index here.
+    'docs/catbus/',
 )
 
 
@@ -115,13 +119,25 @@ def project_facts() -> str:
     return '\n'.join(lines)
 
 
+def _doc_files(root: Path) -> list[tuple[str, Path]]:
+    """Resolve DOC_ROOTS to files. A trailing ``/`` means “every markdown under this directory”."""
+    files: list[tuple[str, Path]] = []
+    for relative in DOC_ROOTS:
+        path = root / relative
+        if relative.endswith('/'):
+            if path.is_dir():
+                for child in sorted(path.rglob('*.md')):
+                    files.append((f'{relative}{child.relative_to(path).as_posix()}', child))
+            continue
+        if path.is_file():
+            files.append((relative, path))
+    return files
+
+
 def _doc_chunks() -> list[tuple[str, str]]:
     chunks = []
     root = Path(Config.ROOT_DIR) if hasattr(Config, 'ROOT_DIR') else Path(__file__).resolve().parents[2]
-    for relative in DOC_ROOTS:
-        path = root / relative
-        if not path.is_file():
-            continue
+    for relative, path in _doc_files(root):
         text = path.read_text(encoding='utf-8', errors='replace')
         current_title = relative
         current = []

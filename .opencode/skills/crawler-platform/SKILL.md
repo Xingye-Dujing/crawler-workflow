@@ -45,6 +45,14 @@ backend/crawlers/core/                   # browser, faults, pacing, shared contr
   keep a measured baseline; it may not keep a private switch.
 - **No Windows-only fact** in `backend/`: drive letters, `.exe`, `taskkill`, code-page console.
 
+## AI 工作区路由：用户要采集数据时
+
+内置 `crawl` / `catbus` 技能（`backend/ai/skills.py`）面对"我要爬数据"时，先 `ask_user_question`
+问清两条路：**建画布节点（第二后端选 catbus）** 还是 **AI 直接调 catbus 指令运行**，不替用户选。
+执行前先 `catbus_status`（只读工具）探测本机 Node + 采析绘适配器与全局 `catbus` CLI，有就不新装；
+缺哪一样就点名哪一样，安装由用户决定。权威 catbus 用法文档在 `docs/catbus/`（从
+catbus 的 `.claude/skills/catbus/` 复制），`docs_search` 按任务取其中一两个文件，不要整本塞进上下文。
+
 ## Recipe: a new list mode
 
 1. Add the mode to `capabilities/platforms/<id>.py` with its fields, engines and requirements.

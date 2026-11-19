@@ -115,6 +115,13 @@ class TestTheToolGate:
         with pytest.raises(AIError):
             tools.require_approval('rerun_node', {'node_id': 'n2'}, {'conversation_id': 'c1'})
 
+    def test_a_setting_tool_is_not_blocked_by_the_approval_switch(self, monkeypatch):
+        """``workspace_set`` is a panel setting, not a per-call act: an approval grant is keyed to
+        exact args and can never cover a folder choice, so requiring one made the tool unusable
+        whenever ai_auto_approve was off — even after the user approved it."""
+        self._off(monkeypatch)
+        tools.require_approval('workspace_set', {'path': '/tmp'}, {'conversation_id': 'c1'})
+
     def test_execute_refuses_run_cmd_without_a_grant(self, monkeypatch):
         self._off(monkeypatch)
         with pytest.raises(AIError) as caught:

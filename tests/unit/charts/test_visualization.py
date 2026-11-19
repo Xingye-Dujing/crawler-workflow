@@ -937,6 +937,16 @@ class TestStackPct:
             shares = [s['data'][i] for s in option['series']]
             assert round(sum(shares), 1) == 100.0, f'{i} period does not add up: {shares}'
 
+    def test_numeric_string_cells_coerce_in_every_renderer(self):
+        # Pasted JSON / dtype=str imports carry numeric strings. matplotlib and TikZ used to sum
+        # the raw strings (concatenating them), so they disagreed with ECharts which coerces.
+        frame = pd.DataFrame({'阶段': ['发酵期', '爆发期'], '积极': ['20', '40'], '消极': ['80', '60']})
+        numeric = pd.DataFrame({'阶段': ['发酵期', '爆发期'], '积极': [20, 40], '消极': [80, 60]})
+        option = V.to_echarts_option(frame, 'stack_pct', x='阶段', stack_fields='积极,消极')
+        reference = V.to_echarts_option(numeric, 'stack_pct', x='阶段', stack_fields='积极,消极')
+        assert [s['data'] for s in option['series']] == [s['data'] for s in reference['series']]
+        assert V.render_image(frame, 'stack_pct', x='阶段', stack_fields='积极,消极').startswith('data:image/png')
+
     def test_raw_counts_are_shown_as_shares_not_heights(self):
         # 1 of 4, 2 of 4, 3 of 4 — the column is a raw count, the figure must be a percentage.
         frame = pd.DataFrame({'g': ['a', 'b', 'c'], 'pos': [1, 2, 3], 'neg': [3, 2, 1]})
@@ -1211,6 +1221,31 @@ class TestRenderImage:
     def test_unknown_chart_type_is_refused_before_drawing(self, df):
         with pytest.raises(ChartConfigError, match='Unsupported chart type'):
             V.render_image(df, 'donut', x='作者')
+
+    @pytest.mark.parametrize('builder', ['render_image', 'to_echarts_option'])
+    def test_an_unknown_aggregate_is_a_named_refusal_not_an_attribute_error(self, df, builder):
+        # A bad agg used to reach pandas as ``SeriesGroupBy.agg('bogus')`` and raise AttributeError,
+        # which the HTTP layer did not catch -> HTML 500 instead of the JSON 400 every bad choice gets.
+        with pytest.raises(ChartConfigError, match='bogus'):
+            getattr(V, builder)(df, 'bar', x='作者', y='点赞', agg='bogus')
+
+    def test_histogram_uses_the_same_bins_as_the_other_renderers(self, df, monkeypatch):
+        import matplotlib.axes
+
+        captured = []
+        real_hist = matplotlib.axes.Axes.hist
+
+        def spy(self, values, bins=None, **kwargs):
+            captured.append(bins)
+            return real_hist(self, values, bins=bins, **kwargs)
+
+        monkeypatch.setattr(matplotlib.axes.Axes, 'hist', spy)
+        from services.charts.style import _histogram_bins
+
+        V.render_image(df, 'histogram', x='点赞')
+        _, edges = _histogram_bins(df['点赞'])
+        assert len(captured) == 1
+        assert list(captured[0]) == edges, 'matplotlib must bin like ECharts and the LaTeX figure'
 
     @pytest.mark.parametrize(
         'chart_type, kwargs, needle',

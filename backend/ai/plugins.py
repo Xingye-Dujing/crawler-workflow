@@ -324,6 +324,13 @@ def install(payload: dict) -> dict:
     existing = store.get_plugin(manifest.id)
     if existing is not None:
         raise AIError('ai.pluginConflict', kind='bad_request', plugin=manifest.id)
+    # The contribution registry is PROCESS-WIDE and releases by the bare ``plugin:<id>`` owner.
+    # A second account installing a different pack under the same id would therefore have its
+    # uninstall/disable remove the FIRST account's contributions too. Ids are process-wide names:
+    # refuse a colliding install before any contribution is registered.
+    owner = f'plugin:{manifest.id}'
+    if manifest.id in _DYNAMIC or any(HOST.owned(kind, owner) for kind in HOST.KINDS):
+        raise AIError('ai.pluginConflict', kind='bad_request', plugin=manifest.id)
     try:
         installed_skills = _apply(manifest)
     except BaseException:

@@ -64,7 +64,10 @@ def cluster_label(
         # declares. The count is said out loud; the totals are not.
         logger.warning(t('analysis.cluster_groups_dropped', col=group_col, n=dropped))
     groups = groups[groups['_grp'].notna()]
-    order = sorted(int(k) for k in groups['_grp'].unique())
+    # Keep the numeric value as-is: ``int(k)`` floored fractional ids (1.0 and 1.5 both became 1),
+    # and the later ``== key`` mask then selected only the 1.0 rows while reporting one cluster.
+    # ``.item()`` yields a plain Python int/float, preserving JSON-friendly output.
+    order = sorted(k.item() if hasattr(k, 'item') else k for k in groups['_grp'].unique())
     if not order:
         # Nothing left to label. A named refusal, not an empty table: the columns this step promises
         # (group_col/n_docs/summary_col) would not exist either, and every reader then blames the

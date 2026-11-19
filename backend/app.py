@@ -101,6 +101,14 @@ _cloud_refusal = web_auth.startup_error()
 if _cloud_refusal:
     raise SystemExit(_cloud_refusal)
 
+# The bind refusal belongs at import time too, not only under ``python app.py``: a WSGI server that
+# imports ``app:app`` never runs the launcher, yet the HOST env var is still the app's declared
+# bind. A public one with no account registry publishes every cookie and dataset to the network.
+# (The launcher repeats the check; the Docker service declares auth, so it passes both.)
+_bind_refusal = web_auth.public_bind_refusal(os.environ.get('HOST'))
+if _bind_refusal:
+    raise SystemExit(_bind_refusal)
+
 app = Flask(__name__, static_folder='static', static_url_path='')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 # The login is a signed session cookie: HttpOnly so page scripts cannot read it, SameSite=Lax so a

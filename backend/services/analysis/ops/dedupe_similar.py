@@ -42,6 +42,9 @@ def dedupe_similar(df: pd.DataFrame, column: str, max_distance: int = 8) -> pd.D
     if not 0 <= distance <= MAX_BANDED_DISTANCE:
         raise UnknownOperationError(t('analysis.dedupe_distance', value=distance, max=MAX_BANDED_DISTANCE))
     candidates = []
+    #: The grouped helper stringifies ids, so keep the original label for each one. Parsing them
+    #: back with ``int()`` assumed a RangeIndex and crashed on a string/UUID index.
+    labels: dict[str, object] = {}
     for idx, raw in work[column].items():
         if pd.isna(raw):
             continue
@@ -51,10 +54,12 @@ def dedupe_similar(df: pd.DataFrame, column: str, max_distance: int = 8) -> pd.D
         # rows into one group. They are not duplicates of each other — they are empty.
         if not normalize_text(text):
             continue
-        candidates.append((str(idx), simhash64(text)))
+        key = str(idx)
+        candidates.append((key, simhash64(text)))
+        labels[key] = idx
     dropped = []
     for group in group_near_duplicates(candidates, max_distance=distance):
-        dropped.extend(int(member) for member in group[1:])
+        dropped.extend(labels[member] for member in group[1:])
     if dropped:
         work = work.drop(index=dropped)
     logger.info(t('analysis.dedupe_similar', n=len(dropped), column=column, distance=distance))

@@ -211,6 +211,21 @@ class TestFlushCadence:
 
 
 class TestStoreFailure:
+    def test_a_registry_that_cannot_answer_keeps_the_batch(self, writer, monkeypatch):
+        """An unreadable accounts.db is not proof the owner was deleted: keeping the batch for a
+        later flush avoids a hole in the durable console. Dropping it was a silent log loss."""
+        import engine.run_logs
+
+        _module, w, store, state = writer
+        _set_run(state, 'rX')
+        monkeypatch.setattr(engine.run_logs, 'owner_state', lambda account: None)
+        w.push(['keep me'], 0, 'info')
+        w.flush()
+        assert store.batches == [], 'a transient registry fault must not drop the line'
+        monkeypatch.setattr(engine.run_logs, 'owner_state', lambda account: True)
+        w.flush()
+        assert store.batches and store.batches[0][0] == 'rX'
+
     def test_a_failed_flush_keeps_the_lines_for_a_later_try(self, writer):
         _module, w, store, state = writer
         _set_run(state, 'rX')

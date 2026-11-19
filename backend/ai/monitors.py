@@ -216,7 +216,13 @@ def _deliver(payload: dict) -> None:
             continue
         body = _compact(payload)
         store.add_monitor_event(monitor['id'], monitor['conversation_id'], event, body)
-        store.touch_monitor(monitor['id'], int(spec.get('max_triggers') or 20))
+        limit = int(spec.get('max_triggers') or 20)
+        updated = store.touch_monitor(monitor['id'], limit)
+        # touch_monitor retires the row in SQLite once its budget is spent, but the armed list is
+        # cached for 10s. Without dropping that cache the same retired monitor kept delivering on
+        # every subsequent event — far past max_triggers, including extra auto-analyze turns.
+        if updated is not None and limit and int(updated.get('trigger_count') or 0) >= limit:
+            invalidate()
 
 
 def _on_event(payload: dict) -> None:

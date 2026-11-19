@@ -833,7 +833,7 @@ SETTINGS = (
     Setting(
         'ai_web_search_default',
         'bool',
-        False,
+        True,
         'ai',
         'set.aiWebSearch',
         hint='set.aiWebSearchHint',

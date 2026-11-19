@@ -1163,6 +1163,15 @@ class TestDedupeSimilar:
         assert len(out) == 2
         assert out.iloc[0]['正文'] == '这家店的服务态度真的很差，再也不会来了', 'the first of a group is kept'
 
+    def test_a_string_index_does_not_crash_the_dedupe(self):
+        """The grouped helper stringifies ids; parsing them back with int() crashed on UUID labels.
+        The step's contract resets the index, so the labels need not survive — only the rows.
+        """
+        frame = pd.DataFrame(self.NEAR, index=['a', 'b', 'c'])
+        out = D.dedupe_similar(frame, column='正文')
+        assert len(out) == 2
+        assert out.iloc[0]['正文'] == self.NEAR[0]['正文']
+
     def test_a_distance_that_only_just_reaches_the_pair_still_finds_it(self):
         # The same pair at the narrowest distance that can see it (measured 4), which is
         # what makes the case above a real one rather than an artefact of a loose default.
@@ -2147,6 +2156,13 @@ class TestClusterLabel:
         assert list(out.columns) == ['簇', 'n_docs', '概述']
         assert out['簇'].tolist() == [0, 1]
 
+    def test_fractional_group_ids_are_not_floored_together(self):
+        """int(k) collapsed 1.0 and 1.5 into one cluster and then masked away the 1.5 rows."""
+        frame = pd.DataFrame({'cluster': [1.0, 1.5, 2.0], '正文': ['甲', '乙', '丙']})
+        out = D.cluster_label(frame, llm=self._Client(), summary_col='摘要')
+        assert sorted(float(v) for v in out['cluster']) == [1.0, 1.5, 2.0]
+        assert (out['n_docs'] == [1, 1, 1]).all()
+
     def test_a_missing_group_column_is_refused_by_name(self):
         frame = pd.DataFrame({'正文': ['甲']})
         with pytest.raises(UnknownOperationError, match='cluster'):
@@ -2347,6 +2363,14 @@ class TestComparePlatform:
         frame = pd.DataFrame({'情感': [1.0]})
         with pytest.raises(UnknownOperationError, match='platform'):
             D.compare_platform(frame)
+
+    def test_a_blank_platform_is_an_empty_label_not_a_literal_nan(self):
+        """``dropna=False`` groups blanks under float('nan'); the None-only guard wrote 'nan'."""
+        frame = pd.DataFrame({'platform': ['weibo', None, float('nan')], '情感': [1.0, 2.0, 3.0]})
+        out = D.compare_platform(frame, platform_col='platform', value_col='情感', agg='mean')
+        assert 'nan' not in set(out['platform'].astype(str)), out
+        blank = out[out['platform'] == '']
+        assert len(blank) == 1 and int(blank.iloc[0]['n']) == 2
 
     def test_a_platform_with_no_numeric_value_is_left_empty_not_zero(self):
         """0.0 made "no scores at all" read as a measured zero, which a bar chart draws as a

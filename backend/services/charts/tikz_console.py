@@ -132,7 +132,14 @@ class ConsoleFigureMixin:
         grouped = df.groupby(x, sort=False)
         keys = list(grouped.groups.keys())
         labels = [str(k) for k in keys]
-        cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in fields}
+        cols = {}
+        for field in fields:
+            # Same coercion and same named refusal as the ECharts and matplotlib branches: raw
+            # numeric-string cells were concatenated by sum, so the paper figure disagreed.
+            numeric = pd.to_numeric(df[field], errors='coerce')
+            if df[field].notna().any() and not numeric.notna().any():
+                raise ChartConfigError(t('chart.y_not_numeric', col=field))
+            cols[field] = numeric.groupby(df[x], sort=False).sum().reindex(keys).fillna(0).tolist()
         totals = [sum(cols[f][i] for f in fields) for i in range(len(labels))]
         plots = []
         for idx, field in enumerate(fields):

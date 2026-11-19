@@ -11,7 +11,10 @@ ZH = {
     'ai.provider.opencode_go': 'OpenCode Go',
     'ai.provider.openrouter': 'OpenRouter',
     'ai.provider.ollama': '本地 Ollama',
-    'ai.providerNote.deepseek': '正式 API：深度思考、联网搜索、读链接、安全审核与会话标题。',
+    'ai.providerNote.deepseek': (
+        '正式 API：深度思考、联网搜索、读链接、安全审核与会话标题。'
+        '联网搜索与抓页的服务端工具调用免费，仅按模型 Token 计费。'
+    ),
     'ai.providerNote.opencode_go': 'OpenCode Go 套餐通道，面向编码代理流量；通用分析对话可能被限流。',
     'ai.providerNote.openrouter': '现有 OpenAI 兼容通道；免费模型可用，但没有服务端联网与文件能力。',
     'ai.providerNote.ollama': '本机守护进程；云端模式无法使用。',
@@ -164,6 +167,7 @@ ZH = {
     'ai.pythonOutputTruncated': '…（输出已截断）',
     'ai.skillUnavailable': '技能“{skill}”需要“{capability}”，而 {provider} 不提供它。',
     'ai.skillCodeLocal': '技能“{skill}”需要读取仓库源码，只在本地网页版（源码运行）可用；桌面版与云端不提供。',
+    'ai.skillLocalOnly': '技能“{skill}”需要本机环境（本地 CLI 与运行时），云端不提供。',
     'ai.skillPythonLocal': '技能“{skill}”需要 Python 扩展：请在本机网页版/桌面版开启“允许 AI 执行 Python”。',
     'ai.skillUnknown': '未知技能：{skill}',
     'ai.skillBadTool': '技能“{skill}”引用了不存在的工具：{tool}',
@@ -204,7 +208,8 @@ EN = {
     'ai.provider.openrouter': 'OpenRouter',
     'ai.provider.ollama': 'Local Ollama',
     'ai.providerNote.deepseek': (
-        'The full API: thinking, web search, link reading, safety review and conversation titles.'
+        'The full API: thinking, web search, link reading, safety review and conversation titles. '
+        'Server-side web search and fetch tool calls are free; only model tokens are billed.'
     ),
     'ai.providerNote.opencode_go': (
         'The OpenCode Go plan, intended for coding-agent traffic; general analysis chat may be rate-limited.'
@@ -387,6 +392,9 @@ EN = {
     'ai.skillCodeLocal': (
         'Skill “{skill}” needs the repository source, which only the local web checkout provides; '
         'the desktop app and a cloud host do not offer it.'
+    ),
+    'ai.skillLocalOnly': (
+        'Skill “{skill}” needs a local machine (a local CLI and runtime), which a cloud host does not offer.'
     ),
     'ai.skillPythonLocal': (
         'Skill “{skill}” needs the Python extension; enable “Allow AI Python execution” on a local web or desktop host.'

@@ -341,11 +341,32 @@ def ai_plugin_install():
         return jsonify({'ok': False, 'error': t('ai.pluginBadManifest', reason=str(exc))}), 400
 
 
+def _plugin_write_refusal(plugin_id: str):
+    """The install route's admin rule, applied to the two sibling write routes too.
+
+    Enabling a provider/tool/code pack re-registers into the process-wide tables, and disabling
+    or uninstalling one releases contributions by plugin id — both are machine-level writes. A
+    non-admin may still manage their own skill pack, which only writes their account's library.
+    """
+    if not accounts_mode() or is_admin():
+        return None
+    row = plugins.store.get_plugin(plugin_id)
+    if row is None:
+        return None  # let the plugin layer raise its named not-found
+    kind = str((row.get('manifest') or {}).get('kind') or '')
+    if kind != 'skill-pack':
+        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    return None
+
+
 @bp.route('/api/ai/plugins/<plugin_id>/enable', methods=['POST'])
 def ai_plugin_enable(plugin_id: str):
     data = _json_body()
     if data is None:
         return _bad_body()
+    refusal = _plugin_write_refusal(plugin_id)
+    if refusal is not None:
+        return refusal
     try:
         plugins.set_enabled(plugin_id, bool(data.get('enabled', True)))
         return jsonify({'ok': True})
@@ -355,6 +376,9 @@ def ai_plugin_enable(plugin_id: str):
 
 @bp.route('/api/ai/plugins/<plugin_id>', methods=['DELETE'])
 def ai_plugin_delete(plugin_id: str):
+    refusal = _plugin_write_refusal(plugin_id)
+    if refusal is not None:
+        return refusal
     try:
         return jsonify({'ok': True, 'deleted': plugins.uninstall(plugin_id)})
     except AIError as exc:

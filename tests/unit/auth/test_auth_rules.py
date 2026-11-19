@@ -37,6 +37,11 @@ class TestSafeNext:
             '/a\r\nX-Injected: 1',
             '/a\x00b',
             '/a\x01b',
+            # A header is latin-1-encoded: these cannot be written to Location, so redirect()
+            # would raise after the session had already been minted.
+            '/登录',
+            '/a\u2028b',
+            '/a\u2029b',
         ],
     )
     def test_anything_else_becomes_the_root(self, target):
@@ -141,6 +146,35 @@ class TestThePublicBind:
         monkeypatch.setattr(Config, 'CLOUD_MODE', False)
         monkeypatch.setattr(Config, 'ADMIN_PASSWORD', '')
         assert auth.public_bind_refusal(host) is None
+
+    def test_a_wsgi_import_with_a_public_bind_refuses(self, tmp_path):
+        """A WSGI server imports ``app:app`` and never runs the launcher, so the bind check must
+        ALSO happen at import time — otherwise the same ungated socket the launcher refuses is
+        published by gunicorn/uwsgi with the identical HOST declaration."""
+        import os
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[3]
+        env = dict(os.environ)
+        env['HOST'] = '0.0.0.0'
+        env['CRAWLER_DATA_ROOT'] = str(tmp_path)
+        env['PYTHONIOENCODING'] = 'utf-8'
+        env.pop('CRAWLER_ADMIN_PASSWORD', None)
+        answer = subprocess.run(
+            [sys.executable, '-c', 'import app'],
+            cwd=repo / 'backend',
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=120,
+            check=False,
+        )
+        assert answer.returncode != 0, answer.stdout
+        assert 'CRAWLER_ADMIN_PASSWORD' in answer.stderr + answer.stdout
 
     def test_an_open_bind_is_fine_once_accounts_gate_it(self, monkeypatch):
         monkeypatch.setattr(Config, 'CLOUD_MODE', False)

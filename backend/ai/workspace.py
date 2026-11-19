@@ -56,6 +56,7 @@ ALLOWED_COMMANDS = frozenset(
         'uv',
         'git',
         'node',
+        'catbus',
         'npm',
         'npx',
         'pnpm',

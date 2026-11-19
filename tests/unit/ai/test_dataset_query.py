@@ -78,6 +78,24 @@ def test_filter_caps_rows_and_cells(frame):
     assert result['rows'][0]['正文'].endswith('…')
 
 
+def test_contains_is_a_literal_substring_not_a_regex(frame):
+    from ai import tools
+
+    # A valid regex used to match unintended rows; a malformed one (``[``) escaped the tool's
+    # error handling as re.error. ``contains`` is a literal substring test, so neither applies.
+    for value in ('知乎|微博', '[', 'C++'):
+        result = tools.tool_dataset_query(
+            {
+                'dataset_id': 'd1',
+                'op': 'count',
+                'columns': ['平台'],
+                'where': {'column': '平台', 'op': 'contains', 'value': value},
+            },
+            {},
+        )
+        assert result['matched_rows'] == 0, value
+
+
 def test_an_unknown_op_is_refused_by_name(frame):
     from ai import tools
 

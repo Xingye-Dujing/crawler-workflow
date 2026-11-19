@@ -57,6 +57,29 @@ def test_a_node_monitor_delivers_one_pending_event_and_ack_clears_it(client, ai_
     assert client.delete('/api/ai/monitors/' + monitor['id']).get_json()['deleted'] is True
 
 
+def test_a_retired_monitor_stops_delivering_even_with_a_warm_cache(client, ai_conversation):
+    from ai import monitors, store
+    from runtime import run_events
+
+    created = client.post(
+        '/api/ai/monitors',
+        json={
+            'conversation_id': ai_conversation,
+            'spec': {'run_id': 'run-budget', 'events': ['run.finished'], 'max_triggers': 2},
+        },
+    ).get_json()['monitor']
+    for _ in range(5):
+        run_events.publish('run.finished', run_id='run-budget', outcome='completed')
+    assert monitors.drain(timeout=5) is True
+    events = client.get('/api/ai/monitors/events?pending=1&conversation_id=' + ai_conversation).get_json()['events']
+    # touch_monitor retires the row at 2, but the armed list is cached for 10s: without invalidating
+    # it the remaining events kept matching and delivering past max_triggers.
+    assert len(events) == 2, events
+    row = store.get_monitor(created['id'])
+    assert row['status'] == 'done'
+    assert int(row['trigger_count']) == 2
+
+
 def test_a_console_delivery_keeps_no_console_text(client, ai_conversation):
     from ai import monitors
     from runtime import run_events

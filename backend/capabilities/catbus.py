@@ -54,6 +54,14 @@ _CATBUS_COMMENT_ID = Field(
     name_key='field.catbusCommentId',
     required=True,
 )
+# bilibili draft get <id>：草稿 ID 是位置参数，清单声明的名字就叫 id（不是 item/urls）。
+_CATBUS_ID = Field(
+    key='id',
+    control='text',
+    label_key='settings.catbusDraftId',
+    name_key='field.catbusDraftId',
+    required=True,
+)
 CATBUS_ACCOUNT = BACKEND_FIELDS[1]
 
 #: 参数名 → 字段模板。清单里出现的参数都必须在这里有模板；没有就说明适配器加了新参数而
@@ -72,6 +80,7 @@ CATBUS_FIELD_TEMPLATES = {
     'conversation': _CATBUS_CONVERSATION,
     'product': _CATBUS_PRODUCT,
     'comment_id': _CATBUS_COMMENT_ID,
+    'id': _CATBUS_ID,
 }
 
 #: CatBus 模式键 → 面板词。共享模式复用 Selenium 的词；独有模式各有自己的名字。
@@ -120,6 +129,14 @@ CATBUS_MODE_LABELS = {
     'notice.list': 'catbus.mode.noticeList',
     'product.get': 'catbus.mode.productGet',
     'danmaku.list': 'catbus.mode.danmakuList',
+    # 原本非表格输出、补齐列定义后进清单的只读命令（见 catbus 适配器的 columns.ts）。
+    'notice.count': 'catbus.mode.noticeCount',
+    'cart.count': 'catbus.mode.cartCount',
+    'order.list': 'catbus.mode.orderList',
+    'coupon.list': 'catbus.mode.couponList',
+    'live.history': 'catbus.mode.liveHistory',
+    'item.subtitles': 'catbus.mode.itemSubtitles',
+    'draft.get': 'catbus.mode.draftGet',
 }
 
 #: 只有 CatBus 能爬、采析绘没有 Selenium 版的平台，以及它们的词。

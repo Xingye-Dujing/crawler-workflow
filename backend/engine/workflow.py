@@ -481,7 +481,10 @@ class WorkflowEngine:
             )
         for nid, node in self.nodes.items():
             ntype = node.get('type')
-            params = node.get('params', {})
+            # Read through the one shape-safe helper: a hand-edited/AI-written node whose params
+            # are a sentence (not an object) used to raise AttributeError here, outside the run
+            # path's sanitising, and turn a diagnostics call into an HTML 500.
+            params = node_params(node)
             # Console references lead with the node's (possibly renamed) title
             # so "node-7" never has to be decoded against the canvas.
             label = node_label(node, nid)

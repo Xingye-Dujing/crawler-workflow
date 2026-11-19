@@ -24,7 +24,8 @@
 | `CIXI_COMPONENTS_DIR` | 在线安装器的组件目录（清单 `install-manifest.json` 在其上一级） | 安装根下的 `components/`；源码运行 `data/components` |
 | `CIXI_COMPONENT_SOURCE` | `bundled`（只认安装器安装的 Chrome/驱动/Node/CatBus）或 `system`（只查本机） | 启动器写入；源码取 `component_source` 设置 |
 | `CIXI_NODE_BIN` / `NODE_BIN` | CatBus 用的 Node 运行时，版本按 CatBus `engines` 核对 | 空 |
-| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | CatBus 适配器入口或源码检出根；找不到就不提供该后端 | 空 |
+| `CIXI_CATBUS_CLI` / `CATBUS_CLI` / `CATBUS_HOME` | **采析绘适配器**入口（`dist/integrations/crawler-workflow/cli.js`）或源码检出根；找不到就不提供画布第二后端。与下面的 `CATBUS_BIN` 不冲突 | 空 |
+| `CATBUS_BIN` | **catbus 主程序**（`catbus` 可执行文件或 `dist/cli/main.js`），由适配器找它来跑平台命令；AI 指令路径用全局 `catbus`（`npm i -g catbus-cli`），也走这个约定 | 空（适配器按 `PATH` 找） |
 | `CIXI_PYTHON_BIN` / `AI_PYTHON_BIN` | Python 扩展用的解释器，优先于 `ai_python_path` 设置 | 空 |
 | `PYTHONUTF8` / `LANG` | 控制台编码：`stdout/stderr` 写不了汉字时改用 UTF-8 | — |
 | `CIXI_UPDATE_PUBKEY` | 更新清单的校验公钥（PEM 文本或路径）；配了就必须签名有效，见 [release.md](release.md) | 空 |

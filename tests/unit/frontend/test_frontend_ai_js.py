@@ -154,9 +154,11 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['stored'] == 'custom_provider'
 
     def test_the_search_default_is_adopted_once_and_never_over_a_choice(self):
-        """联网搜索 costs money, so the server's default is off; adopting it must not undo a click
-        either — a switched-off browser was being turned back on by the next refresh."""
+        """联网搜索 is on by default (DeepSeek's server-side search/fetch tool calls are free);
+        adopting the server default must not undo a click either — a switched-off browser was being
+        turned back on by the next refresh."""
         out = _run_workspace()['searchDefault']
+        assert out['browserDefault'] is True, 'a fresh browser did not start with 联网搜索 on'
         assert out['adopted'] is True, 'a browser that never chose did not adopt the server default'
         assert out['kept'] is False, 'a click on 联网搜索 was reverted by the next bootstrap'
 

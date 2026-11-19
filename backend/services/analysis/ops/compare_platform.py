@@ -35,7 +35,10 @@ def compare_platform(
     rows = []
     unmeasured = []
     for name, sub in groups:
-        row = {platform_col: ('' if name is None else str(name)), 'n': int(len(sub))}
+        # groupby(dropna=False) emits float('nan') as the key for blank platforms, not None. The
+        # old None-only guard let that become a literal 'nan' row — a platform the table never had.
+        label = '' if name is None or pd.isna(name) else str(name)
+        row = {platform_col: label, 'n': int(len(sub))}
         if value_col:
             if value_col not in df.columns:
                 raise UnknownOperationError(t('analysis.step_col_missing', op='compare_platform', col=value_col))

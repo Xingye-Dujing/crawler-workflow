@@ -46,6 +46,8 @@ checkout 里拍不了、为什么（云端账号环境、章节里的示例工�
 .venv/Scripts/python.exe docs/manual/shots/capture.py datapreview --workflow "刘学州-评论-情感演化分析-BERT" --node-type upload --out data-preview
 # 定点取景（172 节点的大画布只截一段）：--ids 逗号分隔节点 id，--zoom 缺省 1.0
 .venv/Scripts/python.exe docs/manual/shots/capture.py zoom --workflow "刘学州-评论-情感演化分析-BERT" --ids node-12,node-13 --out liu-zoom-stage
+# AI 工作区：整批配方里的 ai 这一种会打开右侧面板，可选会话列、工作室页或上下文预览
+.venv/Scripts/python.exe docs/manual/shots/capture.py --batch --only ai-workspace,ai-settings,ai-context,ai-studio,ai-memory
 ```
 
 `chart` / `fullscreen` / `dashboard` / `datapreview` / `history` 会先调用 `hydrate_results`，把这张画布最新一次
@@ -65,4 +67,5 @@ checkout 里拍不了、为什么（云端账号环境、章节里的示例工�
 - **拍完要还原 `data/workflows/`**：打开工作流会让服务端把视角和节点位置写回文件，`git status` 会看到
   7 个 json 变了。`git checkout -- data/workflows` 即可，别把这些改动当成手册的一部分提交。
 - 菜单与停靠面板先在 9 节点的小画布（`测试：图表可视化`）上打开，背景才干净；大画布只用来取“定点”图。
+- AI 工作区的上下文列只在全屏且有会话列时才有宽度，所以 `ai-context` 那张会先切全屏再打开预览；其余 AI 图保持停靠尺寸。
 

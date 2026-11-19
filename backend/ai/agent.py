@@ -394,6 +394,19 @@ class AgentService:
             bool(meta.get('web_search')),
         )
         skill = skills.get_skill(meta.get('skill') or 'auto')
+        # A retry is a NEW paid run, not the resumption of a turn that was already inside its
+        # budget. Without this check a conversation refused at its cap by send() could quietly
+        # spend past it by retrying the last message — the same bypass send() refuses before any
+        # row or provider call.
+        spend = costs.spend_state(conversation_id)
+        if spend['exceeded']:
+            raise AIError(
+                'ai.budgetExceeded',
+                kind='capability',
+                scope=_budget_scope_text(spend['scope']),
+                spent=spend['spent'],
+                limit=spend['limit'],
+            )
         run = store.create_run(conversation_id, user['id'])
         return self._loop(
             conversation=conversation,
@@ -477,8 +490,13 @@ class AgentService:
             raise AIError('ai.apiNoMessage', kind='bad_request', message=message_id)
         meta = user.get('meta') or {}
         # Answering a token-cap question means "spend on": remember it on the TURN so the resumed
-        # loop does not ask the same question again at its very next round boundary.
-        if str(question_id) == 'token_budget':
+        # loop does not ask the same question again at its very next round boundary. ``question_id``
+        # is the questions-table ROW id (q_...), while the inner id (``token_budget``) lives in the
+        # question's payload — comparing the row id to the literal never matched, so the ack was
+        # never written and a resumed multi-round turn was nagged again at the next boundary.
+        if any(
+            isinstance(item, dict) and item.get('id') == 'token_budget' for item in (question.get('questions') or [])
+        ):
             store.update_message(user['id'], meta={**meta, 'token_budget_ack': True})
         provider, model = _validate_provider(
             meta.get('provider') or 'deepseek',

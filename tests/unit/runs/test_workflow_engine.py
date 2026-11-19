@@ -244,6 +244,14 @@ class TestValidate:
         )
         assert WorkflowEngine(wf).validate() == []
 
+    def test_a_sentence_in_params_is_read_safely(self, en):
+        """A hand-edited/AI-written node whose params are a sentence (not an object) used to raise
+        AttributeError inside validate_detailed, turning a diagnostics call into an HTML 500."""
+        wf = _wf([_node('node-1', platform='zhihu', params='去重，按评论内容')], [])
+        errors = WorkflowEngine(wf).validate()
+        assert errors and isinstance(errors, list)
+        assert 'keyword' in ' '.join(errors), errors
+
     def test_blank_keyword_counts_as_missing(self, en):
         wf = _wf([_node('node-1', platform='zhihu', params={'keyword': '   '})], [])
         errors = WorkflowEngine(wf).validate()

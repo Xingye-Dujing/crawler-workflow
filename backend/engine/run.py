@@ -1790,6 +1790,9 @@ def begin_run(data: dict, lang_header: str) -> dict:
         logger.exception(t('run.start_failed', err=start_error))
         # Below the lock: the drain starts the next request through ``begin_run``, which needs it.
         start_next_queued()
-        return {'status': 500, 'body': {'ok': False, 'error': str(start_error)}}
+        # A thread that cannot start is a permanent refusal, not a busy slot: without ``drop``
+        # the queue drains this entry back onto the front after every later run, starving the
+        # requests behind it and surviving a restart in the mirror.
+        return {'status': 500, 'drop': True, 'body': {'ok': False, 'error': str(start_error)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}

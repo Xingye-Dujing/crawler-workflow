@@ -261,6 +261,27 @@ class TestQueueHandOff:
         monkeypatch.setattr(Config, 'CLOUD_MODE', True)
         assert cloud_refusal_response('ollama').get('drop') is True
 
+    def test_a_thread_that_cannot_start_is_a_permanent_refusal(self, app_module, monkeypatch):
+        """A thread-creation failure is as permanent as a corrupt canvas: the drain must discard
+        the entry, not park it at the front to starve every request behind it."""
+
+        def broken_start(self):
+            raise RuntimeError('cannot start worker')
+
+        monkeypatch.setattr(threading.Thread, 'start', broken_start)
+        answer = _run_module().begin_run(
+            {
+                'workflow': {
+                    'nodes': [{'id': 'n', 'type': 'name', 'params': {}}],
+                    'connections': [],
+                    'settings': {'mode': 'serial'},
+                }
+            },
+            'en',
+        )
+        assert answer['status'] == 500, answer
+        assert answer.get('drop') is True
+
     def test_a_request_that_can_never_start_is_discarded_not_requeued(self, client, app_module, monkeypatch):
         """The 继续 whose run was purged while it waited is refused with 'drop'."""
         self._seed(

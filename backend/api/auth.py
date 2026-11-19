@@ -249,7 +249,10 @@ def safe_next(target) -> str:
     text = str(target or '').strip()
     if not text.startswith('/') or text.startswith('//') or '\\' in text:
         return DEFAULT_NEXT
-    if any(ord(char) < 0x20 or char == '\x7f' for char in text):
+    # A response header is latin-1-encoded on the wire: a character above U+00FF (e.g. a CJK path)
+    # makes redirect() raise AFTER the session was created, and U+2028/U+2029 are line separators
+    # no header may carry. Both fall back to the root instead of a post-login 500.
+    if any(ord(char) < 0x20 or char == '\x7f' or ord(char) > 0xFF or char in '\u2028\u2029' for char in text):
         return DEFAULT_NEXT
     parts = urlsplit(text)
     if parts.scheme or parts.netloc:

@@ -177,6 +177,12 @@ class TestWorkspaceApi:
         assert 'workspace' in body
         assert 'folder' in body['workspace']
 
+    def test_web_search_is_on_by_default(self, client):
+        """DeepSeek's server-side search/fetch tool calls are free since 2026-11-18, so a browser
+        that never chose starts with web search on."""
+        body = client.get('/api/ai/bootstrap').get_json()
+        assert body['settings']['web_search_default'] is True
+
     def test_browse_names_the_other_roots(self, client, tmp_path):
         """A picker that only walks down from one drive can never reach another."""
         listing = client.get('/api/ai/workspace/browse?path=' + str(tmp_path)).get_json()

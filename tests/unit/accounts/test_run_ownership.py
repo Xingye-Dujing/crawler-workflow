@@ -70,6 +70,21 @@ def test_an_orphaned_record_is_settled_in_its_owners_store(monkeypatch):
     assert seen and seen[0][0] == ALICE, f'the store was opened as {seen[0][0]}'
 
 
+def test_a_transient_registry_error_keeps_the_orphan_for_retry(monkeypatch):
+    """An unreadable accounts.db is not a deletion: keep the id so a later settle retries. The old
+    conservative verdict dropped it here, leaving the run stuck at 运行中 until a full restart."""
+    from services.runs import settlement
+
+    monkeypatch.setattr(settlement, 'owner_state', lambda account: None)
+    monkeypatch.setattr(settlement, 'add_log', lambda _line: None)
+    state.execution_state['running'] = False
+    state.execution_state['thread'] = None
+    state.execution_state['owned_records'] = {'r-alice'}
+    state.execution_state['record_owners'] = {'r-alice': ALICE}
+    assert settlement.settle_orphaned_records() == 0
+    assert 'r-alice' in state.execution_state['owned_records']
+
+
 def _entry(queue_id: str, user_id: str) -> dict:
     return {
         'id': queue_id,
@@ -138,11 +153,10 @@ def test_the_clock_reads_each_accounts_schedule_in_its_own_context(monkeypatch):
         seen.append(account_context.scope_key())
         return {'ok': True, 'run_id': 'r1'}
 
-    clock.set_run_starter(fake_starter)
-    try:
-        fired = clock.tick(datetime(2026, 1, 2))
-    finally:
-        clock.set_run_starter(None)
+    # monkeypatch restores the app-wired starter: setting it to None here used to leave the whole
+    # process's scheduler unwired for every later test file, whatever order pytest ran them in.
+    monkeypatch.setattr(clock, '_starter', fake_starter)
+    fired = clock.tick(datetime(2026, 1, 2))
     assert fired, 'the clock saw no due task'
     assert seen == [ALICE.user_id, BOB.user_id]
 

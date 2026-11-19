@@ -117,6 +117,23 @@ def chart_engine(value) -> str:
     return name
 
 
+def _agg(grouped, agg: str):
+    """Apply a pandas aggregation, turning an unknown name into a named chart refusal.
+
+    ``agg`` arrives from a request as raw text. A value pandas does not know (``'bogus'``) used to
+    raise ``AttributeError`` from ``SeriesGroupBy.agg`` — not one of the exception types the HTTP
+    route catches — so a mistyped option answered an HTML 500 instead of the JSON 400 every other
+    bad choice gets. Sharing this helper keeps every renderer's verdict identical.
+    """
+    try:
+        return grouped.agg(agg)
+    except AttributeError as exc:
+        allowed = 'sum, count, mean, min, max, median, std, var, first, last, nunique'
+        raise ChartConfigError(
+            t('analysis.bad_option', op='aggregate', param='agg', value=agg, allowed=allowed)
+        ) from exc
+
+
 class VisualizationService(OptionMixin):
     """Builds chart specs from a DataFrame. Stateless / reusable."""
 
@@ -154,7 +171,7 @@ class VisualizationService(OptionMixin):
                 # was never numeric. 热力图/散点 refuse the same input by name.
                 raise ChartConfigError(t('chart.y_not_numeric', col=y))
             grouped = numeric.groupby(df[x], sort=False)
-            aggregated = grouped.agg(agg)
+            aggregated = _agg(grouped, agg)
             # A GROUP whose cells are all missing is not a group worth 0 either: `sum` of an
             # all-NaN group is 0.0 with pandas' ``min_count=0`` default, so a phase nobody measured
             # drew as "this phase is 0" — the same lie ``style._box_stats`` refuses. A frame that
@@ -353,7 +370,7 @@ class VisualizationService(OptionMixin):
             # count — a heatmap the user asked to aggregate by “分值” that quietly showed 条数 lies.
             VisualizationService.require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
-            grouped = work.groupby(['_yc', '_xc'], sort=False)['_v'].agg(agg)
+            grouped = _agg(work.groupby(['_yc', '_xc'], sort=False)['_v'], agg)
         else:
             grouped = work.groupby(['_yc', '_xc'], sort=False).size()
         # Every grid position carries a value: the colour scale needs the full matrix, and a json
@@ -376,7 +393,7 @@ class VisualizationService(OptionMixin):
         if value_field:
             VisualizationService.require_columns(df, value_field)
             work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
-            grouped = work.groupby(['_s', '_t'])['_v'].agg(agg).reset_index()
+            grouped = _agg(work.groupby(['_s', '_t'])['_v'], agg).reset_index()
         else:
             grouped = work.groupby(['_s', '_t']).size().reset_index(name='_v')
 
@@ -477,7 +494,12 @@ class VisualizationService(OptionMixin):
                 ax.set_xlabel(_localize_label(x))
                 ax.set_ylabel(_localize_label(y))
             elif chart_type == 'histogram':
-                ax.hist(pd.to_numeric(df[x], errors='coerce').dropna(), bins=20)
+                # One binning for all three renderers: the ECharts builder and the LaTeX figure use
+                # ``_histogram_bins`` (10 bins). A hardcoded 20 here drew a different figure for the
+                # very same table, so take the shared edges instead.
+                values = pd.to_numeric(df[x], errors='coerce').dropna()
+                _, edges = _histogram_bins(values)
+                ax.hist(values, bins=edges)
                 ax.set_xlabel(_localize_label(x))
                 ax.set_ylabel(t('chart.count'))
             elif chart_type == 'box':
@@ -512,7 +534,16 @@ class VisualizationService(OptionMixin):
                 grouped = df.groupby(x, sort=False)
                 keys = list(grouped.groups.keys())
                 cats = [str(k) for k in keys]
-                cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in fields}
+                cols = {}
+                for f in fields:
+                    # A stacked SHARE divides numbers. With raw cells a numeric-string column
+                    # (pasted JSON, dtype=str import) had its strings CONCATENATED by sum, so the
+                    # print figure disagreed with ECharts (which coerces) or crashed. Refuse a
+                    # text-only column by name, exactly like the ECharts branch does.
+                    numeric = pd.to_numeric(df[f], errors='coerce')
+                    if df[f].notna().any() and not numeric.notna().any():
+                        raise ChartConfigError(t('chart.y_not_numeric', col=f))
+                    cols[f] = numeric.groupby(df[x], sort=False).sum().reindex(keys).fillna(0).tolist()
                 totals = [sum(cols[f][i] for f in fields) for i in range(len(cats))]
                 bottoms = [0.0] * len(cats)
                 for idx, f in enumerate(fields):

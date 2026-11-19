@@ -1,0 +1,353 @@
+{
+  "connections": [
+    {
+      "from": "n_name",
+      "to": "n_upload"
+    },
+    {
+      "from": "n_upload",
+      "to": "f4"
+    },
+    {
+      "from": "n_upload",
+      "to": "f6"
+    },
+    {
+      "from": "n_upload",
+      "to": "f7"
+    },
+    {
+      "from": "n_upload",
+      "to": "f8"
+    },
+    {
+      "from": "n_upload",
+      "to": "f9"
+    },
+    {
+      "from": "n_upload",
+      "to": "f10"
+    },
+    {
+      "from": "n_upload",
+      "to": "f11"
+    },
+    {
+      "from": "f4",
+      "to": "v4"
+    },
+    {
+      "from": "f6",
+      "to": "v6"
+    },
+    {
+      "from": "f7",
+      "to": "v7"
+    },
+    {
+      "from": "f8",
+      "to": "v8"
+    },
+    {
+      "from": "f9",
+      "to": "v9"
+    },
+    {
+      "from": "f10",
+      "to": "v10"
+    },
+    {
+      "from": "f11",
+      "to": "v11"
+    },
+    {
+      "from": "v4",
+      "to": "n_compile"
+    },
+    {
+      "from": "v6",
+      "to": "n_compile"
+    },
+    {
+      "from": "v7",
+      "to": "n_compile"
+    },
+    {
+      "from": "v8",
+      "to": "n_compile"
+    },
+    {
+      "from": "v9",
+      "to": "n_compile"
+    },
+    {
+      "from": "v10",
+      "to": "n_compile"
+    },
+    {
+      "from": "v11",
+      "to": "n_compile"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n_name",
+      "params": {
+        "workflow_name": "XHS_图表_词典型v5"
+      },
+      "title": "工作流名",
+      "type": "name",
+      "x": 80,
+      "y": 40
+    },
+    {
+      "id": "n_upload",
+      "params": {
+        "dataset_id": "1b075bce1e2f33a1",
+        "dataset_name": "XHS图数据_词典型v3",
+        "row_count": "103"
+      },
+      "title": "图数据 103 行",
+      "type": "upload",
+      "x": 80,
+      "y": 200
+    },
+    {
+      "id": "f4",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图4"
+      },
+      "title": "筛 图4",
+      "type": "analysis",
+      "x": 340,
+      "y": 160
+    },
+    {
+      "id": "f6",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图6"
+      },
+      "title": "筛 图6",
+      "type": "analysis",
+      "x": 340,
+      "y": 320
+    },
+    {
+      "id": "f7",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图7"
+      },
+      "title": "筛 图7",
+      "type": "analysis",
+      "x": 340,
+      "y": 480
+    },
+    {
+      "id": "f8",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图8"
+      },
+      "title": "筛 图8",
+      "type": "analysis",
+      "x": 340,
+      "y": 640
+    },
+    {
+      "id": "f9",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图9"
+      },
+      "title": "筛 图9",
+      "type": "analysis",
+      "x": 340,
+      "y": 800
+    },
+    {
+      "id": "f10",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图10"
+      },
+      "title": "筛 图10",
+      "type": "analysis",
+      "x": 340,
+      "y": 960
+    },
+    {
+      "id": "f11",
+      "params": {
+        "column": "图号",
+        "op": "eq",
+        "operation": "filter_rows",
+        "value": "图11"
+      },
+      "title": "筛 图11",
+      "type": "analysis",
+      "x": 340,
+      "y": 1120
+    },
+    {
+      "id": "v4",
+      "params": {
+        "agg": "sum",
+        "chart_type": "bar",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图4 不同恋爱消费场景的评论分布",
+        "tokenize": false,
+        "value_field": "",
+        "x_field": "行类别",
+        "y_field": "数值"
+      },
+      "title": "图4 消费场景分布",
+      "type": "visualize",
+      "x": 620,
+      "y": 160
+    },
+    {
+      "id": "v6",
+      "params": {
+        "agg": "sum",
+        "chart_type": "bar",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图6 实际分配方式与应然主张对比",
+        "tokenize": false,
+        "value_field": "列类别",
+        "x_field": "行类别",
+        "y_field": "数值"
+      },
+      "title": "图6 实际vs应然",
+      "type": "visualize",
+      "x": 620,
+      "y": 320
+    },
+    {
+      "id": "v7",
+      "params": {
+        "agg": "sum",
+        "chart_type": "bar",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图7 不同性别规范表达的分布",
+        "tokenize": false,
+        "value_field": "",
+        "x_field": "行类别",
+        "y_field": "数值"
+      },
+      "title": "图7 规范分布",
+      "type": "visualize",
+      "x": 620,
+      "y": 480
+    },
+    {
+      "id": "v8",
+      "params": {
+        "agg": "sum",
+        "chart_type": "bar",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图8 正当化理由分布",
+        "tokenize": false,
+        "value_field": "",
+        "x_field": "行类别",
+        "y_field": "计数"
+      },
+      "title": "图8 理由分布",
+      "type": "visualize",
+      "x": 620,
+      "y": 640
+    },
+    {
+      "id": "v9",
+      "params": {
+        "agg": "sum",
+        "chart_type": "heatmap",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图9 性别规范与经济分配主张关联（行百分比）",
+        "tokenize": false,
+        "value_field": "数值",
+        "x_field": "列类别",
+        "y_field": "行类别"
+      },
+      "title": "图9 关联热力图",
+      "type": "visualize",
+      "x": 620,
+      "y": 800
+    },
+    {
+      "id": "v10",
+      "params": {
+        "agg": "sum",
+        "chart_type": "heatmap",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图10 不同消费场景下经济分配主张的构成（行百分比）",
+        "tokenize": false,
+        "value_field": "数值",
+        "x_field": "列类别",
+        "y_field": "行类别"
+      },
+      "title": "图10 场景x主张",
+      "type": "visualize",
+      "x": 620,
+      "y": 960
+    },
+    {
+      "id": "v11",
+      "params": {
+        "agg": "sum",
+        "chart_type": "sankey",
+        "emit_latex": true,
+        "emit_latex_table": true,
+        "engine": "echarts",
+        "title": "图11 正当化理由与经济分配主张的对应关系",
+        "tokenize": false,
+        "value_field": "计数",
+        "x_field": "行类别",
+        "y_field": "列类别"
+      },
+      "title": "图11 理由到主张",
+      "type": "visualize",
+      "x": 620,
+      "y": 1120
+    },
+    {
+      "id": "n_compile",
+      "params": {},
+      "title": "合成PDF",
+      "type": "compile",
+      "x": 900,
+      "y": 640
+    }
+  ],
+  "settings": {
+    "headless": true,
+    "mode": "serial"
+  },
+  "name": "XHS_图表_词典型v5"
+}

@@ -293,6 +293,13 @@ class TestResumableLookup:
     def test_a_canvas_with_nothing_on_it_answers_empty(self, client, payload):
         assert client.post('/api/runs/resumable', json=payload).get_json() == {'ok': True, 'runs': []}
 
+    def test_a_hand_edited_params_sentence_answers_empty_not_a_500(self, client):
+        """A hand-edited/AI-written canvas can carry params as a sentence. /resumable must refuse
+        it with no offers, not walk the node and raise AttributeError on each page load."""
+        workflow = _workflow()
+        workflow['nodes'][0]['params'] = '去重，按评论内容'
+        assert client.post('/api/runs/resumable', json={'workflow': workflow}).get_json() == {'ok': True, 'runs': []}
+
     def test_the_number_of_offers_is_capped(self, client, app_module):
         store = app_module._RUN_STORE
         fingerprint = workflow_fingerprint(_workflow())

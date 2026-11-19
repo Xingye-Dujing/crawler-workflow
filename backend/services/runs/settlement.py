@@ -27,7 +27,7 @@ import logging
 from runtime import account_context
 from runtime.settings import get_setting
 from runtime.state import _completed_lock, add_log, execute_lock, execution_state, history_service, live_run_ids
-from runtime.stores import get_housekeeper, get_run_store, owner_is_live
+from runtime.stores import get_housekeeper, get_run_store, owner_state
 
 from i18n import t
 from services import lock_store
@@ -121,13 +121,19 @@ def settle_orphaned_records() -> int:
             groups.setdefault(owners.get(rid), set()).add(rid)
         promoted = []
         for owner, ids in groups.items():
-            if not owner_is_live(owner):
+            state = owner_state(owner)
+            if state is False:
                 # The account is gone (deleted/disabled). Drop its ids instead of opening a
                 # store that would mint an ownerless tree; nothing is left to settle.
                 with _completed_lock:
                     execution_state['owned_records'].difference_update(ids)
                     for rid in ids:
                         execution_state.get('record_owners', {}).pop(rid, None)
+                continue
+            if state is None:
+                # The registry could not be read. These ids are NOT known to be orphaned by a
+                # deletion — keep them so a later settle (or the next page load) retries. The old
+                # conservative verdict dropped them here, leaving a run stuck at 运行中 forever.
                 continue
             try:
                 with account_context.use(owner):

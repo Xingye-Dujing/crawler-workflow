@@ -42,6 +42,17 @@ _BY_PLATFORM = {c.platform: c for c in CAPABILITIES}
 MODE_KEY = 'collect'
 
 
+def node_params(node) -> dict:
+    """A node's params as a mapping — a hand-edited sentence is not an object.
+
+    An AI-written or hand-edited canvas can carry ``"params": "去重，按评论内容"``. The readers
+    below used ``node.get('params') or {}`` and then called ``.get`` on the string, so validation
+    of that node raised AttributeError instead of reporting the missing fields by name.
+    """
+    params = node.get('params') if isinstance(node, dict) else None
+    return params if isinstance(params, dict) else {}
+
+
 def backend_of(params) -> str:
     """The backend a node asks for, defaulted to the one that has always been there.
 
@@ -49,7 +60,8 @@ def backend_of(params) -> str:
     the executor reads a node that never opened its panel. An unknown spelling is not silently
     treated as Selenium: ``unoffered_selections`` refuses it by name at validation time.
     """
-    return str((params or {}).get('backend') or BACKEND_SELENIUM).strip().lower()
+    mapping = params if isinstance(params, dict) else {}
+    return str(mapping.get('backend') or BACKEND_SELENIUM).strip().lower()
 
 
 def is_catbus(params) -> bool:
@@ -402,8 +414,7 @@ def requested_mode_key(node: dict) -> str:
     crawl than the one that was asked for or reports “缺少关键词” about a field the
     panel never showed the user.
     """
-    node = node or {}
-    params = node.get('params') or {}
+    params = node_params(node)
     return str(params.get('mode') or params.get(MODE_KEY) or '').strip()
 
 
@@ -413,8 +424,8 @@ def mode_of_node(node: dict) -> Mode | None:
     The engine is part of the reading: the same 平台 × 功能 can be a different form (and a different
     handler) under CatBus, and a node's stored ``backend`` is what decides which one this run gets.
     """
-    node = node or {}
-    params = node.get('params') or {}
+    params = node_params(node)
+    node = node if isinstance(node, dict) else {}
     platform = str(node.get('platform') or params.get('platform') or '')
     return mode_for(platform, requested_mode_key(node), backend_of(params))
 

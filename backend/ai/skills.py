@@ -6,6 +6,7 @@ the server refuses a skill whose provider cannot honour its requirements. User s
 per account; built-ins are code and are forked, never overwritten.
 """
 
+from core.config import Config
 from runtime import account_context
 from runtime.settings import get_setting
 
@@ -81,11 +82,58 @@ BUILTIN = {
             'You are the crawl advisor. Answer from the capability matrix: platform, mode, required '
             'fields, session/account needs, cloud/local boundaries and known refusals. Name the mode '
             'and the exact field. If a user asks for a mode the platform lacks, refuse by name and '
-            'offer the supported alternative.'
+            'offer the supported alternative. When the user actually wants to collect data (not just ask '
+            'how), first call ask_user_question to choose the path: "建画布节点（第二后端选 catbus）" or '
+            '"AI 直接调 catbus 指令运行"; then hand off to the catbus skill for either branch. Call '
+            'catbus_status before recommending a CatBus path so the answer names what this machine has; '
+            'if there is no global CLI but a local build, let the user choose the local build or an '
+            'install instead of deciding yourself.'
         ),
         context=('project', 'canvas', 'docs'),
-        tools=('capabilities', 'docs_search', 'project_facts'),
+        tools=('catbus_status', 'capabilities', 'docs_search', 'project_facts'),
         suggested=('知乎评论采集需要什么？', '抖音和 B 站的采集方式有什么不同？', '云端能跑哪些平台？'),
+    ),
+    'catbus': SkillSpec(
+        id='catbus',
+        name_key='ai.skill.catbus.name',
+        description_key='ai.skill.catbus.desc',
+        prompt=(
+            'You drive CatBus (猫巴士), the second crawl backend, for 采析绘. Two paths exist and you never '
+            'choose between them for the user: (1) build a canvas node whose 采集方式/backend is catbus, or '
+            '(2) call the catbus CLI yourself through run_cmd. When the user wants to collect data, FIRST '
+            'call ask_user_question with exactly these two options — "建画布节点（第二后端选 catbus）" and '
+            '"AI 直接调 catbus 指令运行" — then follow the answer. Do not start either path before they choose.\n'
+            'Detect before acting: call catbus_status FIRST. It reports the 采析绘 adapter (Node + platform '
+            'capabilities), the global catbus CLI and any local catbus checkout (local_cli), separately. '
+            'It never installs anything. If there is NO global CLI but a local_cli is reported, DO NOT '
+            'choose for the user and DO NOT install: call ask_user_question with two options — "用本地已有'
+            '的 catbus 构建"（the local_cli from catbus_status） and "下载安装全局 catbus CLI'
+            '（npm i -g catbus-cli）" — then follow the answer. If neither a global CLI nor a local build '
+            'is found, ask the same two options and say no local build was found. A .js local_cli runs '
+            'with node in front of it through run_cmd. Never install or upgrade anything yourself, and '
+            'never claim the canvas backend is ready when catbus_status says it is not.\n'
+            'Canvas path: use capabilities to name a legal platform, a runnable mode and its exact fields; '
+            'propose a workflow (workflow_draft/apply_workflow) with backend=catbus. CatBus keeps its own '
+            'accounts (catbus <platform> auth login) — it never reads or writes a Selenium cookie. A mode '
+            "the matrix marks unavailable is refused by the adapter's own reason, never silently swapped.\n"
+            'Direct path: read the installed skill docs with docs_search (catbus SKILL.md, '
+            'reference/commands.md, the platforms/<id>.md file and workflows/collect.md / errors.md). '
+            'Check a command before calling it: catbus platforms <platform> and catbus <platform> <resource> '
+            "<action> --help. Run ONE command via run_cmd per call (approval is the user's), keep its output "
+            'small with --limit / --fields / -o json, and use --dry-run first for any write. After a read '
+            "returns, offer to import the JSON as a dataset with workspace_import (also the user's approval) "
+            'and state the command and the row count you actually saw.\n'
+            'Hard rules from the CatBus skill: logins belong to the user — never ask for or store a password, '
+            'cookie or 2FA code, and never read ~/.catbus; writes (publish/comment/like/follow/DM/delete) '
+            'need an explicit request, default to --visibility private, and never contact a real person the '
+            'user did not name; RISK_CONTROL means STOP, never retry; report empty, null or unsupported '
+            'honestly. Instagram, Facebook, 知乎, 微信公众号, 今日头条, 得物, 拼多多, 美团 and 大众点评 are '
+            'not supported — say so by name instead of substituting another platform.'
+        ),
+        context=('project', 'docs'),
+        tools=('catbus_status', 'capabilities', 'docs_search', 'project_facts', 'run_cmd', 'workspace_import'),
+        local_only=True,
+        suggested=('帮我用 catbus 采集小红书笔记', '本机装了 catbus 吗？', '用 catbus 指令直接抓一批微博数据'),
     ),
     'diagnose': SkillSpec(
         id='diagnose',
@@ -356,6 +404,8 @@ def get_skill(skill_id: str) -> SkillSpec:
 
 
 def availability(skill: SkillSpec, provider, model: str = '') -> tuple[bool, str]:
+    if skill.local_only and Config.CLOUD_MODE:
+        return False, 'ai.skillLocalOnly|' + skill.id
     if 'code' in skill.context and (
         not environment.capabilities()['local_source'] or not get_setting('ai_allow_code_context')
     ):
@@ -384,6 +434,8 @@ def reason_text(reason: str) -> tuple[str, dict] | None:
     key = parts[0]
     if key == 'ai.skillUnavailable' and len(parts) >= 4:
         return key, {'skill': parts[1], 'capability': parts[2], 'provider': parts[3]}
+    if key == 'ai.skillLocalOnly' and len(parts) >= 2:
+        return key, {'skill': parts[1]}
     if key == 'ai.skillCodeLocal' and len(parts) >= 2:
         return key, {'skill': parts[1]}
     if key == 'ai.skillPythonLocal' and len(parts) >= 2:
@@ -415,6 +467,8 @@ def public_skills(provider=None, model: str = '') -> list:
 def route(text: str, page: str = '') -> str:
     """A deterministic router whose choice is printed in the transcript; no hidden model call."""
     blob = f'{page} {text}'.lower()
+    if any(word in blob for word in ('catbus', '猫巴士', '第二后端')):
+        return 'catbus'
     if any(word in blob for word in ('监控', '盯着', '通知我', 'watch', 'monitor', 'notify')):
         return 'monitor'
     if any(word in blob for word in ('失败', '报错', '错误', '诊断', 'failed', 'error', 'console', '日志')):

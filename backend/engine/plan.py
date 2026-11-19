@@ -12,7 +12,7 @@ over the cases ``tests/api/test_nodes_execution.py`` already names.
 """
 
 from analyzers.llm_client import LLMClient
-from engine.workflow import effective_workflow
+from engine.workflow import effective_workflow, node_params
 from i18n import t
 from services.analysis.pipeline import UnknownOperationError
 from services.analysis.process import PROCESS_ENUMS
@@ -115,7 +115,7 @@ def workflow_needs_llm(workflow: dict) -> bool:
     for node in effective_workflow(workflow).get('nodes') or []:
         if not isinstance(node, dict) or node.get('type') != 'process':
             continue
-        params = node.get('params') or {}
+        params = node_params(node)
         op = str(params.get('operation') or node.get('operation') or '')
         if op_needs_llm(op, params):
             return True
@@ -133,7 +133,7 @@ def component_name(sub_engine) -> str:
     for node in sub_engine.nodes.values():
         if node.get('type') != 'name':
             continue
-        label = str((node.get('params') or {}).get('workflow_name') or '').strip()
+        label = str(node_params(node).get('workflow_name') or '').strip()
         if label:
             return label
     return ''

@@ -7,11 +7,14 @@ when they are unset.
 
 Usage (the app must be running, default http://127.0.0.1:5000):
 
-    python docs/manual/shots/capture.py canvas   --workflow "测试：图表可视化" --out zh-canvas
-    python docs/manual/shots/capture.py panels   --workflow "刘学州-评论-情感演化分析-BERT" --out liu --types analysis --limit 1
-    python docs/manual/shots/capture.py dock     --out runs --panel runs
-    python docs/manual/shots/capture.py chart    --workflow "刘学州-评论-情感演化分析-BERT" --out liu-chart --node-type visualize
-    python docs/manual/shots/capture.py fullscreen --workflow "刘学州-评论-情感演化分析-BERT" --out liu-zoom --node-type visualize
+    python docs/manual/shots/capture.py canvas --workflow "测试：图表可视化" --out zh-canvas
+    python docs/manual/shots/capture.py panels --workflow "刘学州-评论-情感演化分析-BERT" \
+        --out liu --types analysis --limit 1
+    python docs/manual/shots/capture.py dock --out runs --panel runs
+    python docs/manual/shots/capture.py chart --workflow "刘学州-评论-情感演化分析-BERT" \
+        --out liu-chart --node-type visualize
+    python docs/manual/shots/capture.py fullscreen --workflow "刘学州-评论-情感演化分析-BERT" \
+        --out liu-zoom --node-type visualize
     python docs/manual/shots/capture.py dashboard --workflow "刘学州-评论-情感演化分析-BERT" --out liu-board
     python docs/manual/shots/capture.py menus    --out style --panel style
     python docs/manual/shots/capture.py outline  --workflow "刘学州-评论-情感演化分析-BERT" --out liu-outline
@@ -169,7 +172,7 @@ def mode_panels(driver, args):
             continue
         js(driver, 'openSettings(arguments[0])', node['id'])
         time.sleep(1.8)
-        save_element(driver, '#node-settings', '%s-%s' % (args.out, node['id']))
+        save_element(driver, '#node-settings', f'{args.out}-{node["id"]}')
         js(driver, 'closeSettings()')
         time.sleep(0.8)
         taken += 1
@@ -190,7 +193,7 @@ def mode_dock(driver, args):
         'workflows': '#btn-workflows',
         'console': '#btn-console',
     }[args.panel]
-    js(driver, "document.getElementById('%s').click()" % selector[1:])
+    js(driver, f"document.getElementById('{selector[1:]}').click()")
     time.sleep(4)
     if args.panel == 'runs':
         js(driver, "try{runsManager.switchTab('all')}catch(e){}")
@@ -418,6 +421,13 @@ RECIPES = (
         'zoom',
         {'workflow': LIU, 'ids': ('node-12', 'node-13', 'node-16', 'node-19', 'node-35', 'node-37')},
     ),
+    # ch11 (AI workspace). A small canvas stays behind the dock so the panel is the whole story.
+    ('ai-workspace', 'ai', {}),
+    ('ai-sessions', 'ai', {'sessions': True}),
+    ('ai-context', 'ai', {'context_preview': True}),
+    ('ai-settings', 'ai', {'settings': True}),
+    ('ai-studio', 'ai', {'studio': 'skills'}),
+    ('ai-memory', 'ai', {'studio': 'memory'}),
 )
 
 #: Figures the book cites that this checkout cannot re-shoot, and the fact that stops it. The gate
@@ -448,6 +458,7 @@ KINDS = frozenset(
         'menu',
         'cookie_dialog',
         'runlog',
+        'ai',
     }
 )
 
@@ -531,6 +542,46 @@ def shot_runlog(driver, out):
     js(driver, 'runLogViewer.open(arguments[0])', run_id)
     time.sleep(5)
     save_window(driver, out)
+
+
+def shot_ai(driver, args, out):
+    """Open the right-hand AI workspace over a calm canvas and shoot it.
+
+    The dock opens from its own API, not a button in the left dock row, so a recipe here names the
+    state it wants (sessions, a studio tab, the context preview) instead of a dock button.
+    """
+    load_workflow(driver, args.get('workflow', ZH))
+    js(driver, 'AIWorkspace.open()')
+    time.sleep(4)
+    # A previous recipe may have left the sessions column open in localStorage; each figure asks
+    # for exactly the state its caption promises, so collapse it unless this is the sessions shot.
+    if not args.get('sessions'):
+        js(driver, 'if(AIWorkspace._sessionsOpen) AIWorkspace.toggleSessions()')
+        time.sleep(1)
+    if args.get('studio'):
+        js(driver, 'AIWorkspace.openStudio(arguments[0])', args['studio'])
+        time.sleep(3)
+    if args.get('sessions'):
+        js(driver, "document.getElementById('ai-history-btn').click()")
+        time.sleep(2)
+    if args.get('settings'):
+        js(driver, 'AIWorkspace.openSettings()')
+        time.sleep(3)
+    if args.get('context_preview'):
+        # The context side column only has a track in fullscreen with the sidebar open; a docked
+        # workspace gives it zero width, so the preview would be captured but invisible.
+        if not _ai_sessions_open(driver):
+            js(driver, 'AIWorkspace.toggleSessions()')
+            time.sleep(1)
+        js(driver, 'if(!AIWorkspace._full) AIWorkspace.toggleFull()')
+        time.sleep(1)
+        js(driver, 'AIWorkspace._previewContext()')
+        time.sleep(3)
+    save_window(driver, out)
+
+
+def _ai_sessions_open(driver):
+    return bool(js(driver, 'return !!AIWorkspace._sessionsOpen'))
 
 
 def mode_zoom(driver, args):
@@ -618,6 +669,8 @@ def run_recipe(driver, url, out, kind, args):
         save_element(driver, '#cookie-dialog', out)
     elif kind == 'runlog':
         shot_runlog(driver, out)
+    elif kind == 'ai':
+        shot_ai(driver, args, out)
     else:
         raise RuntimeError('unknown kind ' + kind)
 

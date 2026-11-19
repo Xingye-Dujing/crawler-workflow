@@ -550,6 +550,7 @@ out.staleBootstrap = workspace._provider;
 /* The server's 联网搜索 default is adopted ONLY when this browser never chose: a browser that
    clicked the switch off must not have it turned back on by the next refresh. */
 sandbox.localStorage.setItem(sandbox.AISettings._key, '{}');
+const browserSearchDefault = sandbox.AISettings.load().search;
 const searchboot = {
     ok: true,
     providers: [{ id: 'ollama', local_only: true, models: [{ id: 'm' }] }],
@@ -562,7 +563,7 @@ sandbox.AISettings.save({ search: false });
 await workspace._loadBootstrap();
 const kept = sandbox.AISettings.load().search;
 sandbox.fetch = realFetch;
-out.searchDefault = { adopted: adopted, kept: kept };
+out.searchDefault = { browserDefault: browserSearchDefault, adopted: adopted, kept: kept };
 
 /* ONE turn, TWO provider rounds (a tool call between them). The transcript must stay one assistant
    bubble with one skill row — the daemon answers each round as its own assistant row, and drawing

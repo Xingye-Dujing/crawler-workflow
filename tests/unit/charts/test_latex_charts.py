@@ -248,6 +248,20 @@ class TestFigure:
         for name in ('积极占比', '中性占比', '消极占比'):
             assert name in out, name
 
+    def test_stack_pct_coerces_numeric_strings_like_echarts(self):
+        """Pasted JSON / dtype=str imports carry numeric strings; a raw ``sum`` concatenated them
+        ('20'+'80'), so the paper figure crashed or disagreed with the drawn 100% stack."""
+        df = pd.DataFrame({'阶段': ['发酵期', '爆发期'], '积极': ['20', '40'], '消极': ['80', '60']})
+        out = L.to_latex_document(df, 'stack_pct', x='阶段', stack_fields='积极,消极')
+        assert 'ybar stacked' in out
+        # 20/(20+80)=20%, 40/(40+60)=40% — the same shares ECharts computes.
+        assert '(c1,20)' in out and '(c2,40)' in out, out
+
+    def test_stack_pct_refuses_a_text_only_column_by_name(self):
+        df = pd.DataFrame({'阶段': ['发酵期', '爆发期'], '积极': ['很多', '很多'], '消极': [80, 20]})
+        with pytest.raises(ChartConfigError, match='积极'):
+            L.to_latex_document(df, 'stack_pct', x='阶段', stack_fields='积极,消极')
+
     def test_map_is_a_bubble_map_that_still_lists_every_value(self):
         df = pd.DataFrame({'省': ['广东', '四川', '某不存在地区'], 'v': [50, 10, 7]})
         out = L.to_latex_document(df, 'map', x='省', value_field='v')

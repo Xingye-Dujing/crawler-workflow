@@ -16,7 +16,7 @@ import time
 
 from runtime import account_context
 from runtime.state import _push_log, execution_state
-from runtime.stores import get_run_store, owner_is_live
+from runtime.stores import get_run_store, owner_state
 
 
 class LogTee:
@@ -166,10 +166,17 @@ class RunLogWriter:
         for owner, rid, rows in queue:
             if not rid or not rows:
                 continue
-            if not owner_is_live(owner):
+            state = owner_state(owner)
+            if state is False:
                 # The account was deleted while this batch waited. Writing it would recreate
                 # ``data/users/<id>/`` through ``get_run_store()``; the log of a deleted
                 # account is not worth an ownerless tree, so the batch is dropped.
+                continue
+            if state is None:
+                # The registry could not be read — not evidence the owner is gone. Keep the
+                # batch for a later flush, just like a store that failed to open; dropping it
+                # here lost durable console lines for a healthy run on a transient DB fault.
+                failed.append((owner, rid, rows))
                 continue
             try:
                 with account_context.use(owner):

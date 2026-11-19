@@ -115,6 +115,8 @@ class SkillSpec:
     suggested: tuple = ()
     ask_policy: str = 'auto'
     builtin: bool = True
+    #: A skill that needs a machine (a local CLI, a local runtime). Cloud mode refuses it by name.
+    local_only: bool = False
     version: int = 1
     account: str = ''
     icon: str = 'spark'
@@ -134,6 +136,7 @@ class SkillSpec:
             'suggested': list(self.suggested),
             'ask_policy': self.ask_policy,
             'builtin': self.builtin,
+            'local_only': self.local_only,
             'version': self.version,
             'icon': self.icon,
         }
@@ -151,6 +154,7 @@ class SkillSpec:
             'requires': sorted(self.requires),
             'suggested': list(self.suggested),
             'ask_policy': self.ask_policy,
+            'local_only': self.local_only,
             'version': self.version,
             'icon': self.icon,
         }
@@ -193,6 +197,7 @@ def skill_from_manifest(payload: dict, *, account: str = '', builtin: bool = Fal
         suggested=tuple(payload.get('suggested') or ()),
         ask_policy=str(payload.get('ask_policy') or 'auto'),
         builtin=builtin,
+        local_only=bool(payload.get('local_only')),
         version=int(payload.get('version') or 1),
         account=account,
         icon=str(payload.get('icon') or 'spark'),

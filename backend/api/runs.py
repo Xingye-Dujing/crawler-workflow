@@ -56,6 +56,11 @@ def runs_resumable():
     workflow = data.get('workflow') or {}
     if not isinstance(workflow, dict) or not workflow.get('nodes'):
         return jsonify({'ok': True, 'runs': []})
+    # A hand-edited/AI-written canvas can carry a sentence where params (or settings) should be an
+    # object. The run path refuses that by name at the payload gate; this read-only endpoint must
+    # not walk such a node and raise AttributeError on every page load — offer no runs instead.
+    if workflow_shape_error(data):
+        return jsonify({'ok': True, 'runs': []})
     limit = _safe_int(data.get('limit'), 10, minimum=1, maximum=100)
     # Same repair as the panel's: a record its worker abandoned must become
     # continuable on a page load, not only once somebody opens 运行记录.

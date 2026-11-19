@@ -18,8 +18,14 @@ from i18n import t
 from services.workflows.reusable import ALLOWED_TYPES
 
 
+def _params(node: dict) -> dict:
+    """A node's params as a mapping — a hand-edited sentence is not an object."""
+    params = node.get('params') if isinstance(node, dict) else None
+    return params if isinstance(params, dict) else {}
+
+
 def _name_of(node: dict) -> str:
-    params = node.get('params') or {}
+    params = _params(node)
     return str(params.get('template_name') or node.get('title') or node.get('id') or '')
 
 
@@ -48,7 +54,7 @@ def expand_reusable_workflow(workflow: dict) -> tuple[dict, str]:
         if node.get('type') != 'reusable':
             expanded_nodes.append(node)
             continue
-        params = node.get('params') or {}
+        params = _params(node)
         # ``as_bool(..., True)``, exactly like ``engine.workflow`` reads this same switch: ``is False``
         # only skipped the group when the stored value was the Python bool, so a canvas that saved
         # ``"false"``, ``0`` or ``"0"`` — all ordinary spellings of "off" — RAN the group the user had

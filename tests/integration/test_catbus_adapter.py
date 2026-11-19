@@ -80,8 +80,14 @@ class TestTheAdapterAnswers:
         import capabilities.registry as capabilities
 
         for platform, entry in adapter.manifest['platforms'].items():
-            for mode in entry.get('modes') or {}:
+            for mode, cell in (entry.get('modes') or {}).items():
                 assert capabilities.CATBUS_MODE_LABELS.get(mode), f'{platform}.{mode} has no panel label'
+                # The same reachability check for parameters: a param with no form field would make
+                # _catbus_mode_fields drop the mode, so the panel would silently lose this function.
+                for param in cell.get('params') or ():
+                    assert capabilities.CATBUS_FIELD_TEMPLATES.get(param), (
+                        f'{platform}.{mode}: param {param} has no field'
+                    )
         payload = capabilities.as_dict()
         by_platform = {p['platform']: p for p in payload['platforms']}
         for platform in adapter.manifest['platforms']:

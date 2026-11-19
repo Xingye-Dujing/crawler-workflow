@@ -59,9 +59,14 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 
 ## 3. 技能、上下文与工具
 
-内置技能（`backend/ai/skills.py`）：`project`、`crawl`、`diagnose`、`monitor`、`analysis`、
+内置技能（`backend/ai/skills.py`）：`project`、`crawl`、`catbus`、`diagnose`、`monitor`、`analysis`、
 `workflow`、`charts`、`report`、`research`、`python`、`conductor`、`skill_author`、`developer`。
 技能声明提示词、上下文来源、只读工具和所需能力；用户技能是数据，可 Fork/编辑/删除，不能包含代码或写操作。
+
+`catbus` 是本地技能（`local_only`，云端按名拒绝）：面对采集需求先问“建画布节点（第二后端选 catbus）”还是
+“AI 直接调 catbus 指令运行”，再用只读工具 `catbus_status` 分别探测采析绘适配器与全局 `catbus` CLI，
+缺哪样点名哪样、绝不自行安装。它的权威文档随仓库放在 `docs/catbus/`（来自 catbus 的 `.claude/skills/catbus/`），
+由 `docs_search` 按任务检索；直接指令路径通过 `run_cmd` 执行 `catbus`（已加入命令白名单），需用户批准。
 
 `ContextBuilder` 从既有注册表生成项目事实，按账号读取实时数据，限额并脱敏；省略项写入
 `context_meta` 并在检查器显示。
@@ -81,7 +86,9 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
   `meta.stop_reason`）。
 - 传输层在**首字节之前**对 429/5xx/连接失败重试（最多 3 次、可被停止打断）；401/402/404 这类
   确定性拒绝立即报错，不重试。
-- **花钱的默认值是省的**：联网搜索默认关（`ai_web_search_default`，浏览器没手动选过时采纳），
+- **默认联网搜索**：工作区默认 DeepSeek 直连并默认开启联网搜索——DeepSeek 自 2026-11-18 起
+  调用模型触发的服务端搜索/抓页工具调用本身免费，结果拼进上下文只按模型 Token 计费
+  （`ai_web_search_default` 默认为开，浏览器没手动选过时采纳，点工具栏开关可关）；
   思考强度可选 `low/high/max`（`ai_reasoning_effort`，默认 high），非思考轮次的温度
   `ai_temperature` 默认 0.3（草案与 JSON 更稳；思考开启时供应商忽略它）。
 - **token 软预算**：`ai_budget_conversation_tokens` / `ai_budget_daily_tokens`（默认 0=不限）只按

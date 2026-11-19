@@ -16,7 +16,9 @@ intercepts them and never looks for a handler here.
 """
 
 import math
+import os
 import re
+from pathlib import Path
 
 from core.config import Config
 from runtime import account_context
@@ -76,6 +78,49 @@ def tool_capabilities(args: dict, _ctx: dict) -> dict:
         rows = [row for row in payload.get('platforms', []) if row.get('platform') == platform]
         return {'platforms': rows}
     return {'platforms': payload.get('platforms', []), 'machine': payload.get('machine', {})}
+
+
+def tool_catbus_status(_args: dict, _ctx: dict) -> dict:
+    """Report the CatBus toolchain the app itself would use — one detector, two run modes.
+
+    The adapter half comes from the SAME :func:`services.ingest.catbus.probe` the canvas backend
+    uses, and the direct-command half from :func:`services.ingest.catbus.direct_cli_status`, which
+    applies the same component-source rule. No PATH probe or path precedence is repeated here. The
+    verdict is a server answer; the model never inspects paths itself or installs anything.
+    """
+    from services.ingest import catbus as bridge
+
+    info = bridge.probe()
+    status: dict = {
+        'available': info.available,
+        'reason_key': info.reason_key,
+        'node': info.node,
+        'node_version': info.node_version,
+        'entry': info.entry,
+        'platforms': list(info.platforms)[:30],
+    }
+    if not info.available:
+        from i18n import t
+
+        status['message'] = t(info.reason_key, **info.reason_params)
+    # The direct CLI facts are the bridge's shared answer, not a second detection here.
+    status.update(bridge.direct_cli_status(info.entry, info.node))
+    local = status['local_cli']
+    if not status['available']:
+        status['hint'] = 'The canvas backend is unavailable — report the named reason; do not install.'
+    elif status['cli_ok']:
+        status['hint'] = 'Both paths are ready: the canvas second backend and direct AI catbus commands.'
+    elif local:
+        status['hint'] = (
+            f'No global catbus CLI, but a local build exists at {local}. Ask the user whether to use '
+            'this local build or to install the global CLI (npm i -g catbus-cli). Never install first.'
+        )
+    else:
+        status['hint'] = (
+            'No global catbus CLI and no local build found. Ask the user whether to install the global '
+            'CLI (npm i -g catbus-cli) or point CATBUS_HOME at a checkout. Never install without consent.'
+        )
+    return status
 
 
 def tool_docs_search(args: dict, _ctx: dict) -> dict:
@@ -231,7 +276,9 @@ def _query_where(frame, where):
         elif op == 'lte':
             mask = series <= value
         else:
-            mask = series.astype(str).str.contains(str(value), na=False)
+            # ``contains`` is a literal substring test, not a regex: a value like ``C++`` or
+            # ``[知乎]`` must match those characters, not raise re.error or match other rows.
+            mask = series.astype(str).str.contains(str(value), na=False, regex=False)
     except (TypeError, ValueError) as exc:
         raise AIError(
             'ai.toolRefused',
@@ -469,7 +516,6 @@ def tool_code_search(args: dict, _ctx: dict) -> dict:
     query = str(args.get('query') or '').strip()
     if not query:
         raise AIError('ai.toolRefused', kind='bad_request', tool='code_search', reason='query is missing')
-    from pathlib import Path
 
     root = Path(root_text)
     search_root = root / 'backend' if (root / 'backend').is_dir() else root
@@ -504,7 +550,6 @@ def tool_code_read(args: dict, _ctx: dict) -> dict:
     root_text = environment.code_root()
     if not root_text:
         raise AIError('ai.codeCloudRefused', kind='capability')
-    from pathlib import Path
 
     root = Path(root_text)
     relative = str(args.get('path') or '').strip().replace('\\', '/')
@@ -672,6 +717,11 @@ def _files_ready() -> None:
 #: is deliberately absent: choosing a folder is a setting the panel offers, not a per-call act.
 APPROVAL_TOOLS = ('run_cmd', 'workspace_write', 'workspace_import', 'rerun_node')
 
+#: ``write:files`` tools that choose a setting rather than perform a per-call act. The panel owns
+#: them, so a per-call approval grant (keyed to exact args) cannot meaningfully cover them; without
+#: this exemption they were permanently refused with ai_auto_approve off — even after approval.
+SETTING_TOOLS = frozenset({'workspace_set'})
+
 
 def require_approval(name: str, args: dict, ctx: dict) -> None:
     """Refuse a mutating call the user has not approved in this conversation.
@@ -679,7 +729,7 @@ def require_approval(name: str, args: dict, ctx: dict) -> None:
     The refusal NAMES the tool and tells the model to call ``request_approval`` first; the grant
     is keyed by the exact arguments, so an approval for one command cannot spend itself on another.
     """
-    if get_setting('ai_auto_approve'):
+    if get_setting('ai_auto_approve') or name in SETTING_TOOLS:
         return
     if name in APPROVAL_TOOLS:
         from ai import approvals
@@ -793,7 +843,6 @@ def tool_app_errors(args: dict, _ctx: dict) -> dict:
     lines in ``runs.db``; a backend bug leaves a traceback in ``logs/app.log``. Both are read here,
     bounded, so the assistant can fix its own proposal without the user copying a stack trace.
     """
-    import os
 
     limit = _int_arg(args.get('lines'), 80, 10, 300)
     report: dict = {'log_tail': [], 'runs': [], 'log_path': ''}
@@ -980,6 +1029,13 @@ TOOLS = {
             'Read the crawler capability matrix. Pass a platform to narrow it.',
             {'type': 'object', 'properties': {'platform': {'type': 'string'}}},
             handler=tool_capabilities,
+        ),
+        ToolSpec(
+            'catbus_status',
+            'Detect the local CatBus toolchain read-only: the 采析绘 adapter (Node + capabilities) and the '
+            'global catbus CLI. Call this before deciding how to crawl; it never installs anything.',
+            {'type': 'object', 'properties': {}},
+            handler=tool_catbus_status,
         ),
         ToolSpec(
             'docs_search',

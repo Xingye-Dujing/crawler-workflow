@@ -240,6 +240,38 @@ class TestTheLabelCatalogueCoversEveryManifestMode:
         missing = sorted(k for k in keys if not capabilities.CATBUS_MODE_LABELS.get(k))
         assert missing == [], f'CatBus modes with no panel label: {missing}'
 
+    def test_every_param_the_adapter_can_declare_has_a_field_template(self, manifest):
+        """CATBUS_FIELD_TEMPLATES covers ALL params, not just the modes the fake manifest happens to name.
+
+        The adapter's ``ARG_PARAMS`` values plus its shared-mode parameters are the full vocabulary a
+        generated mode can declare. A new param without a box makes ``_catbus_mode_fields`` drop the
+        whole mode, so the gap must fail here instead of hiding a function from the panel.
+        """
+        declared = {
+            p
+            for entry in manifest['platforms'].values()
+            for cell in entry['modes'].values()
+            for p in cell.get('params') or ()
+        }
+        adapter_vocabulary = {
+            'author',
+            'urls',
+            'comment_id',
+            'keyword',
+            'room',
+            'folder',
+            'series',
+            'conversation',
+            'product',
+            'id',  # generic.ts ARG_PARAMS values
+            'target_count',
+            'comment_limit',
+            'board',
+            'catbus_account',  # shared modes / backend field
+        }
+        missing = sorted((declared | adapter_vocabulary) - set(capabilities.CATBUS_FIELD_TEMPLATES))
+        assert missing == [], f'CatBus params with no form field: {missing}'
+
     def test_every_label_exists_in_both_browser_catalogues(self):
         tables = _catalog_keys()
         missing = [

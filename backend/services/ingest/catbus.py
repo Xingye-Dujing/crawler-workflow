@@ -27,9 +27,9 @@ import time
 from dataclasses import dataclass, field
 
 from core import machine, procs
-from core.config import Config
 
 from i18n import t
+from services.ingest import catbus_toolchain as toolchain
 
 BACKEND_NAME = 'catbus'
 
@@ -113,33 +113,12 @@ class Probe:
 
 
 def explicit_paths() -> tuple[str, str]:
-    """The two hand-written paths, settings panel first and environment second.
+    """The Node and adapter paths, filtered by component source — shared with the AI direct path.
 
-    The panel wins because that is where the user just typed it, and the setting is what survives a
-    restart of a service whose environment nobody controls (a systemd unit, a container). An empty
-    setting means "look it up on this machine", not "nothing is configured" — the candidate tables in
-    :mod:`core.machine` answer that, and ``PATH`` is only the last fallback there, never a thing
-    the user is asked to edit.
+    Kept as a thin re-export so existing callers and tests keep one name to ask. The logic lives in
+    :mod:`services.ingest.catbus_toolchain`, which is also what the AI workspace calls.
     """
-    # Imported here rather than at module scope: ``runtime.settings`` reads ``Config``, and this module
-    # is read by the capabilities endpoint at import time on a cold start.
-    from runtime.settings import get_setting
-
-    from services.components import source
-
-    # A stored path that points into the installer's tree stops counting when 本机 was chosen —
-    # otherwise "use the Node already on this PATH" would still launch the bundled one forever,
-    # because the setting was persisted from the environment before the switch. The reverse must
-    # also hold: in installer mode the launcher's manifest export outranks a settings.json written
-    # by an older build, or a stale machine path would keep a component the installer just placed
-    # out of reach.
-    if source.prefer_bundled():
-        node = source.usable(Config.CATBUS_NODE) or source.usable(get_setting('catbus_node'))
-        cli = source.usable(Config.CATBUS_CLI) or source.usable(get_setting('catbus_cli'))
-    else:
-        node = source.usable(get_setting('catbus_node')) or source.usable(Config.CATBUS_NODE)
-        cli = source.usable(get_setting('catbus_cli')) or source.usable(Config.CATBUS_CLI)
-    return node, cli
+    return toolchain.explicit_paths()
 
 
 def _probe_now() -> Probe:
@@ -243,6 +222,66 @@ def reset_probe_cache() -> None:
     with _LOCK:
         _PROBE = None
         _PROBE_AT = 0.0
+
+
+def local_checkout(entry: str = '') -> tuple[str, str]:
+    """Thin re-export of the shared detector; see :func:`catbus_toolchain.local_checkout`."""
+    return toolchain.local_checkout(entry)
+
+
+def direct_cli_status(entry: str = '', node: str = '') -> dict:
+    """The catbus main CLI facts for a direct command — discovery shared, version read here.
+
+    Path discovery (both run modes, both sources) comes from :mod:`catbus_toolchain`; this function
+    only adds the bounded version check, which needs this module's subprocess boundary. Whether to
+    USE a local build or install a global CLI stays the user's choice.
+    """
+    found = toolchain.direct_cli_candidates(entry)
+    status = {
+        'cli': found['cli'],
+        'cli_ok': False,
+        'cli_version': '',
+        'local_root': found['local_root'],
+        'local_cli': found['local_cli'],
+        'local_cli_version': '',
+    }
+    if status['cli']:
+        version = executable_version(status['cli'], node)
+        if version:
+            status['cli_ok'] = True
+            status['cli_version'] = version
+    if status['local_cli']:
+        status['local_cli_version'] = executable_version(status['local_cli'], node) or 'runnable local build'
+    return status
+
+
+def executable_version(path: str, node: str = '') -> str:
+    """The version line of a catbus executable, or '' when it cannot answer.
+
+    A ``main.js`` build runs on Node; anything else is called directly. Public on purpose: the AI
+    workspace's ``catbus_status`` tool reports a local checkout separately from the global CLI and
+    must not reach into this module's private process helper to ask a one-line question.
+    """
+    path = str(path or '').strip()
+    if not path:
+        return ''
+    if not node and path.lower().endswith(_SCRIPT_SUFFIXES):
+        node = machine.find_node()
+    call = _call(argv_for(node, path, ['version']), capture=True, timeout=15)
+    out = call.stdout.strip()
+    if call.code != 0 or not out:
+        return ''
+    try:
+        envelope = json.loads(out)
+    except (ValueError, TypeError):
+        return out[:120]
+    # `catbus version` prints a JSON envelope; keep the one fact the caller wants, not the whole doc.
+    if isinstance(envelope, dict):
+        data = envelope.get('data') if isinstance(envelope.get('data'), dict) else envelope
+        version = data.get('version') if isinstance(data, dict) else None
+        if version:
+            return f'catbus {version}'[:120]
+    return out[:120]
 
 
 def available() -> bool:

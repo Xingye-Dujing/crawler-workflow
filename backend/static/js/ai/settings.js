@@ -14,9 +14,9 @@ const AISettings = {
            batch call takes. Local turns therefore default to no thinking; the toolbar switch
            turns it on per browser. */
         thinkingLocal: false,
-        /* 联网搜索默认关：开着的时候每一轮都带 DeepSeek 的服务端搜索工具，简单问题也可能先去联网，
-           既慢又贵，还可能拿网上的通用说法覆盖本机事实。要搜索点工具栏的开关，或在设置里改默认。 */
-        search: false,
+        /* 联网搜索默认开：DeepSeek 自 2026-11-18 起，调用模型触发的服务端搜索/抓页工具调用本身
+           免费，结果拼进上下文只按模型 Token 计费。不想联网时点工具栏开关关掉，或在设置里改默认。 */
+        search: true,
         skill: 'auto',
         scope: 'summary',
         width: 520,

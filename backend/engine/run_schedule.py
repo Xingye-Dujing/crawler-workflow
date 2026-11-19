@@ -60,11 +60,11 @@ def _scheduled_session_gate(workflow: dict) -> str:
     import capabilities.registry as capabilities
     from sessions import preflight
 
-    from engine.workflow import effective_workflow
+    from engine.workflow import effective_workflow, node_params
 
     entries = []
     for node in effective_workflow(workflow).get('nodes') or []:
-        params = node.get('params') or {}
+        params = node_params(node)
         platform = str(params.get('platform') or node.get('platform') or '').strip()
         if not platform:
             continue

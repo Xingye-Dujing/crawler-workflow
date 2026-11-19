@@ -154,14 +154,15 @@ def _user_slot() -> _UserStores | None:
         return slot
 
 
-def owner_is_live(account) -> bool:
-    """Whether *account* still exists and is active, so its tree may be opened.
+def owner_state(account) -> bool | None:
+    """True = live, False = definitely gone/disabled, None = the registry could not answer.
 
     ``record_owners`` and a pending console batch can outlive the ACCOUNT: an administrator
     deleting A starts a request whose abandoned record is still in this process's map. Opening
     A's store would run ``paths.for_user(id).ensure()`` and recreate ``data/users/<deleted_id>/``
     as an ownerless tree nobody cleans up again. ``None`` is the local owner (and a no-accounts
-    server has no registry to ask).
+    server has no registry to ask). A caller that DELETES state must distinguish a gone owner
+    from a registry that was momentarily unreadable — the latter is retryable, not a deletion.
     """
     if account is None:
         return True
@@ -172,10 +173,17 @@ def owner_is_live(account) -> bool:
     try:
         row = get_account_service().store.get_user(account.user_id)
     except Exception:
-        # An unreadable registry is not proof the account exists; skip the repair/write rather
-        # than create a directory for an id nobody owns.
-        return False
+        return None
     return bool(row) and str(row.get('status') or '') == 'active'
+
+
+def owner_is_live(account) -> bool:
+    """Conservative verdict for OPENING a store: an unknown owner is not opened.
+
+    Callers that would otherwise destroy state (dropping an orphan record, discarding a console
+    batch) must use :func:`owner_state` and retry on ``None`` instead of treating it as gone.
+    """
+    return owner_state(account) is True
 
 
 def release_user(user_id: str, force: bool = False) -> None:
