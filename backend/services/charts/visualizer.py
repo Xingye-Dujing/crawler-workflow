@@ -317,6 +317,13 @@ class VisualizationService(OptionMixin):
             raise ChartConfigError(f'model_agreement needs at least 2 models in {model_col!r}; found {len(order)}')
         # One Series per model, indexed by the row id, so a pair aligns on 原行 not on position.
         per_model = {name: g.set_index(id_col)[label_col] for name, g in df.groupby(df[model_col].astype(str))}
+        # A repeated id inside ONE model makes the alignment undefined. pandas answers with a
+        # bare "cannot reindex on an axis with duplicate labels", which the node reports as an
+        # opaque failure; a table that cannot say which row is the model's answer is a named
+        # refusal instead, like a missing column or a single-model comparison.
+        for name, series in per_model.items():
+            if series.index.has_duplicates:
+                raise ChartConfigError(f'model_agreement needs one row per id in {id_col!r}; {name!r} repeats an id')
         matrix = []
         for a in order:
             row = []

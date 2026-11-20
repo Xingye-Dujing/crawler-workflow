@@ -381,6 +381,19 @@ class TestModelAgreement:
         with pytest.raises(ChartConfigError, match='at least 2 models'):
             V.agreement_matrix(single, '模型', 'emotion', '原行')
 
+    def test_a_repeated_id_in_one_model_is_a_named_refusal_not_a_pandas_error(self):
+        """Two rows for the same (model, id) make the pairwise alignment undefined: pandas used
+        to raise a bare 'cannot reindex on an axis with duplicate labels' out of the chart node."""
+        tidy = pd.DataFrame(
+            {
+                '原行': [0, 0, 1, 0, 1],
+                '模型': ['A', 'A', 'A', 'B', 'B'],
+                'emotion': ['Joy', 'Sad', 'Joy', 'Joy', 'Anger'],
+            }
+        )
+        with pytest.raises(ChartConfigError, match='repeats an id'):
+            V.agreement_matrix(tidy, '模型', 'emotion', '原行')
+
     def test_a_named_column_that_is_not_there_is_reported(self):
         with pytest.raises(ChartConfigError, match='Field not found in the data: nope'):
             V.to_echarts_option(
