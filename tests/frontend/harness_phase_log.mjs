@@ -155,6 +155,27 @@ answer = {
 await PhaseLog.refresh();
 out.running = body.innerHTML;
 
+/* ── an older response landing after a newer one must not repaint stale timings ── */
+const pending = [];
+sandbox.fetch = () => {
+    const entry = {};
+    entry.promise = new Promise((resolve) => {
+        entry.resolve = resolve;
+    });
+    pending.push(entry);
+    return entry.promise;
+};
+const oldRefresh = PhaseLog.refresh();
+const oldPayload = { ok: true, phases: [{ phase: 'browser', label: 'OLD', seconds: 1 }] };
+const newRefresh = PhaseLog.refresh();
+const newPayload = { ok: true, phases: [{ phase: 'crawl', label: 'NEW', seconds: 2 }] };
+pending[1].resolve({ json: () => Promise.resolve(newPayload) });
+await newRefresh;
+const htmlAfterNew = body.innerHTML;
+pending[0].resolve({ json: () => Promise.resolve(oldPayload) });
+await oldRefresh;
+out.stale = { keptNew: body.innerHTML === htmlAfterNew, html: body.innerHTML };
+
 /* ── a closed console is not polled ─────────────────────────────────────── */
 consolePanel.classList.remove('open');
 const before = fetches.length;

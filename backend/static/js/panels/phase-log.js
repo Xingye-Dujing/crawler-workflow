@@ -14,6 +14,7 @@
 const PhaseLog = {
     _timer: null,
     _signature: '',
+    _seq: 0,
 
     start() {
         if (this._timer) return;
@@ -36,6 +37,10 @@ const PhaseLog = {
         if (!panel || !panel.classList.contains('open')) return;
         const details = document.getElementById('console-phases');
         if (details && details.open === false) return;
+        /* Its own 2s poll overlaps under a slow server. The signature check below suppresses
+           IDENTICAL payloads, but an older DIFFERENT one landing last still repainted stale
+           timings. A generation makes only the newest request eligible to paint. */
+        const seq = this._seq = (this._seq || 0) + 1;
         let data = null;
         try {
             const resp = await fetch('/api/run/phases');
@@ -44,6 +49,7 @@ const PhaseLog = {
             return;
         }
         if (!data || !data.ok) return;
+        if (seq !== this._seq) return;
         this.render(data.phases || []);
     },
 

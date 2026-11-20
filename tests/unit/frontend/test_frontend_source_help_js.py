@@ -188,3 +188,6 @@ class TestTheGuideDrawsWhatTheServerSaid:
         refetch = placed['refetch']
         assert refetch['whileClosed'] == refetch['seen'], 'a closed overlay has nobody waiting for it'
         assert refetch['whileOpen'] is True, 'the sentences are served per language'
+
+    def test_a_late_old_response_cannot_repaint_the_new_language(self, placed):
+        assert placed['stale']['keptNew'] is True, 'an out-of-order fetch repainted the old language'

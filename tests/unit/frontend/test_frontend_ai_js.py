@@ -192,6 +192,11 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['contextChecks'] == ['project', 'run'], out['contextChecks']
         assert out['toolChecks'] == ['run_status'], 'a control tool was offered as a skill tool'
 
+    def test_a_context_source_cannot_break_out_of_the_checkbox_attribute(self):
+        html = _run_workspace()['editorEscaped']['html']
+        assert '" onfocus="alert(1)"' not in html, 'a source reached the attribute as raw markup'
+        assert '&quot; onfocus=&quot;alert(1)' in html
+
     def test_a_slash_command_runs_and_never_leaks_into_a_message(self):
         out = _run_workspace()['commands']
         assert out['ids'] == ['retry'], out['ids']

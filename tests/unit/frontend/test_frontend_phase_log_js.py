@@ -67,5 +67,9 @@ def test_a_running_phase_shows_its_elapsed_instead_of_silence(phase_log):
     assert re.search(r'7[0-9]\.\ds', html), html
 
 
+def test_an_older_poll_cannot_repaint_stale_timings(phase_log):
+    assert phase_log['stale']['keptNew'] is True, 'an out-of-order response repainted older timings'
+
+
 def test_a_closed_console_is_not_polled(phase_log):
     assert phase_log['closed']['fetched'] == 0, 'a hidden panel still asked the server'

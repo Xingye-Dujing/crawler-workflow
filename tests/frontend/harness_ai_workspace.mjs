@@ -274,6 +274,11 @@ const contextChecks = editor
 const toolChecks = editor.querySelectorAll('[data-ai-skill-tool]').map((el) => String(el.getAttribute('data-ai-skill-tool')));
 out.editor = { contextChecks, toolChecks };
 
+/* A context source is still server data interpolated into a double-quoted attribute: escape it
+   the same way the adjacent tool list does, or a crafted value can break out of the attribute. */
+workspace._bootstrap.context_sources = ['x" onfocus="alert(1)'];
+out.editorEscaped = { html: sandbox.AIStudio.editor({ id: 'mine', context: [], tools: [] }, workspace) };
+
 /* A saved provider id is not rewritten by a browser-side list; the server catalog decides. */
 sandbox.AISettings.save({ provider: 'custom_provider' });
 out.provider = { stored: sandbox.AISettings.load().provider };

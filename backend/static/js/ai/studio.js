@@ -82,7 +82,7 @@ const AIStudio = {
         const selectedContext = new Set(skill.context || []);
         const selectedTools = new Set(skill.tools || []);
         const contextChecks = contextSources.map((source) =>
-            '<label class="ai-check"><input type="checkbox" data-ai-skill-context="' + source + '"' + (selectedContext.has(source) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(this.contextLabel(source)) + '</label>'
+            '<label class="ai-check"><input type="checkbox" data-ai-skill-context="' + AIRender.escape(source) + '"' + (selectedContext.has(source) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(this.contextLabel(source)) + '</label>'
         ).join('');
         const toolChecks = toolList.map((tool) =>
             '<label class="ai-check"><input type="checkbox" data-ai-skill-tool="' + AIRender.escape(tool) + '"' + (selectedTools.has(tool) ? ' checked' : '') + ' /><span class="ai-check-box"></span>' + AIRender.escape(tool) + '</label>'

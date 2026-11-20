@@ -218,4 +218,32 @@ const out = {};
     out.refetch = { seen, whileClosed, whileOpen: w.requests.length > whileClosed };
 }
 
+// 8 · a late OLD response (e.g. from before a language switch) may not repaint the newer guide.
+{
+    const w = world({ ok: true, sources: SOURCES, extensions: [] });
+    w.x.openSourceHelp();
+    await drain();
+    const pending = [];
+    w.sandbox.fetch = () => {
+        const entry = {};
+        entry.promise = new Promise((resolve) => {
+            entry.resolve = resolve;
+        });
+        pending.push(entry);
+        return entry.promise;
+    };
+    w.x.sourceHelp.reload();  // old request
+    w.x.sourceHelp.reload();  // new request, e.g. after a language change
+    const respond = (sources) => ({
+        text: () => Promise.resolve(JSON.stringify({ ok: true, sources, extensions: [] })),
+        status: 200,
+    });
+    pending[1].resolve(respond([SOURCES[0]]));
+    await drain();
+    const htmlAfterNew = w.html();
+    pending[0].resolve(respond(SOURCES));
+    await drain();
+    out.stale = { keptNew: w.html() === htmlAfterNew, html: w.html() };
+}
+
 console.log(JSON.stringify(out));

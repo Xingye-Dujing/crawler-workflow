@@ -25,6 +25,7 @@ var sourceHelp = {
     error: '',
     loaded: false,
     _backdropBound: false,
+    _reloadSeq: 0,
 
     _overlay: function () {
         return document.getElementById('source-help-overlay');
@@ -69,7 +70,12 @@ var sourceHelp = {
 
     reload: function () {
         var self = this;
+        /* A language switch refetches the served sentences while an earlier fetch can still be
+           in flight. Without a generation the slower OLD response could land last and repaint the
+           guide in the language the user just left. */
+        var seq = this._reloadSeq = (this._reloadSeq || 0) + 1;
         this._fetch().then(function (answer) {
+            if (seq !== self._reloadSeq) return;
             if (!answer || answer.ok !== true || !Array.isArray(answer.sources)) {
                 self.error = (answer && answer.error) || 'HTTP ?';
                 self.render();
