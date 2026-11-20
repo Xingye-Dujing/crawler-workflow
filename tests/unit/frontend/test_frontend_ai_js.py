@@ -45,6 +45,11 @@ class TestAIStreamAndRenderer:
         assert '<a ' not in out['escapedLink']
         assert 'href="https://example.com/a"' in out['safeLink']
 
+    def test_a_node_trace_moves_the_bottom_chip_to_the_node_model(self):
+        out = _run()
+        assert 'ollama' in out['traceChip'].lower() and 'qwen3.5:2b' in out['traceChip']
+        assert 'ollama' in out['traceChipTitle'].lower() and 'qwen3.5:2b' in out['traceChipTitle']
+
     def test_a_pipe_inside_code_or_escaped_does_not_split_a_table_cell(self):
         """The model's own rows: `a|b` and `\\|` stay inside one cell, and every row keeps 2 cells."""
         out = _run()['tablePipes']

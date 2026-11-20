@@ -44,6 +44,7 @@ def _forward_run_console(monkeypatch):
     import services.analysis.llm
     import services.charts.outputs
     import services.ingest.lifecycle
+    import services.llm_trace
     import services.runs.queue
     import services.runs.settlement
 
@@ -71,6 +72,7 @@ def _forward_run_console(monkeypatch):
     forward(monkeypatch, nodes.executors.verify, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.visualize, 'add_log', app_module)
     forward(monkeypatch, services.analysis.llm, 'add_log', app_module)
+    forward(monkeypatch, services.llm_trace, 'add_log', app_module)
     forward(monkeypatch, services.charts.outputs, 'add_log', app_module)
     forward(monkeypatch, services.ingest.lifecycle, 'add_log', app_module)
     forward(monkeypatch, services.runs.queue, 'add_log', app_module)

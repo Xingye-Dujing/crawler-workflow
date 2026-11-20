@@ -24,6 +24,7 @@ from api.auth import accounts_mode, is_admin
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import get_lang, set_lang, t
 from services import python_runtime, python_scripts
+from services.coding import codebooks
 
 logger = logging.getLogger('api.ai')
 
@@ -389,6 +390,80 @@ def ai_plugin_delete(plugin_id: str):
         return jsonify({'ok': True, 'deleted': plugins.uninstall(plugin_id)})
     except AIError as exc:
         return _error(exc)
+
+
+@bp.route('/api/ai/traces/<run_id>', methods=['GET'])
+def ai_run_traces(run_id: str):
+    """The visible trace conversations opened by nodes of one run."""
+    from services.llm_trace import traces_for_run
+
+    return jsonify({'ok': True, 'conversations': traces_for_run(run_id)})
+
+
+@bp.route('/api/ai/traces/<conversation_id>/apply', methods=['POST'])
+def ai_trace_apply(conversation_id: str):
+    """Apply the edited result of a node trace conversation and return the rerun coordinates."""
+    from services.coding import node_results
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    conversation = store.get_conversation(conversation_id)
+    if conversation is None or conversation.get('skill') != 'node_trace':
+        return jsonify({'ok': False, 'error': 'not a node trace conversation'}), 404
+    messages = store.list_messages(conversation_id, limit=400)
+    provenance = next(
+        (
+            item.get('meta') or {}
+            for item in reversed(messages)
+            if (item.get('meta') or {}).get('kind') == 'trace_result'
+        ),
+        {},
+    )
+    run_id = str(provenance.get('run_id') or '')
+    node_id = str(provenance.get('node_id') or '')
+    if not run_id or not node_id:
+        return jsonify({'ok': False, 'error': 'this trace has no settled node result yet'}), 400
+    saved = node_results.save(run_id, node_id, dict(data.get('result') or data))
+    return jsonify(
+        {
+            'ok': True,
+            'saved': saved,
+            'run_id': run_id,
+            'workflow_name': str(provenance.get('workflow_name') or ''),
+            'node_id': node_id,
+        }
+    )
+
+
+@bp.route('/api/ai/codebooks', methods=['GET'])
+def ai_codebooks():
+    return jsonify({'ok': True, 'codebooks': codebooks.list_codebooks()})
+
+
+@bp.route('/api/ai/codebooks/<codebook_id>', methods=['GET'])
+def ai_codebook(codebook_id: str):
+    try:
+        return jsonify({'ok': True, 'codebook': codebooks.load_codebook(codebook_id)})
+    except codebooks.CodebookError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 404
+
+
+@bp.route('/api/ai/codebooks', methods=['POST'])
+def ai_codebook_save():
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    try:
+        saved = codebooks.save_codebook(data, codebook_id=str(data.get('id') or ''))
+    except codebooks.CodebookError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+    return jsonify({'ok': True, 'codebook': saved})
+
+
+@bp.route('/api/ai/codebooks/<codebook_id>', methods=['DELETE'])
+def ai_codebook_delete(codebook_id: str):
+    return jsonify({'ok': True, 'deleted': codebooks.delete_codebook(codebook_id)})
 
 
 @bp.route('/api/ai/memories', methods=['GET'])
@@ -1029,6 +1104,12 @@ def ai_conversation_update(conversation_id: str):
         store.touch_conversation(conversation_id, bump=False, pinned=1 if data.get('pinned') else 0)
     if 'archived' in data:
         store.touch_conversation(conversation_id, bump=False, archived=1 if data.get('archived') else 0)
+    # Per-conversation model memory: a node trace must keep the provider/model that actually
+    # answered it, and a user chat may deliberately differ from the last chat's choice.
+    if 'provider' in data:
+        store.touch_conversation(conversation_id, bump=False, provider=str(data.get('provider') or '')[:80])
+    if 'model' in data:
+        store.touch_conversation(conversation_id, bump=False, model=str(data.get('model') or '')[:160])
     return jsonify({'ok': True, 'conversation': store.get_conversation(conversation_id)})
 
 

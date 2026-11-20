@@ -278,6 +278,9 @@ class TestTheTablesLiveWithTheirOwners:
             'ner',
             'bot',
             'tokenize',
+            # The coding node's columns depend on its phase (open/axial/selective), like tokenize's
+            # on output_mode; the executor owns that shape and the test below pins it.
+            'qualitative_code',
         }
 
     def test_every_analysis_contract_op_is_a_step_the_service_serves(self):

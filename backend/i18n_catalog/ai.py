@@ -7,6 +7,12 @@ also rendered by the page, and a single missing key must be visible in both plac
 """
 
 ZH = {
+    'trace.intro': (
+        '这里记录节点向模型发出的每一条提示与回答。你可以在本对话里修改内容；'
+        '确认后可从该节点继续重跑。Token 数为估算，不是账单数字。'
+    ),
+    'trace.opened': '已为节点 {node} 打开可见追踪对话：{id}',
+    'trace.finished': '节点 {node} 已完成（{rows} 行）。如不满意，可在本对话里继续调整，再确认重跑。',
     'ai.provider.deepseek': 'DeepSeek 直连',
     'ai.provider.opencode_go': 'OpenCode Go',
     'ai.provider.openrouter': 'OpenRouter',
@@ -228,6 +234,15 @@ ZH = {
 }
 
 EN = {
+    'trace.intro': (
+        'Every prompt and answer this node sends to the model appears here. '
+        'You can edit the content and resume the run from the node after confirming. '
+        'Token counts are estimates, not billed units.'
+    ),
+    'trace.opened': 'Opened a visible trace conversation for node {node}: {id}',
+    'trace.finished': (
+        'Node {node} finished ({rows} rows). If you want changes, keep talking here, then confirm and rerun.'
+    ),
     'ai.provider.deepseek': 'DeepSeek API',
     'ai.provider.opencode_go': 'OpenCode Go',
     'ai.provider.openrouter': 'OpenRouter',

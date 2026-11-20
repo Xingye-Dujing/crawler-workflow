@@ -2224,6 +2224,26 @@ const AIWorkspace = {
             /* The header names the model this conversation used; the picker below keeps the model
                the NEXT message will use, which may be a different one. */
             this._conversationModel = [data.conversation.provider, data.conversation.model].filter(Boolean).join(' / ');
+            /* A trace conversation belongs to a NODE, not to the user's last chat choice. Mirror the
+               node's run-time provider/model into the bottom picker and tip so the chip never claims
+               a different model answered these prompts. Normal conversations keep the user's choice. */
+            const savedProvider = String(data.conversation.provider || '');
+            const savedModel = String(data.conversation.model || '');
+            if (savedProvider || savedModel) {
+                if (savedProvider) this._provider = savedProvider;
+                if (savedModel) this._model = savedModel;
+                this._renderProviderOptions();
+            }
+            if (data.conversation.skill === 'node_trace') {
+                if (this._dom.modelChip) {
+                    this._dom.modelChip.title = I18n.t('ai.traceModelTip', {
+                        provider: savedProvider || '—',
+                        model: savedModel || '—'
+                    });
+                }
+            } else if (this._dom.modelChip) {
+                this._dom.modelChip.title = '';
+            }
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
             this._renderSide();
@@ -3818,18 +3838,31 @@ const AIWorkspace = {
         }
     },
 
+    /* Remember the choice on the conversation itself, not only in the global settings: each chat
+       (especially a node trace) keeps the model that actually belongs to it. */
+    _rememberConversationModel() {
+        if (!this._conversationId) return;
+        fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider: this._provider, model: this._model }),
+        }).catch(() => {});
+    },
+
     setProviderFromBar(value) {
         this._provider = value;
         AISettings.setProvider(value);
         this._model = AISettings.modelFor(value, this._bootstrap?.providers);
         this._renderModelOptions();
         this._renderToggles();
+        this._rememberConversationModel();
         this._loadBootstrap();
     },
 
     setModelFromBar(value) {
         this._model = value;
         AISettings.setModel(this._provider, value);
+        this._rememberConversationModel();
         this._loadBootstrap();
     },
 

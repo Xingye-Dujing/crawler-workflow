@@ -61,6 +61,8 @@ BODY_ROUTES = [
     '/api/ai/conversations',
     '/api/ai/conversations/<conversation_id>/context',
     '/api/ai/memories',
+    '/api/ai/codebooks',
+    '/api/ai/traces/<conversation_id>/apply',
     '/api/ai/plugins/<plugin_id>/enable',
     '/api/ai/plugins/install',
     '/api/ai/providers/<provider_id>/test',

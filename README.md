@@ -169,6 +169,7 @@ crawler_workflow/
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收矩阵 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | 前端拆分方案 |
 | [`docs/models.md`](docs/models.md) | 本地模型目录、下载/缓存、备份、数据集分类与选型 |
+| [`docs/qualitative_coding.md`](docs/qualitative_coding.md) | 三级质性编码与画布↔AI 工作区的可见 LLM 调用追踪 |
 | [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 微调 BERT 的理由与口径 |
 | [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比 |
 | [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的规则与改动流程 |

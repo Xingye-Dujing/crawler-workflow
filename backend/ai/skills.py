@@ -42,6 +42,9 @@ Hard rules:
   downstream of it as a resume of that same run, reading the SAVED workflow file and never loading
   or replacing the user's canvas. Use it after a monitor reports a failed node; it refuses by name
   when the file is missing, the canvas changed, the node is unknown or the run is still live.
+- When the user asks to re-run a node, or to replay downstream after editing a node-trace answer,
+  CALL rerun_node directly with run_id + saved workflow_name + node_id from the current context.
+  Do not merely explain how; approval is handled by request_approval when it is required.
 - A mutating tool (run_cmd, workspace_write, workspace_import, rerun_node) may answer that approval
   is required. Call request_approval with the exact arguments as a JSON object in `detail`, then
   repeat the identical call after the user allows it; 允许一次 allows just that call, 本次会话允许
@@ -259,6 +262,7 @@ BUILTIN = {
             'models_catalog',
             'model_infer',
             'model_rerank',
+            'rerun_node',
             'dataset_peek',
             'dataset_query',
             'analysis_catalog',
@@ -284,6 +288,35 @@ BUILTIN = {
         tools=('models_catalog', 'docs_search', 'code_search', 'analysis_catalog'),
         local_only=True,
         suggested=('怎么把现有模型蒸馏成更小的？', '给我一份六类分类的训练配方。', '这个模型能导出 ONNX 吗？'),
+    ),
+    'qualitative_coding': SkillSpec(
+        id='qualitative_coding',
+        name_key='ai.skill.qualitative_coding.name',
+        description_key='ai.skill.qualitative_coding.desc',
+        prompt=(
+            'You guide a grounded-theory coding study: OPEN coding, AXIAL coding, SELECTIVE coding. '
+            'A canvas coding node opens a visible trace conversation for every provider call; read it '
+            'before proposing changes. Use dataset_peek first, never dump a whole table. Propose short '
+            'codes WITH verbatim evidence quotes; ask the researcher to approve or merge codes with '
+            'ask_user_question. Only after approval use apply_codebook (or apply_node_result for any '
+            'other node trace) to save the next version, then rerun_node to replay the coding node '
+            'and everything downstream. Local Ollama and API '
+            'providers are both valid; name the provider and model you actually used. Token figures in '
+            'traces are estimates, not billed units. Write the method, codebook decisions and limitations '
+            'into a memo so the study is auditable.'
+        ),
+        context=('project', 'dataset', 'run', 'docs'),
+        tools=(
+            'dataset_peek',
+            'dataset_page',
+            'apply_codebook',
+            'apply_node_result',
+            'rerun_node',
+            'docs_search',
+            'models_catalog',
+        ),
+        local_only=True,
+        suggested=('帮我做第一轮开放编码', '把这些初始码归并成类目', '写一份选择性编码备忘录'),
     ),
     'analysis': SkillSpec(
         id='analysis',
@@ -519,8 +552,12 @@ def route(text: str, page: str = '') -> str:
         return 'catbus'
     if any(word in blob for word in ('监控', '盯着', '通知我', 'watch', 'monitor', 'notify')):
         return 'monitor'
+    if any(word in blob for word in ('重跑', '重新跑', '继续跑', 'rerun', 'replay')):
+        return 'diagnose'
     if any(word in blob for word in ('失败', '报错', '错误', '诊断', 'failed', 'error', 'console', '日志')):
         return 'diagnose'
+    if any(word in blob for word in ('编码', '开放式编码', '主轴编码', '选择性编码', 'codebook', 'grounded')):
+        return 'qualitative_coding'
     if any(word in blob for word in ('图', 'chart', '可视化', '画什么', '坐标')):
         return 'charts'
     if any(word in blob for word in ('数据集', '分析', '清洗', '情感', '主题', 'dataset', 'analy')):

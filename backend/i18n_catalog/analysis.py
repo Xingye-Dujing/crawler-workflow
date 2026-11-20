@@ -89,6 +89,15 @@ ZH = {
     'analysis.dedupe_similar': (
         '近重复去重：在“{column}”上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
     ),
+    'coding.no_client': '编码节点没有可用的 LLM 客户端：请在运行时选择本地 Ollama 或 API 供应商，不会静默改用别的模型',
+    'coding.no_codebook': '主轴/选择性编码必须先指定一个码本 id，节点不会替你新建或猜测',
+    'coding.bad_phase': '未知编码阶段“{phase}”，只支持 open/axial/selective',
+    'coding.saved': '编码码本 {id} 已保存为第 {version} 版（{phase}）',
+    'coding.open_label': '开放编码',
+    'coding.no_open_codes': '主轴编码需要已确认的开放编码码本，请先完成开放编码并保存码本',
+    'coding.axial_unparseable': '主轴编码没有读到一个合法的“类目|副类目|代码|关系”行，已拒绝而不编造类目',
+    'coding.no_axial_categories': '选择性编码需要已确认的类目，请先完成主轴编码并保存码本',
+    'coding.selective_unparseable': '选择性编码没有读到 CORE/MEMO 两行，已拒绝而不编造核心类目',
     'analysis.zero_shot_no_labels': '零样本分类没有候选标签：请填写至少一个标签，节点不会替你猜一个',
     'analysis.zero_shot_missing': '零样本模型不可用：缺少 torch/transformers；不会改用关键词规则冒充模型判断',
     'analysis.zero_shot_failed': '零样本模型“{model}”加载或运行失败：{err}',
@@ -519,6 +528,21 @@ EN = {
     ),
     'analysis.dedupe_similar': (
         'Near-duplicate dedupe: SimHash distance ≤{distance} on "{column}", dropped {n} rows (first of each group kept)'
+    ),
+    'coding.no_client': (
+        'The coding node has no LLM client: choose local Ollama or an API provider for this run; no silent substitution'
+    ),
+    'coding.no_codebook': 'Axial/selective coding requires a codebook id; the node will not invent one',
+    'coding.bad_phase': 'Unknown coding phase "{phase}"; only open/axial/selective are supported',
+    'coding.saved': 'Codebook {id} saved as version {version} ({phase})',
+    'coding.open_label': 'Open coding',
+    'coding.no_open_codes': 'Axial coding needs an approved open-code codebook; finish open coding first',
+    'coding.axial_unparseable': (
+        'Axial coding found no valid CATEGORY|SUBCATEGORY|CODE|RELATION line; refusing instead of inventing a category'
+    ),
+    'coding.no_axial_categories': 'Selective coding needs approved categories; finish axial coding first',
+    'coding.selective_unparseable': (
+        'Selective coding did not return CORE/MEMO lines; refusing instead of inventing a core category'
     ),
     'analysis.zero_shot_no_labels': (
         'Zero-shot classification has no candidate labels; name at least one instead of letting the node invent one'

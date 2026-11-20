@@ -36,6 +36,7 @@ from analyzers import (
     TextCluster,
 )
 from analyzers.bot import BotLikelihoodAnalyzer
+from analyzers.qualitative import aggregate_open_codes, axial_code, open_code, selective_code
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from analyzers.zero_shot import DEFAULT_MODEL as ZERO_SHOT_MODEL
 from analyzers.zero_shot import analyze_zero_shot
@@ -53,6 +54,7 @@ from services.analysis.process import (
     enum_param,
     sentiment_thresholds,
 )
+from services.coding import codebooks
 
 NODE_TYPE = 'process'
 
@@ -373,6 +375,56 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
             min_samples=min_samples,
         )
         return df.to_dict('records')
+
+    if op == 'qualitative_code':
+        phase = str(params.get('phase') or 'open').strip().lower()
+        codebook_id = str(params.get('codebook_id') or '').strip()
+        if phase == 'open':
+            result = open_code(df, text_column, ctx=run_ctx)
+            book = codebooks.save_codebook(
+                {
+                    'id': codebook_id,
+                    'name': str(params.get('codebook_name') or t('coding.open_label')),
+                    'phase': 'open',
+                    'codes': aggregate_open_codes(result),
+                    'source': {'dataset_rows': len(result), 'llm': (run_ctx or {}).get('client').label},
+                }
+            )
+            add_log(t('coding.saved', id=book['id'], version=book['version'], phase='open'))
+            return result.to_dict('records')
+        if not codebook_id:
+            raise ValueError(t('coding.no_codebook'))
+        current = codebooks.load_codebook(codebook_id)
+        if phase == 'axial':
+            book = axial_code(current, ctx=run_ctx)
+        elif phase == 'selective':
+            book = selective_code(current, ctx=run_ctx)
+        else:
+            raise ValueError(t('coding.bad_phase', phase=phase))
+        saved = codebooks.save_codebook(book, codebook_id=codebook_id)
+        add_log(t('coding.saved', id=saved['id'], version=saved['version'], phase=phase))
+        if phase == 'axial':
+            rows = []
+            for category in saved.get('categories') or []:
+                for sub in category.get('subcategories') or []:
+                    for code in sub.get('codes') or []:
+                        rows.append(
+                            {
+                                'category': category.get('name', ''),
+                                'subcategory': sub.get('name', ''),
+                                'code': code,
+                                'relation': category.get('relation', ''),
+                            }
+                        )
+            return rows
+        return [
+            {
+                'core_category': saved.get('core_category', ''),
+                'memo': saved.get('memo', ''),
+                'codebook_id': saved['id'],
+                'version': saved['version'],
+            }
+        ]
 
     if op == 'zero_shot':
         frame = analyze_zero_shot(

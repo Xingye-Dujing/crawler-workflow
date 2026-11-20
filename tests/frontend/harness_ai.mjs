@@ -67,6 +67,29 @@ workspace._dom.modelChip = sandbox.document.getElementById('ai-model-chip');
 workspace._renderProviderOptions();
 const providerOptions = workspace._dom.provider.innerHTML;
 
+/* A node trace conversation must move the bottom chip to the model the NODE actually used. */
+const previousFetch = sandbox.fetch;
+sandbox.fetch = async () =>
+    new Response(
+        JSON.stringify({
+            ok: true,
+            conversation: {
+                id: 'c_trace',
+                provider: 'ollama',
+                model: 'qwen3.5:2b',
+                skill: 'node_trace',
+                title: 'trace',
+            },
+            messages: [],
+            pending_questions: [],
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+    );
+await workspace.selectConversation('c_trace');
+sandbox.fetch = previousFetch;
+const traceChip = workspace._dom.modelChip.textContent;
+const traceChipTitle = workspace._dom.modelChip.title;
+
 const out = {
     events,
     lang: I18n.lang,
@@ -83,6 +106,8 @@ const out = {
     runtimeTitle: workspace._runtimeTitle(),
     skillOptions,
     providerOptions,
+    traceChip,
+    traceChipTitle,
     hasKnown: I18n.has('ai.title'),
     hasUnknown: I18n.has('ai.notAKey'),
     turnFlow: (() => {

@@ -327,6 +327,20 @@ def run_node_durable(
         # where the answer cache makes only the missing rows cost anything.
         store.finish_node(run_id, nid, NODE_PARTIAL)
         return result, NODE_PARTIAL
+    # Close the node's visible LLM trace (a no-op for nodes without one). This is the ONE generic
+    # hook: any future LLM-backed node gets a settled trace and the confirm→rerun coordinates.
+    from services.llm_trace import finish_node_trace
+
+    finish_node_trace(
+        run_id,
+        nid,
+        {
+            'op': str(ntype or ''),
+            'rows': len(result) if isinstance(result, list) else 0,
+            'workflow_name': str(ambient().get('workflow_name') or ''),
+            'text': t('trace.finished', node=label, rows=len(result) if isinstance(result, list) else 0),
+        },
+    )
     store.finish_node(run_id, nid, NODE_DONE)
     return result, NODE_DONE
 

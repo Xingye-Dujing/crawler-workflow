@@ -701,7 +701,7 @@ function openSettings(nodeId) {
         html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
+        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'qualitative_code', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -828,6 +828,16 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'entity_types\',this.value)">' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.entityTypesHint') +
                 '</div></div>';
+        }
+
+        /* Qualitative coding: the three grounded-theory passes. Every provider call is mirrored
+           into a visible AI-workspace trace conversation by the shared LLM run context. */
+        if (p.operation === 'qualitative_code') {
+            html += renderParamSelect(nodeId, p, 'phase', 'settings.codingPhase', 'open',
+                [{ v: 'open', l: I18n.t('coding.phaseOpen') }, { v: 'axial', l: I18n.t('coding.phaseAxial') },
+                 { v: 'selective', l: I18n.t('coding.phaseSelective') }]);
+            html += renderParamInput(nodeId, p, 'codebook_id', 'settings.codebookId', 'text', '') +
+                renderParamInput(nodeId, p, 'codebook_name', 'settings.codebookName', 'text', '');
         }
 
         /* Zero-shot labelling: a temporary, user-named label set scored by a small NLI model. */

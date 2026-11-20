@@ -45,6 +45,7 @@ PROCESS_ENUMS = {
     # bert is the default; snownlp is the no-model fallback the executor picks when bert cannot run.
     'sentiment': {'mode': ('bert', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm', 'bert'))},
+    'qualitative_code': {'phase': ('open', ('open', 'axial', 'selective'))},
     # The lexicon is the default because it needs no model, costs nothing, and answers the same
     # table every run; ``llm`` is the opt-in that can see the euphemisms a fixed list cannot.
     'aggression': {'mode': ('lexicon', ('lexicon', 'llm'))},
@@ -64,6 +65,7 @@ PROCESS_OPS = frozenset(PROCESS_ENUMS) | {
     'significance',
     'tokenize',
     'zero_shot',
+    'qualitative_code',
 }
 
 #: The operations whose whole job is to read one text column of the table.
@@ -113,6 +115,7 @@ READ_PARAMS: dict[str, tuple[str, ...]] = {
     'correlation': (),
     'significance': ('group_column', 'value_column'),
     'zero_shot': ('text_column',),
+    'qualitative_code': ('text_column',),
 }
 
 

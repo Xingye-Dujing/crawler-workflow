@@ -500,6 +500,46 @@ def tool_analysis_catalog(_args: dict, _ctx: dict) -> dict:
     return {'ops': sorted(OPS), 'count': len(OPS), 'contracts': vocabulary.analysis_catalog()}
 
 
+def tool_apply_node_result(args: dict, _ctx: dict) -> dict:
+    """Generic confirm step for a node-created conversation: save the edit, then rerun downstream."""
+    from services.coding import node_results
+
+    run_id = str(args.get('run_id') or '').strip()
+    node_id = str(args.get('node_id') or '').strip()
+    result = args.get('result')
+    if not run_id or not node_id or not isinstance(result, dict):
+        raise AIError(
+            'ai.toolRefused',
+            kind='bad_request',
+            tool='apply_node_result',
+            reason='run_id, node_id and a result object are required',
+        )
+    saved = node_results.save(run_id, node_id, result)
+    return {
+        'ok': True,
+        'saved': saved,
+        'next': 'Call rerun_node on this run and node to replay it and everything downstream.',
+    }
+
+
+def tool_apply_codebook(args: dict, _ctx: dict) -> dict:
+    """Save the codebook the user just edited in the trace conversation, as a new version."""
+    from services.coding import codebooks
+
+    payload = args.get('codebook')
+    if not isinstance(payload, dict):
+        raise AIError('ai.toolRefused', kind='bad_request', tool='apply_codebook', reason='codebook is missing')
+    try:
+        saved = codebooks.save_codebook(payload, codebook_id=str(payload.get('id') or ''))
+    except codebooks.CodebookError as exc:
+        raise AIError('ai.toolRefused', kind='bad_request', tool='apply_codebook', reason=str(exc)) from exc
+    return {
+        'ok': True,
+        'codebook': saved,
+        'next': 'Call rerun_node on the coding node to replay it and everything downstream with this version.',
+    }
+
+
 def tool_models_catalog(args: dict, _ctx: dict) -> dict:
     """The model registry, including what this machine can run and why it cannot run the rest."""
     from services.models import catalog, probe
@@ -850,7 +890,14 @@ def _files_ready() -> None:
 #: ``ai_auto_approve`` off, one of these runs only after the user answered a ``request_approval``
 #: question with the EXACT arguments it is about to use (see ``ai.approvals``). ``workspace_set``
 #: is deliberately absent: choosing a folder is a setting the panel offers, not a per-call act.
-APPROVAL_TOOLS = ('run_cmd', 'workspace_write', 'workspace_import', 'rerun_node')
+APPROVAL_TOOLS = (
+    'run_cmd',
+    'workspace_write',
+    'workspace_import',
+    'rerun_node',
+    'apply_codebook',
+    'apply_node_result',
+)
 
 #: ``write:files`` tools that choose a setting rather than perform a per-call act. The panel owns
 #: them, so a per-call approval grant (keyed to exact args) cannot meaningfully cover them; without
@@ -1293,6 +1340,29 @@ TOOLS = {
             'Read every analysis operator the pipeline knows.',
             {'type': 'object', 'properties': {}},
             handler=tool_analysis_catalog,
+        ),
+        ToolSpec(
+            'apply_node_result',
+            'Confirm an edited result from a node-created AI conversation and make it available to '
+            'rerun_node. Use only after the user agrees to the edited content.',
+            {
+                'type': 'object',
+                'properties': {
+                    'run_id': {'type': 'string'},
+                    'node_id': {'type': 'string'},
+                    'result': {'type': 'object'},
+                },
+                'required': ['run_id', 'node_id', 'result'],
+            },
+            handler=tool_apply_node_result,
+            permission='write:project',
+        ),
+        ToolSpec(
+            'apply_codebook',
+            'Save an edited qualitative codebook as a new version, then rerun the coding node from the run.',
+            {'type': 'object', 'properties': {'codebook': {'type': 'object'}}, 'required': ['codebook']},
+            handler=tool_apply_codebook,
+            permission='write:project',
         ),
         ToolSpec(
             'models_catalog',

@@ -60,6 +60,8 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     """
     cfg = execution_state.get('llm') or {}
     provider = cfg.get('provider') or 'ollama'
+    node_id = node.get('id', '')
+    run_id = str(execution_state.get('run_id') or '')
     # Per-node model override: only Ollama is overridable — an OpenRouter run must not be
     # handed a daemon tag it has no id for — and a blank node model falls back to the run's
     # global model.
@@ -81,7 +83,12 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         # attempts rather than after them.
         cancel_event=execution_state.get('cancel_event'),
     )
-    node_id = node.get('id', '')
+    # One generic trace seam for every LLM-backed node: the client below is wrapped here so no
+    # analyzer has to open a conversation itself. New nodes inherit it by using this run context.
+    from services.llm_trace import start_node_trace
+
+    client, trace_id = start_node_trace(run_id, node_id, op, client)
+
     # ── live snapshot (AI 调用实时导出) ──
     # A long LLM pass enriches rows in batches; the honest artifact there is
     # 'the table as it stands', so every settled batch rewrites the whole
@@ -112,6 +119,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
 
     run_ctx = {
         'client': client,
+        'trace_conversation_id': trace_id,
         'node_id': node_id,
         'batch_size': cfg.get('batch_size') or 10,
         # API providers tolerate a little concurrency (free tiers are shared
