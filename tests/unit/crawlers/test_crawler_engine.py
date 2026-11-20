@@ -455,7 +455,12 @@ def test_an_empty_read_is_reported_as_no_cards_not_as_an_empty_search():
     assert feed.scrolled == 0
 
 
-def test_the_walk_stops_at_once_when_the_caller_says_the_session_died():
+def test_the_walk_stops_at_once_when_the_caller_says_the_session_died(monkeypatch):
+    """A stop latched by the per-card check ends the walk before a scroll or a settle wait."""
+    from crawlers.engine import feed as feed_module
+
+    sleeps = []
+    monkeypatch.setattr(feed_module.time, 'sleep', sleeps.append)
     feed = Feed(['a', 'b'])
     calls = {'n': 0}
 
@@ -473,9 +478,11 @@ def test_the_walk_stops_at_once_when_the_caller_says_the_session_died():
         stopped=dying,
     )
     assert result.stopped_reason == 'stopped'
-    # One round was already under way when the session died: the walk must not
-    # keep scrolling after that, and one scroll is what the first round costs.
-    assert feed.scrolled == 1
+    # The stop was latched mid-round: the walk must end here, before paying a scroll and a
+    # settle wait for a screen nobody will read. The outer check would catch it a round later,
+    # but only after a full browser round of work.
+    assert feed.scrolled == 0
+    assert sleeps == []
 
 
 def test_the_scroller_is_asked_to_settle_before_the_growth_is_measured(monkeypatch):

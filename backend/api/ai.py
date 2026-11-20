@@ -106,7 +106,11 @@ def _stream(generator, account, lang: str, conversation_id: str = ''):
                 logger.warning(t('ai.streamFailed', kind=type(exc).__name__))
                 yield _sse({'type': 'error', 'kind': 'error', 'error': str(exc)[:500]})
                 yield _sse({'type': 'done', 'stop_reason': 'error'})
-                ended = True
+                # A raw fault (e.g. sqlite3.OperationalError from save_usage inside a round) is NOT
+                # an ending the agent wrote: its assistant row is still `streaming`. Leave `ended`
+                # false so the `finally` settles that row for this conversation — the same verdict
+                # a reader disconnect gets. Marking it here would double-settle and skipping it left
+                # a half answer that looked live on the next page load until a restart swept it.
             finally:
                 if not ended and owned['id']:
                     store.mark_interrupted(owned['id'])

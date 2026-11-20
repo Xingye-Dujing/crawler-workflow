@@ -193,6 +193,11 @@ def walk_feed(
             if mark is not None:
                 mark(position)
         result.rounds += 1
+        if result.stopped_reason:
+            # A stop (or wall) latched mid-screen: end the walk before paying a scroll and a
+            # settle wait for a screen the caller has already ended. The outer check would
+            # catch it on the next round, but only after a full browser round of work.
+            break
         if collected() >= target:
             break
         before = watcher()

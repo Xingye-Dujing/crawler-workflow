@@ -17,7 +17,7 @@ import importlib.util
 import json
 import os
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from core.config import Config
@@ -76,6 +76,10 @@ BUILTIN_PLUGINS = (
 )
 
 _DYNAMIC: dict[str, dict] = {}
+
+#: How many redirect hops an HTTP plugin tool may follow before it is refused by name. Bounds a
+#: redirect loop and keeps a chain of allowed hosts from growing the request without end.
+_MAX_REDIRECTS = 5
 
 
 def register_builtin() -> None:
@@ -143,11 +147,27 @@ def _http_tool(spec: dict, plugin_id: str):
             target = target.replace('{' + str(key) + '}', str(value))
         if not _allowed_host(target, hosts):
             raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='host is not in allowed_hosts')
+        # requests follows redirects by default, which would let an allowed host bounce this tool
+        # into an internal address the allowlist never approved. Drive the hops ourselves: every
+        # Location is resolved to an absolute URL and re-checked, and a loop is bounded by _MAX_REDIRECTS.
         try:
-            if method == 'GET':
-                response = requests.get(target, timeout=20)
-            else:
-                response = requests.post(target, json=args, timeout=20)
+            hops = 0
+            while True:
+                if method == 'GET':
+                    response = requests.get(target, timeout=20, allow_redirects=False)
+                else:
+                    response = requests.post(target, json=args, timeout=20, allow_redirects=False)
+                location = response.headers.get('Location')
+                if not location or response.status_code not in (301, 302, 303, 307, 308):
+                    break
+                if hops >= _MAX_REDIRECTS:
+                    raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='too many redirects')
+                hops += 1
+                target = urljoin(target, location)
+                if not _allowed_host(target, hosts):
+                    raise AIError(
+                        'ai.toolRefused', kind='bad_request', tool=name, reason='redirect host is not in allowed_hosts'
+                    )
         except requests.RequestException as exc:
             raise AIError('ai.toolRefused', kind='network', tool=name, reason=str(exc)[:200]) from exc
         text = response.text[:20000]

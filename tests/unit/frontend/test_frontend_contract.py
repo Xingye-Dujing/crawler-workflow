@@ -188,6 +188,39 @@ class TestLlmGateParity:
             node['operation'] = operation
         assert js_answers[name] == workflow_needs_llm({'nodes': [node]}), name
 
+    def test_an_analysis_step_that_calls_a_model_is_seen_on_both_sides(self, tmp_path_factory):
+        """``nodeNeedsLlm`` (settings.js) and ``workflow_needs_llm`` (engine/plan.py) must also
+        agree on ANALYSIS nodes: a scheduled canvas carrying ``topic_label`` passes the verdict,
+        crawls everything and then dies at the analysis node when either side misses it.
+        """
+        from services.analysis.contracts import LLM_OPS
+
+        if shutil.which('node') is None:
+            pytest.skip('node not available')
+        scenarios = [{'id': f'llm_{op}', 'needsLlm': {'steps': [{'op': op}]}} for op in sorted(LLM_OPS)]
+        scenarios += [
+            {'id': 'flat_llm_op', 'needsLlm': {'operation': 'topic_label'}},
+            {'id': 'non_llm_step', 'needsLlm': {'steps': [{'op': 'topic_map'}]}},
+        ]
+        path = tmp_path_factory.mktemp('gate_analysis') / 'scenarios.json'
+        path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
+        proc = run_node(VALIDATE_HARNESS, JS_DIR / 'workflow.js', path)
+        assert proc.returncode == 0, proc.stderr
+        js = json.loads(proc.stdout)['needsLlm']
+
+        from engine.plan import workflow_needs_llm
+
+        for op in sorted(LLM_OPS):
+            node = {'type': 'analysis', 'params': {'steps': [{'op': op}]}}
+            assert js[f'llm_{op}'] is True, op
+            assert workflow_needs_llm({'nodes': [node]}) is True, op
+        flat = {'type': 'analysis', 'params': {'operation': 'topic_label'}}
+        assert js['flat_llm_op'] is True
+        assert workflow_needs_llm({'nodes': [flat]}) is True
+        plain = {'type': 'analysis', 'params': {'steps': [{'op': 'topic_map'}]}}
+        assert js['non_llm_step'] is False
+        assert workflow_needs_llm({'nodes': [plain]}) is False
+
     def test_the_execute_gate_asks_the_effective_graph_not_the_drawn_one(self):
         """The gate refuses a run before it starts, so it may not hold up a canvas whose only
         model-shaped node the user switched off — a disabled node is not on the canvas, which is

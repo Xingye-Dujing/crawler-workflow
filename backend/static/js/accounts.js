@@ -173,7 +173,7 @@ const Accounts = {
                 (callable ?
                     '<button class="menu-btn" type="button" onclick="Accounts.reset(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.reset')) + '</button>' +
                     '<button class="menu-btn" type="button" onclick="Accounts.forceLogout(\'' + user.user_id + '\')">' + this.esc(I18n.t('accounts.forceLogout')) + '</button>' +
-                    (user.locked_until > Date.now() / 1000 ?
+                    (user.locked ?
                         '<button class="menu-btn" type="button" onclick="Accounts.unlock(\'' + user.user_id + '\')">' +
                             this.esc(I18n.t('accounts.unlock')) + '</button>'
                         : '') +

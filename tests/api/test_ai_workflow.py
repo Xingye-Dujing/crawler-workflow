@@ -205,6 +205,63 @@ def test_a_reader_that_disconnects_mid_answer_leaves_an_interrupted_row(client, 
     assert any(row['status'] == 'interrupted' for row in detail['messages'])
 
 
+def test_a_raw_stream_fault_settles_the_assistant_row(client, monkeypatch, clean_ai):
+    """A non-AIError raised inside a round used to leave the assistant row `streaming` forever.
+
+    The old generic `except` set `ended = True`, so the disconnect settlement in `finally` was
+    skipped — even though the browser got a `done` frame. A real store fault (e.g.
+    ``sqlite3.OperationalError`` from save_usage) then left a half answer that a reload drew as
+    still generating. The generic branch must reach the same settlement as a closed connection.
+    """
+    import api.ai as ai_api
+    from ai import store
+    from ai.providers import PROVIDERS
+
+    class BoomProvider(FakeProvider):
+        def __init__(self):
+            super().__init__('fake_boom')
+
+        def stream(self, request):
+            yield {'type': 'text_delta', 'text': 'half an answer'}
+            raise RuntimeError('a raw provider fault')
+
+    monkeypatch.setitem(PROVIDERS, 'fake_boom', BoomProvider())
+    settled = []
+    real_mark = ai_api.store.mark_interrupted
+
+    def spy(cid=''):
+        settled.append(cid)
+        return real_mark(cid)
+
+    monkeypatch.setattr(ai_api.store, 'mark_interrupted', spy)
+
+    response = client.post(
+        '/api/ai/chat',
+        json={
+            'text': 'hello',
+            'provider': 'fake_boom',
+            'model': 'fake-model',
+            'api_key': 'secret-key',
+            'skill': 'project',
+            'context': {},
+        },
+    )
+    assert response.status_code == 200, response.get_json()
+    events = [
+        json.loads(frame[len('data: ') :])
+        for chunk in response.response
+        for frame in chunk.decode('utf-8').split('\n\n')
+        if frame.startswith('data: ')
+    ]
+    # The done SSE behaviour stays intact: the error branch still emits both frames.
+    assert any(event.get('type') == 'error' for event in events)
+    assert any(event.get('type') == 'done' and event.get('stop_reason') == 'error' for event in events)
+    conversation_id = next(event['conversation_id'] for event in events if event.get('type') == 'meta')
+    assert conversation_id in settled, 'the raw fault did not settle the conversation this stream owns'
+    rows = store.list_messages(conversation_id)
+    assert [row['status'] for row in rows if row['role'] == 'assistant'] == ['interrupted'], rows
+
+
 def test_a_paused_turn_is_not_a_cut_connection(client, fake_ai, clean_ai):
     """`paused` is an ENDING of this stream (the answer resumes through /api/ai/answer). Leaving it out
     of the settlement's ending events would mark a waiting turn interrupted the moment the browser
@@ -353,6 +410,61 @@ def test_an_answer_can_reference_a_file_and_the_model_sees_it(client, fake_ai, c
         if message['role'] == 'tool' and 'answer_to_pending_question' in str(message.get('content') or '')
     )
     assert '语料 120 行' in tool_row['content']
+
+
+def test_referenced_secrets_are_redacted_before_the_provider_sees_them(client, fake_ai, clean_ai, monkeypatch):
+    """references.resolve() runs after build_context()'s redaction, so its text needs its own pass.
+
+    A token inside a referenced export/dataset otherwise reached the provider verbatim and was
+    stored on the user row that is replayed for every later turn.
+    """
+    from ai import agent as agent_module
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setattr(agent_module.references, 'resolve', lambda refs: ('导出 token = sk-abcdefgh12345678', []))
+    response = _chat(
+        client,
+        provider='fake_record',
+        model='fake-model',
+        text='check this',
+        references=[{'kind': 'export', 'id': 'e1'}],
+    )
+    assert response.status_code == 200, response.get_json()
+    sent = json.dumps(PROVIDERS['fake_record'].requests, ensure_ascii=False, default=str)
+    assert 'sk-abcdefgh12345678' not in sent, 'a referenced secret reached the provider'
+    assert '[redacted]' in sent, 'the referenced text was not redacted at all'
+
+
+def test_referenced_secrets_are_redacted_in_the_answer_replay(client, fake_ai, clean_ai, monkeypatch):
+    """The answer box's `@` resolves AFTER redaction too; its tool row is replayed forever."""
+    from ai import agent as agent_module
+
+    monkeypatch.setattr(agent_module.references, 'resolve', lambda refs: ('<ref> token = sk-abcdefgh12345678', []))
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+    resumed = client.post(
+        '/api/ai/answer?stream=0',
+        json={
+            'conversation_id': meta['conversation_id'],
+            'message_id': question['message_id'],
+            'question_id': question['question_id'],
+            'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+            'references': [{'kind': 'export', 'id': 'e1'}],
+            'api_key': 'secret-key',
+        },
+    )
+    assert resumed.status_code == 200, resumed.get_json()
+    stored = client.get('/api/ai/conversations/' + meta['conversation_id']).get_json()
+    tool_row = next(
+        message
+        for message in stored['messages']
+        if message['role'] == 'tool' and 'answer_to_pending_question' in str(message.get('content') or '')
+    )
+    assert '<ref>' in tool_row['content']
+    assert 'sk-abcdefgh12345678' not in tool_row['content'], 'a referenced secret was stored in the replay block'
+    assert '[redacted]' in tool_row['content']
 
 
 def test_asking_web_search_of_go_refuses_by_name(client, monkeypatch):

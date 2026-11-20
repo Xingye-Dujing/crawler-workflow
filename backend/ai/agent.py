@@ -204,8 +204,10 @@ def _meta_event(conversation: dict, message: dict, skill, reason: str, run_id: s
 class AgentService:
     """One turn, with its provider rounds, tools and pending question."""
 
-    #: Same-problems draft refusals counted within the current turn (see ``send``).
-    _draft_refusals: dict[str, int] = {}
+    #: Same-problems draft refusals counted within the current turn (reset at the start of ``_loop``).
+    #: A type annotation only — a mutable class-level default was shared by EVERY instance and turn
+    #: (only ``send`` reset it), so a bad draft in one conversation poisoned the next one's counter.
+    _draft_refusals: dict[str, int]
 
     def _refusal_note(self, problems: list[str], kind: str = '') -> str:
         """A sentence for a draft refused again without useful new information.
@@ -265,6 +267,10 @@ class AgentService:
         context_text, context_meta = context_builder.build_context(text, context_payload)
         references_text, reference_files = references.resolve(payload.get('references') or [])
         if references_text:
+            # build_context redacts its own sources, but references.resolve() runs AFTER it: without
+            # the same pass here a token in a referenced export/dataset reached the provider (and the
+            # stored replay block) verbatim. Redact before concatenating, never after.
+            references_text = context_builder.redact(references_text)
             context_text = f'{context_text}\n\n{references_text}'.strip()
         # The block is stored on this turn's user row and replayed with it forever, so its size is
         # decided ONCE, here, and reported in `context_meta` (see `ai.context.for_replay`).
@@ -471,7 +477,9 @@ class AgentService:
             'answers': answers,
         }
         if refs_text:
-            tool_result['references'] = refs_text
+            # The tool row is replayed to the provider on the next round AND stored forever, so it
+            # needs the same redaction as the composer's references (see send()).
+            tool_result['references'] = context_builder.redact(refs_text)
         store.append_message(
             conversation_id,
             'tool',
@@ -547,6 +555,11 @@ class AgentService:
         run_id: str,
         agent_mode: str = 'build',
     ):
+        # One turn owns one refusal memory. Reset in the ONE method every entry point reaches —
+        # send(), retry() and answer() all delegate here — so two turns on this process-wide service
+        # never share a count. Retry and answer used to skip send()'s reset and inherited an earlier
+        # conversation's “identical draft” / repair-cap verdict without having earned it.
+        self._draft_refusals = {}
         cancel_event = _active(conversation['id'])
         # 0 means "no ceiling": the workspace is a harness, and a task with many files legitimately
         # needs many tools. A finite value is a SOFT stop — the assistant asks the user whether to

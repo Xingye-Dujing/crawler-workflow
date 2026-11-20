@@ -930,6 +930,32 @@ class TestXhsAdapter:
             )
             in said
         ), said
+        assert driver.owner.skipped_targets == [XHS_NOTE], 'a failed expander is a hole, not a finished thread'
+
+    def test_a_failed_expander_never_licenses_a_reconciled_short_table(self, xhs_chains):
+        """A reply the site printed behind an expander that stopped yielding is a hole.
+
+        The raw totals still reconcile (2 rows + 1 unrevealed reply == the site's 3), which is
+        exactly the trap: the old code licensed the table and let the cursor step over a reply
+        the site itself said exists. The expander's ``fails`` count is the evidence it never
+        opened, so 继续 must re-walk this link.
+        """
+        panel = _XhsPanel(
+            [
+                {
+                    'own': _xhs_comment('a1', '甲', '主评论', replies='2'),
+                    'subs': [_xhs_comment('a2', '乙', '首条回复')],
+                    'hidden': [_xhs_comment('a3', '丙', '永远展不开的回复')],
+                }
+            ],
+            total='共 3 条评论',
+            stuck=True,
+        )
+        (rows, status), driver = _xhs_walk(panel)
+        assert status == OK and len(rows) == 2
+        assert 2 + 1 >= 3, 'setup: the raw arithmetic reconciles — that is the trap'
+        assert driver.clicks.count('comment-a1') >= 2, 'setup: the expander really failed twice'
+        assert driver.owner.skipped_targets == [XHS_NOTE], 'a failed expander never licenses the gap'
 
     def test_the_sites_own_end_marker_ends_the_walk(self, xhs_chains):
         """`- THE END -` is the only exit that may be quoted as "this note has no more comments"."""

@@ -193,6 +193,30 @@ workspace._applyChartArtifact = (id) => calls.push('chart-artifact:' + id);
 if (chartArtifactButton) dispatchOn(workspace._dom.root, 'click', { target: chartArtifactButton });
 out.chartArtifact = { button: !!chartArtifactButton, applied: calls.includes('chart-artifact:chart_art') };
 
+/* A monitor artifact offers two arms: the primary auto-analyzes (armed=true) and the ghost only
+   watches (armed=false). The primary was a bare `return`, so arming from the card was unreachable —
+   the only reachable button was the watch-only one. Both must reach _applyMonitor with the right
+   armed flag, keyed by the ARTIFACT id from the button's data attribute. */
+const monitorHolder = sandbox.document.createElement('div');
+monitorHolder.innerHTML = sandbox.AIRender.artifactCard({
+    id: 'mon_art',
+    kind: 'monitor',
+    title: 'Run monitor',
+    payload: { events: ['run.finished'] },
+    summary: '',
+});
+const monitorAuto = monitorHolder.querySelector('[data-ai-apply-monitor]');
+const monitorWatch = monitorHolder.querySelector('[data-ai-watch-only]');
+const monitorCalls = [];
+workspace._applyMonitor = async (id, auto) => monitorCalls.push([id, !!auto]);
+if (monitorAuto) dispatchOn(workspace._dom.root, 'click', { target: monitorAuto });
+if (monitorWatch) dispatchOn(workspace._dom.root, 'click', { target: monitorWatch });
+out.monitorArtifact = {
+    autoButton: !!monitorAuto,
+    watchButton: !!monitorWatch,
+    calls: monitorCalls,
+};
+
 /* Attachments: a multi-file pick uploads each file (one request each) and keeps the successes; a
    drop and a pasted screenshot enter the SAME path, so neither can bypass the capability check. */
 const realWorkspaceFetch = sandbox.fetch;

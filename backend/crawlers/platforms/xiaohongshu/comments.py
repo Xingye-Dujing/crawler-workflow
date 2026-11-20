@@ -556,12 +556,22 @@ def walk(session, url: str, limit: int) -> tuple:
     # `nested` is the replies the site's own numbers count and this walk never opened, so the gap
     # stays honest whether or not the threads opened — and never double-counts landed reply rows.
     nested = sum(max(slot['declared'] - len(slot['subs']), 0) for slot in threads.values())
+    # With 爬楼中楼 on, a reply behind an expander we clicked but that stopped yielding is a
+    # site-witnessed hole, not the user's shape: those replies must not make the table reconcile.
+    # The expander's ``fails`` count is the evidence — a thread retired after two failed clicks
+    # still owes the replies the site printed. 爬楼中楼 off never clicks an expander, so this
+    # term is zero there and that branch may keep reconciling as before.
+    failed_nested = sum(
+        max(slot['declared'] - len(slot['subs']), 0)
+        for slot in threads.values()
+        if with_replies and _comment_id(slot['own'].get('id')) in expand['fails']
+    )
     asked = bool(limit and len(rows) >= limit)
     # The site's own `- THE END -`, a reconciled denominator, or the user's own limit is the only
     # evidence that licenses a short table. Without one, a shortfall (or a walk that merely stopped
     # growing / was stopped) is a hole: the cursor is pinned on this link and 继续 re-walks it
     # rather than treating "0 new" as the answer.
-    reconciled = bool(declared) and len(rows) + nested >= declared
+    reconciled = bool(declared) and len(rows) + nested - failed_nested >= declared
     licensed = bool((panel or {}).get('ended')) or asked or reconciled
     if not with_replies:
         # 爬楼中楼 is off: the missing replies are the node's own choice, so only a hole in the

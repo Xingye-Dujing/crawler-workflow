@@ -268,6 +268,22 @@ class TestWaitingForTheFirstContent:
         assert crawler.wait_for_first_content(has_content=lambda: ['card'])['arrived'] is True
         assert crawler.pending_waits == 0
 
+    def test_a_corrupt_stored_value_falls_back_instead_of_raising(self, no_sleep, monkeypatch):
+        """The budget and breaker are read through the pacing helpers: a blank/unparsable
+        stored value degrades to the documented fallback, never a ValueError mid-crawl."""
+        from runtime import settings
+
+        stored = settings._load()
+        monkeypatch.setitem(stored, 'page_wait_timeout', '')
+        monkeypatch.setitem(stored, 'max_pending_waits', 'nonsense')
+        crawler = _crawler(Browser(document_uri=ASKED, body=CONTENT))
+        first = crawler.wait_for_first_content(has_content=lambda: [])
+        second = crawler.wait_for_first_content(has_content=lambda: [])
+        assert (first['gave_up'], second['gave_up']) == (1, 2)
+        third = crawler.wait_for_first_content(has_content=lambda: [])
+        assert third['verdict'] == 'breaker', 'a bad stored breaker value fell back to 2, not a raise'
+        assert third['gave_up'] == 2
+
 
 class TestTheRefusalCarriesItsNumbers:
     def test_the_exception_keeps_what_only_the_wait_knows(self):

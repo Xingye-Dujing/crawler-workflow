@@ -840,7 +840,10 @@ def _component_run(
     run_events.publish(
         'run.started',
         run_id=rid,
-        workflow=getattr(_wf_local, 'name', '') or '',
+        # The display name was resolved at the top of this function. ``_wf_local.name`` is only
+        # assigned later in ``_run_single_workflow``, so reading it here published an empty
+        # workflow on a fresh run — the monitor/event consumer got an id with no name to show.
+        workflow=name,
         wf_idx=wf_idx,
         resume=bool(earlier),
     )

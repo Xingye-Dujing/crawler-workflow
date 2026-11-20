@@ -188,7 +188,11 @@ def walk(session, url: str, limit: int) -> tuple:
         # pages, and the node handler only looks between URLs.
         alive=lambda: not session.may_stop(),
     )
-    if not rows and outcome.stopped_reason == 'fetch_failed':
+    if outcome.stopped_reason == 'fetch_failed':
+        # A refused continuation is unproven even after rows have landed: the walk stopped
+        # mid-thread, so the cursor must stay on this video. Returning OK once rows exist
+        # launders a risk page into a finished thread and lets url_index advance past a gap
+        # that 继续 can never recover.
         session.mark_blocked()
-        return [], BLOCKED
+        return rows, BLOCKED
     return rows, OK

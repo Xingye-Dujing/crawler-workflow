@@ -1025,8 +1025,10 @@ class Crawler(ABC):
         classifier, so without this the patient wait would sit out its whole budget on a
         page that has already refused.
         """
-        budget = float(get_setting('page_wait_timeout')) if timeout is None else pacing.wait(float(timeout))
-        max_pending = max(1, int(get_setting('max_pending_waits') or 1))
+        # Both numbers go through the pacing helpers so a blank/corrupt stored value takes the
+        # documented fallback instead of raising mid-crawl — the same reads weibo makes here.
+        budget = pacing.page_wait_timeout() if timeout is None else pacing.wait(float(timeout))
+        max_pending = pacing.max_pending_waits()
         probe = has_content if has_content is not None else self._rendered_by_the_site
         started = time.monotonic()
         ticks = max(1, int(budget / self.FIRST_CONTENT_TICK))

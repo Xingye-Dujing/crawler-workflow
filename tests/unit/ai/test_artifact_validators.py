@@ -118,6 +118,77 @@ def test_a_kind_hits_the_repair_cap_on_different_problem_sets():
         assert note == expected
 
 
+def test_a_new_turn_resets_the_refusal_counter(monkeypatch):
+    """retry() and answer() go straight to _loop, never through send()'s old reset.
+
+    A counter that survived into the next turn answered an identical bad draft with “stop
+    resending” (or the repair cap) it had not earned in that conversation. The reset now lives in
+    the one method all three entry points reach.
+    """
+    from ai import agent, skills, store
+
+    from i18n import t
+
+    class DoneProvider:
+        def __init__(self):
+            from ai.types import ModelSpec, ProviderSpec
+
+            self.spec = ProviderSpec(
+                id='done_provider',
+                label_key='x',
+                notes_key='y',
+                protocol='openai',
+                base_url='',
+                models=(ModelSpec('m', 'M', 1000),),
+            )
+
+        def supports(self, capability, model=''):
+            return False
+
+        def context_window(self, model=''):
+            return 0
+
+        def stream(self, request):
+            yield {'type': 'text_delta', 'text': 'ok'}
+            yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+    monkeypatch.setattr(agent, 'get_setting', lambda key, default=None: default)
+    service = agent.AgentService()
+    conversation = store.create_conversation('done_provider', 'm', 'auto')
+    store.append_message(conversation['id'], 'user', 'hi', status='done')
+
+    def run_turn():
+        list(
+            service._loop(
+                conversation=conversation,
+                turn_id='t-refusals',
+                skill=skills.get_skill('project'),
+                skill_reason='auto',
+                provider=DoneProvider(),
+                model='m',
+                api_key='',
+                thinking=False,
+                web_search=False,
+                safety='high',
+                context_meta={},
+                run_id='',
+            )
+        )
+
+    # First turn earns one bad-draft count, then a second identical one is refused.
+    service._draft_refusals = {}
+    assert service._refusal_note(['bad'], 'memory') == ''
+    assert service._refusal_note(['bad'], 'memory') == t('ai.draftRefusedAgain')
+
+    # Each fresh turn (the retry/answer path) must start with a clean counter.
+    run_turn()
+    assert service._draft_refusals == {}
+    assert service._refusal_note(['bad'], 'memory') == ''
+    run_turn()
+    assert service._draft_refusals == {}
+    assert service._refusal_note(['bad'], 'memory') == ''
+
+
 def test_reset_then_load_restores_the_builtin_validators():
     from ai import validators
 

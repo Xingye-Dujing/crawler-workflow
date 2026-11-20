@@ -1178,6 +1178,19 @@ function llmModeLabel() {
 function nodeNeedsLlm(params, nodeOperation) {
     var p = params || {};
     var op = p.operation || nodeOperation || '';
+    /* An ANALYSIS node calls a model when one of its steps names an LLM op (topic_label /
+       cluster_label / cluster_review) — the same set as the server's LLM_OPS in
+       services/analysis/contracts.py. Walking only process ops let a scheduled canvas carrying
+       such a step pass the save-time and fire-time verdict, crawl everything, and then die at
+       the analysis node. Steps may be a list (API/steps shape) or a flat operation. */
+    var llmStepOps = ['topic_label', 'cluster_label', 'cluster_review'];
+    if (Array.isArray(p.steps)) {
+        for (var i = 0; i < p.steps.length; i++) {
+            var step = p.steps[i] || {};
+            if (llmStepOps.indexOf(step.op || step.operation || '') >= 0) return true;
+        }
+    }
+    if (llmStepOps.indexOf(op) >= 0) return true;
     /* Trimmed, because a BLANK means the operation's declared default on the server —
        `'  '` is not a mode name and app.py reads it as "not stated". Comparing the raw
        value here answered "no model" for a whitespace-only field while the server

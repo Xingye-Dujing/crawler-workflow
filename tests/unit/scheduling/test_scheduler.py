@@ -12,6 +12,7 @@ No thread is left running: the module-level thread is stopped by the fixture, be
 still ticking would fire a later test's tasks.
 """
 
+import importlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -30,12 +31,24 @@ NOW = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
 
 @pytest.fixture(autouse=True)
 def _isolated(tmp_path, monkeypatch):
-    """Its own store file, no injected seams, and no thread left behind."""
+    """Its own store file, no injected seams, and no thread left behind.
+
+    ``app.py`` wires the real starter/source at IMPORT time. Import it before recording what to
+    restore: otherwise the first test can capture the pre-wiring ``None`` and, once a later
+    fixture imports app, teardown clobbers the freshly-wired seams back to ``None`` — every
+    schedule API test after this file then fails with "scheduler is not wired up". Restoring by
+    NAME as well as through monkeypatch's snapshot makes this independent of fixture order.
+    """
+    importlib.import_module('app')
+    wired_starter = scheduler_module._starter
+    wired_source = scheduler_module._canvas_source
     monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
     monkeypatch.setattr(scheduler_module, '_starter', None)
     monkeypatch.setattr(scheduler_module, '_canvas_source', None)
     yield
     scheduler_module.stop()
+    scheduler_module.set_run_starter(wired_starter)
+    scheduler_module.set_canvas_source(wired_source)
 
 
 def _save(now=NOW, **over):

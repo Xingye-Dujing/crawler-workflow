@@ -444,3 +444,73 @@ class TestCommentRows:
         # (author, text, time) could re-store the same comment after a day.
         rows = parse_youtube_comments(self.payload(), 'https://youtu.be/x')
         assert {row['评论ID'] for row in rows} == {'UgxZn0T0WJhVx7C5X054AaABAg', 'UgxSECOND'}
+
+
+class _YtWalkSession:
+    """The surface the YouTube walk uses, enough to drive it without a browser."""
+
+    def __init__(self):
+        self.driver = object()
+        self.blocked = []
+        self.logged = []
+
+    def get(self, url):
+        pass
+
+    def body_head(self):
+        return ''
+
+    def log(self, message):
+        self.logged.append(message)
+
+    def mark_blocked(self):
+        self.blocked.append(True)
+
+    def nap(self, seconds):
+        pass
+
+    def may_stop(self):
+        return False
+
+
+class TestYouTubeWalkMarksMidWalkRefusal:
+    def test_a_refusal_after_rows_landed_is_blocked_and_pins_the_cursor(self, monkeypatch):
+        """A risk page on page two is unproven even though page one's rows are stored.
+
+        The old tail only marked blocked when ``not rows``, so a refusal mid-thread was
+        laundered into OK: url_index advanced and 继续 could never recover the gap.
+        """
+        from crawlers.commenting.protocol import BLOCKED
+        from crawlers.platforms.youtube import comments as yt_comments
+        from crawlers.platforms.youtube import crawler as yt_crawler
+        from crawlers.platforms.youtube import innertube
+
+        continuations = {'n': 0}
+
+        def fake_call(driver, method, key, context, params):
+            if 'videoId' in params:
+                return {'watch': True}
+            continuations['n'] += 1
+            # Selection fetch and the pager's first round answer with rows; page two is a refusal.
+            if continuations['n'] <= 2:
+                return {'commentEntityPayload': [1], 'ids': ['c1', 'c2']}
+            return {'refused': True}
+
+        monkeypatch.setattr(innertube, 'call', fake_call)
+        monkeypatch.setattr(innertube, 'ready', lambda driver: ('key', {}))
+        monkeypatch.setattr(innertube, 'refused', lambda payload: bool(payload and payload.get('refused')))
+        monkeypatch.setattr(innertube, 'pager_tokens', lambda watch: ['TOKEN'])
+        monkeypatch.setattr(innertube, 'pager_of', lambda payload, marker: 'NEXT')
+        monkeypatch.setattr(yt_crawler, 'video_id_of', lambda url: 'abc')
+        monkeypatch.setattr(yt_comments, 'collect', lambda payload, key: payload.get(key) or [])
+        monkeypatch.setattr(
+            yt_comments,
+            'parse_youtube_comments',
+            lambda payload, url: [{'评论ID': rid} for rid in payload.get('ids', [])],
+        )
+
+        session = _YtWalkSession()
+        rows, status = yt_comments.walk(session, 'https://www.youtube.com/watch?v=abc', 0)
+        assert status == BLOCKED, status
+        assert [row['评论ID'] for row in rows] == ['c1', 'c2'], 'rows read before the refusal survive'
+        assert session.blocked == [True], 'a mid-walk refusal must mark the session blocked'

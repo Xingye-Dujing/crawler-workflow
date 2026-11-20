@@ -123,24 +123,54 @@ class TestSweep:
         assert logs == []
 
     def test_a_file_purge_drops_the_dataset_read_through_cache(self):
-        """The manual clear paths empty ``state._dataset_cache``; the automatic sweep deletes the
-        same rows, and if it left the cache standing, /preview would still serve a deleted
-        dataset's rows while /datasets/<id> 404s."""
-        from runtime.state import _dataset_cache
+        """The manual clear paths empty the CURRENT scope's slice of ``state._dataset_cache``;
+        the automatic sweep deletes the same rows, and if it left the cache standing, /preview
+        would still serve a deleted dataset's rows while /datasets/<id> 404s."""
+        from runtime.state import _dataset_cache, dataset_cache_key
 
-        _dataset_cache['gone'] = object()
+        key = dataset_cache_key('gone')
+        _dataset_cache[key] = object()
         Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=3)).run_now()
-        assert 'gone' not in _dataset_cache, 'a deleted dataset stayed reachable through the cache'
+        assert key not in _dataset_cache, 'a deleted dataset stayed reachable through the cache'
 
     def test_a_purge_that_removed_nothing_leaves_the_cache_alone(self):
         """Nothing went, so a still-live dataset the cache holds must not be dropped."""
-        from runtime.state import _dataset_cache
+        from runtime.state import _dataset_cache, dataset_cache_key
 
         marker = object()
-        _dataset_cache['keep'] = marker
-        Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=0)).run_now()
-        assert _dataset_cache.get('keep') is marker
-        _dataset_cache.pop('keep', None)
+        key = dataset_cache_key('keep')
+        _dataset_cache[key] = marker
+        try:
+            Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=0)).run_now()
+            assert _dataset_cache.get(key) is marker
+        finally:
+            _dataset_cache.pop(key, None)
+
+    def test_a_purge_clears_only_the_current_accounts_frames(self):
+        """A whole-dict ``_dataset_cache.clear()`` evicted every OTHER account's warm frames.
+
+        Dataset ids are content hashes, so two accounts can hold the same id under different
+        scopes. Sweeping account A must drop only A's slice and leave B's frame warm.
+        """
+        from runtime import account_context
+        from runtime.state import _dataset_cache
+
+        key_a = ('u-a', 'shared-id')
+        key_b = ('u-b', 'shared-id')
+        marker_b = object()
+        _dataset_cache[key_a] = object()
+        _dataset_cache[key_b] = marker_b
+        token = account_context.bind(account_context.Account('u-a', 'alice', 'user'))
+        try:
+            Housekeeping(_FakeRunStore(result={}), _FakeDatasetStore(removed=3)).run_now()
+        finally:
+            account_context.unbind(token)
+        try:
+            assert key_a not in _dataset_cache, "account A's purged frame survived the sweep"
+            assert _dataset_cache.get(key_b) is marker_b, "account B's warm frame was evicted by A's sweep"
+        finally:
+            _dataset_cache.pop(key_a, None)
+            _dataset_cache.pop(key_b, None)
 
     def test_something_is_logged_when_it_dropped_something(self, logs):
         Housekeeping(_FakeRunStore(), _FakeDatasetStore(removed=1)).run_now()

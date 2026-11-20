@@ -610,6 +610,12 @@ class AccountService:
             # way an administrator can tell "this person is locked out" from "this person is idle".
             'locked_until': float(row['locked_until'] or 0),
             'locked_local': _local_text(row['locked_until']),
+            # Whether the lock is STILL armed, read against the SERVER's clock. The panel must
+            # not decide this from `locked_until > Date.now()`: a clock-skewed administrator could
+            # not unlock an account the server still considers locked (or offered 解除锁定 for one
+            # whose lock had already expired). `locked_until`/`locked_local` stay for sorting and
+            # display; this boolean is the single verdict for the button.
+            'locked': float(row['locked_until'] or 0) > time.time(),
             'failed_attempts': int(row['failed_attempts'] or 0),
         }
 

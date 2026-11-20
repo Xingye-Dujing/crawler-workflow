@@ -2523,6 +2523,35 @@ class TestTopicViewsEmbedding:
         assert round(float(sum(emb['prevalence_pct'])), 2) == 100.0
         assert all(str(words) for words in emb['feature_words'])
 
+    def test_an_unused_embedding_cluster_has_no_bogus_feature_words(self, monkeypatch):
+        """An empty KMeans cluster has an all-zero component: every term ties at 0, so argsort's
+        tail prints the LAST `topn` vocabulary words as that topic's 特征词. The doc_n=0 path files
+        an empty word list; an unused cluster must be just as honest."""
+        import importlib
+
+        import numpy as np
+
+        op = importlib.import_module('services.analysis.ops.topic_map')
+
+        class _Model:
+            components_ = np.array([[0.5, 0.5, 0.0], [0.0, 0.0, 0.0]])
+
+            def perplexity(self, _matrix):
+                return 1.0
+
+        doc_topic = np.array([[1.0, 0.0], [1.0, 0.0]])
+        vocabulary = ['猫', '狗', '股票']
+        monkeypatch.setattr(
+            op,
+            '_prepare_topic_model',
+            lambda df, column, n, mf, method, emb: (['猫', '狗'], _Model(), None, doc_topic, vocabulary),
+        )
+        out = op.topic_map(pd.DataFrame({'正文': ['猫 狗', '猫 狗']}), '正文', n_topics=2, topn=2, method='embedding')
+        rows = {row['topic']: row for row in out.to_dict('records')}
+        assert rows['Topic-2']['feature_words'] == '', 'the unused cluster printed arbitrary words'
+        assert rows['Topic-2']['doc_n'] == 0
+        assert rows['Topic-1']['feature_words'], 'the used topic lost its real words'
+
     def test_embedding_topic_salience_reproduces_the_lda_columns(self, monkeypatch):
         lda = m.DataAnalysisService.topic_salience(self._frame(), '正文', n_topics=2)
         self._install_encoder(monkeypatch)

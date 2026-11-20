@@ -64,7 +64,15 @@ def topic_map(
     rows = []
     for index in range(topics):
         component = model.components_[index]
-        best = component.argsort()[::-1][: max(1, int(topn))]
+        # An UNUSED embedding cluster has an all-zero component: every term ties at weight 0, so
+        # argsort's tail is just the last `topn` vocabulary words in order. Naming those as the
+        # topic's 特征词 would present arbitrary words as its signature. The doc_n=0 path already
+        # files an empty word list; an unused cluster gets the same honest blank.
+        if float(component.sum()) <= 0:
+            feature_words = ''
+        else:
+            best = component.argsort()[::-1][: max(1, int(topn))]
+            feature_words = '、'.join(str(vocabulary[position]) for position in best)
         rows.append(
             {
                 'topic': f'Topic-{index + 1}',
@@ -72,7 +80,7 @@ def topic_map(
                 'pc2': round(float(points[index][1]), 6),
                 'prevalence_pct': round(float(mass[index]) / total * 100, 2) if total else 0.0,
                 'doc_n': claimed.count(index),
-                'feature_words': '、'.join(str(vocabulary[position]) for position in best),
+                'feature_words': feature_words,
             }
         )
     logger.info(

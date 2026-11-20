@@ -1958,6 +1958,7 @@ const AIWorkspace = {
             return;
         }
         if (target.hasAttribute('data-ai-apply-monitor')) {
+            this._applyMonitor(target.getAttribute('data-ai-apply-monitor'), true);
             return;
         }
         if (target.hasAttribute('data-ai-watch-only')) {

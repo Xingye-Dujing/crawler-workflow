@@ -67,11 +67,11 @@ class Housekeeping:
         if removed_files:
             # The rows are gone but the read-through cache still holds them, so /preview would
             # keep serving a deleted dataset's rows while /datasets/<id> 404s. The two MANUAL
-            # clear paths (api/data.py) empty this cache; the automatic sweep must not be the
-            # one door that forgets, or the same divergence arrives on a schedule.
-            from runtime.state import _dataset_cache
+            # clear paths (api/data.py) use this same scope-aware door; a whole-dict .clear()
+            # used to evict every OTHER account's warm frames when one account's sweep ran.
+            from runtime.state import clear_cached_datasets
 
-            _dataset_cache.clear()
+            clear_cached_datasets()
         result = {
             'runs': removed_runs,
             'cache_entries': cache_entries,

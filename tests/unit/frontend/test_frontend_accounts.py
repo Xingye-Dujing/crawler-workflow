@@ -81,6 +81,14 @@ class TestAMomentIsNotFormattedInTheBrowser:
         assert 'must_change_password' in accounts, 'the registry hides the password debt'
         assert "I18n.t('accounts.needsChange')" in accounts, 'the debt has no word of its own'
 
+    def test_the_unlock_button_follows_the_servers_lock_verdict(self):
+        """Whether 解除锁定 shows is the SERVER's answer (``public()['locked']``), not the
+        viewer's clock compared against ``locked_until`` — a skewed administrator must still be
+        able to unlock an account the server considers locked."""
+        accounts = js_text('accounts.js')
+        assert 'user.locked ?' in accounts, 'the unlock button ignores the server lock verdict'
+        assert 'Date.now()' not in accounts, 'the panel decides the lock from the VIEWER clock'
+
 
 class TestThePanelUsesTheSharedDesignTokens:
     CSS = ROOT / 'backend' / 'static' / 'css' / 'accounts.css'

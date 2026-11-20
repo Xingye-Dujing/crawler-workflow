@@ -80,6 +80,32 @@ def test_the_database_never_stores_the_session_token(service):
     assert ticket.token not in str(stored)
 
 
+def test_public_reports_the_lock_from_the_server_clock():
+    """The unlock button must follow the SERVER's verdict, not the viewer's clock.
+
+    A clock-skewed administrator used to be unable to unlock a still-locked account because the
+    panel compared `locked_until` with its own `Date.now()`. `public()` now ships a boolean read
+    against the server clock, while the raw epoch and its local text remain for display/sorting.
+    """
+    base = {
+        'user_id': 'u_1',
+        'username': 'bob',
+        'role': 'user',
+        'status': 'active',
+        'must_change_password': 0,
+        'created_at': 1,
+        'last_login_at': None,
+        'failed_attempts': 5,
+    }
+    future = AccountService.public({**base, 'locked_until': time.time() + 900})
+    past = AccountService.public({**base, 'locked_until': time.time() - 1})
+    cleared = AccountService.public({**base, 'locked_until': 0})
+    assert future['locked'] is True
+    assert past['locked'] is False
+    assert cleared['locked'] is False
+    assert future['locked_until'] > time.time() and future['locked_local']
+
+
 def test_wrong_password_locks_after_five_attempts(service):
     _bootstrap(service)
     for _ in range(5):

@@ -23,6 +23,7 @@ import threading
 
 _HEADER_LIMIT = 64 * 1024
 _PUMP_TIMEOUT = 30.0
+_ACCEPT_POLL = 0.5
 
 
 def chrome_arguments(proxy: dict) -> tuple[list, object]:
@@ -72,13 +73,29 @@ class _AuthRelay:
         self._sock.bind(('127.0.0.1', 0))
         self._sock.listen(64)
         self.port = int(self._sock.getsockname()[1])
-        threading.Thread(target=self._serve, name='proxy-relay', daemon=True).start()
+        self._thread = threading.Thread(target=self._serve, name='proxy-relay', daemon=True)
+        self._thread.start()
 
     def _serve(self) -> None:
         while not self._stop.is_set():
             try:
+                # A bounded select makes the listener wakeable on every OS: closing a socket
+                # from another thread does not reliably interrupt a blocked ``accept`` on
+                # Windows, and a daemon stuck there would keep the port long after stop().
+                ready, _, _ = select.select([self._sock], [], [], _ACCEPT_POLL)
+            except (OSError, ValueError):
+                return
+            if not ready:
+                continue
+            if self._stop.is_set():
+                return
+            try:
                 client, _addr = self._sock.accept()
             except OSError:
+                return
+            if self._stop.is_set():
+                with contextlib.suppress(OSError):
+                    client.close()
                 return
             try:
                 # A local process that connects and says nothing must not pin a daemon thread
@@ -140,6 +157,11 @@ class _AuthRelay:
 
     def stop(self) -> None:
         self._stop.set()
+        # Wake a listener already in select()/accept() without a Windows-only call: one
+        # loopback connection is enough, and the select timeout is the backstop.
+        with contextlib.suppress(OSError):
+            probe = socket.create_connection(self._sock.getsockname(), timeout=_ACCEPT_POLL)
+            probe.close()
         with contextlib.suppress(OSError):
             self._sock.close()
 

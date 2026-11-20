@@ -197,6 +197,14 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['button'] is True, 'a chart_spec artifact drew no render button'
         assert out['applied'] is True, 'the button did not reach _applyChartArtifact'
 
+    def test_a_monitor_cards_auto_button_arms_analysis(self):
+        """The primary monitor button must pass armed=true — it used to be a bare `return`, leaving
+        the only reachable arm path the watch-only ghost button."""
+        out = _run_workspace()['monitorArtifact']
+        assert out['autoButton'] is True, 'the monitor card drew no auto-arm button'
+        assert out['watchButton'] is True, 'the monitor card drew no watch-only button'
+        assert out['calls'] == [['mon_art', True], ['mon_art', False]], out['calls']
+
     def test_a_multi_file_pick_uploads_each_and_drop_and_paste_share_the_path(self):
         out = _run_workspace()['upload']
         assert out['requests'] == 2, out['requests']

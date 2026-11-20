@@ -99,12 +99,20 @@ def op_needs_llm(op: str, params: dict) -> bool:
 
 
 def workflow_needs_llm(workflow: dict) -> bool:
-    """True when any process node in the payload will actually call a model.
+    """True when any node in the payload will actually call a model.
 
-    Cleaner always does; the three classifiers and entity recognition only when the node
-    picked the model. A crawl-and-save workflow must not be blocked by a missing API key or
-    an unpicked Ollama tag — the frontend makes the same distinction (``nodeNeedsLlm``)
-    before it opens the console, and both read one table of which mode means which model.
+    Two kinds of nodes answer, and both are cost questions rather than shape questions.
+
+    * A PROCESS node calls a model according to its operation and mode: cleaner always does;
+      the three classifiers and entity recognition only when the node picked the model.
+    * An ANALYSIS node calls one whenever one of its steps is in ``LLM_OPS`` — ``topic_label``,
+      ``cluster_label``, ``cluster_review``. Walking only process nodes let a scheduled canvas
+      carrying such a step pass the save-time and fire-time verdict, crawl everything, and then
+      fail at the analysis node where the executor refuses to run without a model.
+
+    A crawl-and-save workflow must not be blocked by a missing API key or an unpicked Ollama tag —
+    the frontend makes the same distinction (``nodeNeedsLlm``) before it opens the console, and
+    both read one table of which step/mode means a model.
 
     Read off the EFFECTIVE graph, not the drawn one. A switched-off node is not on the canvas
     (the engine's own rule, which validate/naming/fingerprint/execution all obey), and this is
@@ -112,13 +120,29 @@ def workflow_needs_llm(workflow: dict) -> bool:
     model at all, and refused a scheduled canvas — forever, at save time and again at every
     fire — over a node the user had deliberately turned off.
     """
+    # Imported here, not at module scope: ``contracts`` pulls in the analysis kernels, and the
+    # engine is imported early in boot. A local import keeps that cycle from ever forming.
+    from services.analysis.contracts import LLM_OPS
+
     for node in effective_workflow(workflow).get('nodes') or []:
-        if not isinstance(node, dict) or node.get('type') != 'process':
+        if not isinstance(node, dict):
             continue
         params = node_params(node)
-        op = str(params.get('operation') or node.get('operation') or '')
-        if op_needs_llm(op, params):
-            return True
+        node_type = node.get('type')
+        if node_type == 'analysis':
+            steps = params.get('steps')
+            if isinstance(steps, list) and any(
+                isinstance(step, dict) and str(step.get('op') or step.get('operation') or '') in LLM_OPS
+                for step in steps
+            ):
+                return True
+            op = str(params.get('operation') or node.get('operation') or '')
+            if op in LLM_OPS:
+                return True
+        elif node_type == 'process':
+            op = str(params.get('operation') or node.get('operation') or '')
+            if op_needs_llm(op, params):
+                return True
     return False
 
 

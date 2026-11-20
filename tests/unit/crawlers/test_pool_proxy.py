@@ -111,3 +111,16 @@ def test_the_relay_adds_the_credential_the_browser_never_sees():
         if relay is not None:
             relay.stop()
         upstream.stop()
+
+
+def test_stop_wakes_the_listener_blocked_in_accept():
+    """Closing a listening socket from another thread is not a reliable accept() wake-up on
+    Windows; the relay must release its daemon thread on every OS so the port is really freed."""
+    relay = proxy._AuthRelay('127.0.0.1', 1, 'user', 'pass')
+    try:
+        assert relay._thread.is_alive()
+        relay.stop()
+        relay._thread.join(timeout=3)
+        assert not relay._thread.is_alive(), 'stop() left the relay thread blocked in accept/select'
+    finally:
+        relay.stop()
