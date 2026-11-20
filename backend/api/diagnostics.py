@@ -79,7 +79,11 @@ def workflow_diagnostics():
         # crawl above it.
         problems = param_errors(eff_nodes)
     except Exception as exc:  # a plugin hook that cannot read a node must not kill the canvas
-        logger.exception(t('api.diagnosticsFailed'), exc)
+        # ``logger.exception`` already attaches exc_info. Passing ``exc`` as a positional
+        # format argument to a message with no placeholder made logging raise
+        # "not all arguments converted" on every hit: the traceback was discarded and a
+        # "--- Logging error ---" block landed on stderr.
+        logger.exception(t('api.diagnosticsFailed'))
         return jsonify({'ok': False, 'error': str(exc)[:300], 'columns': {}, 'reads': {}, 'problems': {}})
     for nid, rows in broken.items():
         problems[nid] = rows + list(problems.get(nid) or [])

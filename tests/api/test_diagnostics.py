@@ -71,3 +71,21 @@ def test_a_node_whose_params_are_a_sentence_answers_instead_of_500(client):
     assert data['columns']['u'] is None
     assert data['columns']['a'] == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
     assert data['problems']['u'][0]['code'] == 'params_shape'
+
+
+def test_a_failed_column_check_logs_one_message_and_keeps_the_traceback(client, monkeypatch):
+    """A plugin hook that raises is caught, but ``logger.exception(msg, exc)`` used to hand the
+    exception as a %-format argument to a message with no placeholder, so logging raised
+    "not all arguments converted" and threw away the traceback it was meant to capture."""
+    from api import diagnostics
+
+    calls = []
+    monkeypatch.setattr(diagnostics, 'compute_columns', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(diagnostics.logger, 'exception', lambda *args, **kwargs: calls.append((args, kwargs)))
+
+    body = {'nodes': {'u': {'id': 'u', 'type': 'upload', 'params': {}}}, 'connections': [], 'settings': {}}
+    response = client.post('/api/workflow/diagnostics', json=body)
+    assert response.status_code == 200
+    assert response.get_json()['ok'] is False
+    assert len(calls) == 1
+    assert len(calls[0][0]) == 1  # only the message; the traceback comes from exc_info, not an arg
