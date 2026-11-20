@@ -6,6 +6,7 @@ the user's choice, and a crash mid-run leaves the completed parts readable
 (the resume ledger then only re-collects what is missing).
 """
 
+import csv
 import json
 import os
 
@@ -35,6 +36,25 @@ class TestNoBatching:
         info = PartWriter(str(tmp_path), 'none', 'csv').finish()
         assert info['rows'] == 0
         assert os.path.exists(info['path'])
+
+    def test_a_crawled_formula_cell_is_kept_as_text_in_the_download(self, tmp_path):
+        """The parts merge into the CSV the user opens in Excel. A title starting with '=' must
+        be data there too, exactly as in DataExporter.save and the biblio writers — a bare
+        DictWriter made the same cell live in one export and inert in another."""
+        w = PartWriter(str(tmp_path), 'formula', 'csv', batch_size=1)
+        w.add(
+            [
+                {'正文': '=HYPERLINK("http://evil","click")', '作者': '@SUM(1)'},
+                {'正文': '=1+1', '作者': 'plain'},
+            ]
+        )
+        info = w.finish()
+        with open(info['path'], encoding='utf-8-sig', newline='') as fh:
+            rows = list(csv.DictReader(fh))
+        assert rows[0]['正文'].startswith("'="), rows[0]
+        assert rows[0]['作者'].startswith("'@"), rows[0]
+        assert rows[1]['正文'].startswith("'="), rows[1]
+        assert rows[1]['作者'] == 'plain'
 
 
 class TestBatching:

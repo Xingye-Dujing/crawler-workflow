@@ -231,6 +231,17 @@ class DataExporter:
     FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
 
     @classmethod
+    def neutralize_cell(cls, value):
+        """One cell's formula guard, shared with writers that stream rows batch by batch.
+
+        A progressive part-file writer cannot build a whole DataFrame first, so it applies this
+        to each cell instead — the same rule, not a second opinion about what Excel evaluates.
+        """
+        if isinstance(value, str) and value[:1] in cls.FORMULA_PREFIXES:
+            return "'" + value
+        return value
+
+    @classmethod
     def neutralize_formulas(cls, df: pd.DataFrame) -> pd.DataFrame:
         """Prefix formula-looking text cells with ``'`` so Excel keeps them as text.
 
@@ -243,10 +254,10 @@ class DataExporter:
 
         def _fix(value):
             nonlocal hits
-            if isinstance(value, str) and value[:1] in cls.FORMULA_PREFIXES:
+            fixed = cls.neutralize_cell(value)
+            if fixed != value:
                 hits += 1
-                return "'" + value
-            return value
+            return fixed
 
         out = df.copy()
         for column in out.columns:

@@ -46,11 +46,16 @@ def _part_number(path: str) -> int:
 def dump_rows(rows, path: str, columns: list, fmt: str) -> None:
     """Write one table to one path in either supported format."""
     if fmt == 'csv':
+        from services.exports.writer import DataExporter
+
         with open(path, 'w', newline='', encoding='utf-8-sig') as fh:
             writer = csv.DictWriter(fh, fieldnames=columns, extrasaction='ignore')
             writer.writeheader()
             for row in rows:
-                writer.writerow({k: row.get(k, '') for k in columns})
+                # These shards merge into the CSV the user downloads and opens in Excel. A crawled
+                # title starting with '=' must be TEXT there, exactly as in DataExporter.save and
+                # the bibliometric/monitor writers — a bare DictWriter executed it as a formula.
+                writer.writerow({k: DataExporter.neutralize_cell(row.get(k, '')) for k in columns})
     else:
         with open(path, 'w', encoding='utf-8') as fh:
             json.dump(rows, fh, ensure_ascii=False, indent=1)
