@@ -9,6 +9,10 @@
 | `演示3_语义去重与相似检索.json` | 向量小模型 | 语义近重复 ≠ SimHash 字面近重复；`similar_to` 固定四列输出，图表/下游可读 |
 | `演示4_零样本用户标签分类.json` | NLI 小模型 | 临时标签集不用训练、不用 LLM；低于阈值的行留空而不是编造标签 |
 | `演示5_NER实体抽取.json` | 序列标注小模型 | BERT NER 输出仍是 `row/text/label/start/end` 五列，可替换 regex/llm 模式而不改下游 |
+| `演示6_量化内容分析演绎编码.json` | 量化内容分析 | 先有码本再编码；双人独立编码给出 Cohen kappa 与一致率，分歧行保留待人工裁定；频次表独立成节点 |
+
+量化演示需要先把 `codebooks/content_analysis_sample.json` 通过 `POST /api/ai/codebooks` 导入账号码本；
+工作流里的 `codebook_id` 与之对应。AI 工作区的“内容分析”技能会引导你定义码本、确认后编码、再按信度结果修订码本并重跑。
 
 工作流 JSON 里的 `dataset_id` 指向演示数据根中通过 `/api/data/paste` 创建的数据集；导入到你自己的项目后，把 upload 节点换成你自己的数据集即可。所有下载与缓存仍只落项目目录。
 

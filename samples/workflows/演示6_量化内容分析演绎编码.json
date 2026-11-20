@@ -1,0 +1,12 @@
+{
+  "name": "演示6 · 量化内容分析（固定码本 + 编码信度）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"内容分析演示","params":{"workflow_name":"内容分析演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"评论样本","params":{"dataset_id":"30dcb21e3345570e","dataset_name":"demo_zero","row_count":"3"},"x":60,"y":200},
+    {"id":"n_dual","type":"process","title":"双人独立编码 + kappa","operation":"content_analysis","params":{"operation":"content_analysis","mode":"dual","text_column":"正文","codebook_id":"cb_content_demo"},"x":360,"y":200},
+    {"id":"n_report","type":"process","title":"频次统计","operation":"content_analysis","params":{"operation":"content_analysis","mode":"report","text_column":"正文","codebook_id":"cb_content_demo"},"x":660,"y":200},
+    {"id":"n_out","type":"output","title":"导出频次表","params":{"operation":"save","format":"csv","filename":"demo_06_content_analysis.csv"},"x":960,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_dual"},{"from":"n_dual","to":"n_report"},{"from":"n_report","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}

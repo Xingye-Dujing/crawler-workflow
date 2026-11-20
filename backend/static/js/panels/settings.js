@@ -701,7 +701,7 @@ function openSettings(nodeId) {
         html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'qualitative_code', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
+        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'qualitative_code', 'content_analysis', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -828,6 +828,15 @@ function openSettings(nodeId) {
                 'onchange="updateParam(\'' + nodeId + '\',\'entity_types\',this.value)">' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.entityTypesHint') +
                 '</div></div>';
+        }
+
+        /* Quantitative content analysis: deductive coding against a fixed codebook. */
+        if (p.operation === 'content_analysis') {
+            html += renderParamSelect(nodeId, p, 'mode', 'settings.analysisMode', 'code',
+                [{ v: 'code', l: I18n.t('quant.modeCode') }, { v: 'dual', l: I18n.t('quant.modeDual') },
+                 { v: 'report', l: I18n.t('quant.modeReport') }]);
+            html += renderParamInput(nodeId, p, 'codebook_id', 'settings.codebookId', 'text', '') +
+                renderParamInput(nodeId, p, 'text_column', 'settings.textColumn', 'text', '正文');
         }
 
         /* Qualitative coding: the three grounded-theory passes. Every provider call is mirrored

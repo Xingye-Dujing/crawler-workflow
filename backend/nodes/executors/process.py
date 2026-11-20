@@ -37,6 +37,7 @@ from analyzers import (
 )
 from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.qualitative import aggregate_open_codes, axial_code, open_code, selective_code
+from analyzers.quantitative import code_rows, dual_code, frequencies
 from analyzers.sentiment import bert_backend, resolve_bert_model
 from analyzers.zero_shot import DEFAULT_MODEL as ZERO_SHOT_MODEL
 from analyzers.zero_shot import analyze_zero_shot
@@ -375,6 +376,35 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
             min_samples=min_samples,
         )
         return df.to_dict('records')
+
+    if op == 'content_analysis':
+        mode = str(params.get('mode') or 'code').strip().lower()
+        codebook_id = str(params.get('codebook_id') or '').strip()
+        if mode == 'report':
+            if not codebook_id:
+                raise ValueError(t('coding.no_codebook'))
+            return frequencies(df)
+        if not codebook_id:
+            raise ValueError(t('coding.no_codebook'))
+        book = codebooks.load_codebook(codebook_id)
+        if mode == 'dual':
+            coded, reliability = dual_code(df, text_column, book, ctx=run_ctx)
+            add_log(t('quant.reliability', kappa=reliability['kappa'], agreement=reliability['agreement']))
+            codebooks.save_codebook(
+                {
+                    'id': codebook_id,
+                    'name': book.get('name', ''),
+                    'phase': 'quantitative',
+                    'codes': book.get('codes', []),
+                    'source': dict(book.get('source') or {}, reliability=reliability),
+                },
+                codebook_id=codebook_id,
+            )
+            return coded.to_dict('records')
+        if mode != 'code':
+            raise ValueError(t('quant.bad_mode', mode=mode))
+        coded = code_rows(df, text_column, book, ctx=run_ctx, coder='a')
+        return coded.to_dict('records')
 
     if op == 'qualitative_code':
         phase = str(params.get('phase') or 'open').strip().lower()

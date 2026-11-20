@@ -1,0 +1,32 @@
+{
+  "id": "cb_content_demo",
+  "name": "舆情内容分析码本（演示）",
+  "phase": "quantitative",
+  "codes": [
+    {
+      "code": "产品质量投诉",
+      "definition": "对商品本身质量、性能或故障的负面描述",
+      "include": "发热、卡顿、掉电、坏了、质量差",
+      "exclude": "物流慢、客服态度"
+    },
+    {
+      "code": "服务体验投诉",
+      "definition": "对客服、售后、退款流程的负面描述",
+      "include": "客服不回复、售后拖延、退款慢",
+      "exclude": "产品本身故障"
+    },
+    {
+      "code": "正面评价",
+      "definition": "对商品或服务的满意与推荐",
+      "include": "不错、满意、推荐、速度快",
+      "exclude": "带转折的投诉"
+    },
+    {
+      "code": "中性咨询",
+      "definition": "询问信息，不含评价",
+      "include": "什么时候、怎么操作、多少钱",
+      "exclude": "任何带评价的陈述"
+    }
+  ],
+  "source": {"kind": "demo", "note": "量化内容分析示例码本，可自由修改后重新保存为新版本"}
+}

@@ -46,6 +46,7 @@ PROCESS_ENUMS = {
     'sentiment': {'mode': ('bert', ('llm', 'ml', 'snownlp', 'bert'))},
     'ner': {'mode': ('regex', ('regex', 'llm', 'bert'))},
     'qualitative_code': {'phase': ('open', ('open', 'axial', 'selective'))},
+    'content_analysis': {'mode': ('code', ('code', 'dual', 'report'))},
     # The lexicon is the default because it needs no model, costs nothing, and answers the same
     # table every run; ``llm`` is the opt-in that can see the euphemisms a fixed list cannot.
     'aggression': {'mode': ('lexicon', ('lexicon', 'llm'))},
@@ -66,6 +67,7 @@ PROCESS_OPS = frozenset(PROCESS_ENUMS) | {
     'tokenize',
     'zero_shot',
     'qualitative_code',
+    'content_analysis',
 }
 
 #: The operations whose whole job is to read one text column of the table.
@@ -116,6 +118,7 @@ READ_PARAMS: dict[str, tuple[str, ...]] = {
     'significance': ('group_column', 'value_column'),
     'zero_shot': ('text_column',),
     'qualitative_code': ('text_column',),
+    'content_analysis': ('text_column',),
 }
 
 

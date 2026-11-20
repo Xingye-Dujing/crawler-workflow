@@ -1,5 +1,13 @@
 # 质性编码与可见的 LLM 调用（画布 ↔ AI 工作区）
 
+## 量化的内容分析（演绎式编码）
+
+同一套码本体系也服务量化研究：`content_analysis` 节点先有码本（类别、定义、纳入/排除标准），再由 LLM
+逐行归类。`mode=code` 单人编码，`mode=dual` 两次独立编码并计算 **Cohen kappa 与一致率**，分歧行保留
+两套编码供人工裁定；`mode=report` 输出频次表。AI 工作区的「内容分析」技能引导你定义码本、确认、
+看信度、按 kappa 修订码本重跑。节点调用仍走同一条可见追踪对话，重跑闭环完全一致。示例码本见
+`samples/workflows/codebooks/content_analysis_sample.json`。
+
 ## 通用能力：一次埋点，所有 API 节点可见
 
 `services/analysis/llm.py::build_llm_run_ctx` 是**唯一**构造 LLM 运行上下文的地方。它在那里调用

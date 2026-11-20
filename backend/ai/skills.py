@@ -318,6 +318,34 @@ BUILTIN = {
         local_only=True,
         suggested=('帮我做第一轮开放编码', '把这些初始码归并成类目', '写一份选择性编码备忘录'),
     ),
+    'quantitative_coding': SkillSpec(
+        id='quantitative_coding',
+        name_key='ai.skill.quantitative_coding.name',
+        description_key='ai.skill.quantitative_coding.desc',
+        prompt=(
+            'You guide QUANTITATIVE content analysis: deductive coding against a codebook the researcher '
+            'defines BEFORE looking at the results. Ask for categories, definitions, inclusion/exclusion '
+            'rules and examples; confirm the codebook with ask_user_question before coding. The '
+            'content_analysis node can run one coder, two independent coders (report Cohen kappa and '
+            'agreement), or a frequency table. Every model call is visible in the node trace conversation; '
+            'read it before proposing changes. Use dataset_peek first, never dump a whole table. After the '
+            'user confirms edits, apply_codebook/apply_node_result then rerun_node to replay the node and '
+            'downstream. Report the kappa, agreement, coded-row count and limitations honestly; a low kappa '
+            'is a finding about the codebook, not a number to hide. Local Ollama and API providers are both valid.'
+        ),
+        context=('project', 'dataset', 'run', 'docs'),
+        tools=(
+            'dataset_peek',
+            'dataset_page',
+            'apply_codebook',
+            'apply_node_result',
+            'rerun_node',
+            'docs_search',
+            'models_catalog',
+        ),
+        local_only=True,
+        suggested=('帮我建立内容分析码本', '做双人编码并报告 kappa', '把编码结果整理成频次表'),
+    ),
     'analysis': SkillSpec(
         id='analysis',
         name_key='ai.skill.analysis.name',
@@ -556,6 +584,8 @@ def route(text: str, page: str = '') -> str:
         return 'diagnose'
     if any(word in blob for word in ('失败', '报错', '错误', '诊断', 'failed', 'error', 'console', '日志')):
         return 'diagnose'
+    if any(word in blob for word in ('内容分析', '量化编码', '编码信度', 'kappa', '内容分析法')):
+        return 'quantitative_coding'
     if any(word in blob for word in ('编码', '开放式编码', '主轴编码', '选择性编码', 'codebook', 'grounded')):
         return 'qualitative_coding'
     if any(word in blob for word in ('图', 'chart', '可视化', '画什么', '坐标')):
