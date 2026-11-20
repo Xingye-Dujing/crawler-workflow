@@ -15,7 +15,7 @@ for.
 
 import pandas as pd
 from core.refs import as_bool
-from runtime.state import add_log, execution_state
+from runtime.state import add_log
 from runtime.stores import get_run_store
 
 from i18n import t
@@ -286,6 +286,36 @@ def execute_analysis_node(
     if not steps:
         op = node.get('operation', params.get('operation', ''))
         steps = [{'op': op, 'params': normalize_analysis_params(op, params)}] if op else []
+
+    # A single-step traditional-model analysis node (semantic dedupe / similarity, which run a
+    # local sentence encoder) opens a trace conversation just like a process node does. The model
+    # identity is stamped so the AI workspace's bottom chip names what ran; the input/output sample
+    # is appended generically by finish_node_trace at settlement. The model gate lives in
+    # trace_tier — one registry shared with every other node.
+    if len(steps) == 1:
+        from runtime.settings import get_setting
+        from runtime.state import execution_state
+
+        from services.analysis.trace_tier import resolve_model_identity, should_trace
+
+        step_op = str(steps[0].get('op') or '')
+        step_params = {**params, **(steps[0].get('params') or {})}
+        cfg = execution_state.get('llm') or {}
+        provider = cfg.get('provider') or 'ollama'
+        threshold = str(get_setting('ai_trace_tier') or 'traditional')
+        probe = {'id': node.get('id', ''), 'params': step_params}
+        if step_op not in LLM_OPS and should_trace(probe, step_op, provider, threshold):
+            from services.llm_trace import start_node_trace
+
+            tp, tm = resolve_model_identity(probe, step_op, provider, cfg.get('model') or '')
+            start_node_trace(
+                str(execution_state.get('run_id') or ''),
+                str(node.get('id') or ''),
+                step_op,
+                None,
+                provider=tp,
+                model=tm,
+            )
 
     # upstream[0] is the left table (already current_input); the SECOND connection is the
     # other table of a two-table step (join / anti-join). ``pairs`` keeps every id so the

@@ -58,14 +58,23 @@ class FakeClient:
     provider = 'ollama'
     model = 'qwen3.5:2b'
 
-    def chat(self, prompt, max_retries=2):
-        return '回答:' + prompt[:5]
+    def __init__(self, chunks=None):
+        self.chunks = chunks
+
+    def chat(self, prompt, max_retries=2, on_delta=None):
+        answer = '回答:' + prompt[:5]
+        if on_delta is not None:
+            # Emit the answer in pieces, the way a provider stream yields text_delta events.
+            for chunk in self.chunks or [answer[:3], answer[3:]]:
+                on_delta(chunk)
+        return answer
 
 
 class FakeStore:
     def __init__(self):
         self.conversations = []
         self.messages = []
+        self.updates = []
 
     def create_conversation(self, provider='', model='', skill='auto'):
         row = {'id': f'c{len(self.conversations)}', 'provider': provider, 'model': model, 'skill': skill, 'title': ''}
@@ -77,8 +86,23 @@ class FakeStore:
         row.update(fields)
 
     def append_message(self, conversation_id, role, content='', **fields):
-        self.messages.append({'conversation_id': conversation_id, 'role': role, 'content': content, **fields})
-        return {'id': f'm{len(self.messages)}'}
+        mid = f'm{len(self.messages) + 1}'
+        row = {
+            'id': mid,
+            'conversation_id': conversation_id,
+            'role': role,
+            'content': content,
+            '_born_status': fields.get('status', 'done'),
+            **fields,
+        }
+        self.messages.append(row)
+        return row
+
+    def update_message(self, message_id, **fields):
+        row = next(item for item in self.messages if item['id'] == message_id)
+        row.update(fields)
+        self.updates.append((message_id, fields.get('content'), fields.get('status')))
+        return row
 
     def list_conversations(self, limit=80, q='', **kwargs):
         return [row for row in self.conversations if q in str(row.get('title') or '')]
@@ -98,8 +122,33 @@ def test_trace_client_records_both_sides_without_touching_the_key(monkeypatch):
     assert fake.messages[1]['content'] == '提示词'
     assert fake.messages[2]['content'].endswith('回答:提示词')
     assert '估算' in fake.messages[2]['content']
+    assert fake.messages[2]['status'] == 'done'
     assert all(item['meta'].get('estimated') is True for item in fake.messages[1:])
     assert traces_for_run('r1') and not traces_for_run('other')
+
+
+def test_trace_streams_answer_deltas_then_settles(monkeypatch):
+    """The trace mirror writes each chunk as it arrives, then settles the row with the estimate."""
+    import services.llm_trace as trace
+
+    fake = FakeStore()
+    monkeypatch.setattr(trace, 'store', fake)
+    monkeypatch.setattr(trace, 'add_log', lambda msg: None)
+    client, _ = start_node_trace('r2', 'n3', 'open_code', FakeClient(chunks=['体验', '卡顿', ' | 很卡']))
+    assert client.chat('提示词') == '回答:提示词'
+
+    assistant = fake.messages[2]
+    assert assistant['_born_status'] == 'streaming', 'the trace row is born streaming'
+    # One update per streamed chunk (no status field on those), then a final settle to 'done'
+    # carrying the estimate. The row was born 'streaming' in append_message (asserted in the fake
+    # by the delta writes preceding the settle).
+    deltas = [content for _, content, status in fake.updates if status is None]
+    assert len(deltas) == 3, 'one write per streamed chunk'
+    assert '体验卡顿 | 很卡' in deltas[-1], 'content grows across deltas'
+    assert assistant['content'].endswith('回答:提示词')
+    assert '估算' in assistant['content']
+    assert assistant['status'] == 'done'
+    assert any(status == 'done' for _, _, status in fake.updates), 'a final settle writes the estimate'
 
 
 def test_no_run_id_means_no_trace(monkeypatch):

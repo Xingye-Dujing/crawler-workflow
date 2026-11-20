@@ -10,6 +10,10 @@ jieba.cache
 # Project-local pip download cache + build temp, deliberately off the C: drive.
 .pip-cache/
 .tmp/
+# Demo recording intermediates: MKV is the crash-safe capture before remux to MP4, and frames/ are
+# the sampled verification screenshots. Only the finished MP4 is a deliverable worth versioning.
+samples/workflows/videos/*.mkv
+samples/workflows/videos/frames/
 
 # ─── Runtime state ───
 # data/ holds runs.db / datasets.db / cookies / exports. A saved workflow is authored work and IS

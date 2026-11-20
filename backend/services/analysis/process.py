@@ -56,6 +56,50 @@ PROCESS_ENUMS = {
     'significance': {'sig_method': ('ttest', ('ttest', 'anova', 'mannwhitney', 'kruskal'))},
 }
 
+# ─── LLM-call policy: the ONE registry for "does this process op call a model?" ───
+# Every consumer — the cost gate (engine.plan), the trace seam (services.analysis.llm), the save-time
+# scheduler verdict and the browser — reads THIS table, so they can no longer disagree about which
+# nodes spend tokens. A policy is one of:
+#   ('always',)                     the op calls the model with no switch (qualitative coding)
+#   ('mode', 'llm', default)        calls only when its `mode` equals 'mode_value'; a blank mode
+#                                   means the declared default (what the panel shows)
+#   ('mode_in', frozenset, default) calls when `mode` is one of the named values
+# Ops absent from the registry never call a model (rules, sklearn, local NLI, statistics). Keeping
+# the answer here — rather than re-deriving it from PROCESS_ENUMS' shape — is what fixed the
+# qualitative_code / content_analysis blind spot: their select is `phase` / `code|dual|report`, not
+# an `llm` mode, so shape-based inference said "no model" for the heaviest LLM callers.
+LLM_POLICY: dict[str, tuple] = {
+    'clean': ('mode', 'llm', 'llm'),
+    'emotion': ('mode', 'llm', 'bert'),
+    'tendency': ('mode', 'llm', 'bert'),
+    'sentiment': ('mode', 'llm', 'bert'),
+    'ner': ('mode', 'llm', 'regex'),
+    'aggression': ('mode', 'llm', 'lexicon'),
+    'qualitative_code': ('always',),
+    'content_analysis': ('mode_in', frozenset({'code', 'dual'}), 'code'),
+}
+
+
+def op_calls_llm(op: str, params: dict | None = None) -> bool:
+    """The single answer to "will running this op call a language model?".
+
+    Reads only the registry above. An unrecognised mode is NOT treated as a model call: it is
+    refused by name at the executor boundary, and a cost/trace gate must not send the user looking
+    for an API key for a definition whose real problem is a spelling.
+    """
+    policy = LLM_POLICY.get(op)
+    if policy is None:
+        return False
+    if policy[0] == 'always':
+        return True
+    kind, wanted, default = policy
+    raw = str((params or {}).get('mode') or '').strip()
+    value = raw or default
+    if kind == 'mode':
+        return value == wanted
+    return value in wanted
+
+
 #: Every operation the process executor dispatches, including the four with no select-shaped
 #: parameter (``PROCESS_ENUMS`` only lists the ones that have one). ``bot``/``anomaly``/
 #: ``correlation``/``significance`` read typed column names instead.

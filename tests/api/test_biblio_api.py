@@ -503,7 +503,7 @@ def test_a_biblio_cluster_reaches_the_review_step_by_its_default_names(client, a
     class _Client:
         label = 'ollama:stub'
 
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             prompts.append(prompt)
             return '该簇围绕数字政府与政务服务展开，下一步可能转向数据要素。'
 

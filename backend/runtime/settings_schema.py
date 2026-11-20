@@ -821,6 +821,19 @@ SETTINGS = (
     ),
     # ── AI workspace ────────────────────────────────────────────────────────
     Setting(
+        'ai_trace_tier',
+        'enum',
+        'traditional',
+        'ai',
+        'set.aiTraceTier',
+        hint='set.aiTraceTierHint',
+        # Which model calls open a visible AI-workspace conversation. A tier AND EVERY HIGHER tier
+        # triggers one: traditional = local BERT/sklearn/NLI/embedding, llm = local Ollama + coding
+        # nodes, api = cloud transports. 'off' disables node tracing entirely.
+        choices=('off', 'traditional', 'llm', 'api'),
+        consumer='both',
+    ),
+    Setting(
         'ai_context_scope',
         'enum',
         'summary',

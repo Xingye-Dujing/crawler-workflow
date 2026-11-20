@@ -1,0 +1,159 @@
+"""One registry for node model tiers and the AI-workspace trace gate.
+
+A "tier" is what a node uses to do its work, from cheapest to most expensive:
+
+    traditional  local, non-LLM models — BERT/sklearn/SnowNLP, NLI, sentence embeddings;
+    llm          a language model served by the local Ollama daemon, or a coding node
+                 (qualitative coding / deductive content analysis) that drives one;
+    api          a language model behind a cloud transport (DeepSeek, OpenRouter, OpenCode Go).
+
+The user picks a threshold in Settings → AI workspace (``ai_trace_tier``). A node opens a visible
+AI-workspace conversation when its tier is AT OR ABOVE that threshold — so "traditional" traces
+everything, "llm" traces LLMs and APIs, "api" traces only cloud calls, and "off" traces nothing.
+Both the backend gate (here) and the browser's live-confirm gate read the same setting and the same
+ordering, so they cannot disagree about which node should show a conversation.
+
+This module owns the ordering and the node→tier decision so no caller re-derives it from an op's
+select shape (the mistake that once made qualitative coding invisible to the trace seam).
+"""
+
+from __future__ import annotations
+
+from services.analysis.process import PROCESS_ENUMS, op_calls_llm
+
+#: Ascending cost. Stored in settings as these exact strings.
+TIERS = ('off', 'traditional', 'llm', 'api')
+_RANK = {name: i for i, name in enumerate(TIERS)}
+
+#: Ops that do their job with a LOCAL TRADITIONAL model even when no LLM is involved. They are
+#: listed explicitly because their select (phase / method / no select at all) does not say "model":
+#: zero_shot runs a local NLI pipeline, semantic_dedupe/similar_to run a sentence encoder, and the
+#: bert/ml/snownlp modes of the classifiers run local models. A node is traditional if it is in this
+#: set AND its current mode is not an LLM mode (op_calls_llm answers that half).
+TRADITIONAL_OPS = frozenset(
+    {
+        'zero_shot',
+        'semantic_dedupe',
+        'similar_to',
+        'topic',  # topic discovery / embedding views use a local encoder
+    }
+)
+
+#: Classifier ops whose non-LLM modes (bert/ml/snownlp/regex) are traditional models.
+_CLASSIFIER_OPS = frozenset({'clean', 'emotion', 'tendency', 'sentiment', 'ner', 'aggression'})
+
+
+def tier_rank(name: str) -> int:
+    """Numeric rank of a tier name; unknown names read as 'off' (no tracing)."""
+    return _RANK.get(str(name or '').strip().lower(), 0)
+
+
+def node_tier(node: dict, op: str, provider: str = 'ollama') -> str:
+    """The tier a node actually uses at run time.
+
+    * LLM-backed nodes (a classifier in `llm` mode, qualitative/content coding) use a cloud tier
+      when the run's provider is a cloud API, otherwise 'llm'.
+    * The same classifier in a non-LLM mode, plus zero_shot/embedding ops, is 'traditional'.
+    * Everything else (rules, statistics, crawl/export plumbing) returns 'off' — no model, so it
+      never opens a conversation regardless of the threshold.
+    """
+    op = str(op or (node.get('params') or {}).get('operation') or '')
+    if op_calls_llm(op, node.get('params') or {}):
+        return 'api' if provider not in ('', 'ollama') else 'llm'
+    if op in TRADITIONAL_OPS or (op in _CLASSIFIER_OPS and _has_local_model_mode(node, op)):
+        return 'traditional'
+    return 'off'
+
+
+def _has_local_model_mode(node: dict, op: str) -> bool:
+    """True when a classifier is in a mode that runs a local model (bert/ml/snownlp).
+
+    The blank-mode default is read from PROCESS_ENUMS — the same declaration the panel shows — so a
+    saved node with an empty mode is tiered by what it will actually run, not a second hard-coded
+    table that could drift.
+    """
+    spec = PROCESS_ENUMS.get(op) or {}
+    default = spec['mode'][0] if 'mode' in spec else ''
+    raw = str((node.get('params') or {}).get('mode') or '').strip()
+    mode = raw or default
+    # 'regex'/'lexicon' are rule/word-list modes, not models. Everything else the classifier can
+    # select that is NOT the LLM mode is a local model (bert / ml / snownlp).
+    return bool(mode) and mode != 'llm' and mode not in ('regex', 'lexicon')
+
+
+def should_trace(node: dict, op: str, provider: str, threshold: str) -> bool:
+    """Whether this node should open a trace conversation at the configured threshold."""
+    minimum = tier_rank(threshold)
+    if minimum == 0:  # 'off' (or an unknown value) traces nothing
+        return False
+    return tier_rank(node_tier(node, op, provider)) >= minimum
+
+
+#: Human-readable provider labels for the trace conversation's bottom model chip. For LLM nodes the
+#: real run provider (ollama/deepseek/...) is used; for traditional models the label names the kind
+#: of local model so the chip does not claim a chat transport that never answered the node.
+_TRADITIONAL_LABEL = {
+    'bert': 'local BERT',
+    'ml': 'local sklearn',
+    'snownlp': 'SnowNLP',
+    'regex': 'rules',
+    'lexicon': 'word list',
+}
+
+#: Ops whose model name is fixed by a module-level default (not a node param). Imported lazily in
+#: resolve_model_identity to avoid pulling heavy deps (transformers) at module import.
+_FIXED_MODEL_OPS = {
+    'zero_shot': ('analyzers.zero_shot', 'DEFAULT_MODEL'),
+    'semantic_dedupe': ('analyzers.backends.encoder', 'DEFAULT_EMBED_MODEL'),
+    'similar_to': ('analyzers.backends.encoder', 'DEFAULT_EMBED_MODEL'),
+}
+
+
+def resolve_model_identity(node: dict, op: str, provider: str, run_model: str = '') -> tuple[str, str]:
+    """``(provider_label, model_name)`` to stamp on a node's trace conversation.
+
+    For an LLM node this is the run's real transport + model (the bottom chip shows what answered).
+    For a traditional model it names the local model family and the resolved model (bert path, NLI
+    tag, embedding name), so a demo recording shows e.g. ``local BERT / ml_train/models/…rbt3``
+    instead of an empty chip or, worse, a stale LLM model from the user's last chat.
+    """
+    op = str(op or (node.get('params') or {}).get('operation') or '')
+    tier = node_tier(node, op, provider)
+    params = node.get('params') or {}
+
+    if tier in ('llm', 'api'):
+        label = {
+            'ollama': 'Ollama',
+            'deepseek': 'DeepSeek',
+            'openrouter': 'OpenRouter',
+            'opencode_go': 'OpenCode Go',
+        }.get(provider, provider or 'LLM')
+        return label, str(params.get('model') or run_model or '').strip()
+
+    if tier == 'traditional':
+        mode = str(params.get('mode') or '').strip()
+        # A classifier's local mode decides the family label; zero_shot/embedding ops have no mode.
+        family = _TRADITIONAL_LABEL.get(mode, 'local model')
+        name = ''
+        # BERT-family classifier: reuse the executor's resolver so the chip names EXACTLY the model
+        # that ran (a stale or second hard-coded resolver would be a second opinion).
+        if op in _CLASSIFIER_OPS and (not mode or mode == 'bert'):
+            try:
+                from nodes.executors.process import _effective_bert_model
+
+                name = _effective_bert_model(op, params)
+            except Exception:
+                name = ''
+        if not name:
+            name = str(params.get('bert_model') or params.get('embedding_model') or params.get('model') or '').strip()
+        if not name and op in _FIXED_MODEL_OPS:
+            module_name, attr = _FIXED_MODEL_OPS[op]
+            try:
+                import importlib
+
+                name = str(getattr(importlib.import_module(module_name), attr) or '')
+            except Exception:
+                name = ''
+        return family, name
+
+    return '', ''

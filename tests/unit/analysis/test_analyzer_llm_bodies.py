@@ -65,7 +65,7 @@ class ScriptedClient(LLMClient):
         self.default = default
         self.prompts = []
 
-    def chat(self, prompt, max_retries=2):
+    def chat(self, prompt, max_retries=2, on_delta=None):
         self.prompts.append(prompt)
         return self.replies.get(prompt, self.default)
 
@@ -835,7 +835,7 @@ class TestJsonlCheckpointScope:
                 super().__init__(**kw)
                 self.calls = 0
 
-            def chat(self, prompt, max_retries=2):
+            def chat(self, prompt, max_retries=2, on_delta=None):
                 self.calls += 1
                 if self.calls > 1:
                     raise LLMError('transport died', 'transport')
@@ -861,7 +861,7 @@ class TestJsonlCheckpointScope:
                 super().__init__(**kw)
                 self.calls = 0
 
-            def chat(self, prompt, max_retries=2):
+            def chat(self, prompt, max_retries=2, on_delta=None):
                 self.calls += 1
                 if self.calls > 1:
                     raise LLMError('transport died', 'transport')
@@ -885,7 +885,7 @@ class TestJsonlCheckpointScope:
                 super().__init__(**kw)
                 self.calls = 0
 
-            def chat(self, prompt, max_retries=2):
+            def chat(self, prompt, max_retries=2, on_delta=None):
                 self.calls += 1
                 if self.calls > 1:
                     raise LLMError('transport died', 'transport')

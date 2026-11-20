@@ -15,7 +15,6 @@ from analyzers.llm_client import LLMClient
 from engine.workflow import effective_workflow, node_params
 from i18n import t
 from services.analysis.pipeline import UnknownOperationError
-from services.analysis.process import PROCESS_ENUMS
 
 #: The two run shapes the canvas settings can name. Kept next to the reader that refuses
 #: anything else, so a second spelling of this list cannot drift away from the first.
@@ -71,31 +70,15 @@ def llm_provider(llm_cfg: dict) -> str:
 def op_needs_llm(op: str, params: dict) -> bool:
     """Whether this node's own choice will call a language model.
 
-    Read through the declared default the panel shows (``PROCESS_ENUMS``), because a blank
-    field means "not stated", not "not the model": an ``emotion`` node left empty IS an LLM
-    run, while an empty ``sentiment`` node is SnowNLP and costs nothing. The test this
-    replaces was ``mode != 'ml'``, which charged a row-by-row model pass to every node whose
-    mode said something else — and a cloud host then refused the whole run for a missing API
-    key that no node in it had asked for.
-
-    ``clean`` used to be listed here as an operation that always calls a model. It has a
-    mode of its own now, and its regex mode washes a Weibo comment without asking anyone —
-    so the answer comes from that same table instead of from a hard-coded membership, and
-    the two can no longer disagree.
+    A thin alias over the shared LLM-call registry in ``services.analysis.process``. The decision
+    lives in exactly one place so the cost gate here, the trace seam and the browser cannot drift
+    apart — inferring it from ``PROCESS_ENUMS``' shape previously said "no model" for
+    qualitative_code (whose select is `phase`) and content_analysis (`code|dual|report`), both of
+    which really call the model. See ``op_calls_llm`` for the registry and the blank-mode rule.
     """
-    spec = PROCESS_ENUMS.get(op) or {}
-    if 'mode' not in spec:
-        return False
-    # Only the declared DEFAULT is read here; the option list beside it is the panel's
-    # business (and an unlisted spelling is refused by name when the node runs).
-    default, _ = spec['mode']
-    raw = str(params.get('mode') or '').strip()
-    value = raw if raw else default
-    # Only the mode that NAMES the model needs one. An unrecognised mode is not treated as
-    # a model call either: it is refused BY NAME when the node runs, and answering "a key
-    # is required" here would send the user to configure credentials for a definition
-    # whose actual problem is a spelling.
-    return value == 'llm'
+    from services.analysis.process import op_calls_llm
+
+    return op_calls_llm(op, params)
 
 
 def workflow_needs_llm(workflow: dict) -> bool:

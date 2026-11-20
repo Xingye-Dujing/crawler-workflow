@@ -83,11 +83,22 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
         # attempts rather than after them.
         cancel_event=execution_state.get('cancel_event'),
     )
-    # One generic trace seam for every LLM-backed node: the client below is wrapped here so no
-    # analyzer has to open a conversation itself. New nodes inherit it by using this run context.
-    from services.llm_trace import start_node_trace
+    # One generic trace seam for every node: the conversation is opened according to the user's
+    # ai_trace_tier setting, and every tier at or above it traces. A traditional model (BERT/NLI/
+    # embedding) gets a conversation too — with its resolved local model identity stamped so the
+    # AI workspace's bottom chip names what actually ran. The tier decision lives in trace_tier,
+    # the one registry shared with the browser's live-confirm gate.
+    from runtime.settings import get_setting
 
-    client, trace_id = start_node_trace(run_id, node_id, op, client)
+    from services.analysis.trace_tier import resolve_model_identity, should_trace
+
+    trace_id = ''
+    threshold = str(get_setting('ai_trace_tier') or 'traditional')
+    if should_trace(node, op, provider, threshold):
+        from services.llm_trace import start_node_trace
+
+        trace_provider, trace_model = resolve_model_identity(node, op, provider, cfg.get('model') or '')
+        client, trace_id = start_node_trace(run_id, node_id, op, client, provider=trace_provider, model=trace_model)
 
     # ── live snapshot (AI 调用实时导出) ──
     # A long LLM pass enriches rows in batches; the honest artifact there is

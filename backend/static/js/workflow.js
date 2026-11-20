@@ -1,5 +1,27 @@
 /* Workflow Execution & File Management */
 
+/* One answer to "will this process op call a model?" — the single browser-side copy of the
+   server's LLM-call registry (services/analysis/process.py::LLM_POLICY). The pre-run model gate,
+   diagnostics cost estimate and settings panel all call THIS, not three drifting local lists.
+   tests/unit/frontend/test_frontend_contract.py pins it against the server so the two stay equal. */
+function opCallsLlmProcess(op, params) {
+    /* {always:true} | {modes:[...], default:'...'}; anything absent never calls a model. */
+    const policy = {
+        clean: {modes: ['llm'], default: 'llm'},
+        emotion: {modes: ['llm'], default: 'bert'},
+        tendency: {modes: ['llm'], default: 'bert'},
+        sentiment: {modes: ['llm'], default: 'bert'},
+        ner: {modes: ['llm'], default: 'regex'},
+        aggression: {modes: ['llm'], default: 'lexicon'},
+        qualitative_code: {always: true},
+        content_analysis: {modes: ['code', 'dual'], default: 'code'},
+    }[op];
+    if (!policy) return false;
+    if (policy.always) return true;
+    const mode = String(((params || {}).mode === undefined || (params || {}).mode === null)
+        ? '' : (params || {}).mode).trim();
+    return policy.modes.indexOf(mode || policy.default) >= 0;
+}
 
 /* #182 — per-item locks. The backend is the truth (清空/删除 respect it); this is a
    client cache so the panels can paint a lock icon. It loads once (every panel calls
@@ -86,6 +108,80 @@ const workflow = {
             /* A browser that refuses localStorage (private mode) simply will not carry the name
                across a reload; the canvas draft behaves the same way, so this is a soft decline. */
         }
+    },
+
+    /* A deep link for demos and runbooks: ?workflow=<saved name>[&autorun=1][&layout=1].
+       The saved file is loaded through the SAME route the panel uses, so no second loader can
+       disagree with it. autorun is opt-in and still goes through execute()'s gates (cookie
+       preflight, model checks). layout=1 arranges the nodes with the same 自动布局 entry the menu
+       uses, so a recording opens on a tidy, fitted canvas instead of scattered leftovers. */
+    async loadFromQuery() {
+        const params = new URLSearchParams(location.search);
+        const name = params.get('workflow');
+        if (!name) return;
+        /* A demo run may pin its provider/model in the link; otherwise the browse application's
+           own saved settings, exactly as a person pressing 执行 would. */
+        const provider = params.get('llm_provider');
+        const model = params.get('llm_model');
+        if (provider && model && typeof LLMSettings !== 'undefined') {
+            LLMSettings.save({ provider: provider, ollama: { model: model } });
+        }
+        /* A demo can widen the AI workspace so the trace transcript is legible in a recording.
+           Clamped to the same 360..900 range the drag handle uses; a normal page never sends this. */
+        const aiWidth = Number(params.get('ai_width'));
+        if (aiWidth && typeof AISettings !== 'undefined') {
+            AISettings.save({ width: Math.max(360, Math.min(900, Math.round(aiWidth))) });
+        }
+        await this._loadByName(name);
+        if (params.get('layout') === '1' && typeof canvas !== 'undefined' && canvas.runAutoLayout) {
+            /* One frame for the freshly loaded node boxes to be measured, then the same layout
+               action the 自动布局 button fires (incl. its shrink-only fit). Layout is cosmetic:
+               a rejected layout must never block the run the link asked for. */
+            try {
+                await new Promise((resolve) => requestAnimationFrame(resolve));
+                await canvas.runAutoLayout();
+            } catch (e) {
+                console.warn('deep link auto-layout failed, continuing', e);
+            }
+        }
+        if (params.get('autorun') === '1') {
+            /* A short grace period lets a screen recorder attach to the window before nodes start
+               firing; a person opening the link sees the canvas settle first, then the run. */
+            const delay = Math.max(0, Number(params.get('autorun_delay') || 1500));
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            await this.execute();
+        }
+    },
+
+    /* Open the AI workspace onto the freshest node-trace conversation and follow it as the answer
+       streams in. The backend creates one per LLM node with skill=node_trace; a demo that cleared
+       its history first sees only this run's chats. Open as soon as the conversation has its intro
+       + first user prompt (>=2 messages), then let AIWorkspace.pumpTraceStream follow the token
+       deltas in place — no full repaint, so the recording shows text growing without flicker. */
+    async _revealRunTrace() {
+        if (typeof AIWorkspace === 'undefined') return;
+        const deadline = Date.now() + 60000;
+        let conv = null;
+        while (Date.now() < deadline) {
+            try {
+                const resp = await fetch('/api/ai/conversations?limit=10');
+                const data = await resp.json();
+                const traces = (data.conversations || []).filter((c) => c.skill === 'node_trace');
+                const started = traces.find((c) => (c.message_count || 0) >= 2);
+                if (started) {
+                    conv = started;
+                    break;
+                }
+                if (!conv && traces.length) conv = traces[0];
+            } catch (e) {
+                /* A transient failure just means the run has not created the conversation yet. */
+            }
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+        if (!conv) return;
+        AIWorkspace.open({ conversation: conv.id });
+        /* The assistant row may still be streaming; follow it token by token, locally. */
+        if (typeof AIWorkspace.pumpTraceStream === 'function') AIWorkspace.pumpTraceStream(conv.id);
     },
 
     restoreOpenFile() {
@@ -1125,6 +1221,13 @@ const workflow = {
                 }
                 showToast(I18n.t('toast.workflowStarted'));
                 this.pollStatus();
+                /* If the user's trace level is on, open the AI workspace on the node-trace
+                   conversation this run just created — whether it came from a local BERT, a local
+                   LLM or a cloud API, as long as its tier meets the configured level. 'off' (or a
+                   missing setting) leaves the panel alone. */
+                var tier = (typeof AppSettings !== 'undefined' && AppSettings._values)
+                    ? AppSettings._values.ai_trace_tier : 'traditional';
+                if (tier && tier !== 'off') this._revealRunTrace();
             } else {
                 showToast(I18n.t('toast.executeFailed') + ': ' + (result.error || ''));
                 restoreRunState();

@@ -1906,7 +1906,7 @@ class TestTopicLabel:
             self.answer = answer
             self.fail_when = fail_when
 
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             from analyzers.llm_client import LLMError
 
             self.prompts.append(prompt)
@@ -2120,7 +2120,7 @@ class TestClusterLabel:
             self.prompts = []
             self.answer = answer
 
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             self.prompts.append(prompt)
             return self.answer
 
@@ -2177,7 +2177,7 @@ class TestClusterLabel:
         class _Broken:
             label = 'ollama:stub'
 
-            def chat(self, prompt, max_retries=2):
+            def chat(self, prompt, max_retries=2, on_delta=None):
                 from analyzers.llm_client import LLMError
 
                 raise LLMError('down')
@@ -3823,12 +3823,12 @@ class TestClusterReview:
             self.prompts = []
             self.answer = answer
 
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             self.prompts.append(prompt)
             return self.answer
 
     class _Failing(_Client):
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             from analyzers.llm_client import LLMError
 
             self.prompts.append(prompt)

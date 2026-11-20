@@ -16,15 +16,18 @@ import contextlib
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
 import webbrowser
 from pathlib import Path
+from urllib.parse import quote
 
 import psutil
 import requests
 from demo_capture import CaptureUnavailableError, capture_command, ffmpeg_binary, find_window, focus_window
+from PIL import Image, ImageStat
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO / 'samples' / 'workflows' / 'manifest.json'
@@ -57,6 +60,28 @@ def _absolute(value: str) -> str:
     return str(path if path.is_absolute() else REPO / path)
 
 
+def _fresh_browser_profile() -> str:
+    """Recreate a pristine profile so Chrome cannot raise its 'restore pages' bubble.
+
+    The recorder hard-kills its browser between demos, which leaves ``exit_type=Crashed`` in the
+    profile and makes Chrome offer to restore pages on the next start (it covers the canvas in
+    the video). A brand-new directory has no crash state to restore. Retried because Windows can
+    hold a file lock for a moment after the previous browser process exits.
+    """
+    profile = _absolute('scratchpad/demo_browser_profile')
+    path = Path(profile)
+    for _ in range(12):
+        if not path.exists():
+            break
+        try:
+            shutil.rmtree(path)
+            break
+        except OSError:
+            time.sleep(0.3)
+    path.mkdir(parents=True, exist_ok=True)
+    return profile
+
+
 def _open_browser(url: str) -> None:
     """Open a clean, maximized browser window without Chrome's crash-restore bubble."""
     binary = os.environ.get('CIXI_BROWSER_BIN', '').strip()
@@ -65,17 +90,18 @@ def _open_browser(url: str) -> None:
             (found for name in ('chrome', 'msedge', 'chromium', 'google-chrome') if (found := shutil.which(name))), ''
         )
     if binary and os.path.isfile(binary):
-        # A per-project profile avoids Chrome's "restore pages" bubble and never touches the
+        # A fresh per-project profile avoids Chrome's "restore pages" bubble and never touches the
         # user's own browser profile. It also makes the recorder's browser processes identifiable.
-        profile = _absolute('scratchpad/demo_browser_profile')
-        Path(profile).mkdir(parents=True, exist_ok=True)
+        profile = _fresh_browser_profile()
         subprocess.Popen(
             [
                 binary,
                 f'--user-data-dir={profile}',
-                '--start-maximized',
+                '--start-fullscreen',  # genuine F11-style fullscreen: no tabs, no address bar, no taskbar
                 '--disable-session-crashed-bubble',
+                '--disable-background-networking',  # no update check -> no "Chrome could not update" bubble
                 '--no-first-run',
+                '--no-default-browser-check',
                 '--new-window',
                 url,
             ],
@@ -98,34 +124,145 @@ def _wait_for_server(url: str, timeout: float) -> None:
     raise RuntimeError(f'{url} did not come up within {timeout:.0f}s')
 
 
-def _wait_for_run(url: str, timeout: float) -> dict:
+def _clear_run_records(url: str, root: str) -> dict:
+    """Wipe run history, dedupe claims AND AI conversations before a take.
+
+    Without this the checkpoint/resume logic would see a prior run's ``done`` nodes and restore
+    their results instead of really executing them — the video would show stale node states (the
+    red crosses seen on a first frame) rather than a fresh execution. ``/api/runs/clear`` releases
+    the item claims with the records. Old AI trace conversations are deleted too, so the workspace
+    shows only the conversations this take opens. Datasets/workflows are left untouched.
+    """
+    answer = requests.post(url + '/api/runs/clear', json={'confirm': True}, timeout=15).json()
+    if not answer.get('ok'):
+        raise RuntimeError(f'could not clear run records: {answer.get("error")}')
+    removed = answer.get('removed') or {}
+
+    # Clear the AI workspace so the recorded transcript shows only THIS take's node-trace chats.
+    cleared_ai = 0
+    listing = requests.get(url + '/api/ai/conversations?limit=500', timeout=10).json()
+    for conv in listing.get('conversations') or []:
+        cid = conv.get('id')
+        if cid and requests.delete(url + '/api/ai/conversations/' + quote(str(cid)), timeout=10).ok:
+            cleared_ai += 1
+
+    # Drop the row-level LLM checkpoint cache too: a replayed row would be filled from disk without
+    # calling the model, so the trace conversation would show no prompt/answer and the video would
+    # claim work the model never did this take. It is pure cache — the dataset itself is untouched.
+    checkpoint_dir = Path(root) / 'data' / 'checkpoints'
+    cleared_ckpt = 0
+    if checkpoint_dir.exists():
+        for item in checkpoint_dir.iterdir():
+            if item.is_file():
+                item.unlink(missing_ok=True)
+                cleared_ckpt += 1
+            elif item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+                cleared_ckpt += 1
+
+    # /api/runs/clear deliberately KEEPS llm_cache (a cached answer is paid for by its prompt),
+    # but a demo must actually call the model so the trace chat shows the real prompt/answer. The
+    # cache lives in the demo root's own runs.db; a direct DELETE is safe here (WAL allows a second
+    # writer) and touches no dataset. Never do this against a real user's data root.
+    runs_db = Path(root) / 'data' / 'runs.db'
+    cleared_llm_cache = 0
+    if runs_db.exists():
+        try:
+            conn = sqlite3.connect(str(runs_db), timeout=10)
+            count = conn.execute('SELECT COUNT(*) FROM llm_cache').fetchone()[0]
+            conn.execute('DELETE FROM llm_cache')
+            conn.commit()
+            conn.close()
+            cleared_llm_cache = int(count)
+        except sqlite3.Error:
+            cleared_llm_cache = -1
+
+    print(
+        f'  [clean] run records cleared: {removed.get("runs", 0)} runs, '
+        f'{removed.get("item_claims", 0)} claims; AI chats: {cleared_ai}, '
+        f'checkpoints: {cleared_ckpt}, llm_cache: {cleared_llm_cache}'
+    )
+    removed['ai_conversations'] = cleared_ai
+    removed['checkpoints'] = cleared_ckpt
+    removed['llm_cache'] = cleared_llm_cache
+    return removed
+
+
+def _wait_for_run(url: str, timeout: float, start_timeout: float = 90) -> dict:
+    """Wait for the browser's autorun deep link to START, then to SETTLE.
+
+    A short LLM run (a few rows of qualitative coding) can finish within the 0.5s poll gap, so
+    ``execution_state['running']`` is already False by the time we look and would read as "never
+    started". The run RECORD, however, is written for every run at its start and kept after it
+    ends — so a fresh record appearing (we cleared all of them first) is the reliable start signal,
+    and waiting for its status to leave 'running' is the reliable settle signal.
+    """
+    started = time.monotonic()
+    run_id = ''
+    while time.monotonic() - started < start_timeout:
+        listing = requests.get(url + '/api/runs/list?limit=5', timeout=5).json()
+        runs = listing.get('runs') or []
+        if runs:
+            run_id = runs[0].get('id') or runs[0].get('run_id') or ''
+            if run_id:
+                break
+        time.sleep(0.3)
+    else:
+        raise TimeoutError(f'deep link did not start a run within {start_timeout:.0f}s')
+
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        status = requests.get(url + '/api/workflow/status', timeout=5).json()
-        if not status.get('running'):
-            return status
+        listing = requests.get(url + '/api/runs/list?limit=5', timeout=5).json()
+        current = next((r for r in (listing.get('runs') or []) if (r.get('id') or r.get('run_id')) == run_id), None)
+        status_value = (current or {}).get('status', '')
+        if status_value and status_value != 'running':
+            return {'run_id': run_id, 'status': status_value}
         time.sleep(0.5)
-    raise TimeoutError(f'run did not settle within {timeout:.0f}s')
+    return {'run_id': run_id, 'status': 'running'}
 
 
-def _start_recording(output: Path, title: str, fps: int, width: int):
+def _focus_browser(title: str, timeout: float = 20, settle_seconds: float = 5.0) -> str:
+    """Bring the freshly opened, already-fullscreen browser forward BEFORE anything else runs.
+
+    Chrome is launched with --start-fullscreen, so it is fullscreen from its first frame. A new
+    profile makes Chrome start slowly, so the window may not exist yet when we look. Waiting for it
+    and focusing here (not at the end) is what keeps the desktop grab on the browser page instead
+    of the host window. ``settle_seconds`` lets Chrome's transient "press Esc to exit fullscreen"
+    bubble fade out before recording starts, so it never appears in the video.
+    """
+    deadline = time.monotonic() + timeout
+    hwnd = ''
+    while time.monotonic() < deadline:
+        _, hwnd = find_window(title)
+        if hwnd:
+            break
+        time.sleep(0.3)
+    if hwnd:
+        # Chrome was launched with --start-fullscreen; only bring it forward, never send F11.
+        if focus_window(hwnd, fullscreen=False):
+            print(f'  [capture] fullscreen browser foregrounded: {title!r} hwnd={hwnd}')
+        else:
+            print(f'  [capture] WARNING: could not foreground {title!r}; the host window may be recorded')
+    else:
+        print(f'  [capture] WARNING: no window matched {title!r}; recording the desktop as-is')
+    # Wait out Chrome's fullscreen hint bubble so the first recorded frame is clean.
+    if settle_seconds > 0:
+        time.sleep(settle_seconds)
+    return hwnd
+
+
+def _start_recording(output: Path, fps: int, width: int):
     # MKV tolerates an abrupt stop; MP4 written by a killed ffmpeg has no moov atom and will not
     # open. The finished recording is remuxed losslessly to MP4 once the run settles.
     output = output.with_suffix('.mkv')
     output.parent.mkdir(parents=True, exist_ok=True)
-    exact_title, hwnd = find_window(title)
-    # MAXIMIZE then F11: a small browser window is exactly what made the earlier recordings useless.
-    focus_window(hwnd, fullscreen=True)
     # Chrome renders a black frame to gdigrab's window-by-title path (GPU composition). With the
     # browser MAXIMIZED + F11 it covers the desktop, so a desktop grab IS the browser page and does
-    # not show the host window that caused the earlier useless recordings.
+    # not show the host window that caused the earlier useless recordings. The browser is already
+    # focused/fullscreen by _focus_browser, called right after it opened.
     command = capture_command(str(output), fps=fps, width=width)
-    if not exact_title and not hwnd:
-        print(f'  [capture] no window matched {title!r}; recording the desktop as-is')
-    else:
-        print(f'  [capture] desktop grab of F11 fullscreen window {exact_title!r} hwnd={hwnd}')
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return process, output, hwnd
+    return process, output
 
 
 def _stop_recording(process) -> None:
@@ -154,6 +291,48 @@ def _remux(source: Path, target: Path) -> None:
     source.unlink(missing_ok=True)
 
 
+def _ffprobe_binary() -> str:
+    override = os.environ.get('CIXI_FFPROBE', '').strip()
+    found = override or shutil.which('ffprobe') or ''
+    if not found or not os.path.isfile(found):
+        raise CaptureUnavailableError('ffprobe not found; set CIXI_FFPROBE to the executable path')
+    return found
+
+
+def _sample_frames(video: Path, demo_id: str, count: int = 3) -> dict:
+    """Extract evenly spaced frames and flag an all-black recording.
+
+    A screen recording that cannot be inspected is not evidence. Frames are saved next to the video
+    so a human can look at them, and the grayscale standard deviation gives a cheap automated
+    warning when the capture failed (a black frame has almost no variation).
+    """
+    if not video.exists():
+        return {'frames': [], 'min_stddev': 0.0, 'ok': False}
+    duration_text = subprocess.check_output(
+        [_ffprobe_binary(), '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', str(video)],
+        text=True,
+    ).strip()
+    duration = float(duration_text or 0)
+    frame_dir = video.parent / 'frames'
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    frames, stddevs = [], []
+    for index in range(1, count + 1):
+        at = max(0.5, duration * index / (count + 1))
+        frame = frame_dir / f'{demo_id}_{index}.png'
+        subprocess.run(
+            [ffmpeg_binary(), '-y', '-ss', f'{at:.2f}', '-i', str(video), '-frames:v', '1', str(frame)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        if frame.exists():
+            stddev = ImageStat.Stat(Image.open(frame).convert('L')).stddev[0]
+            stddevs.append(stddev)
+            frames.append({'path': str(frame.relative_to(REPO)), 'at': round(at, 1), 'stddev': round(stddev, 1)})
+    minimum = min(stddevs) if stddevs else 0.0
+    return {'frames': frames, 'min_stddev': round(minimum, 1), 'ok': minimum > 3.0}
+
+
 def run_group(group: dict, args, manifest_path: Path) -> list[dict]:
     root = _absolute(group['data_root'])
     Path(root).mkdir(parents=True, exist_ok=True)
@@ -169,43 +348,45 @@ def run_group(group: dict, args, manifest_path: Path) -> list[dict]:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    browser_before = _browser_pids()
+    saved_dir = Path(root) / 'data' / 'workflows'
+    saved_dir.mkdir(parents=True, exist_ok=True)
     try:
         _wait_for_server(url, args.startup_timeout)
-        if args.open_browser:
-            _open_browser(url)
-            time.sleep(3)
 
         results = []
         for demo in group['demos']:
             if args.demo and demo['id'] not in args.demo:
                 continue
             template = manifest_path.parent / demo['template']
-            workflow = json.loads(template.read_text(encoding='utf-8'))
+            saved_name = demo.get('saved_name') or demo['id']
+            shutil.copyfile(template, saved_dir / f'{saved_name}.json')
             output = VIDEOS / f'{demo["id"]}.mp4'
             recorder = None
             intermediate = None
-            window = ''
-            if not args.no_record:
-                try:
-                    recorder, intermediate, window = _start_recording(
-                        output, group.get('capture_title', ''), args.fps, args.width
-                    )
-                except CaptureUnavailableError as exc:
-                    print(f'  [capture] skipped: {exc}')
+            browser_before = _browser_pids()
             try:
-                answer = requests.post(
-                    url + '/api/workflow/execute',
-                    json={
-                        'workflow': workflow,
-                        'llm': group.get('llm') or {},
-                        'lang': 'zh',
-                        'workflow_name': workflow.get('name') or demo['title'],
-                    },
-                    timeout=15,
-                ).json()
-                if not answer.get('ok'):
-                    raise RuntimeError(f'{demo["id"]} refused: {answer.get("error")}')
+                # Fresh history for every take: no checkpoint reuse, no stale node states, no
+                # prior dedupe claims. Datasets and the saved canvas are left intact.
+                _clear_run_records(url, root)
+                if args.open_browser:
+                    # The deep link loads the saved canvas into the browser and starts it there:
+                    # the video shows real nodes executing, not an empty canvas or a REST call.
+                    llm = group.get('llm') or {}
+                    link = (
+                        f'{url}/?workflow={quote(saved_name)}&autorun=1&layout=1&autorun_delay=11000'
+                        f'&ai_width={int(group.get("ai_width") or 760)}'
+                        f'&llm_provider={quote(str(llm.get("provider") or "ollama"))}'
+                        f'&llm_model={quote(str(llm.get("model") or ""))}'
+                    )
+                    _open_browser(link)
+                    # Focus the browser and go F11 fullscreen FIRST, before recording or any run:
+                    # a slow-starting fresh profile otherwise leaves the host window in front.
+                    _focus_browser(group.get('capture_title', ''))
+                if not args.no_record:
+                    try:
+                        recorder, intermediate = _start_recording(output, args.fps, args.width)
+                    except CaptureUnavailableError as exc:
+                        print(f'  [capture] skipped: {exc}')
                 status = _wait_for_run(url, args.run_timeout)
                 print(f'  [run] {demo["id"]} settled: {status.get("run_id", "")}')
             finally:
@@ -213,21 +394,26 @@ def run_group(group: dict, args, manifest_path: Path) -> list[dict]:
                 if recorder is not None:
                     time.sleep(args.pad_seconds)
                     _stop_recording(recorder)
-                    if window:
-                        focus_window(window, fullscreen=True)  # leave F11 fullscreen
                     _remux(intermediate, output)
+                if args.open_browser:
+                    # Close THIS demo's browser now, not at the end of the whole group: the next
+                    # demo then starts from a clean process set and a brand-new profile, so no
+                    # crash-restore bubble and no leftover browser eating memory between takes.
+                    _close_browsers_started_after(browser_before)
+            frames = _sample_frames(output, demo['id']) if output.exists() else {'frames': [], 'ok': False}
+            if not frames['ok']:
+                print(f'  [capture] WARNING: {demo["id"]} frames look blank (stddev={frames["min_stddev"]})')
             results.append(
                 {
                     'id': demo['id'],
                     'title': demo['title'],
                     'video': str(output.relative_to(REPO)) if output.exists() else '',
                     'run_id': status.get('run_id', ''),
+                    'frames': frames,
                 }
             )
         return results
     finally:
-        if args.open_browser:
-            _close_browsers_started_after(browser_before)
         if server is not None:
             # Flask spawns a child on some setups; terminating only the parent leaves a live
             # port holder. Kill the whole tree the recorder created, nobody else's server.

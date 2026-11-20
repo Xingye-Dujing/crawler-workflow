@@ -9,10 +9,27 @@ promise — the fold, the naming, or the refusal.
 from pathlib import Path
 
 import pytest
+from nodes.executors import fuse as fuse_executor
 
 from services.biblio import fuse
 
 pytestmark = pytest.mark.unit
+
+
+def test_read_columns_skips_the_source_column_when_labels_supply_it():
+    """A fuse node with source_labels does not need a source column in the data, so diagnostics
+    must not raise a red 'missing column' badge for it. Without labels the column is still read."""
+    params = {
+        'source_columns': '平台',
+        'source_labels': 'node-1=文献\nnode-2=微博',
+        'title_columns': '题名',
+        'entity_columns': '关键词',
+    }
+    assert '平台' not in fuse_executor.read_columns({'type': 'fuse', 'params': params})
+    assert '题名' in fuse_executor.read_columns({'type': 'fuse', 'params': params})
+    no_labels = {k: v for k, v in params.items() if k != 'source_labels'}
+    assert '平台' in fuse_executor.read_columns({'type': 'fuse', 'params': no_labels})
+
 
 LITERATURE = [
     {'题名': '文1', '年份': 2021, '关键词': '数字治理;算法问责', '作者': '张明', '作者单位': '清华大学'},

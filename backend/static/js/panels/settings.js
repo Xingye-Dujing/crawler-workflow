@@ -1221,20 +1221,9 @@ function nodeNeedsLlm(params, nodeOperation) {
         }
     }
     if (llmStepOps.indexOf(op) >= 0) return true;
-    /* Trimmed, because a BLANK means the operation's declared default on the server —
-       `'  '` is not a mode name and app.py reads it as "not stated". Comparing the raw
-       value here answered "no model" for a whitespace-only field while the server
-       answered "the default", so one of the two blocked a run the other would allow. */
-    var mode = String(p.mode === undefined || p.mode === null ? '' : p.mode).trim();
-    /* Asked by NAME, never by "not the one I special-case". `mode !== 'ml'` was the old
-       reading and it charged a row-by-row model pass to a node whose mode said something
-       else — sentiment has four modes now, three of which need no model at all. A blank
-       means the operation's own declared default, which is what the backend reads too
-       (app.py `_op_needs_llm`). */
-    if (op === 'clean') return (mode || 'llm') === 'llm';
-    if (op === 'emotion' || op === 'tendency') return (mode || 'bert') === 'llm';
-    if (op === 'sentiment') return (mode || 'bert') === 'llm';
-    if (op === 'ner' || op === 'aggression') return mode === 'llm';
+    /* The process half is answered by the server's LLM-call registry (published in /api/config),
+       not by a local list: one source of truth shared with the cost gate and the trace seam. */
+    if (opCallsLlmProcess(op, p)) return true;
     return false;
 }
 

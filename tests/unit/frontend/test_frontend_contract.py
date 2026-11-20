@@ -156,6 +156,14 @@ class TestLlmGateParity:
         ('sentiment_llm', {'operation': 'sentiment', 'mode': 'llm'}, None),
         ('sentiment_blank_mode', {'operation': 'sentiment', 'mode': '  '}, None),
         ('sentiment_bogus_mode', {'operation': 'sentiment', 'mode': 'TextBlob'}, None),
+        # Qualitative coding calls the model in every phase; content analysis does in code/dual
+        # but not report. Both were missing from the browser list and cost/trace gates.
+        ('qualitative_open', {'operation': 'qualitative_code', 'phase': 'open'}, None),
+        ('qualitative_axial', {'operation': 'qualitative_code', 'phase': 'axial'}, None),
+        ('content_code', {'operation': 'content_analysis', 'mode': 'code'}, None),
+        ('content_dual', {'operation': 'content_analysis', 'mode': 'dual'}, None),
+        ('content_default', {'operation': 'content_analysis'}, None),
+        ('content_report', {'operation': 'content_analysis', 'mode': 'report'}, None),
         ('keyword', {'operation': 'keyword'}, None),
         ('cluster', {'operation': 'cluster'}, None),
         ('anomaly', {'operation': 'anomaly'}, None),

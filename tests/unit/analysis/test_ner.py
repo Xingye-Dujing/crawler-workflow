@@ -173,7 +173,7 @@ class ScriptedClient(LLMClient):
         self.exc = exc
         self.prompts = []
 
-    def chat(self, prompt, max_retries=2):
+    def chat(self, prompt, max_retries=2, on_delta=None):
         self.prompts.append(prompt)
         if self.exc is not None:
             raise self.exc

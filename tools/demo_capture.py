@@ -13,6 +13,7 @@ by name rather than producing an empty file.
 import os
 import platform
 import shutil
+import time
 
 
 class CaptureUnavailableError(RuntimeError):
@@ -31,11 +32,14 @@ def screen_input(fps: int, title: str = '', hwnd: str = '') -> list[str]:
     """The OS-specific input half of the ffmpeg command."""
     system = platform.system().lower()
     if system == 'windows':
+        # -draw_mouse 0 keeps the cursor out of the recording: gdigrab redraws it every frame and
+        # it flickers/steadily blinks on accelerated windows, which reads as a broken capture.
+        grab = ['-f', 'gdigrab', '-draw_mouse', '0', '-framerate', str(fps)]
         if hwnd:
-            return ['-f', 'gdigrab', '-framerate', str(fps), '-i', f'hwnd={hwnd}']
+            return grab + ['-i', f'hwnd={hwnd}']
         if title:
-            return ['-f', 'gdigrab', '-framerate', str(fps), '-i', f'title={title}']
-        return ['-f', 'gdigrab', '-framerate', str(fps), '-i', 'desktop']
+            return grab + ['-i', f'title={title}']
+        return grab + ['-i', 'desktop']
     if system == 'linux':
         display = os.environ.get('DISPLAY', '').strip()
         if not display:
@@ -86,25 +90,40 @@ def find_window(substring: str = '') -> tuple[str, str]:
     return found[0] if found else ('', '')
 
 
-def focus_window(hwnd: str, *, fullscreen: bool = False) -> None:
+def focus_window(hwnd: str, *, fullscreen: bool = False) -> bool:
     """Foreground + MAXIMIZE the browser, optionally toggling F11 fullscreen.
 
     A background or small browser window answers gdigrab with a black frame or a narrow strip of
     the page. The recording must show the browser at its real desktop size, so focusing and sizing
-    are part of the capture contract rather than a cosmetic extra.
+    are part of the capture contract rather than a cosmetic extra. Returns whether the target is
+    genuinely the foreground window — F11 is only sent on success, otherwise it would toggle the
+    fullscreen state of whatever app was focused (the host window) instead.
     """
     if not hwnd or platform.system().lower() != 'windows':
-        return
+        return False
     import ctypes
 
     handle = int(hwnd, 16)
     user32 = ctypes.windll.user32
-    user32.ShowWindow(handle, 9)  # SW_RESTORE first, then maximize
-    user32.ShowWindow(handle, 3)  # SW_MAXIMIZE
-    user32.SetForegroundWindow(handle)
-    if fullscreen:
+    # Do NOT call ShowWindow(SW_RESTORE/SW_MAXIMIZE): the browser is launched with Chrome's native
+    # --start-fullscreen, and restoring/maximizing would cancel that fullscreen state. The window is
+    # fresh and owned by us, so BringWindowToTop + SetForegroundWindow is enough. No synthetic key
+    # presses (an earlier ALT tap to defeat the foreground lock made the menu/cursor visibly flicker).
+    for _ in range(12):
+        user32.BringWindowToTop(handle)
+        user32.SetForegroundWindow(handle)
+        if user32.GetForegroundWindow() == handle:
+            break
+        time.sleep(0.15)
+    focused = user32.GetForegroundWindow() == handle
+    if fullscreen and focused:
+        # Kept for compatibility with callers that did not launch with --start-fullscreen:
+        # synthesise F11 only when explicitly asked. Our recorder passes fullscreen=False because
+        # Chrome is already fullscreen from its command line.
         user32.keybd_event(0x7A, 0, 0, 0)  # VK_F11 down
         user32.keybd_event(0x7A, 0, 2, 0)  # key up
+        time.sleep(0.3)
+    return focused
 
 
 def capture_command(output: str, fps: int = 12, width: int = 0, title: str = '', hwnd: str = '') -> list[str]:

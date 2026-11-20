@@ -361,6 +361,13 @@ _log_handler = LogBufferHandler()
 _log_handler.setLevel(logging.INFO)
 logging.getLogger().addHandler(_log_handler)
 logging.getLogger().setLevel(logging.INFO)
+# Third-party HTTP clients (httpx/httpcore under HF Hub, Ollama, model downloads) log every probe
+# as "HTTP Request: GET/HEAD ... 200 OK" / "404 Not Found" at INFO. Those are routine cache checks —
+# a 404 for an optional file (e.g. a model's additional_chat_templates) is NORMAL, not a failure —
+# but the root logger forwards them to the operator's run console. Keep WARNING+ so real problems
+# still surface, while the noisy per-request lines stay out of the demo recording.
+for _noisy in ('httpx', 'httpcore', 'huggingface_hub'):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
 def pin_console_streams() -> list[str]:

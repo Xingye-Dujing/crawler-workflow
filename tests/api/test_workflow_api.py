@@ -1266,6 +1266,44 @@ class TestProgressiveOutput:
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
         assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
 
+    def test_llm_run_ctx_trace_respects_the_tier_setting(self, client, app_module, data_root, monkeypatch):
+        """The trace gate follows ai_trace_tier: at 'traditional' a local BERT/SnowNLP node opens a
+        conversation too, a pure-rule node never does, and 'off' disables all node tracing."""
+        import runtime.settings as runtime_settings
+
+        prev_llm = app_module.execution_state.get('llm')
+        prev_run = app_module.execution_state.get('run_id')
+        try:
+            app_module.execution_state['llm'] = {'provider': 'ollama', 'model': 'qwen:test'}
+            app_module.execution_state['run_id'] = 'trace-gate-run'
+            monkeypatch.setattr(runtime_settings, 'get_setting', lambda key, *a, **k: 'traditional')
+
+            snownlp = _node(
+                'p-snow',
+                'process',
+                operation='sentiment',
+                params={'text_column': '正文', 'mode': 'snownlp'},
+            )
+            assert _llm_run_ctx(snownlp, 'sentiment', None)['trace_conversation_id'], 'local model traces'
+
+            regex = _node('p-regex', 'process', operation='clean', params={'text_column': '正文', 'mode': 'regex'})
+            assert _llm_run_ctx(regex, 'clean', None)['trace_conversation_id'] == '', 'rules never trace'
+
+            llm = _node('p-llm', 'process', operation='emotion', params={'text_column': '正文', 'mode': 'llm'})
+            assert _llm_run_ctx(llm, 'emotion', None)['trace_conversation_id'], 'a model node gets a trace'
+
+            monkeypatch.setattr(runtime_settings, 'get_setting', lambda key, *a, **k: 'off')
+            assert _llm_run_ctx(llm, 'emotion', None)['trace_conversation_id'] == '', 'off disables tracing'
+        finally:
+            if prev_llm is None:
+                app_module.execution_state.pop('llm', None)
+            else:
+                app_module.execution_state['llm'] = prev_llm
+            if prev_run is None:
+                app_module.execution_state.pop('run_id', None)
+            else:
+                app_module.execution_state['run_id'] = prev_run
+
     def test_llm_run_ctx_uses_a_per_node_model_only_on_ollama(self, client, app_module, data_root):
         """A node may pick its own local Ollama tag; a blank node model falls back to
         the run's global model (the box's 跟随全局). The override is Ollama-only: an
@@ -1345,7 +1383,7 @@ class TestEntityNode:
     def test_the_model_mode_uses_the_transport_the_request_named(self, client, app_module, paste, monkeypatch):
         asked = {}
 
-        def fake_chat(self, prompt, max_retries=2):
+        def fake_chat(self, prompt, max_retries=2, on_delta=None):
             asked['prompt'] = prompt
             asked['provider'] = self.provider
             return '张伟|PERSON'

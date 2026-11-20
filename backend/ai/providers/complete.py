@@ -21,7 +21,16 @@ def chat_once(
     host: str = '',
     system: str = '',
     temperature: float = 0.1,
+    on_delta=None,
 ) -> str:
+    """One prompt -> full text. ``on_delta(text)``, when given, sees each token as it arrives.
+
+    The provider catalog is the single source of truth: stream() already yields canonical
+    ``text_delta`` events, so the row analyzers and the workspace cannot disagree about the
+    transport. The optional callback is how a node-trace conversation mirrors the answer while
+    it is being generated instead of only after it finished; without it the behaviour is exactly
+    the buffered ``chat_once`` the analyzers have always used.
+    """
     provider = get_provider(provider_id)
     chosen = (model or '').strip() or (provider.spec.models[0].id if provider.spec.models else '')
     pieces = []
@@ -45,7 +54,10 @@ def chat_once(
     ):
         kind = event.get('type')
         if kind == 'text_delta':
-            pieces.append(str(event.get('text') or ''))
+            delta = str(event.get('text') or '')
+            pieces.append(delta)
+            if on_delta is not None and delta:
+                on_delta(delta)
         elif kind == 'done':
             break
     text = ''.join(pieces).strip()

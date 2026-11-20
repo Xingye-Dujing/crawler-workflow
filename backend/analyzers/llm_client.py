@@ -211,27 +211,32 @@ class LLMClient:
         if self._cancel is not None and self._cancel.is_set():
             raise LLMError(t('llm.cancelled'), 'cancelled')
 
-    def chat(self, prompt: str, max_retries: int = 2) -> str:
-        """One user message in, the model's plain text out. Raises LLMError."""
+    def chat(self, prompt: str, max_retries: int = 2, on_delta=None) -> str:
+        """One user message in, the model's plain text out. Raises LLMError.
+
+        ``on_delta(text)``, when given, is called for each streamed chunk. It is how a node-trace
+        conversation shows the answer as it is generated; every existing call omits it and keeps
+        the fully buffered result. The return value is ALWAYS the complete text either way.
+        """
         if self.provider == 'openrouter':
             if not self.api_key:
                 raise LLMError(t('llm.no_key'), 'auth')
             if not self.model:
                 raise LLMError(t('llm.no_model'), 'model')
-            return self._openrouter(prompt, max_retries)
+            return self._openrouter(prompt, max_retries, on_delta)
         if self.provider in ('deepseek', 'opencode_go'):
             if not self.api_key:
                 raise LLMError(t('llm.no_key'), 'auth')
             if not self.model:
                 raise LLMError(t('llm.no_model'), 'model')
-            return self._api_chat(prompt, max_retries)
+            return self._api_chat(prompt, max_retries, on_delta)
         if self.provider == 'ollama':
-            return self._ollama(prompt, max_retries)
+            return self._ollama(prompt, max_retries, on_delta)
         # An unknown id must not become the local daemon: that is a silent answer from a provider
         # nobody selected. The run panel and /api/settings refuse it by name too.
         raise LLMError(t('llm.provider_unknown', provider=self.provider), 'provider')
 
-    def _api_chat(self, prompt: str, max_retries: int) -> str:
+    def _api_chat(self, prompt: str, max_retries: int, on_delta=None) -> str:
         """DeepSeek / OpenCode Go through the one provider catalog.
 
         Thinking is deliberately off for a one-row classification: the reasoning budget would
@@ -253,6 +258,7 @@ class LLMClient:
                     max_tokens=self.max_tokens,
                     timeout=self.timeout,
                     host=self.host,
+                    on_delta=on_delta,
                 )
             except AIError as exc:
                 kind = {
@@ -273,7 +279,7 @@ class LLMClient:
 
     # ── transports ──────────────────────────────────────────────
 
-    def _ollama(self, prompt: str, max_retries: int) -> str:
+    def _ollama(self, prompt: str, max_retries: int, on_delta=None) -> str:
         try:
             from ollama import Client  # imported lazily: the daemon is optional
         except ImportError as e:  # pragma: no cover
@@ -302,7 +308,9 @@ class LLMClient:
         kwargs = {
             'model': self.model,
             'messages': [{'role': 'user', 'content': prompt}],
-            'stream': False,
+            # Stream only when a trace listener wants the tokens as they arrive. Without it keep
+            # the buffered call the analyzers have always used — one response, one parse.
+            'stream': on_delta is not None,
             'options': {'temperature': self.temperature, 'num_predict': self.max_tokens},
         }
         if 'think' in _chat_kwargs():
@@ -314,8 +322,17 @@ class LLMClient:
         for attempt in range(1, max_retries + 1):
             self._check_cancel()
             try:
-                resp = client.chat(**kwargs)
-                content = self._ollama_content(resp)
+                if on_delta is None:
+                    content = self._ollama_content(client.chat(**kwargs))
+                else:
+                    pieces = []
+                    for chunk in client.chat(**kwargs):
+                        self._check_cancel()
+                        delta = self._ollama_content(chunk)
+                        if delta:
+                            pieces.append(delta)
+                            on_delta(delta)
+                    content = ''.join(pieces)
                 if not content or not content.strip():
                     raise LLMError(t('llm.ollama_empty'), 'bad_response')
                 return content
@@ -347,7 +364,7 @@ class LLMClient:
         content = getattr(msg, 'content', None) if msg is not None else None
         return content if content is not None else str(resp)
 
-    def _openrouter(self, prompt: str, max_retries: int) -> str:
+    def _openrouter(self, prompt: str, max_retries: int, on_delta=None) -> str:
         headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json',
@@ -360,6 +377,8 @@ class LLMClient:
             'temperature': self.temperature,
             'max_tokens': self.max_tokens,
         }
+        if on_delta is not None:
+            payload['stream'] = True
         delay = 2.0
         last = None
         for attempt in range(1, max_retries + 1):
@@ -374,10 +393,32 @@ class LLMClient:
                 continue
 
             if resp.status_code == 200:
-                try:
-                    content = resp.json()['choices'][0]['message']['content'] or ''
-                except (KeyError, IndexError, TypeError, ValueError) as e:
-                    raise LLMError(t('llm.or_bad_format', err=e), 'bad_response') from e
+                if on_delta is None:
+                    try:
+                        content = resp.json()['choices'][0]['message']['content'] or ''
+                    except (KeyError, IndexError, TypeError, ValueError) as e:
+                        raise LLMError(t('llm.or_bad_format', err=e), 'bad_response') from e
+                else:
+                    # Same canonical SSE lines the provider catalog reads; no second opinion about
+                    # how a token delta is shaped.
+                    from ai.providers.base import stream_lines
+
+                    pieces = []
+                    for line in stream_lines(resp, self._cancel):
+                        if not line:
+                            continue
+                        try:
+                            frame = json.loads(line)
+                        except ValueError:
+                            continue
+                        choices = frame.get('choices') or []
+                        if not choices:
+                            continue
+                        delta = ((choices[0].get('delta') or {}).get('content')) or ''
+                        if delta:
+                            pieces.append(str(delta))
+                            on_delta(str(delta))
+                    content = ''.join(pieces)
                 if content.strip():
                     return content
                 last = LLMError(t('llm.or_empty'), 'bad_response')

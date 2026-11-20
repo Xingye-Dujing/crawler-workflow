@@ -28,11 +28,21 @@ def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
 
 
 def read_columns(node: dict) -> list[str]:
-    """Every candidate column, because which one a given parent answers with is data-dependent;
-    diagnostics flags a candidate only when NO parent can supply it."""
+    """Candidate columns the fuse node genuinely needs from its parents.
+
+    Every role's candidate list is read except `source_columns` when `source_labels` is present:
+    source labels are the documented fallback "for a table that carries no source column", so a
+    missing source column there is NOT a problem and must not raise a red diagnostics badge. The
+    other roles have no such fallback — a missing title/author/keyword really does mean a column
+    the user typed that no parent can supply. Which parent answers each role stays data-dependent;
+    diagnostics flags a candidate only when NO parent can supply it.
+    """
     params = node_params(node)
     found: list[str] = []
+    source_labels = str(params.get('source_labels') or '').strip()
     for key in fuse.ROLE_PARAMS:
+        if key == 'source_columns' and source_labels:
+            continue
         found += split_panel_columns(params.get(key))
     return found
 

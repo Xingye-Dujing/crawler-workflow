@@ -67,7 +67,7 @@ class ScriptedClient(LLMClient):
         self.exc = exc  # raise this exception class every row
         self.prompts = []
 
-    def chat(self, prompt, max_retries=2):
+    def chat(self, prompt, max_retries=2, on_delta=None):
         self.prompts.append(prompt)
         n = len(self.prompts)
         if self.error_after is not None and n > self.error_after:
@@ -201,7 +201,7 @@ class TestRunRows:
 
     def test_success_between_failures_resets_the_counter(self):
         class Flaky(ScriptedClient):
-            def chat(self, prompt, max_retries=2):
+            def chat(self, prompt, max_retries=2, on_delta=None):
                 if 'bad' in prompt:
                     self.prompts.append(prompt)
                     raise RuntimeError('transient row crash')

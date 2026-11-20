@@ -393,7 +393,6 @@ const AIWorkspace = {
         button.setAttribute('aria-pressed', this._pinned ? 'true' : 'false');
         button.classList.toggle('active', !!this._pinned);
         const label = I18n.t(this._pinned ? 'ai.pinOn' : 'ai.pinOff');
-        button.setAttribute('title', label);
         button.setAttribute('aria-label', label);
         if (this._dom.root) this._dom.root.classList.toggle('pinned', !!this._pinned);
     },
@@ -421,7 +420,12 @@ const AIWorkspace = {
             /* Closing the dock must not end the turn: the fetch is still streaming while the panel
                is hidden, and re-rendering the stored transcript would throw that live turn away and
                leave only the deltas that arrive afterwards. Keep the DOM the stream is painting. */
-            if (this._conversationId && !this._sending) this.selectConversation(this._conversationId);
+            /* A demo deep link may open the workspace straight onto a specific (node-trace)
+               conversation. It wins over the remembered one so the recording shows the trace the
+               run just created, not a stale chat from a previous take. */
+            const wanted = opts && opts.conversation;
+            if (wanted) this.selectConversation(wanted);
+            else if (this._conversationId && !this._sending) this.selectConversation(this._conversationId);
             else if (!this._conversationId) this._renderWelcome();
             this._loadSpend();
             if (opts && opts.prompt && this._dom.input) this._dom.input.focus();
@@ -607,18 +611,15 @@ const AIWorkspace = {
             this._dom.thinking.classList.toggle('selected', thinking);
             this._dom.thinking.disabled = !capabilities.includes('thinking');
             this._dom.thinking.setAttribute('aria-pressed', thinking ? 'true' : 'false');
-            this._dom.thinking.title = capabilities.includes('thinking') ? I18n.t('ai.thinking') : I18n.t('ai.noCapability');
         }
         if (this._dom.search) {
             this._dom.search.classList.toggle('selected', search);
             this._dom.search.disabled = !capabilities.includes('web_search');
             this._dom.search.setAttribute('aria-pressed', search ? 'true' : 'false');
-            this._dom.search.title = capabilities.includes('web_search') ? I18n.t('ai.search') : I18n.t('ai.noCapability');
         }
         if (this._dom.attachBtn) {
             const files = capabilities.includes('files');
             this._dom.attachBtn.disabled = !files || this._uploading || this._sending;
-            this._dom.attachBtn.title = files ? I18n.t('ai.attach') : I18n.t('ai.noCapability');
         }
     },
 
@@ -1387,9 +1388,6 @@ const AIWorkspace = {
         if (state.cloud) return;
         const name = String(state.folder_name || '');
         button.textContent = name || I18n.t('ai.workspace.choose');
-        button.title = state.folder
-            ? I18n.t('ai.workspace.current', { path: state.folder })
-            : I18n.t('ai.workspace.none');
         button.classList.toggle('is-set', !!state.folder);
     },
 
@@ -2234,26 +2232,80 @@ const AIWorkspace = {
                 if (savedModel) this._model = savedModel;
                 this._renderProviderOptions();
             }
-            if (data.conversation.skill === 'node_trace') {
-                if (this._dom.modelChip) {
-                    this._dom.modelChip.title = I18n.t('ai.traceModelTip', {
-                        provider: savedProvider || '—',
-                        model: savedModel || '—'
-                    });
-                }
-            } else if (this._dom.modelChip) {
-                this._dom.modelChip.title = '';
-            }
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
             this._renderSide();
             this._loadSpend();
             if (this._dom.title) {
                 this._dom.title.textContent = data.conversation.title || I18n.t('ai.title');
-                this._dom.title.title = this._conversationModel;
             }
         } catch (error) {
             this._toast(I18n.t('ai.error') + ': ' + error.message);
+        }
+    },
+
+    /* Follow a node-trace conversation while a run writes it. There is no SSE stream to this page:
+       the row runner appends new messages (one per row) and streams tokens into the current one.
+       Two jobs, kept apart so the recording neither misses rows nor flickers:
+         - NEW message (another row answered): re-render the whole transcript once via
+           selectConversation, so the user sees all 3 rows' Q&A appear in sequence;
+         - tokens arriving in an EXISTING message: update only that bubble's `.ai-flow`, with a per
+           message HTML memo, so a repaint with no new text never rewrites the DOM (no flicker).
+       Stops when the run's closing trace_result row appears. */
+    async pumpTraceStream(conversationId) {
+        if (!conversationId || !this._dom.chat) return;
+        const memos = new Map();
+        const seen = new Set();
+        const deadline = Date.now() + 180000;
+        while (Date.now() < deadline) {
+            try {
+                const resp = await fetch('/api/ai/conversations/' + encodeURIComponent(conversationId));
+                const data = await resp.json();
+                if (!data.ok) break;
+                const messages = data.messages || [];
+                const ids = messages.map((message) => String(message.id));
+                const isNew = ids.some((id) => !seen.has(id));
+                ids.forEach((id) => seen.add(id));
+
+                if (isNew) {
+                    /* A fresh row's Q&A just landed — repaint once so its bubble exists at all.
+                       This is the one full re-render per new message (3 rows => at most 3). */
+                    await this.selectConversation(conversationId);
+                    for (const message of messages) {
+                        if (message.role === 'assistant' && String(message.status || '') !== 'streaming') {
+                            const html = AIRender.assistantFlow(message.blocks || []);
+                            memos.set(String(message.id), html);
+                        }
+                    }
+                }
+
+                let stillStreaming = false;
+                let closed = false;
+                for (const message of messages) {
+                    if (String((message.meta || {}).kind || '') === 'trace_result') closed = true;
+                    if (message.role !== 'assistant') continue;
+                    const streaming = String(message.status || '') === 'streaming';
+                    if (streaming) stillStreaming = true;
+                    const selector = '[data-ai-message="' + String(message.id).replace(/"/g, '') + '"]';
+                    const el = this._dom.chat.querySelector(selector);
+                    const flow = el && el.querySelector('.ai-flow');
+                    if (!flow) continue;
+                    const html = AIRender.assistantFlow(message.blocks || []);
+                    if (memos.get(String(message.id)) === html) continue;
+                    memos.set(String(message.id), html);
+                    flow.innerHTML = html;
+                    if (!streaming && el.querySelector('.ai-note')) {
+                        const noteText = I18n.t('ai.stillStreaming');
+                        for (const note of el.querySelectorAll('.ai-note')) {
+                            if (note.textContent.indexOf(noteText) >= 0) note.hidden = true;
+                        }
+                    }
+                }
+                if (closed || (!stillStreaming && !isNew)) break;
+            } catch (e) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 350));
         }
     },
 
@@ -2874,10 +2926,6 @@ const AIWorkspace = {
             }
             this._renderSide();
             this._paintAssistant();
-            if (event.skill_name_key) {
-                const chip = this._dom.modelChip;
-                if (chip) chip.title = I18n.has(event.skill_name_key) ? I18n.t(event.skill_name_key) : (event.skill || '');
-            }
             return;
         }
         if (type === 'thinking') {

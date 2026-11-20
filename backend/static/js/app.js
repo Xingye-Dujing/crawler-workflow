@@ -253,10 +253,10 @@ const I18n = {
             el.placeholder = this.t(el.dataset.i18nPlaceholder);
         });
         /* The dock's icon buttons have no visible text, so their accessible name IS the only label
-           a screen reader (or a hover tooltip) gets. */
+           a screen reader gets. Kept off `title` on purpose: copying it there made a native hover
+           tooltip pop up over the canvas whenever the mouse rested on an icon during a recording. */
         document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
             el.setAttribute('aria-label', this.t(el.dataset.i18nAriaLabel));
-            if (!el.title) el.title = this.t(el.dataset.i18nAriaLabel);
         });
         /* Menu labels and the open dropdown are rendered by TopMenu, not by
            data-i18n attributes, so they need an explicit refresh. */
@@ -634,6 +634,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // may have been updated outside this browser, so entering must open the latest saved version,
     // not the stale view. A new (unnamed) canvas keeps its draft.
     boot('reloadOpenFile', () => workflow.reloadOpenFile());
+    /* Demo/runbook deep link: ?workflow=<name>[&autorun=1] loads that saved canvas and may start it.
+       It runs after the remembered-file restore so an explicit link wins over a stale session. */
+    boot('workflowDeepLink', () => workflow.loadFromQuery());
     boot('stats', () => stats.init());
     /* The main program checks its release feed once per start (and every six hours); a failure
        is silent, because an update prompt is a convenience, not a workspace dependency. */

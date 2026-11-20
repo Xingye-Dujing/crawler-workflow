@@ -48,7 +48,9 @@ class TestAIStreamAndRenderer:
     def test_a_node_trace_moves_the_bottom_chip_to_the_node_model(self):
         out = _run()
         assert 'ollama' in out['traceChip'].lower() and 'qwen3.5:2b' in out['traceChip']
-        assert 'ollama' in out['traceChipTitle'].lower() and 'qwen3.5:2b' in out['traceChipTitle']
+        # The model is the chip's visible text; there is deliberately no hover title (tooltips
+        # were removed from the workspace so a resting cursor cannot cover the canvas in a demo).
+        assert not out['traceChipTitle'], 'a trace chip must not raise a title tooltip'
 
     def test_a_pipe_inside_code_or_escaped_does_not_split_a_table_cell(self):
         """The model's own rows: `a|b` and `\\|` stay inside one cell, and every row keeps 2 cells."""
@@ -501,7 +503,9 @@ class TestWorkspaceRepaintAndDelegation:
         tag = html[start:end]
         assert '↓' in tag, 'the button lost its arrow'
         assert 'data-i18n="ai.jumpLatest"' not in tag, 'the sentence is the button text again'
-        assert 'data-i18n-title="ai.jumpLatest"' in tag
+        # No hover tooltip: a resting cursor must not raise a tip over the canvas in a demo.
+        assert 'data-i18n-title="ai.jumpLatest"' not in tag
+        assert 'aria-label="Jump to the latest message"' in tag
 
     def test_the_pin_keeps_the_panel_open_on_an_outside_click(self):
         out = _run_workspace()['pin']

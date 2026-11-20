@@ -2070,7 +2070,7 @@ class TestTheLabellingStepNeedsTheRunModel:
         def __init__(self):
             self.prompts = []
 
-        def chat(self, prompt, max_retries=2):
+        def chat(self, prompt, max_retries=2, on_delta=None):
             self.prompts.append(prompt)
             return '概括：网络暴力的谩骂'
 

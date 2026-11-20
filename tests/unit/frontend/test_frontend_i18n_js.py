@@ -290,7 +290,10 @@ def _dead_app_keys(en_keys, app_text, other_js, html, backend):
 
     dead = []
     for key in en_keys:
-        if any(f'{attr}="{key}"' in html for attr in ('data-i18n', 'data-i18n-title', 'data-i18n-placeholder')):
+        if any(
+            f'{attr}="{key}"' in html
+            for attr in ('data-i18n', 'data-i18n-title', 'data-i18n-placeholder', 'data-i18n-aria-label')
+        ):
             continue
         if any(key.startswith(root) and len(key) > len(root) for root in dyn_roots):
             continue

@@ -252,15 +252,8 @@ function _rowsAt(id, memo, stack) {
 }
 
 function _processLlm(op, p) {
-    var llmOps = ['clean', 'emotion', 'tendency', 'sentiment', 'ner', 'aggression'];
-    if (llmOps.indexOf(op) < 0) return false;
-    var mode = String(p.mode || p.method || '');
-    /* A blank is the operation's declared default — clean defaults to llm, the two label
-       classifiers to bert — exactly as nodeNeedsLlm reads it. Asking only ``mode === 'llm'``
-       priced a default clean node at zero calls while the run would pay for every row. */
-    if (op === 'clean') return (mode || 'llm') === 'llm';
-    if (op === 'emotion' || op === 'tendency' || op === 'sentiment') return (mode || 'bert') === 'llm';
-    return mode === 'llm';
+    /* One answer, from the same server registry nodeNeedsLlm and the run/trace gates read. */
+    return opCallsLlmProcess(op, p);
 }
 
 /* A label step asks the LLM once per row it summarises, and the node caps how many rows

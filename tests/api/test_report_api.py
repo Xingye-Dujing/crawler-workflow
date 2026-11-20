@@ -128,7 +128,7 @@ class TestConclusion:
         app_module.execution_state['results'] = {'node-1': ROWS}
         asked = {}
 
-        def fake_chat(self, prompt, max_retries=2):
+        def fake_chat(self, prompt, max_retries=2, on_delta=None):
             asked['prompt'] = prompt
             return '数据以正面情绪为主。\n\n机构名未出现。'
 

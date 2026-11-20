@@ -339,6 +339,10 @@ def run_node_durable(
             'rows': len(result) if isinstance(result, list) else 0,
             'workflow_name': str(ambient().get('workflow_name') or ''),
             'text': t('trace.finished', node=label, rows=len(result) if isinstance(result, list) else 0),
+            # A small in/out sample for traditional-model traces: they have no chat loop, so this is
+            # the only evidence of what the model actually saw and produced. Bounded in llm_trace.
+            'input_rows': primary if isinstance(primary, list) else [],
+            'output_rows': result if isinstance(result, list) else [],
         },
     )
     store.finish_node(run_id, nid, NODE_DONE)
