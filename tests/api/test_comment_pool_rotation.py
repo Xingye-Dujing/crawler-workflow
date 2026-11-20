@@ -144,6 +144,43 @@ def test_a_zero_row_wall_still_rotates_to_the_next_login(pool_calls):
 
 
 @pytest.mark.usefixtures('clean_globals')
+def test_the_time_filter_applies_to_the_export_file_too(pool_calls, monkeypatch):
+    """The merged CSV is written from writer.add() before the returned table is filtered, so an
+    out-of-range comment used to ship in the download while vanishing from the analysis table."""
+    from nodes.executors import comment as comment_exec
+
+    from services.ingest import parts
+
+    added = []
+
+    class FakeWriter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add(self, rows):
+            added.extend(rows)
+
+        def finish(self):
+            return {'path': ''}
+
+    monkeypatch.setattr(parts, 'PartWriter', FakeWriter)
+    node = _node()
+    node['params'].update(comment_start='2024-02-01', comment_end='2024-02-28')
+    _ScriptedSession.script = [
+        (
+            [
+                {'评论ID': 'c1', '评论内容': 'in', '评论时间': '2024-02-10 09:00'},
+                {'评论ID': 'c2', '评论内容': 'out', '评论时间': '2024-03-10 09:00'},
+            ],
+            _protocol.OK,
+        )
+    ]
+    rows = comment_exec.execute_comment_node(node, headless=True, ctx=None)
+    assert [row['评论ID'] for row in rows] == ['c1']
+    assert [row['评论ID'] for row in added] == ['c1'], 'the exported file held an out-of-range comment'
+
+
+@pytest.mark.usefixtures('clean_globals')
 def test_a_network_fault_stays_a_network_fact_when_rotating(pool_calls, monkeypatch):
     """A browser error page named `unreachable` must not be rewritten into 风控: that benched a
     healthy exit for the full risk term and burned an account on a link the site never saw."""

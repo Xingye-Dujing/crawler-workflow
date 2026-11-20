@@ -66,7 +66,7 @@ def _session_is_gone(exc: WebDriverException) -> bool:
     return any(marker in message for marker in _GONE_MARKERS)
 
 
-def filter_comments_by_time(rows: list, params: dict, label: str) -> list:
+def filter_comments_by_time(rows: list, params: dict, label: str, log: bool = True) -> list:
     """Drop comments whose 评论时间 falls outside an optional [start, end] range.
 
     This is a TABLE-side filter of comments already crawled, deliberately separate from a
@@ -103,16 +103,17 @@ def filter_comments_by_time(rows: list, params: dict, label: str) -> list:
             continue
         if lo_day <= day <= hi_day:
             out.append(row)
-    add_log(
-        t(
-            'comment.time_filtered',
-            nid=label,
-            start=start,
-            end=end,
-            kept=len(out),
-            dropped=len(rows) - len(out),
+    if log:
+        add_log(
+            t(
+                'comment.time_filtered',
+                nid=label,
+                start=start,
+                end=end,
+                kept=len(out),
+                dropped=len(rows) - len(out),
+            )
         )
-    )
     return out
 
 
@@ -562,9 +563,14 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         fresh.append(row)
                 else:
                     fresh.append(row)
-            writer.add(fresh)
+            # The merged CSV the user downloads is built from these writes, so apply the SAME
+            # table-side time filter here that the returned rows get at the end. Filtering only
+            # the returned table left the export holding out-of-range comments the analysis never
+            # saw. Log once at the end on the full table, not once per batch.
+            kept = filter_comments_by_time(fresh, params, node_label(node, str(nid)), log=False)
+            writer.add(kept)
             rows_out.extend(fresh)
-            add_log(t('comment.article', url=url, n=len(fresh), status=t(f'comment.status.{status}')))
+            add_log(t('comment.article', url=url, n=len(kept), status=t(f'comment.status.{status}')))
             if cursor_sink is not None and not unproven:
                 # Recorded AFTER the row sink committed, and only while the run of completed
                 # inputs is UNBROKEN — so ``url_index`` means "the leading inputs this node
