@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "note": "每张演示画布在独立数据根下串行执行；录制目标优先是显示应用页面的浏览器窗口，而不是宿主窗口。",
+  "groups": [
+    {
+      "id": "model",
+      "name": "模型与小模型能力",
+      "data_root": "scratchpad/demo_trace_root",
+      "port": 5001,
+      "llm": {"provider": "ollama", "model": "qwen3.5:9b"},
+      "capture_title": "采析绘",
+      "demos": [
+        {"id": "demo1", "title": "质性编码开放编码", "template": "templates/演示1_质性编码开放编码.json"},
+        {"id": "demo2", "title": "情感极性BERT批量分类", "template": "templates/演示2_情感极性BERT批量分类.json"},
+        {"id": "demo3", "title": "语义去重与相似检索", "template": "templates/演示3_语义去重与相似检索.json"},
+        {"id": "demo4", "title": "零样本用户标签分类", "template": "templates/演示4_零样本用户标签分类.json"},
+        {"id": "demo5", "title": "NER实体抽取", "template": "templates/演示5_NER实体抽取.json"},
+        {"id": "demo6", "title": "量化内容分析与编码信度", "template": "templates/演示6_量化内容分析演绎编码.json"}
+      ]
+    },
+    {
+      "id": "showcase",
+      "name": "全链路能力展示（复用已保存画布与数据集）",
+      "data_root": "scratchpad/demo_showcase_root",
+      "port": 5002,
+      "llm": {"provider": "ollama", "model": "qwen3.5:9b"},
+      "capture_title": "采析绘",
+      "demos": [
+        {"id": "showcase_sentiment", "title": "情感分析 + 可视化", "template": "templates/showcase_sentiment.json"},
+        {"id": "showcase_xhs", "title": "小红书数据筛选 + 图表 + 编译", "template": "templates/showcase_xhs.json"},
+        {"id": "showcase_keywords", "title": "关键词共现关系", "template": "templates/showcase_keywords.json"},
+        {"id": "showcase_biblio", "title": "文献计量与知识图谱", "template": "templates/showcase_biblio.json"}
+      ]
+    }
+  ]
+}

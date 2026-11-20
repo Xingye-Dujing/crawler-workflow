@@ -1,29 +1,49 @@
-# 演示工作流（最佳实践示例）
+# 演示工作流与录屏（可复用）
 
-这五个工作流体现采析绘推荐用法，均在独立演示数据根中实机跑通（Ollama qwen3.5:9b 与本地小模型）：
+本目录是采析绘能力的演示库，已按用途分类：
 
-| 文件 | 演示的能力 | 最佳实践要点 |
+| 目录 | 内容 |
+|---|---|
+| `templates/` | 演示画布 JSON（模型能力 + 你已保存的全链路画布） |
+| `codebooks/` | 码本样例（质性/量化编码） |
+| `datasets/` | 演示数据说明与粘贴载荷 |
+| `videos/` | 实机录屏 MP4 |
+| `manifest.json` | 演示清单：分组、数据根、端口、LLM 设置、画布模板 |
+| `../../tools/record_demo.py` | 一键运行 + 录屏脚本（跨三系统，一次一个运行） |
+
+## 一键录制
+
+```bash
+# 列出/直接运行单个演示
+python tools/record_demo.py --group model --demo demo1
+python tools/record_demo.py --group showcase --demo showcase_sentiment
+
+# 跑完某组全部演示；--no-record 只验证不录制
+python tools/record_demo.py --group model
+python tools/record_demo.py --group showcase --no-record
+```
+
+脚本会自动：在清单指定的独立数据根启动服务 → 打开**项目内专属 Chrome 配置**的浏览器窗口 →
+`SW_MAXIMIZE` + **F11 全屏** → 录制桌面（此时桌面就是浏览器页面，不是宿主窗口）→ 通过
+`/api/workflow/execute` 串行执行画布 → MKV 录制、无损转 MP4 → 关闭本次启动的浏览器进程树与
+服务进程树。不会误杀你原本开着的浏览器或服务器。
+
+需要覆盖时：`CIXI_BROWSER_BIN` 指定浏览器，`CIXI_FFMPEG` 指定 ffmpeg，`--width 0` 保持全屏原生分辨率。
+
+## 演示清单
+
+| 分组 | 演示 | 展示 |
 |---|---|---|
-| `演示1_质性编码开放编码.json` | LLM 节点 ↔ AI 工作区 | 每次 API/Ollama 调用生成可见临时对话；提示、回答、Token 估算、码本证据都留痕；不满意就在对话里继续改，确认后 `apply_codebook` → `rerun_node` |
-| `演示2_情感极性BERT批量分类.json` | 微调小模型 | 默认走模型目录里实测最优的 rbt3 蒸馏模型；不逐行问 LLM；批量推理 + 断点缓存 |
-| `演示3_语义去重与相似检索.json` | 向量小模型 | 语义近重复 ≠ SimHash 字面近重复；`similar_to` 固定四列输出，图表/下游可读 |
-| `演示4_零样本用户标签分类.json` | NLI 小模型 | 临时标签集不用训练、不用 LLM；低于阈值的行留空而不是编造标签 |
-| `演示5_NER实体抽取.json` | 序列标注小模型 | BERT NER 输出仍是 `row/text/label/start/end` 五列，可替换 regex/llm 模式而不改下游 |
-| `演示6_量化内容分析演绎编码.json` | 量化内容分析 | 先有码本再编码；双人独立编码给出 Cohen kappa 与一致率，分歧行保留待人工裁定；频次表独立成节点 |
+| `model` | demo1 | 质性编码开放编码，LLM 调用在 AI 工作区可见 |
+| `model` | demo2 | 微调 BERT 情感批量分类 |
+| `model` | demo3 | 语义去重 + 相似检索 |
+| `model` | demo4 | 零样本用户自定义标签 |
+| `model` | demo5 | NER 序列标注 |
+| `model` | demo6 | 量化内容分析，双人编码 + Cohen kappa |
+| `showcase` | showcase_sentiment | 情感分析 + 图表 + LaTeX 导出 |
+| `showcase` | showcase_xhs | 小红书数据筛选 + 可视化 + 编译 |
+| `showcase` | showcase_keywords | 关键词共现关系 |
+| `showcase` | showcase_biblio | 文献计量与知识图谱 |
 
 量化演示需要先把 `codebooks/content_analysis_sample.json` 通过 `POST /api/ai/codebooks` 导入账号码本；
-工作流里的 `codebook_id` 与之对应。AI 工作区的“内容分析”技能会引导你定义码本、确认后编码、再按信度结果修订码本并重跑。
-
-工作流 JSON 里的 `dataset_id` 指向演示数据根中通过 `/api/data/paste` 创建的数据集；导入到你自己的项目后，把 upload 节点换成你自己的数据集即可。所有下载与缓存仍只落项目目录。
-
-## 实机录屏
-
-五个工作流都在独立演示数据根（`scratchpad/demo_trace_root`，端口 5001）里、桌面 1440×900 视口下真实执行过，录屏在 `videos/`：
-
-- `videos/demo1.mp4`：质性编码开放编码（Ollama qwen3.5:9b，提示/回答/码本追踪可见）
-- `videos/demo2.mp4`：情感极性微调 BERT 批量分类
-- `videos/demo3.mp4`：语义近重复去重 + 相似文本检索
-- `videos/demo4.mp4`：零样本用户自定义标签
-- `videos/demo5.mp4`：NER 序列标注实体抽取
-
-录屏为 1280×800 H.264/MP4；每次运行都串行，未并发。节点可见追踪对话的界面截图见 `.openchamber/screenshots/trace-9b-final-*.jpg`。
+其他演示使用对应数据根中已经准备好的数据集。所有下载与缓存仍只落项目目录。
