@@ -549,6 +549,14 @@ class TestRunTranslatesTheAdapter:
         )
         assert bridge._summary_of(call)['rows'] == 3
 
+    def test_a_malformed_article_row_count_is_zero_not_a_traceback(self):
+        """``articles[].rows`` is adapter output. A non-numeric cell used to raise out of run()
+        with a bare ValueError instead of a named refusal."""
+        article = bridge._as_article({'url': 'https://x/1', 'status': 'blocked', 'rows': 'many'})
+        assert article.rows == 0
+        assert article.status == 'blocked'
+        assert bridge._as_article({'rows': -5}).rows == 0
+
 
 class TestPreflightAsksCatBusAlone:
     def test_a_logged_in_verdict_keeps_the_account_and_method(self, monkeypatch):
@@ -579,6 +587,16 @@ class TestPreflightAsksCatBusAlone:
         assert out['logged_in'] is False
         assert out['verdict'] == 'expired'
         assert out['hint'] == 'catbus bilibili auth login', 'the remedy names CatBus, never a Selenium cookie'
+
+    def test_a_string_error_keeps_the_verdict_unverifiable_instead_of_500(self, monkeypatch):
+        """A valid JSON verdict whose ``error`` is a string used to pass the ``or {}`` check and
+        then raise on ``error.get(...)``, turning the never-blocks gate into a request error."""
+        monkeypatch.setattr(
+            bridge, '_call', lambda argv, **kw: bridge._Call(code=3, stdout=json.dumps({'error': 'session expired'}))
+        )
+        out = bridge.preflight('bilibili')
+        assert out['verdict'] == 'unverifiable'
+        assert out['logged_in'] is False
 
     def test_the_account_is_asked_of_by_name(self, monkeypatch):
         seen = []

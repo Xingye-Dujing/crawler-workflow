@@ -745,7 +745,21 @@ def preflight(platform: str, account: str = '') -> dict:
             'hint': '',
             'account': account or None,
         }
-    error = verdict.get('error') or {}
+    # ``or {}`` only covered a MISSING error. A non-empty string (``{"error": "session expired"}``)
+    # passed the truthiness check and then died on ``error.get(...)`` — an adapter that answers in
+    # the alternate shape must keep the "unverifiable, never blocks" verdict, not 500 the route.
+    error = verdict.get('error')
+    if error is None:  # a logged-in verdict legitimately omits the error field
+        error = {}
+    elif not isinstance(error, dict):
+        return {
+            'available': True,
+            'logged_in': False,
+            'verdict': 'unverifiable',
+            'message': t('catbus.probeUnreadable', detail=call.stdout[:200]),
+            'hint': '',
+            'account': account or None,
+        }
     return {
         'available': True,
         'logged_in': bool(verdict.get('logged_in')),
@@ -793,10 +807,17 @@ class Outcome:
 
 
 def _as_article(entry: dict) -> Article:
+    # ``rows`` is adapter output, not a trusted integer. A non-numeric cell used to raise out of
+    # run() with a bare traceback; a per-article count is a named fact, so a malformed one is 0
+    # and the article's own status/error still carries the refusal.
+    try:
+        rows = max(0, int(entry.get('rows') or 0))
+    except (TypeError, ValueError, OverflowError):
+        rows = 0
     return Article(
         url=str(entry.get('url') or ''),
         status=str(entry.get('status') or 'error'),
-        rows=int(entry.get('rows') or 0),
+        rows=rows,
         error=entry.get('error') if isinstance(entry.get('error'), dict) else None,
     )
 
