@@ -44,7 +44,7 @@ PROCESS_ENUMS = {
     # six-tendency label set — hence its own operation rather than a new mode on theirs.
     # bert is the default; snownlp is the no-model fallback the executor picks when bert cannot run.
     'sentiment': {'mode': ('bert', ('llm', 'ml', 'snownlp', 'bert'))},
-    'ner': {'mode': ('regex', ('regex', 'llm'))},
+    'ner': {'mode': ('regex', ('regex', 'llm', 'bert'))},
     # The lexicon is the default because it needs no model, costs nothing, and answers the same
     # table every run; ``llm`` is the opt-in that can see the euphemisms a fixed list cannot.
     'aggression': {'mode': ('lexicon', ('lexicon', 'llm'))},
@@ -57,10 +57,17 @@ PROCESS_ENUMS = {
 #: Every operation the process executor dispatches, including the four with no select-shaped
 #: parameter (``PROCESS_ENUMS`` only lists the ones that have one). ``bot``/``anomaly``/
 #: ``correlation``/``significance`` read typed column names instead.
-PROCESS_OPS = frozenset(PROCESS_ENUMS) | {'bot', 'anomaly', 'correlation', 'significance', 'tokenize'}
+PROCESS_OPS = frozenset(PROCESS_ENUMS) | {
+    'bot',
+    'anomaly',
+    'correlation',
+    'significance',
+    'tokenize',
+    'zero_shot',
+}
 
 #: The operations whose whole job is to read one text column of the table.
-_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression')
+_TEXT_COLUMN_OPS = ('clean', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'zero_shot')
 
 # ─── Column contract (what each op writes, what it reads) ───
 #: Ops that ADD these columns and pass the rest through (verified against each analyzer's
@@ -72,6 +79,7 @@ OUTPUT_ADD_COLUMNS: dict[str, tuple[str, ...]] = {
     'sentiment': ('sentiment', 'score'),
     'aggression': ('aggression', 'aggression_score', 'aggression_hits'),
     'anomaly': ('anomaly_score', 'is_anomaly'),
+    'zero_shot': ('zero_shot_label', 'zero_shot_score'),
 }
 
 #: Ops that REPLACE the whole table with a fixed set (the analyzer returns a fresh frame;
@@ -104,6 +112,7 @@ READ_PARAMS: dict[str, tuple[str, ...]] = {
     'anomaly': (),
     'correlation': (),
     'significance': ('group_column', 'value_column'),
+    'zero_shot': ('text_column',),
 }
 
 

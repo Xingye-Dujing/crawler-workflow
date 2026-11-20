@@ -37,6 +37,8 @@ from analyzers import (
 )
 from analyzers.bot import BotLikelihoodAnalyzer
 from analyzers.sentiment import bert_backend, resolve_bert_model
+from analyzers.zero_shot import DEFAULT_MODEL as ZERO_SHOT_MODEL
+from analyzers.zero_shot import analyze_zero_shot
 from i18n import t
 from nodes.context import NodeCall, columns_from_params, node_operation, node_params
 from nodes.executors.tokenize import OUTPUT_COLUMNS as TOKENIZE_COLUMNS
@@ -372,10 +374,23 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
         )
         return df.to_dict('records')
 
+    if op == 'zero_shot':
+        frame = analyze_zero_shot(
+            df,
+            text_column=text_column,
+            labels=str(params.get('labels') or ''),
+            model=str(params.get('model') or ZERO_SHOT_MODEL),
+            threshold=_safe_float(params.get('threshold'), 0.0) or 0.0,
+        )
+        return frame.to_dict('records')
+
     if op == 'ner':
         # Its own mode default: the rules need no model, and a workflow saved
         # before the mode selector existed must not start paying for one.
-        recognizer = NamedEntityRecognizer(mode=enum_param(op, params, 'mode'))
+        recognizer = NamedEntityRecognizer(
+            mode=enum_param(op, params, 'mode'),
+            model_name=str(params.get('bert_model') or '').strip(),
+        )
         df = recognizer.analyze_dataframe(
             df,
             text_column=text_column,

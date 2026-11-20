@@ -1,0 +1,17 @@
+{
+  "id": "ckip-ner",
+  "name": "中文 NER（序列标注）",
+  "family": "token_classification",
+  "task": "ner",
+  "source": "hub",
+  "path": "ckiplab/bert-base-chinese-ner",
+  "desc": "ckiplab 中文命名实体小模型；process 节点 ner 的 bert 模式直接填这个 id 即可。",
+  "labels": ["PERSON", "ORG", "LOC", "DATE"],
+  "outputs": ["row", "text", "label", "start", "end"],
+  "use_for": ["从微博正文抽取人名、机构、地点、时间", "不支付逐行 LLM 费用的实体识别"],
+  "avoid_for": ["需要模型没训练过的新实体类型", "跨度超过模型窗口的超长文本"],
+  "license": "MIT",
+  "docs": "docs/models/ckip-ner.md",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

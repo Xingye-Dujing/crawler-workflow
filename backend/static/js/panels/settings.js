@@ -701,7 +701,7 @@ function openSettings(nodeId) {
         html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
+        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(
@@ -817,13 +817,24 @@ function openSettings(nodeId) {
            both, so asking for persons only costs persons only. */
         if (p.operation === 'ner') {
             html += renderParamSelect(nodeId, p, 'mode', 'settings.mode', 'regex',
-                [{ v: 'regex', l: I18n.t('mode.regex') }, { v: 'llm', l: llmModeLabel() }]);
+                [{ v: 'regex', l: I18n.t('mode.regex') }, { v: 'llm', l: llmModeLabel() },
+                 { v: 'bert', l: I18n.t('mode.nerBert') }]);
+            if (p.mode === 'bert') {
+                html += renderParamInput(nodeId, p, 'bert_model', 'settings.bertModel', 'text', '');
+            }
             html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.entityTypes') +
                 '</label><input class="settings-input" value="' + escapeHtml(p.entity_types || '') + '" placeholder="' +
                 I18n.t('settings.entityTypesPlaceholder') + '" ' +
                 'onchange="updateParam(\'' + nodeId + '\',\'entity_types\',this.value)">' +
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.entityTypesHint') +
                 '</div></div>';
+        }
+
+        /* Zero-shot labelling: a temporary, user-named label set scored by a small NLI model. */
+        if (p.operation === 'zero_shot') {
+            html += renderParamInput(nodeId, p, 'labels', 'settings.zeroShotLabels', 'text', '') +
+                renderParamInput(nodeId, p, 'model', 'settings.bertModel', 'text', 'MoritzLaurer/mDeBERTa-v3-base-mnli-xnli') +
+                renderParamInput(nodeId, p, 'threshold', 'settings.zeroShotThreshold', 'number', 0);
         }
 
         /* Cyberbullying speech — the study's own object. The word-list path needs no model,

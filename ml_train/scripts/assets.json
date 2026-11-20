@@ -6,7 +6,7 @@
     {"id": "rbt6", "repo": "hfl/rbt6", "task": "encoder-base", "kind": "hub", "patterns": ["config.json", "model.safetensors", "tokenizer.json", "vocab.txt", "pytorch_model.bin"]},
     {"id": "electra-small", "repo": "hfl/chinese-electra-180g-small-discriminator", "task": "encoder-base", "kind": "hub", "patterns": ["config.json", "model.safetensors", "tokenizer.json", "vocab.txt", "pytorch_model.bin"]},
     {"id": "erlangshen-deberta-97m", "repo": "IDEA-CCNL/Erlangshen-DeBERTa-v2-97M-chinese", "task": "encoder-base", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
-    {"id": "erlangshen-ner", "repo": "IDEA-CCNL/Erlangshen-Roberta-110M-NER", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
+    {"id": "ckip-ner", "repo": "ckiplab/bert-base-chinese-ner", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
     {"id": "bge-small-zh", "repo": "BAAI/bge-small-zh-v1.5", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
     {"id": "gte-small-zh", "repo": "thenlper/gte-small-zh", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
     {"id": "m3e-small", "repo": "moka-ai/m3e-small", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},

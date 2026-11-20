@@ -255,7 +255,15 @@ BUILTIN = {
             'column you quote. Refuse by name when a model is not runnable here.'
         ),
         context=('project', 'dataset', 'docs'),
-        tools=('models_catalog', 'model_infer', 'dataset_peek', 'dataset_query', 'analysis_catalog', 'docs_search'),
+        tools=(
+            'models_catalog',
+            'model_infer',
+            'model_rerank',
+            'dataset_peek',
+            'dataset_query',
+            'analysis_catalog',
+            'docs_search',
+        ),
         local_only=True,
         suggested=('这几条评论用哪个小模型最快？', '这个标签集该用零样本还是微调模型？', '用向量模型找相似评论。'),
     ),

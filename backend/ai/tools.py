@@ -612,6 +612,29 @@ def _infer_text_classifier(manifest, texts: list[str], args: dict) -> dict:
     }
 
 
+def tool_model_rerank(args: dict, _ctx: dict) -> dict:
+    """Order up to 50 candidate strings by a cross-encoder's relevance to one query."""
+    from analyzers.backends.reranker import DEFAULT_MODEL, rerank
+
+    query = str(args.get('query') or '').strip()
+    candidates = args.get('candidates')
+    if not query or not isinstance(candidates, list) or not candidates:
+        raise AIError(
+            'ai.toolRefused', kind='bad_request', tool='model_rerank', reason='query and candidates are required'
+        )
+    rows = [str(item) for item in candidates[:50]]
+    try:
+        ordered = rerank(
+            query,
+            rows,
+            model_name=str(args.get('model') or DEFAULT_MODEL),
+            top_k=_int_arg(args.get('top_k'), 10, 1, 50),
+        )
+    except Exception as exc:
+        raise AIError('ai.toolRefused', kind='error', tool='model_rerank', reason=str(exc)[:200]) from exc
+    return {'query': query, 'model': str(args.get('model') or DEFAULT_MODEL), 'results': ordered, 'count': len(ordered)}
+
+
 def tool_list_runs(_args: dict, _ctx: dict) -> dict:
     from runtime.stores import get_run_store
 
@@ -1303,6 +1326,23 @@ TOOLS = {
                 'required': ['model_id', 'column'],
             },
             handler=tool_model_infer,
+            permission='exec:model',
+        ),
+        ToolSpec(
+            'model_rerank',
+            'Order up to 50 candidate strings by how well a small cross-encoder matches one query. '
+            'Use it after a coarse retrieval, not on a whole table.',
+            {
+                'type': 'object',
+                'properties': {
+                    'query': {'type': 'string'},
+                    'candidates': {'type': 'array', 'items': {'type': 'string'}},
+                    'model': {'type': 'string'},
+                    'top_k': {'type': 'integer'},
+                },
+                'required': ['query', 'candidates'],
+            },
+            handler=tool_model_rerank,
             permission='exec:model',
         ),
         ToolSpec(

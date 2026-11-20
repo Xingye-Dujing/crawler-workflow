@@ -40,6 +40,7 @@ class ModelManifest:
     family: str
     task: str
     path: str
+    source: str = 'local'
     desc: str = ''
     operation: str = ''
     labels: tuple = ()
@@ -71,6 +72,7 @@ class ModelManifest:
             'task': self.task,
             'operation': self.operation or self.task,
             'path': self.path,
+            'source': self.source,
             'desc': self.desc,
             'labels': list(self.labels),
             'outputs': list(self.outputs),
@@ -129,7 +131,10 @@ def from_manifest(data: dict, *, base_dir: str = '') -> ModelManifest:
     path = str(data.get('path') or '').strip()
     if not path:
         raise ManifestError(f'{model_id}: path is empty; nothing could be loaded from it')
-    if not os.path.isabs(path):
+    source = str(data.get('source') or 'local').strip()
+    if source not in ('local', 'hub'):
+        raise ManifestError(f'{model_id}: unknown source {source!r}; use local or hub')
+    if source == 'local' and not os.path.isabs(path):
         if '..' in path.replace('\\', '/').split('/'):
             raise ManifestError(f'{model_id}: path {path!r} escapes its root')
         if base_dir:
@@ -142,6 +147,7 @@ def from_manifest(data: dict, *, base_dir: str = '') -> ModelManifest:
         family=family,
         task=str(data.get('task') or model_id),
         path=path,
+        source=source,
         desc=str(data.get('desc') or ''),
         operation=str(data.get('operation') or data.get('task') or ''),
         labels=tuple(str(item) for item in data.get('labels') or ()),

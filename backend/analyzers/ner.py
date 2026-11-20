@@ -174,9 +174,10 @@ class NamedEntityRecognizer:
 
     def __init__(self, model_name: str = 'qwen3.5:9b', mode: str = 'regex'):
         self.model_name = model_name
-        # Anything but an explicit 'llm' stays on the rules: an older saved
+        # Anything but an explicit model mode stays on the rules: an older saved
         # workflow has no mode field and must not start paying for a model.
-        self.mode = 'llm' if str(mode or '').strip().lower() == 'llm' else 'regex'
+        chosen = str(mode or '').strip().lower()
+        self.mode = chosen if chosen in ('llm', 'bert') else 'regex'
 
     def analyze_dataframe(
         self,
@@ -194,7 +195,62 @@ class NamedEntityRecognizer:
         wanted = wanted_types(entity_types)
         if self.mode == 'llm':
             return self._analyze_llm(df, text_column, wanted, ctx)
+        if self.mode == 'bert':
+            return self._analyze_bert(df, text_column, wanted)
         return self._analyze_regex(df, text_column, wanted)
+
+    # ── bert mode: a small sequence-labelling model, no per-row LLM cost ──
+
+    def _analyze_bert(self, df: pd.DataFrame, text_column: str, wanted: set) -> pd.DataFrame:
+        """Tag entities with a local token-classification model.
+
+        The pipeline returns character offsets into the SAME text the row holds. Anything it reports
+        whose slice does not reproduce the entity is discarded: a label filed against the wrong
+        substring is worse data than a missing entity, and it keeps the five-column contract intact
+        for charts and exports. No lexical fallback -- an explicit model mode refuses by name.
+        """
+        if text_column not in df.columns:
+            logger.error(t('analysis.col_missing', col=text_column))
+            return _empty_table()
+        try:
+            from transformers import pipeline
+        except ImportError as exc:
+            raise ValueError(t('analysis.ner_bert_missing')) from exc
+        from analyzers.sentiment import resolve_bert_model
+
+        model = resolve_bert_model(str(self.model_name or '').strip())
+        if not model:
+            raise ValueError(t('analysis.ner_bert_no_model'))
+        try:
+            tagger = pipeline('token-classification', model=model, aggregation_strategy='simple')
+        except Exception as exc:
+            raise ValueError(t('analysis.ner_bert_failed', model=model, err=exc)) from exc
+
+        indices = [idx for idx, raw in df[text_column].items() if pd.notna(raw) and str(raw).strip()]
+        hits = []
+        for start in range(0, len(indices), 32):
+            chunk = indices[start : start + 32]
+            texts = [str(df.at[idx, text_column]).strip() for idx in chunk]
+            try:
+                answers = tagger(texts)
+            except Exception as exc:
+                raise ValueError(t('analysis.ner_bert_failed', model=model, err=exc)) from exc
+            for idx, text, entities in zip(chunk, texts, answers, strict=False):
+                for entity in entities:
+                    raw_label = str(entity.get('entity_group') or entity.get('entity') or '').split('-')[-1]
+                    label = _label_of(raw_label)
+                    if label not in wanted:
+                        continue
+                    begin, end = int(entity.get('start', -1)), int(entity.get('end', -1))
+                    if (
+                        begin < 0
+                        or end <= begin
+                        or end > len(text)
+                        or text[begin:end] != entity.get('word', text[begin:end])
+                    ):
+                        continue
+                    hits.append({'row': idx, 'text': text[begin:end], 'label': label, 'start': begin, 'end': end})
+        return _table(hits)
 
     # ── regex mode ──────────────────────────────────────────────
 

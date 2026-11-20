@@ -89,6 +89,12 @@ ZH = {
     'analysis.dedupe_similar': (
         '近重复去重：在“{column}”上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
     ),
+    'analysis.zero_shot_no_labels': '零样本分类没有候选标签：请填写至少一个标签，节点不会替你猜一个',
+    'analysis.zero_shot_missing': '零样本模型不可用：缺少 torch/transformers；不会改用关键词规则冒充模型判断',
+    'analysis.zero_shot_failed': '零样本模型“{model}”加载或运行失败：{err}',
+    'analysis.ner_bert_no_model': '序列标注模式的模型名为空：请填写本机已有的 NER 模型目录，节点不会改用规则代替',
+    'analysis.ner_bert_missing': '序列标注模型不可用：缺少 torch/transformers；显式选择 bert 模式时不会偷偷退回规则',
+    'analysis.ner_bert_failed': '序列标注模型“{model}”加载或运行失败：{err}',
     'analysis.embed_missing': '向量模型不可用：缺少 sentence-transformers；显式选择向量算子时不会偷偷退回词面方法',
     'analysis.embed_failed': '向量模型“{model}”加载或运行失败：{err}',
     'analysis.semantic_threshold': '语义相似度阈值应在 0–1 之间，收到 {value}，已拒绝',
@@ -514,6 +520,22 @@ EN = {
     'analysis.dedupe_similar': (
         'Near-duplicate dedupe: SimHash distance ≤{distance} on "{column}", dropped {n} rows (first of each group kept)'
     ),
+    'analysis.zero_shot_no_labels': (
+        'Zero-shot classification has no candidate labels; name at least one instead of letting the node invent one'
+    ),
+    'analysis.zero_shot_missing': (
+        'The zero-shot model is unavailable: torch/transformers is missing; '
+        'no keyword rule will be passed off as a model verdict'
+    ),
+    'analysis.zero_shot_failed': 'Zero-shot model "{model}" failed to load or run: {err}',
+    'analysis.ner_bert_no_model': (
+        'The bert NER mode has no model name; point it at a local NER checkpoint instead of silently using regex rules'
+    ),
+    'analysis.ner_bert_missing': (
+        'The token-classification model is unavailable: torch/transformers is missing; '
+        'an explicit bert mode refuses instead of silently falling back to regex rules'
+    ),
+    'analysis.ner_bert_failed': 'Token-classification model "{model}" failed to load or run: {err}',
     'analysis.embed_missing': (
         'The embedding model is unavailable: sentence-transformers is missing; '
         'an explicit embedding step refuses instead of silently falling back to lexical matching'

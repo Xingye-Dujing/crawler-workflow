@@ -65,6 +65,10 @@ def _path_ready(manifest: ModelManifest) -> tuple[bool, str]:
     path = manifest.path
     if not path:
         return False, f'{manifest.source_of_truth()}: no path'
+    if manifest.source == 'hub':
+        # A hub id is downloaded into the project-local HF cache by fetch_assets.py; the runtime
+        # resolves it there. No local directory is required to declare it addressable.
+        return True, ''
     if os.path.isdir(path):
         if manifest.family == 'text_classification' and not any(
             os.path.isfile(os.path.join(path, name)) for name in ('config.json', 'model.onnx', 'model.safetensors')

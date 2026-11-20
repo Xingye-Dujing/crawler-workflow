@@ -1,0 +1,17 @@
+{
+  "id": "mnli-xnli",
+  "name": "零样本分类（多语言 NLI）",
+  "family": "zero_shot",
+  "task": "zero_shot",
+  "source": "hub",
+  "path": "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli",
+  "desc": "候选标签临时给定时的小模型分类；process 节点 zero_shot 的默认模型。",
+  "labels": [],
+  "outputs": ["zero_shot_label", "zero_shot_score"],
+  "use_for": ["临时标签集（正面/质疑/辟谣/离题）", "没有标注数据又不想逐行问 LLM"],
+  "avoid_for": ["固定封闭标签的大批量任务（用微调分类器）", "需要细分领域的精确分类"],
+  "license": "MIT",
+  "docs": "docs/models/mnli-xnli.md",
+  "requires": ["torch", "transformers"],
+  "default_for": ["zero_shot"]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "gte-small-zh",
+  "name": "句向量（gte-small-zh）",
+  "family": "encoder",
+  "task": "embedding",
+  "source": "hub",
+  "path": "thenlper/gte-small-zh",
+  "desc": "小中文句向量备选；主题步骤与语义去重/检索可通过 embedding_model 字段点名使用。",
+  "labels": [],
+  "outputs": ["vector"],
+  "use_for": ["短文本相似度与聚类", "语义去重/检索的备选编码器"],
+  "avoid_for": ["和 bge-small 混用后直接比较分数（不同向量空间）"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/gte-small-zh.md",
+  "requires": ["sentence_transformers"],
+  "default_for": []
+}

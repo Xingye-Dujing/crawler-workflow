@@ -1,0 +1,17 @@
+{
+  "id": "bge-reranker-base",
+  "name": "语义重排（bge-reranker-base）",
+  "family": "reranker",
+  "task": "reranker",
+  "source": "hub",
+  "path": "BAAI/bge-reranker-base",
+  "desc": "交叉编码器，对候选文本对打分重排；用于 AI 检索/报告引用排序，不进逐行节点。",
+  "labels": [],
+  "outputs": ["score"],
+  "use_for": ["文档检索结果重排", "对话上下文候选排序"],
+  "avoid_for": ["逐行打标（用分类模型）", "无候选对的纯生成任务"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/bge-reranker-base.md",
+  "requires": ["torch", "transformers"],
+  "default_for": ["reranker"]
+}

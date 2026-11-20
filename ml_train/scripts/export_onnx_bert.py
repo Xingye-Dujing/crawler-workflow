@@ -73,6 +73,18 @@ PACKS = {
         'sentiment',
         '正面/负面二分类，中性带交给阈值。情感/sentiment 节点 bert 模式用。',
     ),
+    'sentiment_rbt3': (
+        'sentiment',
+        '3 层 rbt3 蒸馏极性模型：同准下吞吐约为 110M 的 5 倍，情感快速档默认。',
+    ),
+    'emotion_rbt6': (
+        'emotion',
+        '6 层 rbt6 情绪六类快速档；质量低于 110M 默认，仅作对照与显存紧张时使用。',
+    ),
+    'tendency_rbt6': (
+        'tendency',
+        '6 层 rbt6 立场六类快速档；质量低于推荐模型，仅作对照与显存紧张时使用。',
+    ),
 }
 
 OPSET = 17

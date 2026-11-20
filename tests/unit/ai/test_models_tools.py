@@ -52,6 +52,23 @@ def test_infer_is_bounded_and_reports_truncation(monkeypatch):
     assert answer['model'] and answer['rows'] == 200
 
 
+def test_rerank_tool_is_bounded_and_uses_the_small_cross_encoder(monkeypatch):
+    seen = {}
+
+    def fake(query, candidates, model_name, top_k):
+        seen['n'] = len(candidates)
+        seen['model'] = model_name
+        return [{'rank': 1, 'text': candidates[0], 'score': 0.9}]
+
+    monkeypatch.setattr('analyzers.backends.reranker.rerank', fake)
+    answer = tools.tool_model_rerank(
+        {'query': '正面评价', 'candidates': [f'候选{i}' for i in range(60)], 'model': 'BAAI/bge-reranker-base'}, {}
+    )
+    assert seen['n'] == 50, 'the hard cap is 50 candidates'
+    assert seen['model'] == 'BAAI/bge-reranker-base'
+    assert answer['count'] == 1
+
+
 def test_new_skills_are_builtin_local_and_name_registered_tools():
     for skill_id in ('models', 'model_tuning'):
         skill = skills.BUILTIN[skill_id]

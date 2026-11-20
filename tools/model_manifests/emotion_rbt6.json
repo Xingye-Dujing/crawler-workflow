@@ -1,0 +1,25 @@
+{
+  "id": "emotion_rbt6",
+  "name": "情绪六类·轻量版（rbt6）",
+  "family": "text_classification",
+  "task": "emotion",
+  "operation": "emotion",
+  "path": "ml_train/models/emotion_rbt6",
+  "desc": "6 层 rbt6 微调 1 轮；本机实测 macro-F1 0.7426，低于原 110M 的 0.792，故不作为默认。",
+  "labels": ["Anger", "Fear", "Joy", "Neutral", "Sadness", "Surprise"],
+  "outputs": ["emotion", "confidence"],
+  "score_kind": "confidence",
+  "precision": "fp16",
+  "size_mb": 83,
+  "quality": [
+    {"dataset": "SMP2020-EWECT usual_train", "split": "official eval 2000 rows, 1 epoch", "metric": "macro_f1", "value": 0.7426},
+    {"dataset": "SMP2020-EWECT usual_train", "split": "5% holdout, 1 epoch", "metric": "macro_f1", "value": 0.7326}
+  ],
+  "use_for": ["显存紧张时的情绪快速档", "与原模型做速度/质量对照"],
+  "avoid_for": ["作为默认情绪模型（质量未达 1 分内）", "稀有情绪类的精细区分"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/emotion_rbt6.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

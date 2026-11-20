@@ -1,0 +1,24 @@
+{
+  "id": "tendency_rbt6",
+  "name": "立场六类·轻量版（rbt6）",
+  "family": "text_classification",
+  "task": "tendency",
+  "operation": "tendency",
+  "path": "ml_train/models/tendency_rbt6",
+  "desc": "6 层 rbt6 微调 1 轮；DEV macro-F1 0.4945，明显低于推荐模型，仅作速度对照。",
+  "labels": ["Advocacy/Call-to-action", "Controversy/Reflection", "Criticism/Questioning", "Objective Statement", "Praise/Affirmation", "Satire/Mockery"],
+  "outputs": ["tendency", "tendency_confidence"],
+  "score_kind": "confidence",
+  "precision": "fp16",
+  "size_mb": 83,
+  "quality": [
+    {"dataset": "tendency_distilled.csv", "split": "DEV seed42 (distilled labels), 1 epoch", "metric": "macro_f1", "value": 0.4945}
+  ],
+  "use_for": ["速度对照", "显存紧张时的快速档（质量让步已知）"],
+  "avoid_for": ["作为默认立场模型", "Controversy/反讽细分"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/tendency_rbt6.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

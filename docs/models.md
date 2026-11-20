@@ -58,5 +58,8 @@ datasets/raw/<原始语料>/
 ## 已接的小模型场景
 
 - 文本分类：`sentiment` / `emotion` / `tendency`（每个模型都可从目录选择，多模型对比复用 `bert_models`）。
-- 语义：`semantic_dedupe`（近重复去重）、`similar_to`（相似文本检索），以及主题步骤的 embedding 路径。
-- AI 工作区：`models_catalog` 查目录、`model_infer` 在 ≤200 行上试跑；`models` 与 `model_tuning` 技能负责调度与配方。
+- 语义：`semantic_dedupe`（近重复去重）、`similar_to`（相似文本检索），以及主题步骤的 embedding 路径；备选编码器 `gte-small-zh`。
+- 序列标注：process 节点 `ner` 的 `mode=bert`，模型名填 `ckiplab/bert-base-chinese-ner`，输出仍是五列实体表。
+- 零样本：`zero_shot` 算子 + NLI 小模型，候选标签由你临时给出；低于阈值的行留空。
+- 重排：`bge-reranker-base` 已入目录，AI 工作区用 `model_rerank` 对 ≤50 个候选做精排。
+- AI 工作区：`models_catalog` 查目录、`model_infer` 在 ≤200 行上试跑、`model_rerank` 精排；`models` 与 `model_tuning` 技能负责调度与配方。
