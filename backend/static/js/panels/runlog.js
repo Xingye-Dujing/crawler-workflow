@@ -74,10 +74,16 @@ var runLogViewer = {
 
     loadOlder: async function () {
         if (!this._hasMore || this._oldestSeq === null) return;
-        var seq = this._seq;
+        var before = this._oldestSeq;
+        /* Two rapid clicks used to share BOTH the generation and the cursor, so both pages
+           with the same `before` landed and the same older lines were prepended twice. Park the
+           cursor as soon as it is requested and invalidate any earlier response with _seq. */
+        if (this._requestedBefore === before) return;
+        this._requestedBefore = before;
+        var seq = this._seq = (this._seq || 0) + 1;
         var runId = this._runId;
         var params = this._qs();
-        params.push('before=' + this._oldestSeq, 'limit=' + this.PAGE);
+        params.push('before=' + before, 'limit=' + this.PAGE);
         this._setStatus(this._t('runLog.loading'));
         try {
             var resp = await fetch('/api/runs/' + encodeURIComponent(runId) + '/log?' + params.join('&'));
@@ -93,11 +99,14 @@ var runLogViewer = {
             this.render(keepFromBottom);
         } catch (e) {
             if (seq === this._seq) this._setStatus(this._t('runLog.loadFailed'));
+        } finally {
+            if (this._requestedBefore === before) this._requestedBefore = null;
         }
     },
 
     reload: function () {
         this._seq = (this._seq || 0) + 1;  // invalidate whatever is in flight
+        this._requestedBefore = null;
         this._rows = [];
         this._oldestSeq = null;
         this._hasMore = false;

@@ -292,9 +292,10 @@ def _cookie_restore(directory: str, snapshot: dict) -> None:
                 os.remove(os.path.join(directory, name))
     for name, payload in snapshot.items():
         path = os.path.join(directory, name)
-        if not os.path.isfile(path):
-            with open(path, 'wb') as handle:
-                handle.write(payload)
+        # A file that existed at setup and was OVERWRITTEN must get its original bytes back,
+        # not just a missing one: otherwise the next test inherits this test's login.
+        with contextlib.suppress(OSError), open(path, 'wb') as handle:
+            handle.write(payload)
 
 
 @pytest.fixture(autouse=True)

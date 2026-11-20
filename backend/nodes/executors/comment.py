@@ -298,11 +298,13 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         was never allowed to advance past the hole.
         """
         candidate = claimed.get(kind)
-        if not facts.get('login_wall') and not facts.get('risk_blocked'):
+        if not any(facts.get(key) for key in ('login_wall', 'risk_blocked', 'unreachable', 'error')):
             # The walker answered BLOCKED but did not say WHY. That is still an attributable
             # refusal — the safe word is 风控 (back off), never "ok": an empty fact set used to
             # clear the account's cooldown and write an `ok` audit row for a walled session.
-            # The platforms that can tell a login wall apart latch it themselves.
+            # A walker THAT DID name a network fault must stay NETWORK: turning unreachable into
+            # risk benched a healthy exit for hours and burned an account rotation on a link the
+            # site never saw. The platforms that can tell a login wall apart latch it themselves.
             facts = {**facts, 'risk_blocked': True}
         verdict = pool.observe(
             kind,
@@ -535,16 +537,6 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 # Not proven: a dead or walled link, one the harness names as skipped, or one
                 # whose own walk came home short of what the site counted.
                 unproven.append(idx)
-            elif cursor_sink is not None and not unproven:
-                # Recorded AFTER the walk, and only while the run of completed inputs is
-                # UNBROKEN — so ``url_index`` means "the leading inputs this node PROVED", the
-                # one thing 继续 has to trust. A hole at 2 must pin the cursor at 1 even when
-                # 3..10 all come back clean: advancing over the hole is exactly the laundering
-                # this rewrite exists to stop. The replay then re-walks from 2, and the ledger
-                # refuses the rows it already paid for (``item_key`` now keys a comment by its
-                # own site id), so the replay costs the player its time and never costs a
-                # duplicate row.
-                cursor_sink({'url_index': idx, 'url_total': len(urls)})
             if status == BLOCKED:
                 # Named by what actually walled. The message used to fall back to a
                 # hand-written list of four platforms, so a YouTube or X comment run
@@ -573,6 +565,16 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             writer.add(fresh)
             rows_out.extend(fresh)
             add_log(t('comment.article', url=url, n=len(fresh), status=t(f'comment.status.{status}')))
+            if cursor_sink is not None and not unproven:
+                # Recorded AFTER the row sink committed, and only while the run of completed
+                # inputs is UNBROKEN — so ``url_index`` means "the leading inputs this node
+                # PROVED", the one thing 继续 has to trust. Writing it before the sink meant a
+                # failed insert (or an unclean kill between the two) laundered a hole into a
+                # completed link that no resume would ever replay. A hole at 2 must pin the
+                # cursor at 1 even when 3..10 come back clean; the replay re-walks from 2 and
+                # the ledger refuses rows it already paid for (``item_key`` keys a comment by
+                # its own site id).
+                cursor_sink({'url_index': idx, 'url_total': len(urls)})
     except BaseException:
         # Whatever the walk raised (a refused adapter, a harness that failed to start, a locked
         # runs.db in the sink, a full export dir), publish the part files first — but suppressed,

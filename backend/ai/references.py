@@ -9,7 +9,6 @@ same budget the context builder applies to project facts.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from runtime import paths, stores
 
@@ -102,14 +101,22 @@ def options(query: str = '') -> list[dict]:
 
 
 def _export_text(name: str) -> str:
-    """A bounded head of an export file: the model needs its shape, not its bytes."""
-    directory = Path(paths.active().export_dir)
-    candidate = directory / name
-    if not candidate.is_file():
+    """A bounded head of an export file: the model needs its shape, not its bytes.
+
+    The id is client input, so it goes through the SAME name-only resolver the download route
+    uses. ``Path(base) / name`` discarded the base for an absolute name and followed ``..`` for
+    a relative one, which let a turn read any file the account could reach and store its first
+    characters in ``context_text`` forever.
+    """
+    from services.exports.browser import resolve_export_file
+
+    candidate = resolve_export_file(paths.active().export_dir, name)
+    if not candidate:
         # A name the export directory does not hold is refused by name, never guessed at.
         return f'导出文件 {name}：在本账号的导出目录中找不到。'
     try:
-        head = candidate.read_text(encoding='utf-8', errors='replace')[:MAX_CHARS]
+        with open(candidate, encoding='utf-8', errors='replace') as handle:
+            head = handle.read(MAX_CHARS)
     except OSError as exc:
         return f'导出文件 {name}：读取失败（{exc}）。'
     return f'导出文件 {name} 的前 {len(head)} 个字符：\n{head}'

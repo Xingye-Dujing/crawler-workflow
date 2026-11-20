@@ -37,6 +37,24 @@ class _Response:
         self.text = text
 
 
+def test_a_skill_pack_cannot_register_process_wide_ui_contributions():
+    """The install route exempts skill packs from admin because they write one account's skills;
+    a ``ui`` array would also register into the process-wide host and break that premise."""
+    from extensions.manifest import validate_manifest
+
+    payload = {
+        'id': 'test.skillpack.ui',
+        'version': '1.0.0',
+        'kind': 'skill-pack',
+        'skills': [{'name': 'Only skills'}],
+        'ui': [{'id': 'secret', 'label': 'global'}],
+    }
+    with pytest.raises(ValueError, match='process-wide ui'):
+        validate_manifest(payload)
+    payload.pop('ui')
+    assert validate_manifest(payload).kind == 'skill-pack'
+
+
 def test_a_redirect_to_a_disallowed_host_is_refused_and_never_fetched(monkeypatch):
     from ai.errors import AIError
 

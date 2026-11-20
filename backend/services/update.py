@@ -237,8 +237,12 @@ def _asset(feed: dict) -> dict:
 
 
 def _fetch(url: str, timeout: float = 8.0) -> bytes:
+    _require_https(url)
     request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    # The package download already refuses an HTTPS→HTTP redirect; the manifest fetch used a
+    # bare opener, so a 302 could hand a signed-less feed (version, sha256, URL) to a cleartext
+    # hop and let a network attacker steer the binary the app then installs.
+    with _OPENER.open(request, timeout=timeout) as response:
         raw = response.read(MAX_FEED_BYTES + 1)
     if len(raw) > MAX_FEED_BYTES:
         raise ValueError(f'更新清单超过 {MAX_FEED_BYTES} 字节，已拒绝')
@@ -249,7 +253,10 @@ def feed_urls() -> tuple[str, ...]:
     """The manifest addresses to try, in order; ``CIXI_UPDATE_FEED`` replaces both when set."""
     override = str(os.environ.get(FEED_ENV) or '').strip()
     if override:
-        return tuple(item.strip() for item in override.split(',') if item.strip())
+        urls = tuple(item.strip() for item in override.split(',') if item.strip())
+        for url in urls:
+            _require_https(url)
+        return urls
     return FEED_URLS
 
 
@@ -534,7 +541,12 @@ def download_package(asset: dict, package: Path, *, progress=None, cancelled=Non
             if cancelled is not None and cancelled():
                 raise UpdateError('cancelled', '已取消')
             url = str(part.get('url') or '').strip()
-            expected_size = int(part.get('size') or 0)
+            try:
+                expected_size = int(part.get('size') or 0)
+            except (TypeError, ValueError) as exc:
+                # The feed is network input; a malformed size is a named refusal, not an
+                # exception that kills the detached download worker.
+                raise UpdateError('feed', f'第 {index} 个分片的大小不是数字') from exc
             expected_sha = str(part.get('sha256') or '').strip().lower()
             part_path = package.with_name(f'{package.name}.part{index:03d}')
             ok_path = part_path.with_name(f'{part_path.name}.ok')

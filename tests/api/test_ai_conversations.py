@@ -28,6 +28,21 @@ def _patch(client, conversation_id: str, **fields):
     return response.get_json()['conversation']
 
 
+def test_stop_does_not_signal_a_conversation_this_account_cannot_see(client, monkeypatch):
+    """ACTIVE_STREAMS is process-wide; without the owner check a known id could cancel a
+    foreign account's paid turn and make it look like the victim pressed 停止. Process-only
+    scopes still stop, so the route itself stays 200."""
+    from ai import agent
+
+    signalled = []
+    monkeypatch.setattr(agent, 'stop', lambda conversation_id: signalled.append(conversation_id) or True)
+    response = client.post('/api/ai/stop', json={'conversation_id': 'c_' + '0' * 24})
+    assert response.status_code == 200
+    assert response.get_json()['ok'] is True
+    assert response.get_json()['stopped'] is False
+    assert signalled == []
+
+
 def test_a_title_search_is_sql_side_and_escapes_like_metacharacters(client):
     exact = _conversation(client, '100% 完成 zz-search')
     other = _conversation(client, '100x 完成 zz-search')

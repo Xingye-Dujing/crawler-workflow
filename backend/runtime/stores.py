@@ -439,15 +439,22 @@ def _cache_dataset(dataset_id: str, df: pd.DataFrame):
             _dataset_cache.pop(next(iter(_dataset_cache)), None)
 
 
-def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> str:
-    """Persist a frame and return its id.
+def register_dataset_result(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> tuple[str, bool]:
+    """Persist a frame and return ``(dataset_id, stored)``.
 
-    Content-addressed, so handing over the same rows twice reuses one copy
-    instead of piling up duplicates of a file somebody re-uploads every run.
+    Content-addressed, so handing over the same rows twice reuses one copy instead of piling up
+    duplicates of a file somebody re-uploads every run. ``stored`` answers whether this call
+    actually wrote a copy — the upload response uses it instead of claiming a new write for a
+    file the store already had.
     """
     meta = get_dataset_store().put(df, name=str(name), source=source)
     _cache_dataset(meta['dataset_id'], df)
-    return meta['dataset_id']
+    return meta['dataset_id'], bool(meta.get('stored'))
+
+
+def _register_dataset(df: pd.DataFrame, name: str = 'dataset', source: str = SOURCE_UPLOAD) -> str:
+    """Persist a frame and return its id; the thin form for callers that need no write fact."""
+    return register_dataset_result(df, name=name, source=source)[0]
 
 
 def _load_dataset(dataset_id: str) -> pd.DataFrame | None:

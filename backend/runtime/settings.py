@@ -80,9 +80,13 @@ def _load() -> dict:
     if _values is None:
         stored = _read_file()
         vals = dict(DEFAULTS)
+        warnings: list = []
         for key in DEFAULTS:
             if key in stored and stored[key] is not None:
-                vals[key] = stored[key]
+                # A file can be hand-edited, restored from an older build or left half-written.
+                # Coercing on READ matters as much as on write: the string "false" is truthy,
+                # so an unvalidated ai_allow_python disabled nothing at all.
+                vals[key] = _coerce(BY_KEY[key], stored[key], warnings)
         # Retirement migration: ``gentle_crawl`` was a bare multiplier. A user who
         # had it on keeps the same pacing as an explicit scale; a preset snapshot is
         # deliberately not invented (there is no "before" state to restore to).

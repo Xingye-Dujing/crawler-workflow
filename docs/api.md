@@ -96,7 +96,7 @@ Flask 后端 HTTP 端点，按域名分组。未登录时 `/api/*` 答 401 `{ok:
 | `GET`/`POST` `/api/ai/skills` · `GET`/`DELETE` `/api/ai/skills/<id>` · `POST` `/api/ai/skills/<id>/fork` | 技能目录 / 保存用户技能 / 完整技能 / 删除 / 从内置 Fork |
 | `GET` `/api/ai/plugins` · `POST` `/api/ai/plugins/install` · `POST` `/api/ai/plugins/<id>/enable` · `DELETE` `/api/ai/plugins/<id>` | 插件清单 / 安装声明式插件（代码插件仅本地与管理员）/ 启停 / 卸载 |
 | `GET`/`POST` `/api/ai/memories` · `DELETE` `/api/ai/memories/<id>` · `POST` `/api/ai/files` · `GET` `/api/ai/conversations/<id>/files` · `DELETE` `/api/ai/files/<id>` | 长期记忆的列、存、删 / 上传附件（当前仅 DeepSeek）/ 列会话附件 / 删附件 |
-| `GET`/`POST` `/api/ai/monitors` · `DELETE` `/api/ai/monitors/<id>` · `GET` `/api/ai/monitors/events` · `POST` `/api/ai/monitors/events/<id>/ack` | 监视器列表、创建、取消 / 待投递事件与确认；事件只带 id、状态与计数，不花 token |
+| `GET`/`POST` `/api/ai/monitors` · `DELETE` `/api/ai/monitors/<id>` · `GET` `/api/ai/monitors/catalog` · `GET` `/api/ai/monitors/events` · `POST` `/api/ai/monitors/events/<id>/ack` | 监视器列表、创建、取消 / 手动构建器的事件名清单（来自服务端匹配表）/ 待投递事件与确认；事件只带 id、状态与计数，不花 token |
 | `POST` `/api/ai/rerun` | 从**已保存的工作流文件**重跑一个失败节点及其下游（失败节点卡片的按钮）；指纹不符、文件缺失、节点未知或运行仍进行时按名拒绝，不载入画布 |
 | `GET` `/api/ai/python/status` · `POST` `/api/ai/python/install` · `GET`/`POST` `/api/ai/python/scripts` · `GET`/`DELETE` `/api/ai/python/scripts/<id>` · `POST` `/api/ai/python/scripts/<id>/fork` · `POST` `/api/ai/python/run` · `GET`/`POST` `/api/ai/python/files` | 解释器探测与安装、脚本库增删改查与 Fork、按 `script_id` 或内联 `code` 运行、工作区文件读写；云端按名拒绝 |
 | `POST` `/api/ai/search` · `POST` `/api/ai/fetch` · `GET` `/api/ai/usage` · `GET` `/api/ai/health` | 联网搜索 / 抓取网页正文（均仅 DeepSeek）/ 本账号 token 汇总 / 运行环境与代码插件可用性 |

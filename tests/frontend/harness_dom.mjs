@@ -266,6 +266,13 @@ export function makeEl(tag = 'div', id = '') {
     Object.defineProperty(el, 'textContent', {
         get: () => el._text,
         set: (v) => {
+            /* Clear the document-wide registry too, or a detached row stays findable by
+               querySelector/getElementById and a harness can pass against phantom nodes. */
+            el.children.forEach((child) => {
+                child.parentElement = null;
+                child.parentNode = null;
+                if (child.__unregister) child.__unregister(child);
+            });
             el._text = v === null || v === undefined ? '' : String(v);
             el.children = [];
         },
@@ -311,6 +318,7 @@ export function makeEl(tag = 'div', id = '') {
         if (i >= 0) el.children.splice(i, 1);
         child.parentElement = null;
         child.parentNode = null;
+        if (child.__unregister) child.__unregister(child);
         return child;
     };
     /* The dialog shell puts its close button at the TOP of the box (DOM order = visual order),

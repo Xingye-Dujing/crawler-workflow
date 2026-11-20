@@ -7,9 +7,13 @@ shape: the scoped registry passes explicit paths today, so nothing read the wron
 default promised that any bare construction — inside another account's request, or in code added
 next month — belongs to the SYSTEM owner. A default is a claim the next caller gets to make, so the
 claim is checked here instead.
+
+The check parses Python instead of grepping for the literal ``Config.``: an import alias
+(``from core.config import Config as C``) or ``getattr(Config, 'RUNS_DB')`` reads the very same
+constant and must not slip through; strings and comments must not be accused of reading it.
 """
 
-import re
+import ast
 from pathlib import Path
 
 import pytest
@@ -38,28 +42,40 @@ ACCOUNT_LEVEL = (
 #: The one module allowed to read them — it owns the shape of ``data/`` and ``data/users/<id>/``.
 OWNER = Path('runtime') / 'paths.py'
 
-_FIND = re.compile(r'Config\.(' + '|'.join(ACCOUNT_LEVEL) + r')\b')
 
-
-def _strip_prose(text: str) -> str:
-    """``text`` with comments and docstrings gone: prose ABOUT a constant is not a read of it.
-
-    Counting the fences per line and toggling is the whole trick — a line holding two of them (a
-    one-line docstring) leaves the state where it found it, which is what a docstring on one line
-    means. A trailing hash-comment is a note about the code, so "no global taskkill" in one cannot
-    read as a call to it."""
-    kept = []
-    inside = False
-    for raw in text.splitlines():
-        line = raw.strip()
-        fences = line.count('"""') + line.count("'''")
-        if fences % 2:
-            inside = not inside
+def _config_names(tree: ast.AST) -> set[str]:
+    """Every local name that can hold the Config class, including import aliases."""
+    names = {'Config'}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or not (node.module or '').endswith('config'):
             continue
-        if inside or line.startswith('#'):
+        for alias in node.names:
+            if alias.name == 'Config':
+                names.add(alias.asname or alias.name)
+    return names
+
+
+def _offenders(text: str) -> list[str]:
+    """The account-level constant reads in *text*, with prose and comments ignored by the AST."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return []
+    names = _config_names(tree)
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in ACCOUNT_LEVEL:
+            if isinstance(node.value, ast.Name) and node.value.id in names:
+                found.append(f'Config.{node.attr}')
             continue
-        kept.append(line.split('#')[0])
-    return '\n'.join(kept)
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.func.id != 'getattr':
+            continue
+        if len(node.args) < 2 or not isinstance(node.args[0], ast.Name) or node.args[0].id not in names:
+            continue
+        wanted = node.args[1].value if isinstance(node.args[1], ast.Constant) else None
+        if wanted in ACCOUNT_LEVEL:
+            found.append(f"getattr(Config, '{wanted}')")
+    return found
 
 
 class TestAnAccountPathIsNeverCached:
@@ -69,12 +85,11 @@ class TestAnAccountPathIsNeverCached:
             relative = path.relative_to(BACKEND)
             if path.name.startswith('test_') or '__pycache__' in path.parts or relative == OWNER:
                 continue
-            found = _FIND.search(_strip_prose(path.read_text(encoding='utf-8', errors='replace')))
-            if found:
-                offenders.append(f'{relative}:{found.group(0)}')
+            for found in _offenders(path.read_text(encoding='utf-8', errors='replace')):
+                offenders.append(f'{relative}:{found}')
         assert offenders == [], 'an account path resolved from a system constant:\n' + '\n'.join(offenders)
 
-    def test_the_gate_notices_a_store_that_caches_the_system_tree(self):
+    def test_the_gate_notices_aliases_indirection_and_ignores_prose(self):
         """A scan that matches nothing reports a green rule nobody wrote."""
         sample = (
             'class RunStore:\n'
@@ -82,10 +97,11 @@ class TestAnAccountPathIsNeverCached:
             '    def __init__(self, db_path=None):\n'
             '        self.db_path = db_path or Config.RUNS_DB\n'
         )
-        stripped = _strip_prose(sample)
-        assert 'Config.RUNS_DB' in stripped, 'the docstring prose survived the strip'
-        assert _FIND.search(stripped)
-        assert _FIND.search(_strip_prose('        # used to read Config.RUNS_DB\n')) is None
+        assert _offenders(sample) == ['Config.RUNS_DB']
+        assert _offenders('from core.config import Config as C\nx = C.RUNS_DB\n') == ['Config.RUNS_DB']
+        assert _offenders("x = getattr(Config, 'RUNS_DB')\n") == ["getattr(Config, 'RUNS_DB')"]
+        assert _offenders('        # used to read Config.RUNS_DB\n') == []
+        assert _offenders('x = Config.ACCOUNTS_DB\n') == []
 
     def test_the_scoped_stores_answer_the_callers_tree(self):
         """The rule has one observable consequence: a bare construction follows WHO IS ASKING.

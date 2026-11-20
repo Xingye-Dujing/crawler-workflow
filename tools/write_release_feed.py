@@ -139,12 +139,28 @@ def release_assets(tag: str, repo: str = REPO) -> dict:
     return {str(asset.get('name') or ''): asset for asset in json.loads(out.stdout or '{}').get('assets') or []}
 
 
+def windows_shards(dist: Path = DIST) -> list[Path]:
+    """Every shard publish_gitee.py actually wrote, in index order.
+
+    Hard-coding ``(1, 2)`` broke the feed the moment a build grew past two shards: extra shards
+    were published but omitted, and windows_entry then refused the whole feed because the listed
+    bytes no longer added up to the archive.
+    """
+    archive_name = 'CaiXiHui-win64.zip'
+    shards = []
+    for path in dist.glob(f'{archive_name}.*'):
+        suffix = path.name[len(archive_name) + 1 :]
+        if suffix.isdigit():
+            shards.append((int(suffix), path))
+    return [path for _index, path in sorted(shards)]
+
+
 def build_feed(version: str, tag: str, *, notes: str, windows_only: bool, dist: Path = DIST) -> dict:
     platforms = {
         'win32': windows_entry(
             tag,
             dist / 'CaiXiHui-win64.zip',
-            [dist / f'CaiXiHui-win64.zip.{index:03d}' for index in (1, 2)],
+            windows_shards(dist),
         )
     }
     if not windows_only:

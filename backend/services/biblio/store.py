@@ -23,7 +23,7 @@ import json
 import os
 import sqlite3
 import threading
-import time
+from datetime import UTC, datetime
 
 from runtime import paths
 
@@ -37,7 +37,26 @@ DIFF_LIMIT = 60
 
 
 def _now() -> str:
-    return time.strftime('%Y-%m-%dT%H:%M:%S')
+    # A naive server-local stamp could go BACKWARDS across a DST fallback or a clock
+    # correction, and a snapshot monitor picks its baseline by sorting this column. An
+    # offset-aware UTC stamp keeps that ordering true on every host and in every zone.
+    return datetime.now(UTC).isoformat(timespec='seconds')
+
+
+def _order_time(value: str) -> float:
+    """A comparable instant for BOTH the old naive-local stamps and the new offset-aware ones.
+
+    Sorting the raw TEXT put an old 10:00 local stamp ahead of the 03:00Z stamp of a capture
+    filed later, so a watch node diffed against the wrong baseline after an upgrade. Naive
+    stamps are server-local facts; attaching this host's zone recovers their instant.
+    """
+    try:
+        stamp = datetime.fromisoformat(str(value or ''))
+    except ValueError:
+        return 0.0
+    if stamp.tzinfo is None:
+        stamp = stamp.astimezone()
+    return stamp.timestamp()
 
 
 def _dumps(value) -> str:
@@ -432,15 +451,20 @@ class BiblioStore:
         the one filed later.
         """
         sql = (
-            'SELECT snapshot_id, project_id, label, created_at, run_id, node_id, workflow_name, '
+            'SELECT rowid, snapshot_id, project_id, label, created_at, run_id, node_id, workflow_name, '
             'entity_type, shape, params_verified, node_count, edge_count FROM biblio_snapshots'
         )
         params: list = []
         if project_id:
             sql += ' WHERE project_id = ?'
             params.append(str(project_id))
-        sql += ' ORDER BY created_at DESC, rowid DESC'
-        return [dict(row) for row in self._query(sql, tuple(params))]
+        rows = [dict(row) for row in self._query(sql, tuple(params))]
+        # Order by the INSTANT, not the text, so captures filed before and after the switch to
+        # offset-aware stamps still sort chronologically. rowid is the insertion-order tie-break.
+        rows.sort(key=lambda row: (_order_time(row.get('created_at') or ''), int(row['rowid'])), reverse=True)
+        for row in rows:
+            row.pop('rowid', None)
+        return rows
 
     def get_snapshot(self, snapshot_id: str) -> dict | None:
         rows = self._query('SELECT * FROM biblio_snapshots WHERE snapshot_id = ?', (str(snapshot_id),))

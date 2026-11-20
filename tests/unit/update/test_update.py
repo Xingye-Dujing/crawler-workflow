@@ -40,6 +40,16 @@ def _asset(**overrides):
     return asset
 
 
+def test_a_cleartext_feed_url_is_refused_before_any_request(monkeypatch):
+    """The package door rejects HTTP, and the manifest door must say the same thing: without
+    a signing key, a redirected cleartext feed can name the binary and its digest together."""
+    monkeypatch.setenv(update.FEED_ENV, 'http://example.invalid/feed.json')
+    with pytest.raises(ValueError, match='HTTPS'):
+        update.feed_urls()
+    with pytest.raises(ValueError, match='HTTPS'):
+        update._fetch('http://example.invalid/feed.json')
+
+
 def test_versions_compare_numerically_not_as_strings():
     assert update.version_tuple('2026.11.11.1') > update.version_tuple('2026.9.30.8')
     assert update.is_newer('2026.11.11.1', '2026.11.10.9')

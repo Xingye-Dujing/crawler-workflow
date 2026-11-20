@@ -163,6 +163,9 @@ def _watch_capture(node: dict, ctx: dict | None, params: dict, rows: list, shape
         node_id=str(node.get('id') or 'biblio'),
         run_id=run_id,
         workflow_name=str((run_record or {}).get('workflow_name') or ''),
+        dataset_id=monitor.upstream_dataset_id(
+            str((run_record or {}).get('workflow_name') or ''), str(node.get('id') or '')
+        ),
         entity_type=entity,
         shape=shape,
         biblio=get_biblio_store(),

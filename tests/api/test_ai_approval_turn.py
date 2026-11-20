@@ -160,6 +160,19 @@ def test_a_once_approval_is_spent_after_one_call(client, monkeypatch):
     assert approvals.consume(meta['conversation_id'], 'run_cmd', args) is False
 
 
+def test_a_second_answer_to_the_same_question_is_a_named_refusal(client, monkeypatch):
+    """Two POSTs used to both succeed, append two tool results and resume the turn twice."""
+    _install(monkeypatch)
+    events = _chat(client).get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+    first = _answer(client, meta['conversation_id'], question, 'once')
+    assert first.get_json()['ok'] is True
+    second = _answer(client, meta['conversation_id'], question, 'once')
+    assert second.status_code == 400
+    assert second.get_json()['ok'] is False
+
+
 def test_a_denial_grants_nothing(client, monkeypatch):
     _install(monkeypatch)
     events = _chat(client).get_json()['events']

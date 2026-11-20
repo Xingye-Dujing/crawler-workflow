@@ -498,25 +498,23 @@ class AgentService:
             # needs the same redaction as the composer's references (see send()).
             refs_text, redacted_refs = context_builder.redact_with_count(refs_text)
             tool_result['references'] = refs_text
-        store.append_message(
+        tool_call_id = question.get('tool_use_id') or ''
+        # Stamp the row WE just appended, not "the last message": a concurrent answer (or any
+        # other append) made that lookup name somebody else's row and left this result unpaired.
+        tool_row = store.append_message(
             conversation_id,
             'tool',
             json.dumps(tool_result, ensure_ascii=False),
             status='done',
-            meta={'turn_id': (assistant.get('meta') or {}).get('turn_id') or message_id},
+            meta={
+                'turn_id': (assistant.get('meta') or {}).get('turn_id') or message_id,
+                'tool_call_id': tool_call_id,
+            },
         )
-        tool_call_id = question.get('tool_use_id') or ''
-        # The tool result has to name the call; the store helper takes the content but the
-        # serializer reads meta.tool_call_id.
-        last = store.list_messages(conversation_id, limit=1)
-        if last and last[-1]['role'] == 'tool':
-            store.update_message(
-                last[-1]['id'],
-                meta={
-                    'turn_id': (assistant.get('meta') or {}).get('turn_id') or message_id,
-                    'tool_call_id': tool_call_id,
-                },
-            )
+        # The serializer reads meta.tool_call_id, so it is stamped in the INSERT above — before
+        # any concurrent append can change which row is "last".
+        if tool_row is None:
+            raise AIError('ai.apiNoMessage', kind='not_found', message=message_id)
         store.update_message(assistant['id'], status='done')
         store.update_run((assistant.get('meta') or {}).get('run_id') or '', status='running')
         user = _turn_user(conversation_id, (assistant.get('meta') or {}).get('turn_id') or '')

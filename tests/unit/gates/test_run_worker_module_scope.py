@@ -30,15 +30,18 @@ def _tree():
     return ast.parse(RUN_PY.read_text(encoding='utf-8'))
 
 
+_FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
 def _top_level_functions(tree):
-    return {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    return {node.name: node for node in tree.body if isinstance(node, _FUNCTIONS)}
 
 
 class TestRunHelpersStayAtModuleScope:
     def test_no_module_level_function_nests_another(self):
         offenders = {
             outer: sorted(
-                {inner.name for inner in ast.walk(node) if isinstance(inner, ast.FunctionDef) and inner is not node}
+                {inner.name for inner in ast.walk(node) if isinstance(inner, _FUNCTIONS) and inner is not node}
             )
             for outer, node in _top_level_functions(_tree()).items()
         }

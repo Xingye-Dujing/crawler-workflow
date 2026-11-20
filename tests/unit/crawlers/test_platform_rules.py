@@ -306,6 +306,13 @@ class TestThePlatformTablesAreComplete:
         message = t('crawl.chromeMissing', browser=machine.chrome_executable_name())
         assert 'chrome.exe' not in message and 'google-chrome' in message
 
+    def test_a_linux_folder_hint_never_carries_the_hosts_separator(self):
+        """The table answers for the TARGET OS; on Windows os.sep used to append a backslash to
+        a POSIX path and hand zenity an invalid filename."""
+        commands = machine.folder_dialog_commands('/home/user', title='pick', system='linux')
+        zenity = next(command for command in commands if command[0] == 'zenity')
+        assert zenity[zenity.index('--filename') + 1] == '/home/user/'
+
     def test_platform_name_normalizes_the_spellings_python_actually_reports(self):
         assert machine.platform_name('linux5') == 'linux'
         assert machine.platform_name('darwin23.4') == 'darwin'

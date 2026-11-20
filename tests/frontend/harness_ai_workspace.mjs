@@ -1368,9 +1368,11 @@ sandbox.showDialog = async (opts) => {
 const applied = [];
 const realApplyWorkflow = workspace._applyWorkflowPayload;
 workspace._applyWorkflowPayload = async (payload, run, title) => applied.push({ payload, run, title });
+/* The real serializeDraft() inherits getState(), whose nodes are KEYED BY ID. An array stub here
+   hid the mismatch that made a one-tick preview apply replace the whole canvas. */
 sandbox.canvas = {
     serializeDraft: () => ({
-        nodes: [{ id: 'n1', type: 'name', params: { workflow_name: 'current' } }],
+        nodes: { n1: { id: 'n1', type: 'name', params: { workflow_name: 'current' } } },
         connections: [],
     }),
 };

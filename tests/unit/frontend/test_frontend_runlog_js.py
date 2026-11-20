@@ -78,6 +78,11 @@ class TestPagingAndDownload:
         """The merged view stays oldest→newest, so the run reads top-to-bottom like it ran."""
         assert ix['mergedOrder'] == ['older-1', '慢', 'hello <b>x</b>', '抓取失败']
 
+    def test_two_rapid_clicks_pull_one_page_and_keep_one_copy(self, ix):
+        """The cursor was parked only after the await, so a double click prepended the same page twice."""
+        assert ix['doubleOlderGets'] == 1, ix['doubleOlderGets']
+        assert ix['doubleOlderRows'].count('older-1') == 1, ix['doubleOlderRows']
+
     def test_download_names_the_same_filtered_endpoint(self, ix):
         assert ix['downloadUrl'].startswith('/api/runs/r1/log.txt?')
         assert 'level=warning' in ix['downloadUrl'] and 'wf=1' in ix['downloadUrl'] and 'q=' in ix['downloadUrl']

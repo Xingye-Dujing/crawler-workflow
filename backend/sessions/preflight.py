@@ -438,7 +438,10 @@ def probe(
         return _verdict(platform, NO_LOGIN, account=account)
     if not has_session_to_test(platform, use_profile, account):
         return _verdict(platform, NO_COOKIE, account=account)
-    health = pool.store.get_health('account', platform, account)
+    # The pool files subjects under CookieManager.key ('default'), while the blank spelling is
+    # only the historical FILE name. Looking up the raw value made a benched default login pass
+    # this gate as if it had never been measured.
+    health = pool.store.get_health('account', platform, CookieManager.key(account))
     if pool.health.effective_state(health) == 'cooling':
         # The pool measured this login against this site and benched it. Opening a browser
         # to discover the same wall again is the single most expensive thing this feature

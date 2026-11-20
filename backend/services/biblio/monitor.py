@@ -14,16 +14,52 @@ got hotter" stays the researcher's job.
 
 from __future__ import annotations
 
-import csv
 from pathlib import Path
 
 from i18n import t
 from services.biblio.metrics import snapshot_capture
+from services.biblio.metrics.export import write_csv
 from services.biblio.schema import WATCH_UNSHAPED
 from services.biblio.store import compare_snapshots
 
 #: One row per change the comparison found. ``前值`` is the baseline, ``后值`` this run.
 WATCH_COLUMNS = ('类别', '名称', '前值', '后值')
+
+
+def upstream_dataset_id(workflow_name: str, node_id: str) -> str:
+    """The dataset that fed this node, walked back through the SAVED workflow's edges.
+
+    Neither the snapshot body nor the node's params carry a dataset id: the panel posts only a
+    run/node pair. Reading it from the canvas the run recorded is the one answer that is true for
+    both the API capture and the scheduled watch path.
+    """
+    from services.workflows.manager import WorkflowManager
+
+    data = WorkflowManager().load(workflow_name) if workflow_name else None
+    if not data:
+        return ''
+    nodes = data.get('nodes') or {}
+    if isinstance(nodes, dict):
+        nodes = list(nodes.values())
+    by_id = {str(node.get('id') or ''): node for node in nodes if isinstance(node, dict)}
+    incoming: dict[str, list[str]] = {}
+    for edge in data.get('connections') or ():
+        if isinstance(edge, dict) and edge.get('from') and edge.get('to'):
+            incoming.setdefault(str(edge['to']), []).append(str(edge['from']))
+    pending = [str(node_id)]
+    seen: set[str] = set()
+    while pending:
+        current = pending.pop(0)
+        if current in seen:
+            continue
+        seen.add(current)
+        node = by_id.get(current) or {}
+        params = node.get('params') if isinstance(node.get('params'), dict) else {}
+        found = str(params.get('dataset_id') or '').strip()
+        if found:
+            return found
+        pending.extend(incoming.get(current, ()))
+    return ''
 
 
 def watch(
@@ -37,6 +73,7 @@ def watch(
     shape: str,
     biblio,
     export_dir: str,
+    dataset_id: str = '',
     stamp: str = '',
 ) -> dict | None:
     """Capture this run's network and diff it against the project's previous capture.
@@ -98,6 +135,7 @@ def watch(
         run_id=run_id,
         node_id=node_id,
         workflow_name=workflow_name,
+        dataset_id=dataset_id,
         entity_type=entity_type,
         shape=shape,
         # These params are the ones the engine is executing right now, so this path does not need
@@ -253,8 +291,8 @@ def _write(rows: list[dict], export_dir: str, name: str) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     safe = ''.join(ch for ch in name if ch not in '\\/:*?"<>|').strip() or 'watch.csv'
     path = directory / safe
-    with path.open('w', encoding='utf-8-sig', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(WATCH_COLUMNS))
-        writer.writeheader()
-        writer.writerows(rows)
+    # The 名称/前值/后值 cells quote crawled titles and values. A bare DictWriter let a
+    # title starting with '=' become a live formula in Excel, even though the same table was
+    # safe when saved through DataExporter — so use the writer that applies that escaping.
+    write_csv(path, rows, columns=list(WATCH_COLUMNS))
     return path

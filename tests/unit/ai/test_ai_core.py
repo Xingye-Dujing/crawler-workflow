@@ -864,3 +864,52 @@ def test_store_uses_max_seq_and_round_trips_blocks():
         assert [message['id'] for message in loaded] == [first['id'], second['id'], third['id']]
     finally:
         store.delete_conversation(conversation['id'])
+
+
+def test_a_second_answer_to_one_question_is_refused():
+    """The conditional UPDATE was followed by an unconditional read, so a duplicate POST looked
+    like a success and resumed the same turn twice."""
+    from ai import store
+
+    conversation = store.create_conversation('fake', 'fake-model', 'project')
+    try:
+        question = store.create_question(conversation['id'], 'm1', 'call_1', [{'id': 'q1', 'question': '?'}])
+        assert store.answer_question(question['id'], {'answers': []}) is not None
+        assert store.answer_question(question['id'], {'answers': []}) is None
+    finally:
+        store.delete_conversation(conversation['id'])
+
+
+def test_an_export_reference_cannot_read_outside_the_export_dir(tmp_path, monkeypatch):
+    """An @-reference id is client input; ``Path(base) / id`` used to follow absolute paths and
+    ``..`` and paste the result into the turn's permanently stored context."""
+
+    from ai import references
+    from core.config import Config
+
+    exports = tmp_path / 'exports'
+    exports.mkdir()
+    (exports / 'ok.csv').write_text('a,b\n1,2', encoding='utf-8')
+    secret = tmp_path / 'secret.txt'
+    secret.write_text('TOP-SECRET-CANARY', encoding='utf-8')
+    monkeypatch.setattr(Config, 'EXPORT_DIR', str(exports))
+    text, _ = references.resolve([{'kind': 'export', 'id': 'ok.csv'}])
+    assert 'a,b' in text
+    for bad in ('../secret.txt', str(secret), '../../secret.txt'):
+        text, _ = references.resolve([{'kind': 'export', 'id': bad}])
+        assert 'TOP-SECRET-CANARY' not in text, bad
+        assert '找不到' in text, bad
+
+
+def test_settings_file_values_are_coerced_on_load(tmp_path, monkeypatch):
+    """A hand-edited/restored settings.json made the string "false" a truthy python gate."""
+    import json
+
+    from runtime import settings
+
+    path = tmp_path / 'settings.json'
+    path.write_text(json.dumps({'ai_allow_python': 'false', 'max_upload_mb': '25'}), encoding='utf-8')
+    monkeypatch.setattr(settings, '_PATH', str(path))
+    monkeypatch.setattr(settings, '_values', None)
+    assert settings.get_setting('ai_allow_python') is False
+    assert settings.get_setting('max_upload_mb') == 25

@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from i18n import t
-from services.biblio.monitor import WATCH_COLUMNS, watch
+from services.biblio.monitor import WATCH_COLUMNS, _write, upstream_dataset_id, watch
 from services.biblio.store import BiblioStore
 
 pytestmark = pytest.mark.unit
@@ -35,6 +35,36 @@ def _nodes(*names, burst=(), cluster='0', label='数字治理'):
             row['突现强度'] = 2.5
         rows.append(row)
     return rows
+
+
+def test_the_dataset_provenance_is_walked_from_the_saved_canvas(monkeypatch):
+    """The panel never posts a dataset id; claiming otherwise left every snapshot's lineage empty."""
+    from services.workflows import manager
+
+    workflow = {
+        'nodes': [
+            {'id': 'u1', 'type': 'upload', 'params': {'dataset_id': 'd1'}},
+            {'id': 'b1', 'type': 'biblio', 'params': {}},
+        ],
+        'connections': [{'from': 'u1', 'to': 'b1'}],
+    }
+    monkeypatch.setattr(manager.WorkflowManager, 'load', lambda self, name: workflow)
+    assert upstream_dataset_id('saved-workflow', 'b1') == 'd1'
+    assert upstream_dataset_id('', 'b1') == ''
+
+
+def test_a_crawled_title_starting_with_a_formula_is_kept_as_text(tmp_path):
+    """The watch CSV is opened in Excel like every other export; a bare DictWriter executed a
+    crawled '=' cell even though the same table was safe from /api/export/save."""
+    path = _write(
+        [{'类别': '新增', '名称': '=HYPERLINK("x")', '前值': '', '后值': '@SUM(1)'}],
+        str(tmp_path),
+        'watch.csv',
+    )
+    with path.open(encoding='utf-8-sig', newline='') as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]['名称'].startswith("'=")
+    assert rows[0]['后值'].startswith("'@")
 
 
 class _Ctx:

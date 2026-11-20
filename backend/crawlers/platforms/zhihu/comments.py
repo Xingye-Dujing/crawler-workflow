@@ -222,9 +222,11 @@ def walk(session, url: str, limit: int) -> tuple:
         if limit and len(rows) >= limit:
             break
     if not opened and rows == []:
-        # No comment button at all: either 评论已关闭 or the page never
-        # rendered the answers — treat as ok-with-nothing, but say so.
+        # No comment button at all: either 评论已关闭 or the page never rendered the answers.
+        # Only the site's own denial proves an empty thread; an unrendered page, a late wall
+        # or a selector drift must leave the cursor on this link for 继续 to replay it.
         session.log(t('comment.zhihuNoPanels', url=url))
+        session.mark_unproven(url)
     return (rows[:limit] if limit else rows), OK
 
 

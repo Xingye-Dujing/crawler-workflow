@@ -197,6 +197,15 @@ class TestStore:
         assert store.create_project('  ').get('name') == ''
         assert store.rename_project('whatever', '   ') is False
 
+    def test_snapshot_order_compares_instants_not_raw_text(self):
+        """Old naive-local stamps and new offset-aware ones must still sort chronologically."""
+        from services.biblio.store import _order_time
+
+        old = _order_time('2026-11-20T10:00:00+08:00')
+        new = _order_time('2026-11-20T02:00:00+00:00')
+        assert old == new
+        assert old < _order_time('2026-11-20T03:00:00+00:00')
+
     def test_newest_first_means_newest_even_inside_one_second(self, store):
         """``created_at`` is second-granular, so captures filed together tie — and the tie used to
         be broken by LABEL, which for Chinese names is codepoint order and has nothing to do with

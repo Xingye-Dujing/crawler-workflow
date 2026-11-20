@@ -43,6 +43,7 @@ RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 # fails if this list and app.py drift apart.
 BODY_ROUTES = [
     '/api/ai/answer',
+    '/api/ai/artifacts/preview',
     '/api/ai/chat',
     '/api/ai/chart/preview',
     '/api/ai/context',

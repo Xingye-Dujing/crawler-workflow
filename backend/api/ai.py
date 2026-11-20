@@ -1223,13 +1223,26 @@ def ai_stop():
     if data is None:
         return _bad_body()
     conversation_id = str(data.get('conversation_id') or '')
+    # ACTIVE_STREAMS is process-wide and keyed by conversation id alone. Without the guard a
+    # caller who knew another account's id could set that turn's stop event — a paid provider
+    # round cancelled as if its owner had pressed 停止. A conversation this account cannot see
+    # belongs to someone else (or does not exist here), so only THIS account's processes stop.
+    # A scope with no conversation row is still valid: batch scripts register a scope and 停止
+    # must be able to end them.
+    owns_conversation = store.get_conversation(conversation_id) is not None
     # 停止 ends the conversation's work, not just the stream: every command and background task it
     # started is stopped here, so a batch script cannot keep running (and spending) after the user
     # said stop.
     from runtime import processes
 
     stopped = processes.stop_scope(conversation_id, account_context.scope_key())
-    return jsonify({'ok': True, 'stopped': agent.stop(conversation_id), 'stopped_processes': stopped})
+    return jsonify(
+        {
+            'ok': True,
+            'stopped': agent.stop(conversation_id) if owns_conversation else False,
+            'stopped_processes': stopped,
+        }
+    )
 
 
 @bp.route('/api/ai/usage', methods=['GET'])

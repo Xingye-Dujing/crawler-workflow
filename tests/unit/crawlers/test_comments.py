@@ -1192,6 +1192,24 @@ def _zh_row(author, text, href='https://www.zhihu.com/people/x', when='3 天前'
 
 
 class TestZhihuAdapter:
+    def test_no_comment_panel_leaves_the_link_unproven(self):
+        """A page that never mounted its 评论 button is not the site's proof of an empty thread;
+        the executor reads skipped_targets to keep the cursor on this link for 继续."""
+
+        class _Owner:
+            def __init__(self):
+                self.skipped_targets = []
+                self.driver = None
+
+        owner = _Owner()
+        driver = FakeDriver(body='正常回答', pages={'button': [El('举报')], 'button, a': []})
+        owner.driver = driver
+        session = CommentSession(driver, nap=lambda s: None, owner=owner)
+        url = 'https://www.zhihu.com/question/1/answer/2'
+        rows, status = session.walk('zhihu', url, 0)
+        assert rows == [] and status == OK
+        assert owner.skipped_targets == [url]
+
     def test_opens_panels_and_collects(self):
         btn = El('17 条评论')
         driver = FakeDriver(

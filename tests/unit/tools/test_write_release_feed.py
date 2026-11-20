@@ -63,6 +63,14 @@ class TestTheNumbers:
         assert entry['parts'][0]['url'].endswith('/exe-2026-11-19.1/CaiXiHui-win64.zip.001')
         assert entry['parts'][0]['url'].startswith('https://gitee.com/')
 
+    def test_every_written_shard_is_listed_not_just_the_first_two(self, tmp_path):
+        tool = _tool()
+        dist = _dist(tmp_path, archive=b'A' * 60, parts=(20, 20, 20))
+        shards = tool.windows_shards(dist)
+        assert [path.name for path in shards] == [f'CaiXiHui-win64.zip.{n:03d}' for n in (1, 2, 3)]
+        entry = tool.windows_entry('exe-2026-11-19.1', dist / 'CaiXiHui-win64.zip', shards)
+        assert len(entry['parts']) == 3
+
     def test_a_stale_split_is_refused_with_both_numbers(self, tmp_path):
         """The failure this exists for: a rebuilt zip beside the previous build's parts."""
         tool = _tool()

@@ -466,11 +466,16 @@ def pending_questions(conversation_id: str) -> list:
 def answer_question(question_id: str, answer: dict) -> dict | None:
     stamp = now()
     with connect() as conn:
-        conn.execute(
+        cur = conn.execute(
             "UPDATE questions SET answer_json = ?, status = 'answered', answered_at = ? "
             "WHERE id = ? AND status = 'pending'",
             (json.dumps(answer, ensure_ascii=False), stamp, question_id),
         )
+        # A duplicate concurrent answer must be told it lost. Returning get_question() here
+        # reported success even when the conditional UPDATE matched nothing, so two POSTs
+        # appended two tool results and resumed the same turn twice.
+        if cur.rowcount != 1:
+            return None
     return get_question(question_id)
 
 

@@ -989,7 +989,10 @@ def folder_dialog_commands(start: str = '', title: str = '', system: str | None 
         location = f' default location POSIX file {_applescript_literal(start)}' if start else ''
         script = f'POSIX path of (choose folder with prompt {_applescript_literal(title)}{location})'
         return [['osascript', '-e', script]]
-    folder_hint = f'{start.rstrip(os.sep)}{os.sep}' if start else ''
+    # The answer is shaped for the TARGET OS, not the host asking: on Windows, os.sep would
+    # append a backslash to a POSIX start path and hand zenity an invalid filename.
+    target_sep = posixpath.sep
+    folder_hint = f'{start.rstrip(target_sep)}{target_sep}' if start else ''
     return [
         ['zenity', '--file-selection', '--directory', '--title', title, '--filename', folder_hint],
         ['kdialog', '--getexistingdirectory', start or str(Path.home()), '--title', title],

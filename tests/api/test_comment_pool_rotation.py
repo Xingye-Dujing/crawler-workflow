@@ -141,3 +141,71 @@ def test_a_zero_row_wall_still_rotates_to_the_next_login(pool_calls):
     assert rows == [{'评论ID': 'c1', '评论内容': 'x'}]
     assert len(_ScriptedSession.instances) == 2
     assert pool_calls == ['work', 'home']
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_a_network_fault_stays_a_network_fact_when_rotating(pool_calls, monkeypatch):
+    """A browser error page named `unreachable` must not be rewritten into 风控: that benched a
+    healthy exit for the full risk term and burned an account on a link the site never saw."""
+    from nodes.executors import comment as comment_exec
+
+    from services import pool
+
+    observed = []
+
+    def observe(platform, account, facts, **kwargs):
+        observed.append(dict(facts))
+        return {'reason': 'network'}
+
+    monkeypatch.setattr(pool, 'observe', observe)
+    monkeypatch.setattr(_FakeCrawler, 'unreachable', True, raising=False)
+    _ScriptedSession.script = [
+        ([], _protocol.BLOCKED),
+        ([{'评论ID': 'c1', '评论内容': 'x'}], _protocol.OK),
+    ]
+    comment_exec.execute_comment_node(_node(), headless=True, ctx=None)
+    assert observed, 'rotation never recorded its fact'
+    assert observed[0].get('unreachable') is True
+    assert observed[0].get('risk_blocked') is False
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_the_cursor_advances_only_after_the_row_sink_commits(pool_calls, monkeypatch):
+    """The cursor used to be written before row_sink; a failed insert then laundered the hole
+    into a completed link that 继续 would never replay."""
+    from nodes.executors import comment as comment_exec
+
+    events = []
+
+    def row_sink(row):
+        events.append('row')
+        return True
+
+    def cursor_sink(position):
+        events.append('cursor')
+
+    monkeypatch.setattr(comment_exec, 'source_stream', lambda *a, **k: (row_sink, cursor_sink))
+    _ScriptedSession.script = [([{'评论ID': 'c1', '评论内容': 'x'}], _protocol.OK)]
+    rows = comment_exec.execute_comment_node(_node(), headless=True, ctx={})
+    assert rows
+    assert events == ['row', 'cursor'], events
+
+
+@pytest.mark.usefixtures('clean_globals')
+def test_a_failed_row_write_does_not_advance_the_cursor(pool_calls, monkeypatch):
+    from nodes.executors import comment as comment_exec
+
+    events = []
+
+    def row_sink(row):
+        events.append('row')
+        raise OSError('locked db')
+
+    def cursor_sink(position):
+        events.append('cursor')
+
+    monkeypatch.setattr(comment_exec, 'source_stream', lambda *a, **k: (row_sink, cursor_sink))
+    _ScriptedSession.script = [([{'评论ID': 'c1', '评论内容': 'x'}], _protocol.OK)]
+    with pytest.raises(OSError):
+        comment_exec.execute_comment_node(_node(), headless=True, ctx={})
+    assert events == ['row'], events

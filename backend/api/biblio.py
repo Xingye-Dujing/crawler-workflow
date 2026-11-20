@@ -22,6 +22,7 @@ from api.http import _bad_body, _json_body, _safe_int
 from i18n import t
 from services.biblio.formats import accepted_extensions
 from services.biblio.metrics import snapshot_capture
+from services.biblio.monitor import upstream_dataset_id
 from services.biblio.schema import classify_shape
 from services.biblio.sources import all_sources
 from services.biblio.store import snapshot_header
@@ -211,7 +212,10 @@ def biblio_snapshot_create():
         node_id=node_id,
         workflow_name=str(run.get('workflow_name') or ''),
         workflow_fingerprint=str(node.get('fingerprint') or ''),
-        entity_type=str(rows[0].get('类型') or ''),
+        dataset_id=upstream_dataset_id(str(run.get('workflow_name') or ''), node_id),
+        # The rendered 类型 column is a localized label; the run's entity_type key is the
+        # same entity in every language and matches the watch path's captured value.
+        entity_type=str(params.get('entity_type') or rows[0].get('类型') or ''),
         shape=shape,
         params=params,
         params_verified=verified,

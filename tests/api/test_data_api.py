@@ -87,6 +87,13 @@ class TestUpload:
         assert len(body['preview']) == row_count
         assert body['preview'][0].keys() <= set(columns)
 
+    def test_uploading_the_same_rows_twice_reports_that_nothing_new_was_written(self, client):
+        first = _upload(client, 'rows.csv', CSV_BYTES).get_json()
+        assert first['persisted'] is True
+        second = _upload(client, 'rows.csv', CSV_BYTES).get_json()
+        assert second['dataset_id'] == first['dataset_id']
+        assert second['persisted'] is False
+
     def test_a_txt_file_keeps_its_whole_text_in_one_row(self, client):
         body = client.post(
             '/api/data/upload',

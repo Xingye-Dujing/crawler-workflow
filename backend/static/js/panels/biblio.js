@@ -286,11 +286,18 @@ var biblioWorkspace = {
 
     async load() {
         if (!this._runId || !this._nodeId) return;
-        var url = '/api/biblio/table?run_id=' + encodeURIComponent(this._runId) +
-            '&node_id=' + encodeURIComponent(this._nodeId) +
-            '&offset=' + encodeURIComponent(String(this._offset)) +
+        /* Switching run/node/page starts a new load. Without a generation the slower older
+           response lands last and paints rows whose run and node do not match the pickers. */
+        var seq = this._seq = (this._seq || 0) + 1;
+        var runId = this._runId;
+        var nodeId = this._nodeId;
+        var offset = this._offset;
+        var url = '/api/biblio/table?run_id=' + encodeURIComponent(runId) +
+            '&node_id=' + encodeURIComponent(nodeId) +
+            '&offset=' + encodeURIComponent(String(offset)) +
             '&limit=' + encodeURIComponent(String(this.LIMIT));
         var answer = await fetchJSON(url);
+        if (seq !== this._seq || runId !== this._runId || nodeId !== this._nodeId || offset !== this._offset) return;
         if (!answer) {
             this._error = I18n.t('biblioWs.unreachable');
             this._table = null;

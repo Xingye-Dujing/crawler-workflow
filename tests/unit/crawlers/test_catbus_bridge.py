@@ -89,6 +89,20 @@ def summary_payload(**fields):
     return json.dumps(base, ensure_ascii=False)
 
 
+def test_preflight_keeps_a_non_object_json_reply_unverifiable(monkeypatch):
+    """A JSON array is valid JSON but not a verdict; the gate must stay 'cannot ask' rather than
+    raising AttributeError into the request."""
+    import types
+
+    info = types.SimpleNamespace(available=True, node='node', entry='entry.js', reason_key='', reason_params={})
+    monkeypatch.setattr(bridge, 'probe', lambda: info)
+    monkeypatch.setattr(bridge, 'argv_for', lambda *a, **k: ['node', 'entry.js', 'preflight'])
+    monkeypatch.setattr(bridge, '_call', lambda *a, **k: bridge._Call(stdout='[1, 2]'))
+    verdict = bridge.preflight('bilibili')
+    assert verdict['verdict'] == 'unverifiable'
+    assert verdict['logged_in'] is False
+
+
 @pytest.fixture
 def restore_lang():
     """The message language is thread-local state; a case that pins it hands back what it found."""

@@ -91,6 +91,11 @@ def validate_manifest(payload) -> Manifest:
         raise ValueError('a provider pack must request provider:custom')
     if kind == 'tool-pack' and 'net:http' not in permissions:
         raise ValueError('a tool pack must request net:http')
+    if kind == 'skill-pack' and tuple(payload.get('ui') or ()):
+        # A skill pack writes only this account's skill library, which is why the install route
+        # lets a non-admin add one. ``ui`` contributions go into the PROCESS-WIDE host registry,
+        # so allowing them here would turn that exemption into an authorization bypass.
+        raise ValueError('a skill pack may not register process-wide ui contributions')
     return Manifest(
         id=plugin_id,
         name=name,

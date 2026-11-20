@@ -734,6 +734,17 @@ def preflight(platform: str, account: str = '') -> dict:
             'hint': '',
             'account': account or None,
         }
+    if not isinstance(verdict, dict):
+        # A valid JSON array/string/number is not a probe verdict. The gate must stay
+        # "unverifiable, never blocks" instead of raising AttributeError into the request.
+        return {
+            'available': True,
+            'logged_in': False,
+            'verdict': 'unverifiable',
+            'message': t('catbus.probeUnreadable', detail=call.stdout[:200]),
+            'hint': '',
+            'account': account or None,
+        }
     error = verdict.get('error') or {}
     return {
         'available': True,

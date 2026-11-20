@@ -247,6 +247,10 @@ var runsManager = {
     async refresh() {
         var body = document.getElementById('runs-mgr-body');
         if (!body) return;
+        /* The console polls this panel every second and stop() polls it faster. Without a
+           generation an older "running" snapshot could land after the newer "completed" one
+           and flip the displayed status back until the next manual open. */
+        var seq = this._seq = (this._seq || 0) + 1;
         this.renderTabs();
         try {
             var result;
@@ -272,6 +276,7 @@ var runsManager = {
                 var allResp = await fetch('/api/runs/list?limit=50');
                 result = await allResp.json();
             }
+            if (seq !== this._seq) return;
             this._lastRuns = (result.ok && result.runs) || [];
             /* Waiting requests come back with the records: the panel that shows
                what has run is where someone looks for what has not started. */
@@ -280,6 +285,7 @@ var runsManager = {
             this._compare = null;
             this.render(this._lastRuns);
         } catch (e) {
+            if (seq !== this._seq) return;
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('runsMgr.empty') + '</div>';
         }
     },
@@ -921,14 +927,14 @@ var runsManager = {
             var columns = (table.columns_added || []).concat(table.columns_removed || []);
             var columnNote = columns.length
                 ? '<div class="runs-compare-subtitle">' +
-                    I18n.t('runsMgr.compareColumns', {
+                    escapeHtml(I18n.t('runsMgr.compareColumns', {
                         added: (table.columns_added || []).join(', ') || '-',
                         removed: (table.columns_removed || []).join(', ') || '-',
-                    }) + '</div>'
+                    })) + '</div>'
                 : '';
             detail = '<div class="runs-compare-detail">' +
                 '<div class="runs-compare-subtitle">' +
-                I18n.t('runsMgr.compareNode', { name: node.title || node.node_id }) + '</div>' +
+                escapeHtml(I18n.t('runsMgr.compareNode', { name: node.title || node.node_id })) + '</div>' +
                 '<div class="runs-compare-counts">' +
                 I18n.t('runsMgr.compareCounts', {
                     added: table.added_count || 0,

@@ -940,11 +940,14 @@ def _cookie_verify_worker(platform: str, url: str, lang: str = '', account: str 
         # exit: the most trustworthy evidence the pool can get, and the one a user pressing
         # 验证 expects to count. Recording it here means the panel's button and the gate's
         # stored table can never disagree about the session just measured.
+        # One subject spelling everywhere: the pool keys accounts by CookieManager.key, so a
+        # verification of the default login written under '' would be orphaned forever.
+        subject = CookieManager.key(account)
         pool.observe(
             platform,
-            account,
+            subject,
             facts,
-            exit_id=pool.store.binding_exit_id(platform, account),
+            exit_id=pool.store.binding_exit_id(platform, subject),
             assume_ok=True,
         )
         lines = _verify_lines(platform, facts)

@@ -20,7 +20,7 @@ from core.refs import as_bool, sanitize_filename
 from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify, request, send_file
 from runtime.state import any_run_live, clear_cached_datasets, drop_cached_dataset
-from runtime.stores import _load_dataset, _register_dataset, get_dataset_store
+from runtime.stores import _load_dataset, _register_dataset, get_dataset_store, register_dataset_result
 
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _resolve_payload_dataframe
@@ -185,7 +185,7 @@ def upload_dataset():
         return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400
 
     try:
-        dataset_id = _register_dataset(df, name=filename, source=SOURCE_UPLOAD)
+        dataset_id, stored = register_dataset_result(df, name=filename, source=SOURCE_UPLOAD)
     except ValueError as e:
         # Over the row ceiling: refusing beats storing half a file.
         return jsonify({'ok': False, 'error': t('api.datasetTooBig', err=e)}), 400
@@ -207,7 +207,7 @@ def upload_dataset():
             'warnings': warnings,
             # False when identical rows were already stored: the UI can then
             # say "already saved" rather than pretending it wrote something new.
-            'persisted': True,
+            'persisted': stored,
             'preview': _json_safe_records(df, 10),
         }
     )

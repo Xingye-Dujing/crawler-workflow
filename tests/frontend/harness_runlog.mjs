@@ -151,6 +151,17 @@ await viewer.loadOlder();
 out.olderGet = captured.gets.slice(beforeOlder).find((u) => u.indexOf('before=2') >= 0) || '';
 out.mergedOrder = viewer._rows.map((r) => r.line);
 
+// ── two rapid “加载更早” clicks must not prepend the same page twice ──
+const beforeDouble = captured.gets.length;
+viewer._rows = PAGE.rows.slice();
+viewer._oldestSeq = 2;
+viewer._hasMore = true;
+const firstOlder = viewer.loadOlder();
+const secondOlder = viewer.loadOlder();
+await Promise.all([firstOlder, secondOlder]);
+out.doubleOlderGets = captured.gets.slice(beforeDouble).filter((u) => u.indexOf('before=2') >= 0).length;
+out.doubleOlderRows = viewer._rows.map((r) => r.line);
+
 // ── download points at the same filtered .txt endpoint ──
 viewer._dom.level.value = 'warning';
 captured.location = '';

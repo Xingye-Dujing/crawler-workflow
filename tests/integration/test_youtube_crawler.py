@@ -598,7 +598,7 @@ class TestCommentWalk:
         rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
         assert rows == [] and status == 'blocked'
 
-    def test_a_refusal_after_some_comments_keeps_what_was_read(self, session_maker):
+    def test_a_refusal_after_some_comments_keeps_the_rows_but_not_the_proof(self, session_maker):
         driver = FakeDriver(
             {
                 f'next:{VIDEO_A}': [watch_answer(['C1'])],
@@ -608,7 +608,9 @@ class TestCommentWalk:
         )
         session = session_maker(driver)
         rows, status = session.walk('youtube', f'https://youtu.be/{VIDEO_A}', limit=0)
-        assert status == OK and [row['评论ID'] for row in rows] == ['cid1', 'cid2']
+        # The rows already read are kept, but a mid-thread refusal is NOT a finished thread:
+        # BLOCKED pins the cursor on this video so 继续 can replay the unanswered tail.
+        assert status == 'blocked' and [row['评论ID'] for row in rows] == ['cid1', 'cid2']
 
     def test_a_link_that_names_no_video_is_dead_rather_than_empty(self, session_maker):
         session = session_maker(FakeDriver({}))

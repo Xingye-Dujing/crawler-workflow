@@ -3363,9 +3363,17 @@ const AIWorkspace = {
         const artifact = this._artifactById(id);
         if (!artifact) return;
         const kind = String(artifact.kind || '');
-        const current = typeof canvas !== 'undefined' && canvas && typeof canvas.serializeDraft === 'function'
+        const draft = typeof canvas !== 'undefined' && canvas && typeof canvas.serializeDraft === 'function'
             ? canvas.serializeDraft()
             : null;
+        /* serializeDraft() inherits getState(), which keys nodes BY ID. Both the server preview
+           and the merge below take a LIST; sending the map made every draft node read as "new"
+           and made an apply with one tick rebuild the canvas from an empty base — deleting every
+           node the user had not selected. Unwrap here, the same way AIContext.canvasDraft does. */
+        const current = draft && draft.nodes && typeof draft.nodes === 'object' && !Array.isArray(draft.nodes)
+            ? Object.assign({}, draft, { nodes: Object.values(draft.nodes) })
+            : draft;
+        const currentNodes = current && Array.isArray(current.nodes) ? current.nodes : [];
         try {
             const response = await fetch('/api/ai/artifacts/preview', {
                 method: 'POST',
@@ -3409,7 +3417,7 @@ const AIWorkspace = {
                 return;
             }
             if (kind === 'workflow' || kind === 'workflow_draft') {
-                const base = current && Array.isArray(current.nodes) ? current.nodes : [];
+                const base = currentNodes;
                 const draftNodes = Array.isArray((artifact.payload || {}).nodes)
                     ? artifact.payload.nodes.filter((node) => picked.has(String(node.id || '')))
                     : [];
@@ -3518,7 +3526,9 @@ const AIWorkspace = {
     async _deleteConversation(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            await fetch('/api/ai/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.ok === false) throw new Error(data.error || 'HTTP ' + response.status);
             if (this._conversationId === id) this.newChat();
             this._refreshConversations();
         } catch (error) {
@@ -3529,12 +3539,18 @@ const AIWorkspace = {
     async _renameConversation(id) {
         const title = await this._prompt(I18n.t('ai.renamePrompt'), '');
         if (!title) return;
-        await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title }),
-        });
-        this._refreshConversations();
+        try {
+            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.ok === false) throw new Error(data.error || 'HTTP ' + response.status);
+            this._refreshConversations();
+        } catch (error) {
+            this._toast(error.message || I18n.t('ai.error'));
+        }
     },
 
     openSettings() {
