@@ -58,6 +58,7 @@ class TestAIStreamAndRenderer:
         assert 'data-ai-answer="A"' in out['question']
         assert 'data-ai-question="q1"' in out['question']
         assert 'data-ai-copy-artifact="a1"' in out['artifact']
+        assert 'data-ai-preview-artifact="a1"' in out['artifact'], 'a previewable card has no preview door'
 
 
 class TestRuntimeSurfaces:
@@ -93,6 +94,28 @@ class TestRuntimeSurfaces:
     def test_the_redaction_key_is_translated_in_both_languages(self):
         catalog = (JS_DIR / 'i18n' / 'ai.js').read_text(encoding='utf-8')
         assert catalog.count("'ai.contextRedacted':") == 2, 'the key needs one en and one zh wording'
+
+    def test_a_preview_applies_only_the_selected_nodes(self):
+        """The preview door is additive, asks the SERVER, and merges only the ticked nodes into the
+        live canvas — the primary button's full apply path is untouched."""
+        out = _run_workspace()['artifactPreview']
+        assert out['button'] is True and out['clicked'] is True, 'the card button did not reach the handler'
+        request = out['request']
+        assert request and request['url'] == '/api/ai/artifacts/preview'
+        assert request['body']['kind'] == 'workflow_draft'
+        assert request['body']['current']['nodes'][0]['params']['workflow_name'] == 'current'
+        assert out['toggles'] == ['ai-preview-0', 'ai-preview-1']
+        applied = out['applied']
+        assert applied and applied['run'] is False
+        ids = [node['id'] for node in applied['payload']['nodes']]
+        assert ids == ['n1', 'n2'], ids
+        # The overwritten n1 stayed at its CURRENT value; only the new n2 was taken from the draft.
+        assert applied['payload']['nodes'][0]['params']['workflow_name'] == 'current'
+        assert applied['payload']['nodes'][1]['type'] == 'analysis'
+        # n1→n2 survives (both endpoints exist); n2→n3 does not (n3 was never brought in).
+        assert applied['payload']['connections'] == [{'from': 'n1', 'to': 'n2'}], (
+            'connections to excluded nodes must be dropped'
+        )
 
     def test_an_unavailable_skill_shows_the_servers_reason(self):
         out = _run()

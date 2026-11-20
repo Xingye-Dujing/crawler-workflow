@@ -703,6 +703,35 @@ def ai_workflow_validate():
     return jsonify({'ok': True, 'report': workflow_draft.validate(payload)})
 
 
+@bp.route('/api/ai/artifacts/preview', methods=['POST'])
+def ai_artifact_preview():
+    """Describe what applying an artifact would change, before the user commits to it.
+
+    Validation stays authoritative: an illegal draft is refused here with the validator's own
+    sentence. A kind with no published preview is refused BY NAME rather than painted as a card
+    with no action. A preview writes nothing — the existing apply endpoints remain the only door.
+    """
+    from ai import previews, validators
+
+    data = _json_body()
+    if data is None:
+        return _bad_body()
+    kind = str(data.get('kind') or '').strip()
+    payload = data.get('payload') if isinstance(data.get('payload'), dict) else {}
+    current = data.get('current') if isinstance(data.get('current'), dict) else None
+    try:
+        validation = validators.check(kind, payload)
+        if validation is not None and not validation.ok:
+            raise AIError('ai.preview.refused', kind='bad_request', detail=validation.message)
+        effective = validation.payload if validation is not None and validation.payload is not None else payload
+        result = previews.preview(kind, effective, current)
+        if result is None:
+            raise AIError('ai.preview.unknown', kind='bad_request', kind_name=kind)
+    except AIError as exc:
+        return _error(exc)
+    return jsonify({'ok': True, 'preview': result.to_dict()})
+
+
 @bp.route('/api/ai/chart/preview', methods=['POST'])
 def ai_chart_preview():
     """Turn a ``chart_spec`` artifact into a validated ``/api/visualize/render`` request.

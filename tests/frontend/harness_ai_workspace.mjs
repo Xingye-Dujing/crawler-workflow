@@ -1307,6 +1307,89 @@ out.redactionNote = {
     noSecretValue: !sideHtml.includes('sk-'),
 };
 
+/* An artifact's preview door is additive to its primary apply button: it asks the server what the
+   apply would change, lets the user tick the parts, and merges ONLY the selected nodes into the
+   live canvas through the same apply path. The server owns the shape and the legality. */
+const previewArtifact = {
+    id: 'preview_art',
+    kind: 'workflow_draft',
+    title: 'Proposed canvas',
+    payload: {
+        nodes: [
+            { id: 'n1', type: 'name', params: { workflow_name: 'draft' } },
+            { id: 'n2', type: 'analysis', params: { operation: 'topic_label' } },
+        ],
+        connections: [
+            { from: 'n1', to: 'n2' },
+            { from: 'n2', to: 'n3' },
+        ],
+    },
+};
+const savedCurrent = workspace._current;
+workspace._current = { artifacts: [previewArtifact] };
+const previewHolder = sandbox.document.createElement('div');
+previewHolder.innerHTML = sandbox.AIRender.artifactCard(previewArtifact);
+const previewButton = previewHolder.querySelector('[data-ai-preview-artifact]');
+
+const realPreview = workspace._previewArtifact;
+const previewClicks = [];
+workspace._previewArtifact = async (id) => previewClicks.push(id);
+if (previewButton) dispatchOn(workspace._dom.root, 'click', { target: previewButton });
+workspace._previewArtifact = realPreview;
+
+const previewRequests = [];
+const realFetchPreview = sandbox.fetch;
+sandbox.fetch = async (url, options) => {
+    previewRequests.push({ url, body: JSON.parse(String(options.body || '{}')) });
+    return {
+        json: async () => ({
+            ok: true,
+            preview: {
+                kind: 'workflow_draft',
+                title: 'Changes',
+                summary: '2 nodes',
+                items: [
+                    { id: 'n1', label: 'overwrite n1', detail: 'name', action: 'change', selectable: true, checked: true },
+                    { id: 'n2', label: 'add n2', detail: 'analysis', action: 'add', selectable: true, checked: true },
+                ],
+                warnings: [],
+                selectable: true,
+            },
+        }),
+    };
+};
+const dialogOpts = [];
+const realShowDialog = sandbox.showDialog;
+sandbox.showDialog = async (opts) => {
+    dialogOpts.push(opts);
+    // Uncheck the overwrite; keep only the new node.
+    return { value: 'apply', toggles: { 'ai-preview-0': false, 'ai-preview-1': true } };
+};
+const applied = [];
+const realApplyWorkflow = workspace._applyWorkflowPayload;
+workspace._applyWorkflowPayload = async (payload, run, title) => applied.push({ payload, run, title });
+sandbox.canvas = {
+    serializeDraft: () => ({
+        nodes: [{ id: 'n1', type: 'name', params: { workflow_name: 'current' } }],
+        connections: [],
+    }),
+};
+
+await workspace._previewArtifact('preview_art');
+
+workspace._current = savedCurrent;
+sandbox.canvas = undefined;
+sandbox.fetch = realFetchPreview;
+sandbox.showDialog = realShowDialog;
+workspace._applyWorkflowPayload = realApplyWorkflow;
+out.artifactPreview = {
+    button: !!previewButton,
+    clicked: previewClicks.includes('preview_art'),
+    request: previewRequests[0] || null,
+    toggles: dialogOpts[0] ? dialogOpts[0].toggles.map((item) => item.id) : [],
+    applied: applied.length === 1 ? applied[0] : null,
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

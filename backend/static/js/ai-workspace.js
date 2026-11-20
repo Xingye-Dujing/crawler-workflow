@@ -1821,7 +1821,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1905,6 +1905,10 @@ const AIWorkspace = {
             const id = target.getAttribute('data-ai-copy-artifact');
             const artifact = (this._current?.artifacts || []).find((item) => item.id === id);
             if (artifact) this._copyText(JSON.stringify(artifact.payload || {}, null, 2));
+            return;
+        }
+        if (target.hasAttribute('data-ai-preview-artifact')) {
+            this._previewArtifact(target.getAttribute('data-ai-preview-artifact'));
             return;
         }
         if (target.hasAttribute('data-ai-apply-skill')) {
@@ -3272,6 +3276,86 @@ const AIWorkspace = {
         // reading `answer.value` from a bare `true` made this return '' for every rename.
         if (!answer || answer.value !== true) return '';
         return String(answer.input || '').trim();
+    },
+
+    /* An artifact's "preview" door: ask the SERVER what applying would change, let the user tick
+       the parts they want, then hand the selection to the SAME apply path the primary button uses.
+       The server owns both the kind's shape and its legality; this file holds no second opinion. */
+    async _previewArtifact(id) {
+        const artifact = this._artifactById(id);
+        if (!artifact) return;
+        const kind = String(artifact.kind || '');
+        const current = typeof canvas !== 'undefined' && canvas && typeof canvas.serializeDraft === 'function'
+            ? canvas.serializeDraft()
+            : null;
+        try {
+            const response = await fetch('/api/ai/artifacts/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kind, payload: artifact.payload || {}, current }),
+            }).then((reply) => reply.json());
+            if (!response.ok) throw new Error(response.error || I18n.t('ai.error'));
+            const pv = response.preview || {};
+            const items = Array.isArray(pv.items) ? pv.items : [];
+            const chosen = items.filter((item) => item.selectable);
+            const message = [
+                pv.summary,
+                ...(Array.isArray(pv.warnings) ? pv.warnings : []),
+                ...items.filter((item) => !item.selectable).map((item) => item.label + (item.detail ? ' — ' + item.detail : '')),
+            ].filter(Boolean).join('\n');
+            const toggles = chosen.map((item, index) => ({
+                id: 'ai-preview-' + index,
+                label: item.label + (item.detail ? ' — ' + item.detail : ''),
+                checked: item.checked !== false,
+            }));
+            if (kind === 'monitor') {
+                toggles.push({ id: 'ai-preview-auto', label: I18n.t('ai.preview.auto'), checked: true });
+            }
+            if (typeof showDialog !== 'function') return;
+            const answer = await showDialog({
+                message,
+                toggles,
+                buttons: [
+                    { label: I18n.t('ai.preview.apply'), value: 'apply', primary: true, collect: true },
+                    { label: I18n.t('dialog.cancel'), value: 'cancel' },
+                ],
+                cancelValue: null,
+            });
+            if (!answer || answer.value !== 'apply') return;
+            const selected = answer.toggles || {};
+            const picked = new Set(
+                chosen.filter((_item, index) => selected['ai-preview-' + index]).map((item) => String(item.id))
+            );
+            if (chosen.length && !picked.size) {
+                this._toast(I18n.t('ai.preview.none'));
+                return;
+            }
+            if (kind === 'workflow' || kind === 'workflow_draft') {
+                const base = current && Array.isArray(current.nodes) ? current.nodes : [];
+                const draftNodes = Array.isArray((artifact.payload || {}).nodes)
+                    ? artifact.payload.nodes.filter((node) => picked.has(String(node.id || '')))
+                    : [];
+                const baseIds = new Set(base.map((node) => String(node.id || '')));
+                const nodes = base.map((node) => draftNodes.find((draft) => String(draft.id) === String(node.id)) || node);
+                for (const draft of draftNodes) {
+                    if (!baseIds.has(String(draft.id || ''))) nodes.push(draft);
+                }
+                const ids = new Set(nodes.map((node) => String(node.id || '')));
+                const connections = []
+                    .concat(current && Array.isArray(current.connections) ? current.connections : [])
+                    .concat(Array.isArray((artifact.payload || {}).connections) ? artifact.payload.connections : [])
+                    .filter((edge) => edge && ids.has(String(edge.from)) && ids.has(String(edge.to)));
+                await this._applyWorkflowPayload({ ...(artifact.payload || {}), nodes, connections }, false, artifact.title || '');
+            } else if (kind === 'memory') {
+                await this._applyMemoryArtifact(id);
+            } else if (kind === 'monitor') {
+                await this._applyMonitor(id, selected['ai-preview-auto'] !== false);
+            } else if (kind === 'chart_spec') {
+                await this._applyChartArtifact(id);
+            }
+        } catch (error) {
+            this._toast(error.message || I18n.t('ai.error'));
+        }
     },
 
     _artifactById(id) {

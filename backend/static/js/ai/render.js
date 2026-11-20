@@ -342,12 +342,19 @@ const AIRender = {
                            as a dead card. The button hands the proposal back to the assistant, which
                            builds the canvas with its validated tools. */
                         : '<button type="button" class="ai-primary" data-ai-implement-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.artifactImplement')) + '</button>';
+        /* A previewable artifact gets a second, additive door: the primary button still applies
+           directly, but this one shows the exact change first and lets the user pick the parts.
+           The server decides which kinds have a published preview — this is only the card. */
+        const previewable = ['memory', 'workflow', 'workflow_draft', 'monitor', 'chart_spec'];
+        const previewButton = previewable.includes(String(artifact.kind || ''))
+            ? '<button type="button" class="ai-ghost" data-ai-preview-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.preview.button')) + '</button>'
+            : '';
         return (
             '<section class="ai-artifact" data-ai-artifact="' + this.escape(artifact.id || '') + '">' +
             '<div class="ai-artifact-head"><span class="ai-artifact-kind">' + this.escape(label) + '</span><span>' + this.escape(artifact.title || '') + '</span></div>' +
             summary +
             '<details class="ai-artifact-body" data-ai-detail="artifact:' + this.escape(String(artifact.id || '')) + ':body"><summary>' + this.escape(I18n.t('ai.preview')) + '</summary><pre class="ai-code">' + this.escape(JSON.stringify(artifact.payload || {}, null, 2)) + '</pre></details>' +
-            '<div class="ai-artifact-actions">' + apply + '<button type="button" class="ai-ghost" data-ai-copy-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.copy')) + '</button><span class="ai-hint">' + this.escape(I18n.t('ai.applyHint')) + '</span></div>' +
+            '<div class="ai-artifact-actions">' + apply + previewButton + '<button type="button" class="ai-ghost" data-ai-copy-artifact="' + this.escape(artifact.id || '') + '">' + this.escape(I18n.t('ai.copy')) + '</button><span class="ai-hint">' + this.escape(I18n.t('ai.applyHint')) + '</span></div>' +
             '</section>'
         );
     },
