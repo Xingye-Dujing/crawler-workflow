@@ -38,7 +38,11 @@ from ai.providers.base import replay_context
 from ai.types import new_id, usage_totals
 from i18n import get_lang, t
 
-ACTIVE_STREAMS: dict[str, threading.Event] = {}
+#: One entry per live turn: its cancel event and the account scope that started it. The scope
+#: matters because the registry is process-wide while ai.db (and its interrupted-row sweep) is
+#: per account: a global "anything live" check let one account's stream suppress another's boot
+#: recovery forever.
+ACTIVE_STREAMS: dict[str, tuple[threading.Event, str]] = {}
 
 #: How many questions one ``ask_user_question`` call may carry. More than this is refused by name —
 #: the old code kept the first five silently, so a sixth question (and its answer) never existed.
@@ -50,13 +54,14 @@ _STREAM_LOCK = threading.RLock()
 MAX_OUTPUT_TOKENS = 8192
 
 
-def _active(conversation_id: str) -> threading.Event:
+def _active(conversation_id: str, scope: str = '') -> threading.Event:
     with _STREAM_LOCK:
-        event = ACTIVE_STREAMS.get(conversation_id)
-        if event is None:
+        entry = ACTIVE_STREAMS.get(conversation_id)
+        if entry is None:
             event = threading.Event()
-            ACTIVE_STREAMS[conversation_id] = event
-        return event
+            ACTIVE_STREAMS[conversation_id] = (event, scope or account_context.scope_key())
+            return event
+        return entry[0]
 
 
 def clear_active(conversation_id: str) -> None:
@@ -64,12 +69,18 @@ def clear_active(conversation_id: str) -> None:
         ACTIVE_STREAMS.pop(conversation_id, None)
 
 
+def active_scopes() -> set[str]:
+    """The account scopes with a live turn right now, for a per-account boot decision."""
+    with _STREAM_LOCK:
+        return {scope for _event, scope in ACTIVE_STREAMS.values()}
+
+
 def stop(conversation_id: str) -> bool:
     with _STREAM_LOCK:
-        event = ACTIVE_STREAMS.get(conversation_id)
-        if event is None:
+        entry = ACTIVE_STREAMS.get(conversation_id)
+        if entry is None:
             return False
-        event.set()
+        entry[0].set()
         return True
 
 

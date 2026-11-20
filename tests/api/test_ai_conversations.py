@@ -43,6 +43,29 @@ def test_stop_does_not_signal_a_conversation_this_account_cannot_see(client, mon
     assert signalled == []
 
 
+def test_boot_settles_this_accounts_stale_rows_even_when_a_foreign_turn_is_live(client, monkeypatch):
+    """ACTIVE_STREAMS is process-wide but the interrupted sweep is per-account ai.db. A global
+    'anything live' check let another account's stream keep this one's crashed rows at
+    ``streaming`` forever; a live turn of THIS scope must still suppress the sweep."""
+    import threading
+
+    from ai import agent, store
+    from runtime import account_context
+
+    conversation_id = _conversation(client)
+    stale = store.append_message(conversation_id, 'assistant', 'half', status='streaming')
+
+    scope = account_context.scope_key()
+    monkeypatch.setattr(agent, 'ACTIVE_STREAMS', {'foreign': (threading.Event(), 'another-account')})
+    assert client.get('/api/ai/bootstrap').status_code == 200
+    assert store.get_message(stale['id'])['status'] == 'interrupted'
+
+    live = store.append_message(conversation_id, 'assistant', 'still going', status='streaming')
+    monkeypatch.setattr(agent, 'ACTIVE_STREAMS', {'local': (threading.Event(), scope)})
+    assert client.get('/api/ai/bootstrap').status_code == 200
+    assert store.get_message(live['id'])['status'] == 'streaming'
+
+
 def test_a_title_search_is_sql_side_and_escapes_like_metacharacters(client):
     exact = _conversation(client, '100% 完成 zz-search')
     other = _conversation(client, '100x 完成 zz-search')

@@ -229,7 +229,9 @@ def ai_provider_test(provider_id: str):
 def ai_bootstrap():
     plugins.register_builtin()
     plugins.register_stored_plugins()
-    if not agent.ACTIVE_STREAMS:
+    # The stream registry is process-wide but the interrupted-row sweep is THIS account's ai.db.
+    # An unrelated account's live turn must not stop this one from settling its own crashed rows.
+    if account_context.scope_key() not in agent.active_scopes():
         store.mark_interrupted()
     provider_id = str(request.args.get('provider') or 'deepseek')
     model = str(request.args.get('model') or '')
