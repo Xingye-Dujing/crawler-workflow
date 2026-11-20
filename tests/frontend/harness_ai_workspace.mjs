@@ -1390,6 +1390,85 @@ out.artifactPreview = {
     applied: applied.length === 1 ? applied[0] : null,
 };
 
+/* The manual monitor builder: the sidebar's new-monitor button fetches the SERVER's name catalog,
+   opens one dialog, and arms through the SAME endpoint the artifact card uses. No second event
+   table in this file. */
+workspace._renderSide();
+const newMonitorButton = workspace._dom.side.querySelector('[data-ai-monitor-new]');
+const realNewMonitor = workspace._newMonitor;
+let newMonitorClicks = 0;
+workspace._newMonitor = async () => {
+    newMonitorClicks += 1;
+};
+if (newMonitorButton) dispatchOn(workspace._dom.root, 'click', { target: newMonitorButton });
+workspace._newMonitor = realNewMonitor;
+
+const monitorRequests = [];
+const realFetchMonitor = sandbox.fetch;
+sandbox.fetch = async (url, options) => {
+    monitorRequests.push({
+        url: String(url),
+        body: options && options.body ? JSON.parse(String(options.body)) : null,
+    });
+    if (String(url).indexOf('/api/ai/monitors/catalog') >= 0) {
+        return {
+            json: async () => ({
+                ok: true,
+                catalog: {
+                    events: ['run.started', 'run.finished'],
+                    statuses: ['failed', 'partial'],
+                    outcomes: ['completed'],
+                },
+            }),
+        };
+    }
+    return { json: async () => ({ ok: true, monitor: { id: 'mon_new', spec: {}, auto_analyze: true } }) };
+};
+const monitorDialogs = [];
+const realShowDialogMonitor = sandbox.showDialog;
+sandbox.showDialog = async (opts) => {
+    monitorDialogs.push(opts);
+    return {
+        value: 'create',
+        fields: {
+            'ai-mon-event': 'run.finished',
+            'ai-mon-statuses': 'failed,partial',
+            'ai-mon-outcomes': '',
+            'ai-mon-run': 'run-9',
+            'ai-mon-console': '',
+            'ai-mon-note': 'manual',
+        },
+        toggles: { 'ai-mon-auto': true },
+    };
+};
+const savedEnsureConversation = workspace._ensureConversation;
+const savedToastMonitor = workspace._toast;
+const savedMonitors = workspace._bootstrap.monitors;
+workspace._ensureConversation = async () => 'c-new';
+workspace._toast = () => {};
+workspace._bootstrap.monitors = [];
+
+await workspace._newMonitor();
+const builderArmed = (workspace._bootstrap.monitors || []).some((item) => item.id === 'mon_new');
+
+workspace._ensureConversation = savedEnsureConversation;
+workspace._toast = savedToastMonitor;
+workspace._bootstrap.monitors = savedMonitors;
+sandbox.fetch = realFetchMonitor;
+sandbox.showDialog = realShowDialogMonitor;
+
+const armRequest = monitorRequests.find(
+    (row) => row.url.indexOf('/api/ai/monitors') >= 0 && row.url.indexOf('/catalog') < 0
+);
+out.monitorBuilder = {
+    button: !!newMonitorButton,
+    clicked: newMonitorClicks === 1,
+    urls: monitorRequests.map((row) => row.url),
+    arm: armRequest ? armRequest.body : null,
+    eventOptions: monitorDialogs[0] ? monitorDialogs[0].fields[0].options.map((option) => option.value) : [],
+    armed: builderArmed,
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

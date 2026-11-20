@@ -483,6 +483,12 @@ def ai_monitor_delete(monitor_id: str):
     return jsonify({'ok': True, 'deleted': monitors.cancel(monitor_id)})
 
 
+@bp.route('/api/ai/monitors/catalog', methods=['GET'])
+def ai_monitor_catalog():
+    """The event/status/outcome names a manually built monitor may use, from the matcher itself."""
+    return jsonify({'ok': True, 'catalog': monitors.public_catalog()})
+
+
 @bp.route('/api/ai/monitors/events', methods=['GET'])
 def ai_monitor_events():
     conversation_id = str(request.args.get('conversation_id') or '')

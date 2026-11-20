@@ -16,6 +16,28 @@ def ai_conversation(client):
     return response.get_json()['conversation']['id']
 
 
+def test_the_manual_builder_reads_its_names_from_the_matcher_and_arms_through_the_same_door(client, ai_conversation):
+    from ai import monitors
+
+    catalog = client.get('/api/ai/monitors/catalog')
+    assert catalog.status_code == 200, catalog.get_json()
+    names = catalog.get_json()['catalog']
+    assert names['events'] == list(monitors.EVENTS)
+    assert names['statuses'] == list(monitors.STATUSES)
+    assert names['outcomes'] == list(monitors.OUTCOMES)
+
+    created = client.post(
+        '/api/ai/monitors',
+        json={
+            'conversation_id': ai_conversation,
+            'spec': {'events': [names['events'][0]], 'statuses': ['failed'], 'note': 'manual builder'},
+            'auto_analyze': False,
+        },
+    )
+    assert created.status_code == 200, created.get_json()
+    assert created.get_json()['monitor']['spec']['events'] == [names['events'][0]]
+
+
 def test_a_node_monitor_delivers_one_pending_event_and_ack_clears_it(client, ai_conversation):
     from runtime import run_events
 

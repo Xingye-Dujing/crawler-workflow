@@ -117,6 +117,21 @@ class TestRuntimeSurfaces:
             'connections to excluded nodes must be dropped'
         )
 
+    def test_the_manual_monitor_builder_uses_the_servers_event_names(self):
+        """The builder offers only names the matcher knows, and arms through the same endpoint the
+        artifact card uses — the page holds no second event table."""
+        out = _run_workspace()['monitorBuilder']
+        assert out['button'] is True and out['clicked'] is True, 'the sidebar has no working builder door'
+        assert '/api/ai/monitors/catalog' in out['urls'], 'the builder did not ask the server for names'
+        assert out['eventOptions'] == ['run.started', 'run.finished']
+        arm = out['arm']
+        assert arm and arm['conversation_id'] == 'c-new'
+        assert arm['auto_analyze'] is True
+        assert arm['spec']['events'] == ['run.finished']
+        assert arm['spec']['statuses'] == ['failed', 'partial']
+        assert arm['spec']['run_id'] == 'run-9'
+        assert out['armed'] is True
+
     def test_an_unavailable_skill_shows_the_servers_reason(self):
         out = _run()
         assert 'disabled' in out['skillOptions']

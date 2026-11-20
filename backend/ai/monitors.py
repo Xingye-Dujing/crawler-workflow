@@ -32,6 +32,14 @@ EVENTS = ('run.started', 'node.finished', 'run.finished', 'run.log')
 STATUSES = ('done', 'restored', 'partial', 'failed', 'skipped')
 OUTCOMES = ('completed', 'failed', 'interrupted')
 
+
+def public_catalog() -> dict:
+    """The names a manual monitor builder may offer, read from the SAME tables ``validate_spec``
+    checks. The browser holds no second copy: a new event or status is offered only when the server
+    can actually match it."""
+    return {'events': list(EVENTS), 'statuses': list(STATUSES), 'outcomes': list(OUTCOMES)}
+
+
 _MAX_TRIGGERS = 50
 _CACHE: dict = {}
 _CACHE_SECONDS = 10.0

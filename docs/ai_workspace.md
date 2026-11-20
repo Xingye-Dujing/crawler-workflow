@@ -147,7 +147,7 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 
 ## 4. 运行监控
 
-AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分析”或“只通知”。条件示例：
+AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分析”或“只通知”；侧栏也有“新建监控”手动填同一份规则。构建器先读 `GET /api/ai/monitors/catalog`：它从 `ai.monitors` 的 `EVENTS`/`STATUSES`/`OUTCOMES` 三张表给出可选名字，浏览器因此不持第二份事件表；填好后与产物卡共用 `POST /api/ai/monitors`，校验和投递路径不会分叉。条件示例：
 
 ```json
 {"run_id": "…", "events": ["node.finished", "run.finished"], "node_ids": ["n3"],

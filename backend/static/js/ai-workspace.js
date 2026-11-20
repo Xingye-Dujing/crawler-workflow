@@ -1086,7 +1086,8 @@ const AIWorkspace = {
             '<button type="button" class="ai-ghost" data-ai-context-apply="1">' + AIRender.escape(I18n.t('ai.applyContext')) + '</button></div>' +
             '</section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.monitor.heading')) + '</h3>' +
-            '<ul class="ai-monitor-list">' + (monitorRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.monitor.empty')) + '</li>') + '</ul></section>' +
+            '<ul class="ai-monitor-list">' + (monitorRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.monitor.empty')) + '</li>') + '</ul>' +
+            '<button type="button" class="ai-ghost" data-ai-monitor-new="1">' + AIRender.escape(I18n.t('ai.monitor.build.new')) + '</button></section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.agentTrace')) + '</h3>' +
             '<ol class="ai-trace">' + (plan || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.planEmpty')) + '</li>') + '</ol></section>' +
             '<section class="ai-side-block ai-spend"><h3>' + AIRender.escape(I18n.t('ai.spend.heading')) +
@@ -1821,7 +1822,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -1976,6 +1977,10 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-watch-only')) {
             this._applyMonitor(target.getAttribute('data-ai-watch-only'), false);
+            return;
+        }
+        if (target.hasAttribute('data-ai-monitor-new')) {
+            this._newMonitor();
             return;
         }
         if (target.hasAttribute('data-ai-disarm-monitor')) {
@@ -2690,6 +2695,79 @@ const AIWorkspace = {
             : I18n.t('ai.monitor.promptAsk');
         const text = I18n.t('ai.monitor.promptHead') + '\n```json\n' + facts + '\n```\n' + tail;
         return this._sendText(text, { monitor: true, monitorEventId: event.id });
+    },
+
+    /* Manual monitor builder. The event/status/outcome names come from the SERVER's matcher table —
+       the page holds no second list — and the rule is POSTed through the SAME arm endpoint the
+       artifact card uses, so the validator and the delivery path cannot drift apart. */
+    async _newMonitor() {
+        if (typeof showDialog !== 'function') return;
+        let catalog;
+        try {
+            catalog = (await fetch('/api/ai/monitors/catalog').then((reply) => reply.json())).catalog || {};
+        } catch (error) {
+            this._toast(I18n.t('ai.monitor.failed') + ': ' + error.message);
+            return;
+        }
+        const events = Array.isArray(catalog.events) ? catalog.events : [];
+        const message = I18n.t('ai.monitor.build.hint', {
+            events: events.join(', '),
+            statuses: (catalog.statuses || []).join(', '),
+            outcomes: (catalog.outcomes || []).join(', '),
+        });
+        const answer = await showDialog({
+            message,
+            fields: [
+                {
+                    id: 'ai-mon-event',
+                    label: I18n.t('ai.monitor.build.event'),
+                    type: 'select',
+                    options: events.map((name) => ({ value: name, label: name })),
+                    value: events[0] || '',
+                },
+                { id: 'ai-mon-statuses', label: I18n.t('ai.monitor.build.statuses'), type: 'text' },
+                { id: 'ai-mon-outcomes', label: I18n.t('ai.monitor.build.outcomes'), type: 'text' },
+                { id: 'ai-mon-run', label: I18n.t('ai.monitor.build.runId'), type: 'text' },
+                { id: 'ai-mon-console', label: I18n.t('ai.monitor.build.console'), type: 'text' },
+                { id: 'ai-mon-note', label: I18n.t('ai.monitor.build.note'), type: 'text' },
+            ],
+            toggles: [{ id: 'ai-mon-auto', label: I18n.t('ai.monitor.build.auto'), checked: false }],
+            buttons: [
+                { label: I18n.t('ai.monitor.build.create'), value: 'create', primary: true, collect: true },
+                { label: I18n.t('dialog.cancel'), value: 'cancel' },
+            ],
+            cancelValue: null,
+        });
+        if (!answer || answer.value !== 'create') return;
+        const fields = answer.fields || {};
+        const list = (value) => String(value || '').split(',').map((part) => part.trim()).filter(Boolean);
+        const spec = {
+            events: [String(fields['ai-mon-event'] || events[0] || '').trim()].filter(Boolean),
+            statuses: list(fields['ai-mon-statuses']),
+            outcomes: list(fields['ai-mon-outcomes']),
+            run_id: String(fields['ai-mon-run'] || '').trim(),
+            console_contains: String(fields['ai-mon-console'] || '').trim(),
+            note: String(fields['ai-mon-note'] || '').trim(),
+        };
+        try {
+            const conversationId = await this._ensureConversation();
+            const response = await fetch('/api/ai/monitors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    conversation_id: conversationId,
+                    spec,
+                    auto_analyze: !!(answer.toggles || {})['ai-mon-auto'],
+                }),
+            });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || I18n.t('ai.error'));
+            this._bootstrap.monitors = [data.monitor, ...(this._bootstrap.monitors || [])];
+            this._renderSide();
+            this._toast(I18n.t('ai.monitor.build.created'));
+        } catch (error) {
+            this._toast(I18n.t('ai.monitor.failed') + ': ' + error.message);
+        }
     },
 
     async _applyMonitor(artifactId, auto) {
