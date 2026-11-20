@@ -1,0 +1,11 @@
+{
+  "name": "演示4 · 零样本分类（用户自定义标签 + NLI 小模型）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"零样本分类演示","params":{"workflow_name":"零样本分类演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"评论样本","params":{"dataset_id":"30dcb21e3345570e","dataset_name":"demo_zero","row_count":"3"},"x":60,"y":200},
+    {"id":"n_zero","type":"process","title":"零样本标签","operation":"zero_shot","params":{"operation":"zero_shot","text_column":"正文","labels":"投诉,咨询,好评","model":"MoritzLaurer/mDeBERTa-v3-base-mnli-xnli","threshold":"0"},"x":360,"y":200},
+    {"id":"n_out","type":"output","title":"导出标签","params":{"operation":"save","format":"csv","filename":"demo_04_zero_shot.csv"},"x":660,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_zero"},{"from":"n_zero","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}

@@ -1,0 +1,11 @@
+{
+  "name": "演示1 · 质性编码（开放编码 + AI 工作区可见追踪）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"质性编码演示","params":{"workflow_name":"质性编码演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"评论样本","params":{"dataset_id":"30dcb21e3345570e","dataset_name":"demo_zero","row_count":"3"},"x":60,"y":200},
+    {"id":"n_open","type":"process","title":"开放编码（LLM 可见追踪）","operation":"qualitative_code","params":{"operation":"qualitative_code","phase":"open","text_column":"正文","codebook_name":"演示码本"},"x":360,"y":200},
+    {"id":"n_out","type":"output","title":"导出编码","params":{"operation":"save","format":"csv","filename":"demo_01_open_codes.csv"},"x":660,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_open"},{"from":"n_open","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}

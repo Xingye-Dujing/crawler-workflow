@@ -1,0 +1,11 @@
+{
+  "name": "演示2 · 情感极性（微调 BERT 批量分类与模型目录）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"情感极性演示","params":{"workflow_name":"情感极性演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"评论样本","params":{"dataset_id":"bfa36e3598428d43","dataset_name":"demo_sentiment","row_count":"4"},"x":60,"y":200},
+    {"id":"n_sent","type":"process","title":"情感极性（BERT）","operation":"sentiment","params":{"operation":"sentiment","mode":"bert","text_column":"正文"},"x":360,"y":200},
+    {"id":"n_out","type":"output","title":"导出结果","params":{"operation":"save","format":"csv","filename":"demo_02_sentiment.csv"},"x":660,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_sent"},{"from":"n_sent","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}

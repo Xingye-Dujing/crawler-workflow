@@ -1,0 +1,11 @@
+{
+  "name": "演示5 · 实体识别（小 NER 模型序列标注）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"实体识别演示","params":{"workflow_name":"实体识别演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"文本样本","params":{"dataset_id":"c0378bc6f9c94638","dataset_name":"demo_ner","row_count":"2"},"x":60,"y":200},
+    {"id":"n_ner","type":"process","title":"实体识别（BERT）","operation":"ner","params":{"operation":"ner","mode":"bert","text_column":"正文","bert_model":"ckiplab/bert-base-chinese-ner"},"x":360,"y":200},
+    {"id":"n_out","type":"output","title":"导出实体","params":{"operation":"save","format":"csv","filename":"demo_05_ner.csv"},"x":660,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_ner"},{"from":"n_ner","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}

@@ -1,0 +1,12 @@
+{
+  "name": "演示3 · 语义去重与相似检索（小句向量模型）",
+  "nodes": [
+    {"id":"n_name","type":"name","title":"语义检索演示","params":{"workflow_name":"语义检索演示"},"x":60,"y":40},
+    {"id":"n_upload","type":"upload","title":"评论样本","params":{"dataset_id":"2d258b80564cb133","dataset_name":"demo_semantic","row_count":"5"},"x":60,"y":200},
+    {"id":"n_dedupe","type":"analysis","title":"语义近重复去重","params":{"operation":"semantic_dedupe","column":"正文","model":"BAAI/bge-small-zh-v1.5","threshold":"0.9"},"x":340,"y":200},
+    {"id":"n_sim","type":"analysis","title":"相似文本检索","params":{"operation":"similar_to","column":"正文","query":"手机发热严重","top_k":"3","model":"BAAI/bge-small-zh-v1.5"},"x":640,"y":200},
+    {"id":"n_out","type":"output","title":"导出相似结果","params":{"operation":"save","format":"csv","filename":"demo_03_similar.csv"},"x":940,"y":200}
+  ],
+  "connections":[{"from":"n_name","to":"n_upload"},{"from":"n_upload","to":"n_dedupe"},{"from":"n_dedupe","to":"n_sim"},{"from":"n_sim","to":"n_out"}],
+  "settings":{"mode":"serial","headless":true,"disabledTypes":[]}
+}
