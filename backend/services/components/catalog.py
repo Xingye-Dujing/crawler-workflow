@@ -44,6 +44,25 @@ class CatalogError(Exception):
     """A catalogue that cannot be trusted, with a sentence naming the exact field."""
 
 
+class _HttpsRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only when the NEXT hop is still HTTPS.
+
+    ``urlopen`` follows a 302 to ``http://`` by default, so checking the original URL said
+    "HTTPS only" while the trusted bytes could still arrive in clear text and be rewritten
+    together with their digests. The installer's update feed already guards every hop this way;
+    the bootstrap catalogue needs the same rule, using only the standard library because it runs
+    before the application exists.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not str(newurl or '').lower().startswith('https://'):
+            raise CatalogError(f'catalog redirect must be https: {newurl}')
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_CATALOG_OPENER = urllib.request.build_opener(_HttpsRedirects)
+
+
 def default_catalog_path() -> Path:
     """The catalogue bundled with the application (and with the bootstrap installer)."""
     return Path(__file__).with_name(CATALOG_NAME)
@@ -58,7 +77,11 @@ def fetch_catalog(url: str, timeout: float = 20.0) -> dict:
     if not str(url or '').lower().startswith('https://'):
         raise CatalogError('catalog url must be https')
     request = urllib.request.Request(url, headers={'User-Agent': 'CaiXiHui-installer'})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with _CATALOG_OPENER.open(request, timeout=timeout) as response:
+        # Also check where the bytes ACTUALLY arrived from: a handler that does not follow a
+        # scheme change (e.g. a custom transport) must still refuse a cleartext final hop.
+        if not str(response.geturl() or '').lower().startswith('https://'):
+            raise CatalogError('catalog arrived over a non-https hop')
         raw = response.read(MAX_CATALOG_BYTES + 1)
     if len(raw) > MAX_CATALOG_BYTES:
         raise CatalogError('catalog is too large')

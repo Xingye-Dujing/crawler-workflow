@@ -19,11 +19,12 @@ import pytest
 from core.machine import browser_version, platform_name
 
 from services import update as update_module
+from services.components import catalog as catalog_module
 from services.components import feed
 from services.components import install as install_module
 from services.components import probe as probe_module
 from services.components.archive import ArchiveError, safe_extract
-from services.components.catalog import Asset, Catalog, CatalogError, Part, load_catalog
+from services.components.catalog import Asset, Catalog, CatalogError, Part, fetch_catalog, load_catalog
 from services.components.fetch import DownloadCancelledError, DownloadError, download_asset
 from services.components.install import InstallError, install_component, remove_component
 from services.components.manifest import Manifest, ManifestError
@@ -55,6 +56,37 @@ def _asset(path: Path, sha: str, size: int, **changes) -> Asset:
     }
     values.update(changes)
     return Asset(**values)
+
+
+def test_a_catalogue_redirect_to_plain_http_is_refused():
+    """The bootstrap fetch trusts the catalogue's digests. A 302 to HTTP must not silently
+    downgrade that trust root — the update feed already refuses every non-HTTPS hop."""
+    handler = catalog_module._HttpsRedirects()
+    with pytest.raises(CatalogError, match='https'):
+        handler.redirect_request(None, None, 302, 'Found', {}, 'http://attacker.example/catalog.json')
+
+
+def test_a_catalogue_that_arrived_over_http_is_refused(monkeypatch):
+    class _Response:
+        def geturl(self):
+            return 'http://attacker.example/catalog.json'
+
+        def read(self, _size):
+            return b'{}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    class _Opener:
+        def open(self, _request, timeout=0):
+            return _Response()
+
+    monkeypatch.setattr(catalog_module, '_CATALOG_OPENER', _Opener())
+    with pytest.raises(CatalogError, match='non-https'):
+        fetch_catalog('https://example.com/catalog.json')
 
 
 class TestCatalog:
