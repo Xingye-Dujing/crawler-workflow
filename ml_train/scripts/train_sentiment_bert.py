@@ -31,12 +31,12 @@ import os
 import random
 import time
 
+# _env publishes every cache HOME before transformers is imported (HF_HOME alone is not enough:
+# huggingface_hub 1.x also writes to HF_XET_CACHE, which defaults to the C: user cache).
+import _env
 import numpy as np
 import pandas as pd
-
-os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
-
-from transformers import (  # noqa: E402  (env var above must precede the import)
+from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
@@ -44,12 +44,15 @@ from transformers import (  # noqa: E402  (env var above must precede the import
     TrainingArguments,
 )
 
+# The import above ran _env.setup() at module load; keep a named reference so the cache root the
+# trainer writes to is visible here and the import is not mistaken for an unused one.
+HF_CACHE_DIR = _env.HF_HOME_DIR
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)  # ml_train
 DATA = os.path.join(ROOT, 'datasets')
 MODELS = os.path.join(ROOT, 'models')
-# Keep every downloaded artifact inside the project, never the C: user cache (~/.cache/huggingface).
-os.environ.setdefault('HF_HOME', os.path.join(ROOT, '.hf-cache'))
+# Cache roots are published by _env above, before any library reads them.
 ID2LABEL = {0: 'negative', 1: 'positive'}
 LABEL2ID = {label: index for index, label in ID2LABEL.items()}
 MAX_LENGTH = 128  # a Weibo post is short; 128 subwords covers it and keeps 8GB of VRAM safe.

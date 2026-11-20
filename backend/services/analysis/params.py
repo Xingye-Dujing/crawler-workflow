@@ -54,6 +54,8 @@ STEP_REPLACE: dict[str, tuple[str, ...]] = {
     'alert': ('period', 'signal', 'value', 'threshold', 'reason'),
     'cooccur': ('source', 'target', 'value'),
     'reply_graph': ('src_author', 'dst_author', 'weight'),
+    # Similarity search returns a fixed four-column result, not the input table.
+    'similar_to': ('rank', 'row_index', 'text', 'similarity'),
     'topic_timeline': (
         'topic',
         'topic_words',
@@ -156,6 +158,8 @@ STEP_PASSTHROUGH = {
     'fill_null',
     'drop_duplicates',
     'dedupe_similar',
+    # A semantic dedupe drops whole rows, exactly like its SimHash sibling.
+    'semantic_dedupe',
     'strip_whitespace',
     'filter_rows',
     'sort_rows',
@@ -205,6 +209,25 @@ def normalize_analysis_params(op: str, params: dict) -> dict:
         distance = _optional_int(params.get('max_distance'))
         if distance is not None:
             result['max_distance'] = distance
+        return result
+    if op == 'semantic_dedupe':
+        result = {'column': params.get('column', ''), 'model': params.get('model', '')}
+        threshold = _optional_float(params.get('threshold'))
+        if threshold is not None:
+            result['threshold'] = threshold
+        batch = _optional_int(params.get('batch_size'))
+        if batch is not None:
+            result['batch_size'] = batch
+        return result
+    if op == 'similar_to':
+        result = {
+            'column': params.get('column', ''),
+            'query': params.get('query', ''),
+            'model': params.get('model', ''),
+        }
+        top_k = _optional_int(params.get('top_k'))
+        if top_k is not None:
+            result['top_k'] = top_k
         return result
     if op == 'filter_rows':
         return {

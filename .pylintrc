@@ -28,7 +28,7 @@ init-hook="import sys; sys.path.insert(0, 'backend'); sys.path.insert(0, 'tests/
 # The list is pinned against `requirements-optional.txt` by
 # `tests/unit/gates/test_lint_gate.py`, so adding an optional dependency without arguing this
 # exemption widens silently, and dropping one leaves a stale name visible.
-ignored-modules=sentence_transformers,torch,transformers,uiautomation,bertopic,onnx
+ignored-modules=sentence_transformers,torch,transformers,uiautomation,bertopic,onnx,huggingface_hub
 
 [MESSAGES CONTROL]
 # Every entry is a written-down standard choice, not a way to look green:

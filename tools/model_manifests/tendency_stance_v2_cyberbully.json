@@ -1,0 +1,34 @@
+{
+  "id": "tendency_stance_v2_cyberbully",
+  "name": "网暴立场模型（六类·推荐）",
+  "family": "text_classification",
+  "task": "tendency",
+  "operation": "tendency",
+  "path": "ml_train/models/tendency_stance_v2_cyberbully",
+  "desc": "六类传播立场，老师蒸馏 + 网暴真实语料 + 自训练；本项目的推荐立场模型。",
+  "labels": [
+    "Advocacy/Call-to-action",
+    "Controversy/Reflection",
+    "Criticism/Questioning",
+    "Objective Statement",
+    "Praise/Affirmation",
+    "Satire/Mockery"
+  ],
+  "outputs": ["tendency", "tendency_confidence"],
+  "score_kind": "confidence",
+  "precision": "fp32",
+  "size_mb": 391,
+  "vram_mb": 1200,
+  "rows_per_sec": 235,
+  "quality": [
+    {"dataset": "dev seed=42", "split": "encoder comparison", "metric": "macro_f1", "value": 0.668},
+    {"dataset": "controversy crawl", "split": "8,208 rows + batch1", "metric": "f1", "value": 0.537}
+  ],
+  "use_for": ["六类传播立场", "网暴事件评论分析", "立场随时间演化"],
+  "avoid_for": ["简单正负情感", "小样本探索性判断", "老师标注之外的立场定义"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/tendency_stance_v2_cyberbully.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": ["tendency"]
+}

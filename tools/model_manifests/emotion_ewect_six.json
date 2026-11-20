@@ -1,0 +1,27 @@
+{
+  "id": "emotion_ewect_six",
+  "name": "情绪六类模型（SMP2020-EWECT）",
+  "family": "text_classification",
+  "task": "emotion",
+  "operation": "emotion",
+  "path": "ml_train/models/emotion_ewect_six",
+  "desc": "Anger/Fear/Joy/Neutral/Sadness/Surprise 六类情绪，chinese-roberta-wwm-ext 基座 + EWECT 微调。",
+  "labels": ["Anger", "Fear", "Joy", "Neutral", "Sadness", "Surprise"],
+  "outputs": ["emotion", "confidence"],
+  "score_kind": "confidence",
+  "precision": "fp32",
+  "size_mb": 391,
+  "vram_mb": 1200,
+  "rows_per_sec": 236,
+  "quality": [
+    {"dataset": "SMP2020-EWECT usual_train", "split": "5% holdout", "metric": "accuracy", "value": 0.811},
+    {"dataset": "SMP2020-EWECT usual_train", "split": "5% holdout", "metric": "macro_f1", "value": 0.792}
+  ],
+  "use_for": ["六类封闭标签的情绪分类", "大批量逐行标注", "需要结构化概率而不是自由文本"],
+  "avoid_for": ["讽刺与反语细分", "跨行结论", "开放标签的临时情绪"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/emotion_ewect_six.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": ["emotion"]
+}

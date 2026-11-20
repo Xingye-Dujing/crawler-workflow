@@ -932,6 +932,14 @@ NORMALIZED = {
     ),
     'drop_duplicates': ({'columns': '名称', 'mode': 'normalized'}, {'columns': ['名称'], 'mode': 'normalized'}),
     'dedupe_similar': ({'column': '名称', 'max_distance': '2'}, {'column': '名称', 'max_distance': 2}),
+    'semantic_dedupe': (
+        {'column': '名称', 'model': 'BAAI/bge-small-zh-v1.5', 'threshold': '0.9'},
+        {'column': '名称', 'model': 'BAAI/bge-small-zh-v1.5', 'threshold': 0.9},
+    ),
+    'similar_to': (
+        {'column': '名称', 'model': 'BAAI/bge-small-zh-v1.5', 'query': '好', 'top_k': '3'},
+        {'column': '名称', 'model': 'BAAI/bge-small-zh-v1.5', 'query': '好', 'top_k': 3},
+    ),
     'extract_time': (
         {'column': '城市', 'time_new_col': '天', 'time_part': 'date'},
         {'column': '城市', 'new_col': '天', 'part': 'date'},
@@ -1227,6 +1235,8 @@ BLANK_FORM = {
     'fill_null': {'columns': [], 'value': None},
     'drop_duplicates': {'columns': None, 'mode': 'exact'},
     'dedupe_similar': {'column': ''},
+    'semantic_dedupe': {'column': '', 'model': ''},
+    'similar_to': {'column': '', 'query': '', 'model': ''},
     'filter_rows': {'column': '', 'op': 'eq', 'value': None, 'keep': 'keep'},
     'select_columns': {'columns': []},
     'rename_columns': {'mapping': {}},
@@ -1907,6 +1917,9 @@ PARSED_FIELDS = {
     # disappears into the signature default, never the literal the user typed.
     'mode',
     'max_distance',
+    # The two model-backed similarity boxes parse their numbers in the normalizer.
+    'threshold',
+    'top_k',
     # 内容去重's two selects and two switches are re-shaped the same way: a blank select falls
     # back to its declared default and a switch is read by ``as_bool``, never forwarded as the
     # text the browser happened to store.
@@ -2743,6 +2756,10 @@ class TestBothStepPathsReadTheSameParameters:
 PANEL_VALUE = {
     'columns': 'a, b',
     'column': 'a',
+    'model': 'BAAI/bge-small-zh-v1.5',
+    'threshold': '0.9',
+    'query': '好',
+    'top_k': '3',
     'value': 'x',
     'op': 'contains',
     'how': 'all',

@@ -10,6 +10,9 @@ Both evaluated on the SAME fixed val → the only difference is batch2's rows, s
 import os
 import random
 
+import _env
+
+_env.setup()
 os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)  # ml_train

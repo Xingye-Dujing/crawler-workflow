@@ -89,6 +89,11 @@ ZH = {
     'analysis.dedupe_similar': (
         '近重复去重：在“{column}”上按 SimHash 距离 ≤{distance} 判定，删除 {n} 行（每组保留首次出现的那行）'
     ),
+    'analysis.embed_missing': '向量模型不可用：缺少 sentence-transformers；显式选择向量算子时不会偷偷退回词面方法',
+    'analysis.embed_failed': '向量模型“{model}”加载或运行失败：{err}',
+    'analysis.semantic_threshold': '语义相似度阈值应在 0–1 之间，收到 {value}，已拒绝',
+    'analysis.semantic_dedupe': ('语义去重：在“{column}”上用 {model} 的余弦相似度 ≥{threshold} 判定，删除 {n} 行'),
+    'analysis.similar_to': '相似检索：在“{column}”上用 {model} 找到 {n} 条与查询最相近的文本',
     'analysis.evolution_done': (
         '情感演化：按“period”聚合出 {n} 个时段（{periods}），情感指数 =(积极−消极)/总数 ∈ [-1, 1]'
     ),
@@ -509,6 +514,14 @@ EN = {
     'analysis.dedupe_similar': (
         'Near-duplicate dedupe: SimHash distance ≤{distance} on "{column}", dropped {n} rows (first of each group kept)'
     ),
+    'analysis.embed_missing': (
+        'The embedding model is unavailable: sentence-transformers is missing; '
+        'an explicit embedding step refuses instead of silently falling back to lexical matching'
+    ),
+    'analysis.embed_failed': 'Embedding model "{model}" failed to load or run: {err}',
+    'analysis.semantic_threshold': 'Semantic similarity threshold must be between 0 and 1, got {value}: refused',
+    'analysis.semantic_dedupe': ('Semantic dedupe: cosine ≥{threshold} with {model} on "{column}", dropped {n} rows'),
+    'analysis.similar_to': 'Similarity search: {model} found {n} texts closest to the query on "{column}"',
     'analysis.evolution_done': (
         'Sentiment evolution: {n} periods from "period" ({periods}); index = (positive − negative) / total ∈ [-1, 1]'
     ),

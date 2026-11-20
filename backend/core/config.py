@@ -1,6 +1,12 @@
 import os
 import sys
 
+from core.cache import setup as _setup_caches
+
+# Published before any module that downloads a weight is imported. ``core.cache`` is standard-library
+# only: it sets environment variables and creates nothing on disk.
+_setup_caches()
+
 #: ``python app.py cloud`` is a command-line shape of ``CRAWLER_CLOUD=1``. It is raised to the
 #: ENVIRONMENT here, before :class:`Config` reads it, because the attribute is read once at import
 #: time and every child process (CatBus, Chrome, the updater) inherits the environment rather than

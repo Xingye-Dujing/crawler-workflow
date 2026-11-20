@@ -42,6 +42,8 @@ OPERATIONS = [
     'fill_null',
     'drop_duplicates',
     'dedupe_similar',
+    'semantic_dedupe',
+    'similar_to',
     'filter_rows',
     'select_columns',
     'rename_columns',

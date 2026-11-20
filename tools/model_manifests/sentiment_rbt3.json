@@ -1,0 +1,27 @@
+{
+  "id": "sentiment_rbt3",
+  "name": "情感极性·蒸馏轻量版（rbt3）",
+  "family": "text_classification",
+  "task": "sentiment",
+  "operation": "sentiment",
+  "path": "ml_train/models/sentiment_rbt3",
+  "desc": "3 层 RoBERTa 蒸馏版，1 轮微调；同机实测与 110M 模型准确率持平，吞吐约为其 5.5 倍。",
+  "labels": ["negative", "positive"],
+  "outputs": ["sentiment", "score"],
+  "score_kind": "polarity",
+  "precision": "fp16",
+  "size_mb": 54,
+  "vram_mb": 719,
+  "rows_per_sec": 743,
+  "quality": [
+    {"dataset": "weibo_senti_100k", "split": "训练脚本 5% 留出 seed=42", "metric": "accuracy", "value": 0.9778},
+    {"dataset": "weibo_senti_100k", "split": "基准抽样 2000 行（含训练行，仅作同机对照）", "metric": "accuracy", "value": 0.9845}
+  ],
+  "use_for": ["需要高吞吐的逐行极性分类", "8GB 显存下同时跑多个模型", "与 110M 模型做速度对照"],
+  "avoid_for": ["未见过的新事件域名的零样本判断", "需要生成解释的场景"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/sentiment_rbt3.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": ["sentiment"]
+}

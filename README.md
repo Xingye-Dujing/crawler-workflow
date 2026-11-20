@@ -50,7 +50,8 @@ cd backend && python app.py                       # http://127.0.0.1:5000
 
 - **清洗与整理**：确定性清洗、去重（含 SimHash 近似重复）、分组聚合、反向筛选（两表比一列找差集/重复）、采集校验（清单表 vs 评论结果表，报出没采到与条数不足的链接）。
 - **口径即答案**：列重命名撞上已有列名、类型转换做不成（如 `1.5` 转整数）、阶段分组没有可用顺序——都按名拒绝或点名，不留一张看着完整、实际被截断的表。分组聚合会自动沿用“分阶段”写出的阶段序号列；回复传播图按（文章、楼层）连接，多链接评论表不会把 A 文的回复连到 B 文的人。
-- **分析**：情感、倾向、情绪（BERT 默认，跑不动会降级并打印实际方法）、NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别、分阶段 LDA、主题流向、情感演化、二次爆发预警。
+- **分析**：情感、倾向、情绪（BERT 默认，跑不动会降级并打印实际方法）、NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别、分阶段 LDA、主题流向、情感演化、二次爆发预警；另有**语义近重复去重**与**相似文本检索**（小中文向量模型）。
+- **本地模型目录**：模型清单、实测指标、下载与单任务训练、备份与数据集分类见 [`docs/models.md`](docs/models.md)；微调权重先备份到 `ml_train/backups/models/`，所有下载与缓存只在项目目录内。
 - **文献计量**：CNKI/CSSCI/WoS/Scopus/PubMed/RIS/BibTeX 导出件，按时间切片建关键词、作者、机构、共被引网络，输出 GraphML/GML/Pajek，可存快照并与上次对比。
 - **导出**：CSV / JSON / Excel / TXT / HTML / Markdown。
 - 细节： [`docs/analysis.md`](docs/analysis.md)、[`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)。
@@ -167,6 +168,7 @@ crawler_workflow/
 | [`docs/crawler_rules.md`](docs/crawler_rules.md) | 采集端工程规则 |
 | [`docs/live_test_plan.md`](docs/live_test_plan.md) | 全平台真机验收矩阵 |
 | [`docs/frontend_modules.md`](docs/frontend_modules.md) | 前端拆分方案 |
+| [`docs/models.md`](docs/models.md) | 本地模型目录、下载/缓存、备份、数据集分类与选型 |
 | [`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md) | 微调 BERT 的理由与口径 |
 | [`docs/tendency_model_comparison.md`](docs/tendency_model_comparison.md) | 倾向性模型对比 |
 | [`AGENTS.md`](AGENTS.md) | 面向 AI agent 的规则与改动流程 |

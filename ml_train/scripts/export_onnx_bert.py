@@ -43,8 +43,10 @@ import sys
 import time
 from pathlib import Path
 
+import _env
 import numpy as np
 
+_env.setup()
 ML_TRAIN = Path(__file__).resolve().parents[1]
 MODELS = ML_TRAIN / 'models'
 ONNX_ROOT = MODELS / 'onnx'

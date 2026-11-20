@@ -1,0 +1,34 @@
+{
+  "id": "tendency_stance_v1",
+  "name": "立场倾向模型 v1（蒸馏基线）",
+  "family": "text_classification",
+  "task": "tendency",
+  "operation": "tendency",
+  "path": "ml_train/models/tendency_stance_v1",
+  "desc": "LLM 蒸馏语料训练的六类立场基线，与网暴模型互斥对照用。",
+  "labels": [
+    "Advocacy/Call-to-action",
+    "Controversy/Reflection",
+    "Criticism/Questioning",
+    "Objective Statement",
+    "Praise/Affirmation",
+    "Satire/Mockery"
+  ],
+  "outputs": ["tendency", "tendency_confidence"],
+  "score_kind": "confidence",
+  "precision": "fp32",
+  "size_mb": 391,
+  "vram_mb": 1200,
+  "rows_per_sec": 238,
+  "quality": [
+    {"dataset": "tendency_distilled.csv", "split": "5% holdout", "metric": "accuracy", "value": 0.731},
+    {"dataset": "tendency_distilled.csv", "split": "5% holdout", "metric": "macro_f1", "value": 0.681}
+  ],
+  "use_for": ["立场蒸馏基线对照", "与 v2 做模型对比图"],
+  "avoid_for": ["作为默认立场模型", "网暴事件委员争议类细分"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/tendency_stance_v1.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

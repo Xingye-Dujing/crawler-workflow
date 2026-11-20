@@ -32,11 +32,11 @@ import os
 import random
 import time
 
+import _env
 import numpy as np
 
-os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
-
-from transformers import (  # noqa: E402  (env var above must precede the import)
+# _env publishes every cache HOME before transformers reads them (HF_HOME alone misses XET).
+from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
@@ -44,13 +44,13 @@ from transformers import (  # noqa: E402  (env var above must precede the import
     TrainingArguments,
 )
 
+HF_CACHE_DIR = _env.HF_HOME_DIR
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)  # ml_train
 DATA = os.path.join(ROOT, 'datasets')
 MODELS = os.path.join(ROOT, 'models')
-# Keep every downloaded artifact inside the project, never the C: user cache (~/.cache/huggingface).
-os.environ.setdefault('HF_HOME', os.path.join(ROOT, '.hf-cache'))
-
+# Cache roots are published by _env above, before any library reads them.
 SMP_DIR = os.path.join(DATA, 'ewect_smp2020')
 
 # The six categories the emotion node answers, in a FIXED order so id2label is reproducible

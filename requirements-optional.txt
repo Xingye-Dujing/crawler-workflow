@@ -32,6 +32,13 @@
 # through --extra-index-url as well as the CPU one, and the comment below explains why.
 torch==2.14.1
 transformers==5.13.0
+# Directly imported by ml_train/scripts/fetch_assets.py (the sequential, project-local downloader).
+# It arrives with transformers today, but a resolver change must not silently move the cache root
+# decision to a transitive dependency -- this is the module that reads HF_HOME at import time.
+huggingface_hub==1.22.0
+# Directly imported by the offline benchmark's dataset loader. Pinned and optional like the rest of
+# the deep-learning stack; the running application never imports it.
+datasets==5.0.0
 
 # -- Parquet export: the columnar engine behind the Output node's `parquet` format ----------
 # `df.to_parquet` needs an engine; `pyarrow` is the one this project names. pandas resolves it

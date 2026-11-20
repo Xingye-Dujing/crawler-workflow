@@ -19,6 +19,9 @@ import shutil
 import subprocess
 import sys
 
+import _env
+
+_env.setup()
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)  # ml_train
 LOGS = os.path.join(ROOT, 'logs')

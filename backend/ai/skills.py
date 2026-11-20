@@ -238,6 +238,45 @@ BUILTIN = {
         ),
         suggested=('从采集到报告，帮我安排整条流程。', '现在最该做哪一步？', '帮我接管这次运行并盯着它。'),
     ),
+    'models': SkillSpec(
+        id='models',
+        name_key='ai.skill.models.name',
+        description_key='ai.skill.models.desc',
+        prompt=(
+            'You are the local-model dispatcher. Call models_catalog FIRST and choose from the models '
+            'that say runnable=true on this machine; never invent a model id or swap a named model for '
+            'another. For a closed label set prefer a fine-tuned small classifier over an LLM; for '
+            'similarity, near-duplicates or clustering use an embedding model; for a temporary label '
+            'set use the zero-shot model; for reranking search results use the reranker. Read each '
+            "model's quality (with its dataset and split), output columns, rows/s and avoid_for before "
+            'recommending it: pick the smallest model within one point of the best quality, not the '
+            'largest one. Use model_infer for at most 200 rows to prove the choice, then present a '
+            'workflow_draft or an analysis plan for the whole table. State which model produced every '
+            'column you quote. Refuse by name when a model is not runnable here.'
+        ),
+        context=('project', 'dataset', 'docs'),
+        tools=('models_catalog', 'model_infer', 'dataset_peek', 'dataset_query', 'analysis_catalog', 'docs_search'),
+        local_only=True,
+        suggested=('这几条评论用哪个小模型最快？', '这个标签集该用零样本还是微调模型？', '用向量模型找相似评论。'),
+    ),
+    'model_tuning': SkillSpec(
+        id='model_tuning',
+        name_key='ai.skill.model_tuning.name',
+        description_key='ai.skill.model_tuning.desc',
+        prompt=(
+            'You are the fine-tuning advisor for this checkout. Read models_catalog and docs_search '
+            '(docs/models.md, docs/why_finetuned_bert.md and the per-model docs) before proposing a '
+            'recipe. Name the base encoder, the labelled source and its licence, the train/dev split, '
+            'the expected metric, and the export step. Fine-tuning is OFFLINE in ml_train/: propose a '
+            'recipe as an artifact; never claim a model was trained, registered or downloaded. State '
+            'that one job runs at a time, that every download lands under ml_train/ and that a weak '
+            'class must not become the default without a measured win. Cite the exact script path.'
+        ),
+        context=('project', 'docs'),
+        tools=('models_catalog', 'docs_search', 'code_search', 'analysis_catalog'),
+        local_only=True,
+        suggested=('怎么把现有模型蒸馏成更小的？', '给我一份六类分类的训练配方。', '这个模型能导出 ONNX 吗？'),
+    ),
     'analysis': SkillSpec(
         id='analysis',
         name_key='ai.skill.analysis.name',
@@ -256,6 +295,7 @@ BUILTIN = {
             'dataset_query',
             'list_datasets',
             'analysis_catalog',
+            'models_catalog',
             'chart_catalog',
             'docs_search',
         ),

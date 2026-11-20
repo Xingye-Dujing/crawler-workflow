@@ -6,7 +6,7 @@
  * it a companion of that file, so a harness naming one receives both.
  */
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'anti_join', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
+var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'semantic_dedupe', 'similar_to', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'anti_join', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
 /* The matching modes a two-table step offers, pinned against
    services/analysis/matching.MATCH_MODES by tests/api/test_analysis_api.py. */
 var MATCH_MODES = ['exact', 'trim', 'url', 'text', 'similar'];
@@ -55,6 +55,24 @@ function renderAnalysisSettings(nodeId, p) {
             renderParamInput(nodeId, p, 'max_distance', 'settings.dedupeDistance', 'number', 8) +
             '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.dedupeSimilarHint') + '</div></div>';
+    }
+
+    /* Model-backed similarity steps. The encoder is a real local model; a blank model name falls
+       back to the declared small Chinese encoder, and an unavailable explicit name refuses. */
+    if (op === 'semantic_dedupe') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
+            renderParamInput(nodeId, p, 'model', 'settings.bertModel', 'text', 'BAAI/bge-small-zh-v1.5') +
+            renderParamInput(nodeId, p, 'threshold', 'settings.semanticThreshold', 'number', 0.92);
+    }
+    if (op === 'similar_to') {
+        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
+            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
+            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
+            renderParamInput(nodeId, p, 'model', 'settings.bertModel', 'text', 'BAAI/bge-small-zh-v1.5') +
+            renderParamInput(nodeId, p, 'query', 'settings.queryText', 'text', '') +
+            renderParamInput(nodeId, p, 'top_k', 'settings.topK', 'number', 10);
     }
 
     /* ── The event study: when, which subjects, and which way the crowd leaned ──

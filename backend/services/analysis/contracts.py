@@ -79,6 +79,11 @@ STEP_PARAMS: dict = {
     # SimHash near-duplicates read ONE column: the fingerprint is over a text, so a
     # multi-column ask would have to invent a concatenation order nobody chose.
     'dedupe_similar': {'one': ('column',)},
+    # Both model-backed steps name ONE text column. ``query`` is the literal text to compare with,
+    # not a column name, so it is nonblank instead of gated as a column. A blank model falls back
+    # to the declared small Chinese encoder; an explicit unavailable model refuses by name.
+    'semantic_dedupe': {'one': ('column',)},
+    'similar_to': {'one': ('column',), 'nonblank': ('query',)},
     'select_columns': {'some': ('columns',)},
     'strip_whitespace': {'some': ('columns',)},
     'filter_rows': {

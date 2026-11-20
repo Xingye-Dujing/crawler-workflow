@@ -1,0 +1,27 @@
+{
+  "id": "sentiment_weibosenti_bin",
+  "name": "情感极性模型（正负二分类）",
+  "family": "text_classification",
+  "task": "sentiment",
+  "operation": "sentiment",
+  "path": "ml_train/models/sentiment_weibosenti_bin",
+  "desc": "正面/负面二分类，中性交给节点的 score 阈值判定；weibo_senti_100k 微调。",
+  "labels": ["negative", "positive"],
+  "outputs": ["sentiment", "score"],
+  "score_kind": "polarity",
+  "precision": "fp32",
+  "size_mb": 391,
+  "vram_mb": 1200,
+  "rows_per_sec": 240,
+  "quality": [
+    {"dataset": "weibo_senti_100k", "split": "5% holdout", "metric": "accuracy", "value": 0.9785},
+    {"dataset": "weibo_senti_100k", "split": "5% holdout", "metric": "macro_f1", "value": 0.9785}
+  ],
+  "use_for": ["正面/负面/中性极性", "舆情正负统计", "大批量确定性打分"],
+  "avoid_for": ["六类情绪细分", "立场与网暴判断", "需要生成解释的场景"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/sentiment_weibosenti_bin.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": ["sentiment"]
+}

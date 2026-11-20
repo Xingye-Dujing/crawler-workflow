@@ -7,11 +7,8 @@ cluster splits out cleanly. ``/api/capabilities`` is its own Blueprint (``api/ca
 extends the crawl matrix with ``sessions.cookies``'s live account list. Paths unchanged.
 """
 
-import json
-
 from core.config import Config
 from flask import Blueprint, jsonify
-from runtime import paths
 from runtime.account_context import current as current_account
 
 from services.accounts.service import accounts_mode
@@ -61,31 +58,34 @@ def list_models():
     return jsonify({'ok': True, 'models': read_model_registry()})
 
 
+@bp.route('/api/models/catalog', methods=['GET'])
+def list_model_catalog():
+    """The rich model catalogue: task, output columns, licence, metrics, and this host's verdict.
+
+    The AI workspace and the model picker read the SAME catalogue the executor resolves from; a
+    second list in the browser would be a second opinion about which model produced a column.
+    """
+    from services.models import catalog, probe
+
+    return jsonify(
+        {
+            'ok': True,
+            'models': catalog.public_rows(),
+            'runtime': probe.runtime_state(include_cuda=True),
+        }
+    )
+
+
 def read_model_registry() -> list:
-    """The registry as a list of ``{name, path, desc, operation}``, from ``data/model_registry.json``.
+    """The legacy four-key registry view, now derived from the model catalogue.
 
     One reader shared by the picker and the executor (``default_model_path_for``), so the friendly
     name the panel shows and the model a default bert run actually loads can never disagree. A
     missing/malformed file is an empty list, never an error.
     """
-    path = paths.model_registry_json()
-    try:
-        with open(path, encoding='utf-8') as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
-        return []
-    if not isinstance(data, list):
-        return []
-    return [
-        {
-            'name': str(m.get('name') or ''),
-            'path': str(m.get('path') or ''),
-            'desc': str(m.get('desc') or ''),
-            'operation': str(m.get('operation') or ''),
-        }
-        for m in data
-        if isinstance(m, dict) and str(m.get('path') or '').strip()
-    ]
+    from services.models import catalog
+
+    return catalog.legacy_rows()
 
 
 def default_model_path_for(operation: str) -> str:
@@ -97,6 +97,13 @@ def default_model_path_for(operation: str) -> str:
     which the executor treats as bert-unavailable and degrades to the general mode with a printed line.
     """
     want = str(operation or '').strip()
+    from services.models import catalog
+
+    # A measured default in a manifest wins; the hand-edited registry stays the fallback so an old
+    # deployment with no manifests keeps exactly the behaviour it had before.
+    declared = catalog.default_for_declared(want)
+    if declared:
+        return declared
     for model in read_model_registry():
         if model['operation'] == want:
             return model['path']

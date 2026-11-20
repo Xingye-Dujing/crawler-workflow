@@ -59,8 +59,11 @@ class TestTheFoundationImportsNoLayerAboveIt:
         valid save into a 500. It imports nothing, so every layer may use it — which is the test for
         membership, and why extending this list was the right move rather than fixing it per store.
         """
+        # ``cache`` joined it because a library that downloads a weight reads HF_HOME when it is
+        # imported, so the project-local cache decision has to be published by ``core.config`` before
+        # any domain layer loads. It is standard-library only and writes nothing at import.
         modules = {path.stem for path in CORE.glob('*.py')} - {'__init__'}
-        assert modules == {'config', 'refs', 'machine', 'procs', 'atomic'}, (
+        assert modules == {'config', 'cache', 'refs', 'machine', 'procs', 'atomic'}, (
             f'core/ holds {sorted(modules)}; a new module belongs here only if every layer may import it — '
             'say so in the package docstring and extend this contract deliberately'
         )

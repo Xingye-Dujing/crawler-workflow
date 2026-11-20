@@ -24,6 +24,9 @@ import sys
 import time
 from pathlib import Path
 
+import _env
+
+_env.setup()
 os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 
 ML_TRAIN = Path(__file__).resolve().parents[1]

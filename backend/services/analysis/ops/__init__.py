@@ -27,7 +27,9 @@ from services.analysis.ops.rename_columns import rename_columns
 from services.analysis.ops.reply_graph import reply_graph
 from services.analysis.ops.sample_rows import sample_rows
 from services.analysis.ops.select_columns import select_columns
+from services.analysis.ops.semantic_dedupe import semantic_dedupe
 from services.analysis.ops.sentiment_evolution import sentiment_evolution
+from services.analysis.ops.similar_to import similar_to
 from services.analysis.ops.sort_rows import sort_rows
 from services.analysis.ops.strip_whitespace import strip_whitespace
 from services.analysis.ops.suggest_stages import suggest_stages
@@ -45,6 +47,8 @@ OPS = {
     'fill_null': fill_null,
     'drop_duplicates': drop_duplicates,
     'dedupe_similar': dedupe_similar,
+    'semantic_dedupe': semantic_dedupe,
+    'similar_to': similar_to,
     'filter_rows': filter_rows,
     'select_columns': select_columns,
     'rename_columns': rename_columns,

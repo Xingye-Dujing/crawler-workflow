@@ -131,6 +131,15 @@ def model_registry_json() -> str:
     return os.path.join(Config.DATA_DIR, 'model_registry.json')
 
 
+def models_manifest_dir() -> str:
+    """``data/models/`` — per-model ``<id>/model.json`` manifests, system-level like the registry.
+
+    The sklearn ``.pkl`` classifiers already live here, so a directory is a model only when it holds
+    a manifest; a stray pickle is never mistaken for a deployable checkpoint.
+    """
+    return os.path.join(Config.DATA_DIR, 'models')
+
+
 def trash_root() -> str:
     """Deleted accounts are moved here, never deleted in place."""
     return os.path.join(users_root(), _TRASH)

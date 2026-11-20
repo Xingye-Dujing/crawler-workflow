@@ -206,6 +206,14 @@ def prompt_block() -> str:
             facts.append('需要 mapping（旧列->新列）')
         lines.append(f'- {op["operation"]}：' + ('；'.join(facts) if facts else '无额外参数'))
     lines.append('')
+    lines.append('## 本地模型（调用 models_catalog 获取实时可用性与实测指标）')
+    from services.models import catalog as model_catalog
+
+    for model in model_catalog.all_models():
+        use = '、'.join(model.use_for[:2]) or model.desc[:40]
+        outputs = ' / '.join(model.outputs) or '按任务'
+        lines.append(f'- {model.id}：任务 {model.task}，族 {model.family}，输出 {outputs}；适用 {use}')
+    lines.append('')
     lines.append('## 图表类型（visualize 节点的 params.chart_type）')
     console = [row for row in chart_catalog() if row['family'] == 'console']
     biblio = [row for row in chart_catalog() if row['family'] == 'biblio']
