@@ -1053,6 +1053,15 @@ const AIWorkspace = {
             (omitted.length
                 ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextOmitted', { items: omitted.join('、') })) + '</p>'
                 : '');
+        /* A scrubbed secret is a fact about what the model received, not a silent internal step.
+           The count is the only thing the server reports — never the matched value. */
+        const redacted = meta.redacted || {};
+        const redactedCount = Object.keys(redacted).reduce(function (sum, key) {
+            return sum + (Number(redacted[key]) || 0);
+        }, 0);
+        const redactedNote = redactedCount
+            ? '<p class="ai-hint">' + AIRender.escape(I18n.t('ai.contextRedacted', { n: redactedCount })) + '</p>'
+            : '';
         const plan = (this._plan || []).map((step) =>
             '<li class="ai-trace-step ' + (step.status || 'pending') + '"><span class="ai-trace-dot"></span>' + AIRender.escape(step.title) + '</li>'
         ).join('');
@@ -1070,7 +1079,7 @@ const AIWorkspace = {
             preview +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.context')) + '</h3>' +
             (meta.scope ? '<div class="ai-chip-row"><span class="ai-chip">' + AIRender.escape(meta.scope) + '</span><span class="ai-chip">' + AIRender.escape(I18n.t('ai.contextTokens', { tokens: meta.tokens || 0, chars: meta.chars || 0 })) + '</span></div>' : '') +
-            '<ul class="ai-context-list">' + (items || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</li>') + '</ul>' + contextNotes +
+            '<ul class="ai-context-list">' + (items || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.contextEmpty')) + '</li>') + '</ul>' + contextNotes + redactedNote +
             '<div class="ai-context-actions"><button type="button" class="ai-ghost" data-ai-context-preview="1">' + AIRender.escape(I18n.t(previewLabel)) + '</button></div>' +
             '<div class="ai-context-fields"><label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.datasetId')) + '</span><input class="ai-input" data-ai-manual="dataset_id" value="' + AIRender.escape(AIContext.manual.dataset_id || '') + '" /></label>' +
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.runId')) + '</span><input class="ai-input" data-ai-manual="run_id" value="' + AIRender.escape(AIContext.manual.run_id || '') + '" /></label>' +

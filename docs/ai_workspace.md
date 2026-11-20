@@ -81,6 +81,9 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
   因此这段块的大小在**写入时**就定下来（`ai_context_replay_chars`，默认 16,000 字），超出的部分
   用工具现取，并在 `context_meta.replay_truncated` 里如实报告（检查器显示“已截到 N 字”）。
 - **省略要看得见**：`context_meta.omitted`（整体预算丢掉的来源）以前只在 JSON 里，现在侧栏也列出来。
+- **脱敏也要看得见**：`redact()` 用 `redact_with_count()` 计数，`build_context` 与被引用文本各自把
+  去掉的密钥数按来源写进 `context_meta.redacted`（只记数量，绝不留原值），检查器汇总成一句
+  “已移除 N 处密钥”；被预算丢掉、根本没发出的来源不计入。这样“悄悄擦掉”就变成一次可核对的事实。
 - 工具参数不完整（典型是回答被 `max_tokens` 截断）时**拒绝执行并按名字说明**，不拿空参数去跑；
   `done.stop_reason == 'max_tokens'` 在转录里显示一行“被截断”，刷新后仍在（存进 assistant 行的
   `meta.stop_reason`）。

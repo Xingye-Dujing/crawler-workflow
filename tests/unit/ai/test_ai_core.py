@@ -597,6 +597,52 @@ def test_redaction_removes_keys_from_context():
     assert 'Bearer abcdefghijklmnop' not in text
 
 
+def test_redaction_reports_the_count_without_keeping_the_value():
+    from ai.context import redact_with_count
+
+    text, count = redact_with_count('sk-abcdefghijklmnop and sk-zzzzzzzzzzzzzzzz')
+    assert count == 2
+    assert text.count('[redacted]') == 2
+    assert 'sk-abcdefghijklmnop' not in text and 'sk-zzzzzzzzzzzzzzzz' not in text
+
+
+def test_build_context_reports_redaction_by_source(monkeypatch):
+    """A scrubbed source is named in the inspector meta, so the panel can say what was removed."""
+    from ai import context
+
+    monkeypatch.setattr(context, 'project_facts', lambda: 'note: sk-abcdefghijklmnop')
+    monkeypatch.setattr(context, '_memory_context', lambda: ('', {'total': 0, 'shown': 0, 'omitted': 0}))
+    monkeypatch.setattr(context, 'docs_search', lambda *args, **kwargs: [])
+
+    text, meta = context.build_context('anything', {'scope': 'summary'})
+
+    assert 'sk-abcdefghijklmnop' not in text
+    assert meta['redacted'] == {'项目事实': 1}, meta['redacted']
+
+
+def test_a_part_dropped_by_the_budget_is_not_counted_as_redacted(monkeypatch):
+    """Only what the model actually received gets reported — a scrubbed part cut by the budget
+    was never sent, so counting it would claim a redaction that did not reach the provider."""
+    from ai import context
+
+    monkeypatch.setattr(context, 'project_facts', lambda: 'x' * 5000)
+    # The secret lives in the SECOND part: the first one spends the whole budget when clipped,
+    # so this part is dropped by the budget check before its redaction could ever be reported.
+    monkeypatch.setattr(
+        context, '_memory_context', lambda: ('note: sk-abcdefghijklmnop', {'total': 0, 'shown': 0, 'omitted': 0})
+    )
+    monkeypatch.setattr(context, 'docs_search', lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        context, 'get_setting', lambda key, default=None: 2100 if key == 'ai_max_context_chars' else default
+    )
+
+    text, meta = context.build_context('anything', {'scope': 'summary'})
+
+    assert 'sk-abcdefghijklmnop' not in text
+    assert meta['redacted'] == {}, meta['redacted']
+    assert '项目记忆' in meta['omitted']
+
+
 def test_context_off_returns_no_project_text():
     from ai.context import build_context
 

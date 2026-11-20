@@ -81,6 +81,19 @@ class TestRuntimeSurfaces:
         assert out['hasKnown'] is True
         assert out['hasUnknown'] is False
 
+    def test_the_inspector_reports_how_many_secrets_were_scrubbed(self):
+        """A scrub is a fact about what the model received: the panel must show the count by name,
+        and show nothing when no redaction happened. Only the count may travel, never the value."""
+        out = _run_workspace()['redactionNote']
+        assert out['shown'] is True, 'a redacted context showed no note'
+        assert out['hidden'] is True, 'a context with no redactions still claimed some were removed'
+        assert out['total'] is True, 'the note did not sum the per-source counts'
+        assert out['noSecretValue'] is True, 'a secret value leaked into the inspector'
+
+    def test_the_redaction_key_is_translated_in_both_languages(self):
+        catalog = (JS_DIR / 'i18n' / 'ai.js').read_text(encoding='utf-8')
+        assert catalog.count("'ai.contextRedacted':") == 2, 'the key needs one en and one zh wording'
+
     def test_an_unavailable_skill_shows_the_servers_reason(self):
         out = _run()
         assert 'disabled' in out['skillOptions']

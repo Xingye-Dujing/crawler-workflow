@@ -47,8 +47,18 @@ def estimate_tokens(text: str) -> int:
     return max(1, cjk + (len(text) - cjk) // 4)
 
 
+def redact_with_count(text: str) -> tuple[str, int]:
+    """Redact secrets and report how many were removed.
+
+    The count is data for the inspector, not a log line: a turn whose context was scrubbed must be
+    able to SAY so, or the user reads a silence as "the model saw everything". Nothing about the
+    matched value is kept — only the number and, at the call site, which source it came from.
+    """
+    return SECRET.subn('[redacted]', str(text or ''))
+
+
 def redact(text: str) -> str:
-    return SECRET.sub('[redacted]', str(text or ''))
+    return redact_with_count(text)[0]
 
 
 def _clip(text: str, limit: int) -> str:
@@ -292,6 +302,7 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
             'tokens': 0,
             'omitted': [],
             'memories': {'total': 0, 'shown': 0, 'omitted': 0},
+            'redacted': {},
         }
     parts: list[tuple[str, str]] = []
     memories_meta: dict = {'total': 0, 'shown': 0, 'omitted': 0}
@@ -321,9 +332,10 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
     kept: list[str] = []
     items: list[dict] = []
     omitted: list[str] = []
+    redactions: dict[str, int] = {}
     used = 0
     for title, text in parts:
-        text = redact(text)
+        text, redacted_n = redact_with_count(text)
         if not text:
             continue
         remaining = budget - used
@@ -333,6 +345,10 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
         clipped = text if len(text) <= remaining else text[:remaining] + '\n…'
         kept.append(f'## {title}\n{clipped}')
         items.append({'title': title, 'chars': len(clipped), 'truncated': len(clipped) < len(text)})
+        # Only count what actually reached the model: a part scrubbed but then dropped by the
+        # budget was never sent, so reporting it would be a different (wrong) fact.
+        if redacted_n:
+            redactions[title] = redacted_n
         used += len(clipped)
     joined = '\n\n'.join(kept)
     return joined, {
@@ -343,6 +359,7 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
         'omitted': omitted,
         'budget': budget,
         'memories': memories_meta,
+        'redacted': redactions,
     }
 
 

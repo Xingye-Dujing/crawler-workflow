@@ -1290,6 +1290,23 @@ workspace.open = realOpen;
 workspace.newChat = realNewChat;
 workspace._renderContextBar = realRenderContextBar;
 
+/* The inspector must SAY when secrets were scrubbed. The server reports only counts by source —
+   never the matched value — and the panel sums them into one visible, localized sentence. */
+workspace._contextMeta = { scope: 'summary', items: [], redacted: { '引用': 2, '项目事实': 1 } };
+workspace._renderSide();
+const redactedWord = vm.runInContext("I18n.t('ai.contextRedacted', { n: 3 })", sandbox);
+const sideHtml = String(workspace._dom.side.innerHTML || '');
+const withRedaction = sideHtml.includes(redactedWord);
+workspace._contextMeta = { scope: 'summary', items: [] };
+workspace._renderSide();
+const withoutRedaction = String(workspace._dom.side.innerHTML || '').includes(redactedWord);
+out.redactionNote = {
+    shown: withRedaction,
+    hidden: !withoutRedaction,
+    total: redactedWord.includes('3'),
+    noSecretValue: !sideHtml.includes('sk-'),
+};
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

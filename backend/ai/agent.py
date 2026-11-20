@@ -201,6 +201,21 @@ def _meta_event(conversation: dict, message: dict, skill, reason: str, run_id: s
     }
 
 
+def _note_redaction(meta: dict, source: str, count: int) -> dict:
+    """Record a redaction pass in the inspector meta, by source. Returns a new dict.
+
+    A turn that had secrets scrubbed must be able to SAY so; silence reads as "the model saw
+    everything". Only the count and its source travel — never the matched value.
+    """
+    if not count:
+        return meta
+    result = dict(meta)
+    redacted = dict(result.get('redacted') or {})
+    redacted[source] = redacted.get(source, 0) + count
+    result['redacted'] = redacted
+    return result
+
+
 class AgentService:
     """One turn, with its provider rounds, tools and pending question."""
 
@@ -266,16 +281,17 @@ class AgentService:
             context_payload['scope'] = str(payload['scope'])
         context_text, context_meta = context_builder.build_context(text, context_payload)
         references_text, reference_files = references.resolve(payload.get('references') or [])
+        redacted_refs = 0
         if references_text:
             # build_context redacts its own sources, but references.resolve() runs AFTER it: without
             # the same pass here a token in a referenced export/dataset reached the provider (and the
             # stored replay block) verbatim. Redact before concatenating, never after.
-            references_text = context_builder.redact(references_text)
+            references_text, redacted_refs = context_builder.redact_with_count(references_text)
             context_text = f'{context_text}\n\n{references_text}'.strip()
         # The block is stored on this turn's user row and replayed with it forever, so its size is
         # decided ONCE, here, and reported in `context_meta` (see `ai.context.for_replay`).
         context_text, replay_meta = context_builder.for_replay(context_text)
-        context_meta = {**context_meta, **replay_meta}
+        context_meta = _note_redaction({**context_meta, **replay_meta}, '引用', redacted_refs)
         skill_meta = {
             'skill': skill.id,
             'skill_reason': requested_skill,
@@ -465,6 +481,7 @@ class AgentService:
         # instead of describing them. Resolved HERE, bounded, exactly like the composer's `@`:
         # the model must not receive a whole table or a filesystem path because someone typed `@`.
         refs_text, _ref_files = references.resolve(refs or []) if refs else ('', [])
+        redacted_refs = 0
         approvals.settle(conversation_id, str(question.get('tool_use_id') or ''), answers, custom=custom)
         assistant = store.get_message(message_id)
         if assistant is None:
@@ -479,7 +496,8 @@ class AgentService:
         if refs_text:
             # The tool row is replayed to the provider on the next round AND stored forever, so it
             # needs the same redaction as the composer's references (see send()).
-            tool_result['references'] = context_builder.redact(refs_text)
+            refs_text, redacted_refs = context_builder.redact_with_count(refs_text)
+            tool_result['references'] = refs_text
         store.append_message(
             conversation_id,
             'tool',
@@ -533,7 +551,7 @@ class AgentService:
             thinking=bool(meta.get('thinking')),
             web_search=bool(meta.get('web_search')),
             safety=str(meta.get('safety') or 'high'),
-            context_meta=meta.get('context_meta') or {},
+            context_meta=_note_redaction(meta.get('context_meta') or {}, '引用', redacted_refs),
             run_id=(assistant.get('meta') or {}).get('run_id') or '',
             agent_mode='plan' if str(meta.get('agent_mode') or '') == 'plan' else 'build',
         )

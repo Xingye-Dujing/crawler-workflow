@@ -433,13 +433,23 @@ def test_referenced_secrets_are_redacted_before_the_provider_sees_them(client, f
     sent = json.dumps(PROVIDERS['fake_record'].requests, ensure_ascii=False, default=str)
     assert 'sk-abcdefgh12345678' not in sent, 'a referenced secret reached the provider'
     assert '[redacted]' in sent, 'the referenced text was not redacted at all'
+    # The scrub is a reported fact, so the inspector can say a reference was cleaned.
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    assert meta['context']['redacted'].get('引用') == 1, meta['context'].get('redacted')
 
 
 def test_referenced_secrets_are_redacted_in_the_answer_replay(client, fake_ai, clean_ai, monkeypatch):
     """The answer box's `@` resolves AFTER redaction too; its tool row is replayed forever."""
     from ai import agent as agent_module
 
-    monkeypatch.setattr(agent_module.references, 'resolve', lambda refs: ('<ref> token = sk-abcdefgh12345678', []))
+    # Respect an empty refs list, as the real resolver does: the setup turn has no `@` references,
+    # so its context must not be scrubbed — only the resumed answer's references are.
+    monkeypatch.setattr(
+        agent_module.references,
+        'resolve',
+        lambda refs: ('<ref> token = sk-abcdefgh12345678', []) if refs else ('', []),
+    )
     response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
     events = response.get_json()['events']
     meta = next(event for event in events if event['type'] == 'meta')
@@ -465,6 +475,9 @@ def test_referenced_secrets_are_redacted_in_the_answer_replay(client, fake_ai, c
     assert '<ref>' in tool_row['content']
     assert 'sk-abcdefgh12345678' not in tool_row['content'], 'a referenced secret was stored in the replay block'
     assert '[redacted]' in tool_row['content']
+    resumed_events = resumed.get_json()['events']
+    resumed_meta = next(event for event in resumed_events if event['type'] == 'meta')
+    assert resumed_meta['context']['redacted'].get('引用') == 1, resumed_meta['context'].get('redacted')
 
 
 def test_asking_web_search_of_go_refuses_by_name(client, monkeypatch):
