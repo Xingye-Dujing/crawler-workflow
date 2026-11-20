@@ -1,37 +1,37 @@
 {
   "schema": 1,
-  "version": "2026.11.20.1",
+  "version": "2026.11.20.2",
   "released": "2026-11-20",
-  "notes": "AI 工作区：补全长期记忆与会话管理（记忆页与“记住”提案、置顶与归档、服务端搜索、Markdown/JSON 导出、多文件与拖拽/粘贴上传）；新增跨面板入口与审批卡，确切展示写文件逐行 diff、命令/导入/重跑事实；补齐精确数据查询、图表一键渲染与 token 软预算；AI 工件改为按 kind 注册校验器，严格格式校验。\n\n采集端新增 CatBus 全平台全功能接入，并可由 AI 工作区技能驱动。图表工作室改由 zen viz-core 统一生成图表页，并加入逐字比对守卫。\n\n另修复浏览器/UI 测量在多种平台与字体加载下的稳定性；Gitee 发布与 version.json 生成已工具化，发布摘要与摘要校验由已发布字节生成。",
+  "notes": "本版为缺陷修复版，聚焦数据一致性、下载与导出安全、跨账号隔离和前端竞态。\n\n修复：搜索接口对非法 count 参数不再返回 500；工作流诊断日志保留完整 traceback；AI 启动恢复按账号判定活跃流，避免一个账号的会话抑制另一个账号的中断消息回收。\n\n数据一致性：评论时间范围现在同时作用于分析表和下载用的导出文件；模型一致率矩阵遇到重复行 ID 改为具名拒绝，不再抛底层错误。\n\n安全：分片导出的 CSV 复用公式中性化，爬取的标题不再可能在 Excel 中被执行；组件目录下载拒绝 HTTPS 降级到 HTTP 的重定向；技能编辑器的上下文来源在属性中正确转义。\n\n健壮性：CatBus 适配器返回异常字段时按名拒绝，预检与摘要不再崩成 500；阶段耗时条、来源指南的语言切换引入请求代次，旧响应不会再覆盖新状态。",
   "platforms": {
     "win32": {
       "archive": "zip",
-      "sha256": "a114409c51513c12b2820a9fc936f8723fe29b3bec851d38c13d2325eb231924",
-      "size": 138244039,
+      "sha256": "6f6f407acfd4bb5d1b91b2268a926b7d9dd89d326943bbf13dcac2b62c0d4a94",
+      "size": 138291055,
       "parts": [
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.1/CaiXiHui-win64.zip.001",
-          "sha256": "5a3269497d169caddbe7ef7004a5aa20ff3cfde8c929a73d2b9cbebe5243eab2",
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-win64.zip.001",
+          "sha256": "27566e583f317b160b6ddb6cc527177d246d49277e687834f5f4d7f75c0d1acb",
           "size": 99614720
         },
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.1/CaiXiHui-win64.zip.002",
-          "sha256": "b146a65528d215dc107833b4d7349f33c3321b927d52547cc5aa8ec126350647",
-          "size": 38629319
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-win64.zip.002",
+          "sha256": "9d193168121cde2414287b052a63820ad61929586b5ae4b8c68de471a5f8d2f5",
+          "size": 38676335
         }
       ]
     },
     "darwin-arm64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.1/CaiXiHui-macOS-arm64.dmg",
-      "sha256": "d0779ab3f2ae6bbe51c7a43e0431d5fa6c8b153270e7293c012caeac6a456712",
-      "size": 194376747
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-macOS-arm64.dmg",
+      "sha256": "63d3a0a2811b01e6db9918858328e1f711401bdfe62828052fd4998b63b8a04e",
+      "size": 194060412
     },
     "darwin-x64": {
       "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.1/CaiXiHui-macOS-x86_64.dmg",
-      "sha256": "26b8052fa09ec550df98dbce7142e2df85f2657ada2caeb3633060b6bf0665bd",
-      "size": 202601346
+      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-macOS-x86_64.dmg",
+      "sha256": "b88fb7e608f5e0a8078e9405690b8ebcb8fb575d8b2ef8cf45f2830a09d8c8e0",
+      "size": 204078947
     }
   }
 }
