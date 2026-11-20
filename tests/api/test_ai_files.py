@@ -128,6 +128,38 @@ def test_standalone_search_and_fetch(client, monkeypatch):
     assert fetch.status_code == 200 and fetch.get_json()['content'] == '# body'
 
 
+@pytest.mark.parametrize('bad', ['abc', [1], {}, None, float('inf'), 1e999])
+def test_search_coerces_a_malformed_count_instead_of_500(client, monkeypatch, bad):
+    """A bare int() on the body field raised before the tool could clamp it, and the route's
+    ``except AIError`` never caught it: a client typo answered an internal-error 500."""
+    from ai import files
+
+    seen = []
+
+    def fake_post(url, **kwargs):
+        seen.append(kwargs['json']['count'])
+        return FakeResponse(200, {'results': []})
+
+    monkeypatch.setattr(files.requests, 'post', fake_post)
+    response = client.post('/api/ai/search', json={'api_key': 'k', 'query': 'x', 'count': bad})
+    assert response.status_code == 200, response.get_json()
+    assert seen == [10]  # the default, not a crash and not a forwarded bad value
+
+
+def test_search_clamps_the_count_to_the_tools_own_bounds(client, monkeypatch):
+    from ai import files
+
+    seen = []
+    monkeypatch.setattr(
+        files.requests,
+        'post',
+        lambda url, **kwargs: seen.append(kwargs['json']['count']) or FakeResponse(200, {'results': []}),
+    )
+    assert client.post('/api/ai/search', json={'api_key': 'k', 'query': 'x', 'count': 999}).status_code == 200
+    assert client.post('/api/ai/search', json={'api_key': 'k', 'query': 'x', 'count': -5}).status_code == 200
+    assert seen == [50, 1]
+
+
 def test_fetch_refuses_credentials_in_the_url_without_an_http_call(client, monkeypatch):
     from ai import files
 

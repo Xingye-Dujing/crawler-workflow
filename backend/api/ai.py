@@ -941,7 +941,10 @@ def ai_search():
         result = files.search(
             str(data.get('api_key') or ''),
             str(data.get('query') or ''),
-            count=int(data.get('count') or 10),
+            # ``count`` is client input: a bare int() raised ValueError/TypeError/OverflowError
+            # while evaluating the argument, before files.search could clamp it, and fell through
+            # to a 500. Use the shared coercion with the same 1-50 bounds the tool applies.
+            count=_safe_int(data.get('count'), 10, minimum=1, maximum=50),
             need_content=bool(data.get('need_content')),
             ori_question=str(data.get('ori_question') or ''),
             localization=str(data.get('localization') or ''),
