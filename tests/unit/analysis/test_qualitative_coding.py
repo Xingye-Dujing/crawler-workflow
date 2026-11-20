@@ -94,10 +94,10 @@ def test_trace_client_records_both_sides_without_touching_the_key(monkeypatch):
     assert conversation_id == 'c0'
     assert 'r1' in fake.conversations[0]['title']
     assert client.chat('提示词') == '回答:提示词'
-    assert [(item['role'], item['content']) for item in fake.messages[1:]] == [
-        ('user', '提示词'),
-        ('assistant', '回答:提示词'),
-    ]
+    assert [item['role'] for item in fake.messages[1:]] == ['user', 'assistant']
+    assert fake.messages[1]['content'] == '提示词'
+    assert fake.messages[2]['content'].endswith('回答:提示词')
+    assert '估算' in fake.messages[2]['content']
     assert all(item['meta'].get('estimated') is True for item in fake.messages[1:])
     assert traces_for_run('r1') and not traces_for_run('other')
 

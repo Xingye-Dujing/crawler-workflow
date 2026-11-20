@@ -13,6 +13,7 @@ mistakes them for billed units.
 import threading
 
 from ai import store
+from ai.types import text_block
 from runtime.state import add_log
 
 from i18n import t
@@ -52,6 +53,7 @@ def start_node_trace(run_id: str, node_id: str, op: str, client):
             f'run={run}\nnode={node_id}\nop={op}\n'
             f'provider={getattr(client, "provider", "")}\nmodel={getattr(client, "model", "")}\n\n' + t('trace.intro')
         ),
+        blocks=[text_block(f'run={run} | node={node_id} | op={op}\n' + t('trace.intro'))],
         meta={'kind': 'trace_start', 'run_id': run, 'node_id': node_id, 'op': op, 'estimated': False},
     )
     add_log(t('trace.opened', id=conversation['id'], node=node_id))
@@ -87,8 +89,20 @@ class TraceClient:
         store.append_message(
             self.conversation_id, 'user', content=str(prompt), meta=meta, provider=provider, model=model
         )
+        prompt_chars = int(meta['prompt_chars'])
+        answer_chars = int(meta['answer_chars'])
+        note = (
+            f'（本次调用估算：提示 {prompt_chars} 字 ≈ {prompt_chars // 2} token，'
+            f'回答 {answer_chars} 字 ≈ {answer_chars // 2} token；非账单数字）\n'
+        )
         store.append_message(
-            self.conversation_id, 'assistant', content=str(answer), meta=meta, provider=provider, model=model
+            self.conversation_id,
+            'assistant',
+            content=note + str(answer),
+            blocks=[text_block(note + str(answer))],
+            meta=meta,
+            provider=provider,
+            model=model,
         )
         return answer
 
@@ -111,6 +125,7 @@ def finish_node_trace(run_id: str, node_id: str, summary: dict) -> None:
             conversation['id'],
             'assistant',
             content=str(summary.get('text') or '节点已完成；如不满意，请继续在对话里修改，再确认重跑。'),
+            blocks=[text_block(str(summary.get('text') or '节点已完成；如不满意，请继续在对话里修改，再确认重跑。'))],
             meta={
                 'kind': 'trace_result',
                 'run_id': run,
