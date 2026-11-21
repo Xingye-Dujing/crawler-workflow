@@ -90,8 +90,12 @@ def resolve_report_path(export_dir: str, name: str) -> str:
     return path if os.path.splitext(path)[1].lower() in ('.html', '.htm') else ''
 
 
-def list_exports(export_dir: str, limit: int = MAX_ENTRIES) -> list:
+def list_exports(export_dir: str, limit: int = MAX_ENTRIES, offset: int = 0) -> list:
     """Every file in *export_dir*, newest first, with size and mtime.
+
+    ``offset`` pages past a prefix the caller could not act on (a bulk clear whose first page
+    is entirely pinned): the listing is capped, so a single scan could stop behind a locked head
+    and report the folder as cleared while deletable files sat past it.
 
     Unreadable entries are skipped rather than failing the listing: one file
     locked by Excel must not empty the panel.
@@ -121,7 +125,8 @@ def list_exports(export_dir: str, limit: int = MAX_ENTRIES) -> list:
                 }
             )
     entries.sort(key=lambda row: (row['mtime'], row['name']), reverse=True)
-    return entries[: max(1, min(int(limit or MAX_ENTRIES), MAX_ENTRIES))]
+    start = max(0, int(offset or 0))
+    return entries[start : start + max(1, min(int(limit or MAX_ENTRIES), MAX_ENTRIES))]
 
 
 def resolve_export_file(export_dir: str, name: str) -> str:

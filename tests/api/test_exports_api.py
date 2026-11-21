@@ -192,6 +192,27 @@ class TestClearAll:
         assert body['removed'] == before and body['left'] == 0
         assert os.listdir(export_dir) == []
 
+    def test_a_pinned_page_does_not_stop_the_sweep_behind_it(self, client, export_dir, monkeypatch):
+        """All of the first listing page being 固定 used to end the sweep with files left behind."""
+        from services import lock_store
+        from services.exports import browser
+
+        real = browser.list_exports
+        monkeypatch.setattr(browser, 'list_exports', lambda where, offset=0: real(where, limit=2, offset=offset))
+        for name, stamp in (('pinned-1.csv', 300), ('pinned-2.csv', 200), ('free.csv', 100)):
+            path = os.path.join(export_dir, name)
+            with open(path, 'w', encoding='utf-8') as handle:
+                handle.write('a\n')
+            os.utime(path, (stamp, stamp))
+        lock_store.set_locked('exports', 'pinned-1.csv', True)
+        lock_store.set_locked('exports', 'pinned-2.csv', True)
+
+        body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
+
+        assert body['ok'] is True and body['left'] == 2, body
+        assert not os.path.exists(os.path.join(export_dir, 'free.csv'))
+        assert os.path.exists(os.path.join(export_dir, 'pinned-1.csv'))
+
 
 class TestSmartClear:
     """``/api/exports/ledger`` + ``/clear-run`` + ``/clear-run-parts`` — the 智能清除 pair.

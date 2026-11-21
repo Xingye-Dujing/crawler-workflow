@@ -241,6 +241,31 @@ def _coerce(spec, raw, warnings: list):
     return str(raw if raw is not None else '').strip()
 
 
+def upload_limit_mb(default: int = 64) -> int:
+    """The upload ceiling: the settings page's ``max_upload_mb``, with ``MAX_UPLOAD_MB`` as the
+    deployment override.
+
+    ONE reader for the boot value (``app.config['MAX_CONTENT_LENGTH']``) and the live update a
+    settings save applies. The save used to re-derive ``int(float(get_setting(...))) * MB``,
+    ignoring both the environment override and this clamp: starting with ``MAX_UPLOAD_MB=512``
+    and then editing the page silently changed the effective ceiling, and the 413 sentence quoted
+    a limit the operator never configured.
+    """
+    try:
+        configured = int(float(get_setting('max_upload_mb')))
+        default = configured if math.isfinite(configured) and configured > 0 else default
+    except (TypeError, ValueError, OverflowError):
+        pass
+    raw = str(os.environ.get('MAX_UPLOAD_MB', '') or '').strip()
+    try:
+        value = int(float(raw)) if raw else default
+    except (TypeError, ValueError, OverflowError):
+        value = default
+    if not math.isfinite(value):
+        value = default
+    return min(max(1, value), 10 * 1024)
+
+
 def _apply_side_effects(patch: dict) -> None:
     """Invalidate what a save just changed, once per store write."""
     if {'catbus_cli', 'catbus_node'} & set(patch or {}):
@@ -248,11 +273,12 @@ def _apply_side_effects(patch: dict) -> None:
 
         catbus.reset_probe_cache()
     if 'max_upload_mb' in (patch or {}):
-        # Flask reads ``MAX_CONTENT_LENGTH`` per request, so a save can apply at once.
+        # Flask reads ``MAX_CONTENT_LENGTH`` per request, so a save can apply at once. Ask the
+        # SAME reader boot used: a save must not silently drop the env override or the clamp.
         try:
             from app import app
 
-            app.config['MAX_CONTENT_LENGTH'] = int(float(get_setting('max_upload_mb'))) * 1024 * 1024
+            app.config['MAX_CONTENT_LENGTH'] = upload_limit_mb() * 1024 * 1024
         except Exception:
             pass  # an import-time/test double without the Flask app still saves the value
 

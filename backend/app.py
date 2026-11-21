@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import re
 import sys
@@ -49,7 +48,7 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from runtime.settings import get_setting
+from runtime.settings import get_setting, upload_limit_mb
 from runtime.state import (
     _push_log,
 )
@@ -261,26 +260,13 @@ def _no_store_ui_assets(resp):
 
 
 def _upload_limit_mb(default: int = 64) -> int:
-    """Read the upload ceiling from the settings page, with ``MAX_UPLOAD_MB`` as the
-    deployment override.
+    """The upload ceiling, answered by the ONE reader in ``runtime.settings``.
 
-    The ceiling has to be configurable — a big dataset stays uploadable by raising it —
-    but a typo in either place must not *disable* it, so an unparseable, infinite or
-    non-positive value falls back to the default.
+    Kept as a name on this module because the boot sets ``MAX_CONTENT_LENGTH`` from it and the
+    hardening tests ask it directly; the arithmetic (env override, clamp, bad-value fallback) lives
+    beside the setting that a save updates, so the two doors cannot disagree.
     """
-    try:
-        configured = int(float(get_setting('max_upload_mb')))
-        default = configured if math.isfinite(configured) and configured > 0 else default
-    except (TypeError, ValueError, OverflowError):
-        pass
-    raw = str(os.environ.get('MAX_UPLOAD_MB', '') or '').strip()
-    try:
-        value = int(float(raw)) if raw else default
-    except (TypeError, ValueError, OverflowError):
-        value = default
-    if not math.isfinite(value):
-        value = default
-    return min(max(1, value), 10 * 1024)
+    return upload_limit_mb(default)
 
 
 # Werkzeug parses a POST body into RAM *before* any handler runs, so without a

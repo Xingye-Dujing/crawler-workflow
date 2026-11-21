@@ -244,6 +244,18 @@ class TestSave:
         assert _read(first['path']) == 'a'
         assert _read(second['path']) == 'b'
 
+    def test_two_reports_in_the_same_second_both_survive(self, service, monkeypatch):
+        """The timestamp has one-second resolution; a look-then-replace overwrote the first."""
+        import services.reports.html as report_module
+
+        frozen = report_module.time.strftime('%Y%m%d-%H%M%S')
+        monkeypatch.setattr(report_module.time, 'strftime', lambda *args, **kwargs: frozen)
+        first = service.save('a', '同名')
+        second = service.save('b', '同名')
+        assert first['name'] != second['name'], (first['name'], second['name'])
+        assert _read(first['path']) == 'a', 'the earlier report was clobbered'
+        assert _read(second['path']) == 'b'
+
     def test_a_generated_report_is_viewable_and_nothing_else_is(self, service, tmp_path):
         saved = service.save('x', '报告')
         assert resolve_report_path(service.export_dir, saved['name']) == saved['path']

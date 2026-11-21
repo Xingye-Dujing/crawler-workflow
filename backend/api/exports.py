@@ -171,7 +171,7 @@ def exports_clear():
     Refused outright while a run is live — a streaming node is writing part files into this
     very directory, and the panel cannot tell a finished artefact from one still being appended.
     """
-    from services.exports.browser import delete_export_file, list_exports
+    from services.exports.browser import delete_export_file, export_usage, list_exports
 
     data = _json_body()
     if data is None:
@@ -183,12 +183,17 @@ def exports_clear():
     removed = 0
     deleted: list[str] = []
     # The listing is capped, so one pass is not necessarily the whole folder: keep going
-    # while it shrinks. The loop's exit is "a pass removed nothing", which is the honest
-    # answer for a file Excel still holds open — 清空 reports what is left rather than
-    # pretending, and cannot spin.
+    # while it shrinks. A page whose every file is pinned (or held open by Excel) removed
+    # nothing, and the old `break` then left every deletable file BEHIND that head untouched
+    # while reporting the folder as swept. So a no-progress page advances the offset instead;
+    # a page that shrank restarts at 0 (earlier names may now be reachable).
+    offset = 0
     while True:
         before = removed
-        for row in list_exports(paths.active().export_dir):
+        batch = list_exports(paths.active().export_dir, offset=offset)
+        if not batch:
+            break
+        for row in batch:
             if lock_store.is_locked('exports', row['name']):
                 # A locked artefact outlives 清空 — the user pinned it on purpose.
                 continue
@@ -196,11 +201,15 @@ def exports_clear():
                 removed += 1
                 deleted.append(row['name'])
         if removed == before:
-            break
+            offset += len(batch)
+        else:
+            offset = 0
     if deleted:
         # One transaction for the whole sweep; the per-file form committed once per name.
         get_run_store().forget_files(deleted)
-    left = len(list_exports(paths.active().export_dir))
+    # Count the DIRECTORY, not a capped listing: quoting MAX_ENTRIES as "left" was the same
+    # error ``export_usage`` was written to stop.
+    left = int(export_usage(paths.active().export_dir)['files'])
     logger.warning(t('exports.cleared', n=removed))
     return jsonify({'ok': True, 'removed': removed, 'left': left})
 

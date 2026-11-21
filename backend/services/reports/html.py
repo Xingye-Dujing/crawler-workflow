@@ -499,12 +499,30 @@ class ReportService:
 
         os.makedirs(self.export_dir, exist_ok=True)
         stem = safe_stem(name, fallback='run')
-        filename = f'{REPORT_PREFIX}{stem}.html'
-        path = os.path.join(self.export_dir, filename)
-        # Never clobber an earlier report: a timestamp suffix keeps both.
+        base = f'{REPORT_PREFIX}{stem}'
+        path = os.path.join(self.export_dir, f'{base}.html')
+        reserved = False
+        # Never clobber an earlier report: a timestamp suffix keeps both — and the suffix is
+        # RESERVED with O_EXCL, not merely looked at. Two reports written in the same second (a
+        # parallel canvas, two clicks) chose the same name and the second atomic replace
+        # destroyed the first, though the docstring promised the opposite.
         if os.path.exists(path):
-            filename = f'{REPORT_PREFIX}{stem}-{time.strftime("%Y%m%d-%H%M%S")}.html'
-            path = os.path.join(self.export_dir, filename)
+            stamp = time.strftime('%Y%m%d-%H%M%S')
+            for suffix in [f'-{stamp}'] + [f'-{stamp}-{index}' for index in range(2, 100)]:
+                candidate = os.path.join(self.export_dir, f'{base}{suffix}.html')
+                try:
+                    handle = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except FileExistsError:
+                    continue
+                except OSError:
+                    break
+                os.close(handle)
+                path = candidate
+                reserved = True
+                break
+            else:
+                path = os.path.join(self.export_dir, f'{base}-{stamp}-{uuid.uuid4().hex[:6]}.html')
+        filename = os.path.basename(path)
         # Staged beside the target and renamed in: the panel lists whatever is in this directory
         # and opens it, so a crash mid-write must not publish a truncated report under a real name.
         staged = f'{path}.{uuid.uuid4().hex[:8]}.part'
@@ -515,6 +533,11 @@ class ReportService:
         except OSError:
             with contextlib.suppress(OSError):
                 os.remove(staged)
+            if reserved:
+                # The empty reservation is not a report: a failed write must not leave a
+                # zero-byte `report-*.html` the panel lists and opens.
+                with contextlib.suppress(OSError):
+                    os.remove(path)
             raise
         return {'name': filename, 'path': path, 'bytes': os.path.getsize(path)}
 
