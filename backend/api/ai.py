@@ -427,7 +427,7 @@ def ai_trace_apply(conversation_id: str):
     # The edited rows of a node are a list, not an object: accepting only a dict made the generic
     # apply path useless for every table-producing node, and dict([...]) raised a 500. Accept both
     # shapes and refuse anything else with the JSON envelope the panel parses.
-    result = data['result'] if 'result' in data else data
+    result = data.get('result', data)
     if not isinstance(result, (dict, list)):
         return _bad_param('result')
     try:

@@ -33,8 +33,11 @@ def test_openrouter_streaming_parses_data_frames(monkeypatch):
     captured = {}
 
     class FakeRequests:
-        class RequestException(Exception):
+        class RequestError(Exception):
             pass
+
+        # The product catches requests.RequestException; the fake must expose that attribute name.
+        RequestException = RequestError
 
         @staticmethod
         def post(*args, **kwargs):

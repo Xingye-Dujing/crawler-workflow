@@ -8,6 +8,7 @@ different run cannot pick up another run's edit.
 actually re-executes the node instead of replaying a stale edit forever.
 """
 
+import contextlib
 import json
 import os
 import re
@@ -72,8 +73,7 @@ def consume(run_id: str, node_id: str) -> dict | None:
             data = json.load(handle)
     except (OSError, ValueError):
         return None
-    try:
+    # Best effort: a locked file must not block the rerun that already read the edit.
+    with contextlib.suppress(OSError):
         os.remove(path)
-    except OSError:
-        pass  # best effort: a locked file must not block the rerun that already read the edit
     return data

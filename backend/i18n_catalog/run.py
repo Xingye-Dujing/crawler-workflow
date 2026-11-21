@@ -792,7 +792,9 @@ EN = {
     'run.reportLatexSaved': 'Paper document compiled: {name} ({figures} figures / {tables} tables)',
     'run.reportSaved': 'Report written: {name} ({size} bytes)',
     'run.restored': 'Node {nid} reuses its previous result ({n} rows) instead of running again',
-    'run.applied_trace_result': 'Node {nid} uses the edit confirmed in its trace conversation ({n} rows); model not called',
+    'run.applied_trace_result': (
+        'Node {nid} uses the edit confirmed in its trace conversation ({n} rows); model not called'
+    ),
     'run.pythonDone': 'Python node {nid} ran “{script}”: {n} rows in {ms} ms',
     'run.pythonStderr': 'Python node {nid} stderr: {text}',
     'run.pythonTruncated': 'Python node {nid} output was truncated: {n} of at most {max} rows were read.',
