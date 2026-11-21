@@ -90,6 +90,39 @@ sandbox.fetch = previousFetch;
 const traceChip = workspace._dom.modelChip.textContent;
 const traceChipTitle = workspace._dom.modelChip.title;
 
+/* A traditional node trace names a DISPLAY label ("local BERT") as its provider. Selecting it must
+   leave the composer on a real catalog provider, otherwise the next send fails with an unknown
+   provider and the model <select> goes blank. */
+const beforeLabelProvider = workspace._provider;
+sandbox.fetch = async () =>
+    new Response(
+        JSON.stringify({
+            ok: true,
+            conversation: {
+                id: 'c_trad',
+                provider: 'local BERT',
+                model: 'ml_train/models/rbt3',
+                skill: 'node_trace',
+                title: 'traditional trace',
+            },
+            messages: [
+                {
+                    id: 'm1',
+                    role: 'assistant',
+                    blocks: [],
+                    status: 'done',
+                    meta: { kind: 'trace_start', provider_label: 'local BERT', model_label: 'ml_train/models/rbt3' },
+                },
+            ],
+            pending_questions: [],
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+    );
+await workspace.selectConversation('c_trad');
+sandbox.fetch = previousFetch;
+const labelTraceChip = workspace._dom.modelChip.textContent;
+const labelTraceProvider = workspace._provider;
+
 const out = {
     events,
     lang: I18n.lang,
@@ -108,6 +141,9 @@ const out = {
     providerOptions,
     traceChip,
     traceChipTitle,
+    labelTraceChip,
+    labelTraceProvider,
+    beforeLabelProvider,
     hasKnown: I18n.has('ai.title'),
     hasUnknown: I18n.has('ai.notAKey'),
     turnFlow: (() => {

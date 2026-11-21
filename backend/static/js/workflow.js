@@ -119,18 +119,30 @@ const workflow = {
         const params = new URLSearchParams(location.search);
         const name = params.get('workflow');
         if (!name) return;
-        /* A demo run may pin its provider/model in the link; otherwise the browse application's
-           own saved settings, exactly as a person pressing 执行 would. */
+        /* The remembered-file restore is a SEPARATE async boot step; boot() does not await it. If
+           its response lands after this loader, it overwrites the deep-linked canvas — and with
+           autorun=1 the run executes the wrong workflow. Wait for that in-flight restore first. */
+        if (this._reloadPromise) {
+            try { await this._reloadPromise; } catch (e) { /* restore failure is non-destructive */ }
+        }
+        /* A demo run may pin its provider/model for THIS run; persist nothing. The link used to
+           write localStorage, permanently changing the user's default transport after one click. */
         const provider = params.get('llm_provider');
         const model = params.get('llm_model');
+        var llmOverride = null;
         if (provider && model && typeof LLMSettings !== 'undefined') {
-            LLMSettings.save({ provider: provider, ollama: { model: model } });
+            llmOverride = Object.assign({}, LLMSettings.payload(), { provider: provider });
+            if (provider === 'ollama') llmOverride.ollama = Object.assign({}, llmOverride.ollama, { model: model });
+            else llmOverride[provider] = Object.assign({}, llmOverride[provider], { model: model });
         }
-        /* A demo can widen the AI workspace so the trace transcript is legible in a recording.
-           Clamped to the same 360..900 range the drag handle uses; a normal page never sends this. */
+        /* A demo can widen the AI workspace for one recording — transient, not saved. */
         const aiWidth = Number(params.get('ai_width'));
-        if (aiWidth && typeof AISettings !== 'undefined') {
-            AISettings.save({ width: Math.max(360, Math.min(900, Math.round(aiWidth))) });
+        if (aiWidth && typeof AIWorkspace !== 'undefined' && AIWorkspace.setRunWidth) {
+            AIWorkspace.setRunWidth(aiWidth);
+        }
+        /* Consume the query now so a refresh (or a reload after the run) cannot silently re-run. */
+        if (typeof history !== 'undefined' && history.replaceState) {
+            history.replaceState(null, '', location.pathname);
         }
         await this._loadByName(name);
         if (params.get('layout') === '1' && typeof canvas !== 'undefined' && canvas.runAutoLayout) {
@@ -145,42 +157,51 @@ const workflow = {
             }
         }
         if (params.get('autorun') === '1') {
-            /* A short grace period lets a screen recorder attach to the window before nodes start
-               firing; a person opening the link sees the canvas settle first, then the run. */
+            /* A bare link must not start a run: that would spend the user's accounts/API keys from
+               a cross-site navigation. Only a server that explicitly opted in (the demo recorder's
+               isolated instance) honours autorun. The canvas is still loaded on every host. */
+            var allowed = false;
+            try {
+                const response = await fetch('/api/config');
+                allowed = !!(await response.json()).demo_autorun;
+            } catch (e) { /* no config answer means no autorun */ }
+            if (!allowed) return;
             const delay = Math.max(0, Number(params.get('autorun_delay') || 1500));
             await new Promise((resolve) => setTimeout(resolve, delay));
-            await this.execute();
+            await this.execute(llmOverride ? { llm: llmOverride } : undefined);
         }
     },
 
-    /* Open the AI workspace onto the freshest node-trace conversation and follow it as the answer
-       streams in. The backend creates one per LLM node with skill=node_trace; a demo that cleared
-       its history first sees only this run's chats. Open as soon as the conversation has its intro
-       + first user prompt (>=2 messages), then let AIWorkspace.pumpTraceStream follow the token
-       deltas in place — no full repaint, so the recording shows text growing without flicker. */
-    async _revealRunTrace() {
-        if (typeof AIWorkspace === 'undefined') return;
+    /* Open the AI workspace onto a trace conversation created by THIS run and follow it as the
+       answer streams in. The generic session list cannot answer which run a trace belongs to — a
+       stale trace from an earlier run was opened instead, and a 60 s wait for "2 messages" never
+       matched a traditional node (its only message before settlement is the intro). Use the
+       backend's per-run trace route, keyed by the run id execute() already received. */
+    async _revealRunTrace(runId) {
+        if (typeof AIWorkspace === 'undefined' || !runId) return;
         const deadline = Date.now() + 60000;
         let conv = null;
         while (Date.now() < deadline) {
             try {
-                const resp = await fetch('/api/ai/conversations?limit=10');
+                const resp = await fetch('/api/ai/traces/' + encodeURIComponent(runId));
                 const data = await resp.json();
-                const traces = (data.conversations || []).filter((c) => c.skill === 'node_trace');
-                const started = traces.find((c) => (c.message_count || 0) >= 2);
-                if (started) {
-                    conv = started;
+                const traces = data.conversations || [];
+                if (traces.length) {
+                    conv = traces[0];  // traces_for_run is newest-first
                     break;
                 }
-                if (!conv && traces.length) conv = traces[0];
             } catch (e) {
                 /* A transient failure just means the run has not created the conversation yet. */
             }
             await new Promise((resolve) => setTimeout(resolve, 300));
         }
         if (!conv) return;
+        /* A live chat turn owns the transcript. Do not repaint it out from under the user; the
+           trace stays in the session list and can be opened when the turn settles. */
+        if (AIWorkspace._sending) return;
         AIWorkspace.open({ conversation: conv.id });
-        /* The assistant row may still be streaming; follow it token by token, locally. */
+        await AIWorkspace.selectConversation(conv.id);
+        /* Follow token deltas in place; pumpTraceStream stops on this run's closing row. */
         if (typeof AIWorkspace.pumpTraceStream === 'function') AIWorkspace.pumpTraceStream(conv.id);
     },
 
@@ -1133,7 +1154,9 @@ const workflow = {
         /* AI transport check — fail fast instead of dying 200 rows into a run. Asked of the
            EFFECTIVE nodes, the same graph the server walks: a node the user switched off is not
            on the canvas, so it must not be able to hold up a run that would call no model at all. */
-        var llm = LLMSettings.payload();
+        /* A demo deep link may pin provider/model for this run without persisting them; a normal
+           press uses the browser's saved settings. */
+        var llm = opts.llm || LLMSettings.payload();
         if (canvas.effectiveIds && canvas.effectiveIds().some(function (id) {
             var n = canvas.nodes[id];
             return n && n.type === 'process' && nodeNeedsLlm(n.params, n.operation);
@@ -1227,7 +1250,7 @@ const workflow = {
                    missing setting) leaves the panel alone. */
                 var tier = (typeof AppSettings !== 'undefined' && AppSettings._values)
                     ? AppSettings._values.ai_trace_tier : 'traditional';
-                if (tier && tier !== 'off') this._revealRunTrace();
+                if (tier && tier !== 'off') this._revealRunTrace(result.run_id);
             } else {
                 showToast(I18n.t('toast.executeFailed') + ': ' + (result.error || ''));
                 restoreRunState();

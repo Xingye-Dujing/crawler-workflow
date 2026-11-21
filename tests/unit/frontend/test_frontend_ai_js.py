@@ -52,6 +52,15 @@ class TestAIStreamAndRenderer:
         # were removed from the workspace so a resting cursor cannot cover the canvas in a demo).
         assert not out['traceChipTitle'], 'a trace chip must not raise a title tooltip'
 
+    def test_a_traditional_trace_label_does_not_corrupt_the_provider_picker(self):
+        out = _run()
+        assert 'local BERT' in out['labelTraceChip']
+        assert 'rbt3' in out['labelTraceChip']
+        # The chip shows the label, but the composer must stay on a real catalog id — a label like
+        # "local BERT" is not a provider and made every subsequent chat turn fail by name.
+        assert out['labelTraceProvider'] == out['beforeLabelProvider']
+        assert out['labelTraceProvider'] in ('deepseek', 'ollama')
+
     def test_a_pipe_inside_code_or_escaped_does_not_split_a_table_cell(self):
         """The model's own rows: `a|b` and `\\|` stay inside one cell, and every row keeps 2 cells."""
         out = _run()['tablePipes']

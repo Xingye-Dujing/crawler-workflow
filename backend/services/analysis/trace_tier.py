@@ -128,25 +128,40 @@ def resolve_model_identity(node: dict, op: str, provider: str, run_model: str = 
             'openrouter': 'OpenRouter',
             'opencode_go': 'OpenCode Go',
         }.get(provider, provider or 'LLM')
-        return label, str(params.get('model') or run_model or '').strip()
+        # Only Ollama honours a per-node model (see build_llm_run_ctx); a cloud run uses the run's
+        # model. A stale node field must never make the chip claim a model the transport never used.
+        node_model = str(params.get('model') or '').strip() if provider == 'ollama' else ''
+        return label, (node_model or str(run_model or '').strip())
 
     if tier == 'traditional':
         mode = str(params.get('mode') or '').strip()
-        # A classifier's local mode decides the family label; zero_shot/embedding ops have no mode.
         family = _TRADITIONAL_LABEL.get(mode, 'local model')
         name = ''
-        # BERT-family classifier: reuse the executor's resolver so the chip names EXACTLY the model
-        # that ran (a stale or second hard-coded resolver would be a second opinion).
-        if op in _CLASSIFIER_OPS and (not mode or mode == 'bert'):
-            try:
-                from nodes.executors.process import _effective_bert_model
 
-                name = _effective_bert_model(op, params)
+        if op in _CLASSIFIER_OPS:
+            # Resolve through the SAME code the executor uses, including its availability check and
+            # its named degrade path. Otherwise the chip would say "local BERT / path" while the
+            # analyzer quietly ran SnowNLP/sklearn because torch or the model was unavailable.
+            effective_mode = mode or str(PROCESS_ENUMS.get(op, {}).get('mode', ('', ()))[0])
+            try:
+                from nodes.executors.process import BERT_FALLBACK_MODE, _bert_runnable, _effective_bert_model
+
+                if effective_mode == 'bert':
+                    path = _effective_bert_model(op, params)
+                    ok, _reason = _bert_runnable(path)
+                    if ok:
+                        return _TRADITIONAL_LABEL['bert'], path
+                    effective_mode = BERT_FALLBACK_MODE.get(op, '')
+                    family = _TRADITIONAL_LABEL.get(effective_mode, 'local model')
+                # A non-BERT local mode has NO model path: do not fall back to a stale bert_model
+                # field left over from a previous selection.
+                return family, ''
             except Exception:
-                name = ''
-        if not name:
-            name = str(params.get('bert_model') or params.get('embedding_model') or params.get('model') or '').strip()
-        if not name and op in _FIXED_MODEL_OPS:
+                # If the executor module cannot be imported, fall through to a conservative
+                # family-only identity rather than naming a model we cannot verify.
+                return family, ''
+
+        if op in _FIXED_MODEL_OPS:
             module_name, attr = _FIXED_MODEL_OPS[op]
             try:
                 import importlib

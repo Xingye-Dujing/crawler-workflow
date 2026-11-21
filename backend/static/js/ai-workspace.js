@@ -23,6 +23,8 @@ const AIWorkspace = {
     _init: false,
     _open: false,
     _full: false,
+    /* Transient width override for a demo deep link; never persisted (see setRunWidth). */
+    _runWidth: 0,
     _sessionsOpen: false,
     _sending: false,
     /* The live turn's clock: when it opened, when the last byte arrived, and whether an ENDING event
@@ -237,6 +239,17 @@ const AIWorkspace = {
         this._dom.root.classList.toggle('tiny', !this._full && width < 390);
     },
 
+    /* A demo deep link may widen the dock for one recording. The override is transient: it must NOT
+       be written to localStorage, or following a link would permanently change the user's panel. */
+    setRunWidth(width) {
+        const value = Math.max(360, Math.min(900, Number(width) || 0));
+        this._runWidth = value;
+        if (this._dom.root) {
+            this._dom.root.style.setProperty('--ai-width', value + 'px');
+            this._applyWidthClass(value);
+        }
+    },
+
     /* The two sidebars are draggable, each within a range that keeps its content readable. The
        width lives in a CSS variable so the grid follows the pointer without a repaint rule, and
        it is remembered per browser like the panel's own width. */
@@ -279,7 +292,7 @@ const AIWorkspace = {
     _bindDock() {
         const root = this._dom.root;
         if (!root) return;
-        const width = Math.max(360, Math.min(900, Number(AISettings.load().width) || 520));
+        const width = this._runWidth || Math.max(360, Math.min(900, Number(AISettings.load().width) || 520));
         root.style.setProperty('--ai-width', width + 'px');
         this._applyWidthClass(width);
         if (this._dom.resizer) {
@@ -424,7 +437,8 @@ const AIWorkspace = {
                conversation. It wins over the remembered one so the recording shows the trace the
                run just created, not a stale chat from a previous take. */
             const wanted = opts && opts.conversation;
-            if (wanted) this.selectConversation(wanted);
+            /* Never repaint a live turn's DOM — the stream is still writing into those bubbles. */
+            if (wanted && !this._sending) this.selectConversation(wanted);
             else if (this._conversationId && !this._sending) this.selectConversation(this._conversationId);
             else if (!this._conversationId) this._renderWelcome();
             this._loadSpend();
@@ -2219,18 +2233,29 @@ const AIWorkspace = {
             this._messages = data.messages || [];
             this._conversationId = data.conversation.id;
             this._rememberConversation(this._conversationId);
-            /* The header names the model this conversation used; the picker below keeps the model
-               the NEXT message will use, which may be a different one. */
-            this._conversationModel = [data.conversation.provider, data.conversation.model].filter(Boolean).join(' / ');
-            /* A trace conversation belongs to a NODE, not to the user's last chat choice. Mirror the
-               node's run-time provider/model into the bottom picker and tip so the chip never claims
-               a different model answered these prompts. Normal conversations keep the user's choice. */
+            const isTrace = String(data.conversation.skill || '') === 'node_trace';
             const savedProvider = String(data.conversation.provider || '');
             const savedModel = String(data.conversation.model || '');
-            if (savedProvider || savedModel) {
-                if (savedProvider) this._provider = savedProvider;
+            const startMeta = (this._messages.find((m) => (m.meta || {}).kind === 'trace_start') || {}).meta || {};
+            /* The header/chip name the model that ACTUALLY answered this conversation. For a node
+               trace that is a display label ("local BERT", "SnowNLP"), not a provider id — read the
+               label from the intro row's meta so it survives a later provider/model PATCH. */
+            const chipProvider = isTrace && startMeta.provider_label ? String(startMeta.provider_label) : savedProvider;
+            const chipModel = isTrace && startMeta.model_label ? String(startMeta.model_label) : savedModel;
+            this._conversationModel = [chipProvider, chipModel].filter(Boolean).join(' / ');
+            if (this._dom.modelChip) this._dom.modelChip.textContent = this._conversationModel || '—';
+            /* The picker is for the NEXT message and must stay on a real catalog provider. A node
+               trace's provider is often only a display label; mirroring it here used to select a
+               non-existent provider, empty the model list and make every follow-up send fail. Only
+               mirror when the stored value is a known id. */
+            const knownIds = (this._bootstrap?.providers || []).map((item) => String(item.id));
+            if (savedProvider && knownIds.includes(savedProvider)) {
+                this._provider = savedProvider;
                 if (savedModel) this._model = savedModel;
                 this._renderProviderOptions();
+            } else if (!isTrace && savedModel) {
+                this._model = savedModel;
+                this._renderModelOptions();
             }
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
@@ -2251,13 +2276,18 @@ const AIWorkspace = {
            selectConversation, so the user sees all 3 rows' Q&A appear in sequence;
          - tokens arriving in an EXISTING message: update only that bubble's `.ai-flow`, with a per
            message HTML memo, so a repaint with no new text never rewrites the DOM (no flicker).
-       Stops when the run's closing trace_result row appears. */
+       Stops when the run's closing trace_result row appears — NOT on a quiet poll: a multi-batch
+       run has gaps between rows, and a traditional node has no streaming row at all before its
+       final sample. If the user selects another conversation or starts their own turn, stop
+       following so we never repaint the transcript they are reading. */
     async pumpTraceStream(conversationId) {
         if (!conversationId || !this._dom.chat) return;
         const memos = new Map();
         const seen = new Set();
         const deadline = Date.now() + 180000;
+        let adopted = false;  // becomes true once this trace has actually been painted
         while (Date.now() < deadline) {
+            if (this._sending || (adopted && this._conversationId && this._conversationId !== conversationId)) break;
             try {
                 const resp = await fetch('/api/ai/conversations/' + encodeURIComponent(conversationId));
                 const data = await resp.json();
@@ -2271,6 +2301,7 @@ const AIWorkspace = {
                     /* A fresh row's Q&A just landed — repaint once so its bubble exists at all.
                        This is the one full re-render per new message (3 rows => at most 3). */
                     await this.selectConversation(conversationId);
+                    adopted = true;
                     for (const message of messages) {
                         if (message.role === 'assistant' && String(message.status || '') !== 'streaming') {
                             const html = AIRender.assistantFlow(message.blocks || []);
@@ -2279,13 +2310,11 @@ const AIWorkspace = {
                     }
                 }
 
-                let stillStreaming = false;
                 let closed = false;
                 for (const message of messages) {
                     if (String((message.meta || {}).kind || '') === 'trace_result') closed = true;
                     if (message.role !== 'assistant') continue;
                     const streaming = String(message.status || '') === 'streaming';
-                    if (streaming) stillStreaming = true;
                     const selector = '[data-ai-message="' + String(message.id).replace(/"/g, '') + '"]';
                     const el = this._dom.chat.querySelector(selector);
                     const flow = el && el.querySelector('.ai-flow');
@@ -2301,7 +2330,7 @@ const AIWorkspace = {
                         }
                     }
                 }
-                if (closed || (!stillStreaming && !isNew)) break;
+                if (closed) break;
             } catch (e) {
                 break;
             }

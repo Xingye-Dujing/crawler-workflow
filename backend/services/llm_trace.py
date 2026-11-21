@@ -55,7 +55,18 @@ def start_node_trace(run_id: str, node_id: str, op: str, client, provider: str =
         'assistant',
         content=(f'run={run}\nnode={node_id}\nop={op}\nprovider={provider}\nmodel={model}\n\n' + t('trace.intro')),
         blocks=[text_block(f'run={run} | node={node_id} | op={op}\n' + t('trace.intro'))],
-        meta={'kind': 'trace_start', 'run_id': run, 'node_id': node_id, 'op': op, 'estimated': False},
+        meta={
+            'kind': 'trace_start',
+            'run_id': run,
+            'node_id': node_id,
+            'op': op,
+            # Display-only labels for the "model that answered" chip. A traditional node's
+            # provider label ("local BERT") is NOT a provider id, so it must never drive the
+            # composer's provider picker — only this read-only chip may show it.
+            'provider_label': provider,
+            'model_label': model,
+            'estimated': False,
+        },
     )
     add_log(t('trace.opened', id=conversation['id'], node=node_id))
     # A traditional node has no chat client to wrap. It still gets the conversation (intro/result),

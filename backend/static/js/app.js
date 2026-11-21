@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Then re-fetch that file's CONTENT from the server: the local draft is a snapshot and the file
     // may have been updated outside this browser, so entering must open the latest saved version,
     // not the stale view. A new (unnamed) canvas keeps its draft.
-    boot('reloadOpenFile', () => workflow.reloadOpenFile());
+    boot('reloadOpenFile', () => { workflow._reloadPromise = workflow.reloadOpenFile(); });
     /* Demo/runbook deep link: ?workflow=<name>[&autorun=1] loads that saved canvas and may start it.
        It runs after the remembered-file restore so an explicit link wins over a stale session. */
     boot('workflowDeepLink', () => workflow.loadFromQuery());

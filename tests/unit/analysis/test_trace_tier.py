@@ -62,3 +62,35 @@ def test_traditional_identity_names_the_local_model():
     prov2, name2 = tt.resolve_model_identity(_node('semantic_dedupe'), 'semantic_dedupe', 'ollama')
     assert 'bge' in name2
     assert prov2 == 'local model'
+
+
+def test_bert_degrade_is_reflected_in_the_trace_identity(monkeypatch):
+    import nodes.executors.process as process
+
+    # The executor degrades an unrunnable BERT to SnowNLP; the chip must follow, not keep claiming
+    # a BERT model that never answered.
+    monkeypatch.setattr(process, '_bert_runnable', lambda _path: (False, 'no torch'))
+    prov, name = tt.resolve_model_identity(_node('sentiment', mode='bert'), 'sentiment', 'ollama')
+    assert prov == 'SnowNLP'
+    assert name == ''
+
+
+def test_non_bert_mode_never_claims_a_stale_bert_model():
+    prov, name = tt.resolve_model_identity(
+        _node('sentiment', mode='snownlp', bert_model='/models/rbt3'), 'sentiment', 'ollama'
+    )
+    assert prov == 'SnowNLP'
+    assert name == '', 'a stale bert_model field must not be named for a SnowNLP run'
+
+
+def test_cloud_provider_uses_the_run_model_not_a_node_model():
+    prov, name = tt.resolve_model_identity(
+        _node('sentiment', mode='llm', model='qwen:stale'), 'sentiment', 'deepseek', run_model='deepseek-chat'
+    )
+    assert prov == 'DeepSeek'
+    assert name == 'deepseek-chat'
+    ollama_prov, ollama_name = tt.resolve_model_identity(
+        _node('sentiment', mode='llm', model='qwen:node'), 'sentiment', 'ollama', run_model='qwen:global'
+    )
+    assert ollama_prov == 'Ollama'
+    assert ollama_name == 'qwen:node'
