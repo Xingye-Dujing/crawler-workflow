@@ -599,30 +599,32 @@ def test_disabling_a_tool_pack_withdraws_it_and_enabling_brings_it_back(client, 
 
 def test_a_non_admin_may_not_install_a_process_wide_pack(client, clean_ai, monkeypatch):
     """A tool/provider/code pack writes tables every account reads; a skill pack is per account."""
-    import api.ai as ai_api
+    from runtime import account_context
+    from runtime.account_context import Account
 
-    monkeypatch.setattr(ai_api, 'accounts_mode', lambda: True)
-    monkeypatch.setattr(ai_api, 'is_admin', lambda: False)
-    refused = client.post('/api/ai/plugins/install', json=_tool_pack([_http_tool('demo_nope_tool')], 'demo.nope'))
-    assert refused.status_code == 403
-    skill_pack = {
-        'id': 'demo.ownskills',
-        'name': 'Own skills',
-        'version': '1.0.0',
-        'api': 1,
-        'kind': 'skill-pack',
-        'permissions': [],
-        'skills': [{'id': 'demo.ownskills.one', 'prompt': 'Answer briefly.'}],
-    }
-    assert client.post('/api/ai/plugins/install', json=skill_pack).status_code == 200
-    assert client.delete('/api/ai/plugins/demo.ownskills').status_code == 200
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    with account_context.use(Account('u_aaaaaaaaaaaa', 'reader', 'user')):
+        refused = client.post('/api/ai/plugins/install', json=_tool_pack([_http_tool('demo_nope_tool')], 'demo.nope'))
+        assert refused.status_code == 403
+        skill_pack = {
+            'id': 'demo.ownskills',
+            'name': 'Own skills',
+            'version': '1.0.0',
+            'api': 1,
+            'kind': 'skill-pack',
+            'permissions': [],
+            'skills': [{'id': 'demo.ownskills.one', 'prompt': 'Answer briefly.'}],
+        }
+        assert client.post('/api/ai/plugins/install', json=skill_pack).status_code == 200
+        assert client.delete('/api/ai/plugins/demo.ownskills').status_code == 200
 
 
 def test_a_non_admin_may_not_enable_or_delete_a_process_wide_pack(client, clean_ai, monkeypatch):
     """Install wasn't the only door: enable re-registers and delete releases the same machine-wide
     contributions, so both need the admin check install already had."""
-    import api.ai as ai_api
     from ai import tools
+    from runtime import account_context
+    from runtime.account_context import Account
 
     assert (
         client.post(
@@ -631,14 +633,14 @@ def test_a_non_admin_may_not_enable_or_delete_a_process_wide_pack(client, clean_
         == 200
     )
     try:
-        monkeypatch.setattr(ai_api, 'accounts_mode', lambda: True)
-        monkeypatch.setattr(ai_api, 'is_admin', lambda: False)
-        assert client.post('/api/ai/plugins/demo.guard/enable', json={'enabled': False}).status_code == 403
-        assert client.delete('/api/ai/plugins/demo.guard').status_code == 403
-        assert 'demo_guard_tool' in tools.TOOLS, 'a refused write must leave the pack callable'
+        monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+        with account_context.use(Account('u_aaaaaaaaaaaa', 'reader', 'user')):
+            assert client.post('/api/ai/plugins/demo.guard/enable', json={'enabled': False}).status_code == 403
+            assert client.delete('/api/ai/plugins/demo.guard').status_code == 403
+            assert 'demo_guard_tool' in tools.TOOLS, 'a refused write must leave the pack callable'
     finally:
-        monkeypatch.setattr(ai_api, 'is_admin', lambda: True)
-        client.delete('/api/ai/plugins/demo.guard')
+        with account_context.use(None):
+            client.delete('/api/ai/plugins/demo.guard')
 
 
 def test_the_provider_key_travels_in_a_header_not_the_url(client, fake_ai):

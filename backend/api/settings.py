@@ -15,6 +15,7 @@ Who may do what:
 """
 
 from flask import Blueprint, jsonify, request
+from runtime import policy
 from runtime.settings import (
     all_settings,
     apply_preset,
@@ -27,10 +28,8 @@ from runtime.settings import (
 )
 from runtime.settings_schema import MACHINE_KEYS
 
-from api.auth import is_admin
 from api.http import _bad_body, _json_body
 from i18n import t
-from services.accounts.service import accounts_mode
 from services.components import source as component_source
 
 bp = Blueprint('settings', __name__)
@@ -41,7 +40,7 @@ _MACHINE_PATH_KEYS = MACHINE_KEYS
 
 def _is_admin() -> bool:
     """Whether this caller may mutate machine-wide settings."""
-    return not accounts_mode() or is_admin()
+    return policy.may_administer_machine()
 
 
 def _visible(values: dict, admin: bool) -> dict:

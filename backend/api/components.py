@@ -13,12 +13,11 @@ from __future__ import annotations
 from contextlib import suppress
 
 from flask import Blueprint, jsonify
+from runtime import policy
 from runtime.state import any_run_live
 
-from api.auth import is_admin
 from api.http import _json_body
 from i18n import t
-from services.accounts.service import accounts_mode
 from services.components import jobs
 from services.components import source as component_source
 from services.components.catalog import Catalog, CatalogError, load_catalog
@@ -39,13 +38,13 @@ def _admin_refusal():
     write ``/api/settings`` and ``/api/lexicon`` guard with 403. The panel hides the buttons;
     hiding is cosmetic, the 403 is the permission.
     """
-    if accounts_mode() and not is_admin():
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    if not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     return None
 
 
 def _admin() -> bool:
-    return not accounts_mode() or is_admin()
+    return policy.may_administer_machine()
 
 
 def _catalog() -> Catalog:

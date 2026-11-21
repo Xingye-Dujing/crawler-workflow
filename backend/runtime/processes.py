@@ -84,10 +84,12 @@ def rows(owner: str | None = None) -> list[dict]:
 
 
 def stop(ident: str, owner: str | None = None) -> tuple[str, str]:
-    """Stop one child and its tree: ``('stopped' | 'gone' | 'refused', machine_reason)``.
+    """Stop one child and its tree: ``('stopped' | 'gone' | 'refused' | 'failed', machine_reason)``.
 
-    Never silent: a refusal names why (the child belongs to another account) and a failure carries
-    the operating system's own sentence back to the panel.
+    Never silent: a refusal names why (the child belongs to another account), a failure carries the
+    operating system's own sentence back to the panel, and a child that survived the kill STAYS in
+    the registry — popping it before the kill made the panel report success while the process kept
+    running (and spending), with no row left to try again.
     """
     with _LOCK:
         row = _ROWS.get(str(ident or ''))
@@ -95,11 +97,11 @@ def stop(ident: str, owner: str | None = None) -> tuple[str, str]:
             return 'gone', 'not running'
         if owner is not None and row['owner'] != owner:
             return 'refused', 'not yours'
-        _ROWS.pop(str(ident), None)
     proc = row.get('proc')
     pid = int(row.get('pid') or 0)
     if not _alive(row):
         # It exited on its own between the panel's poll and this click: nothing to stop.
+        unregister(ident)
         return 'gone', ''
     terminate = getattr(proc, 'terminate', None)
     if terminate is not None:
@@ -110,10 +112,13 @@ def stop(ident: str, owner: str | None = None) -> tuple[str, str]:
             pass
     if pid:
         stopped, reason = procs.reap_process(pid)
-        if stopped:
-            return 'stopped', ''
-        # A child that exited on its own is not a failure: the reap says "no such process".
-        return ('gone', '') if not _alive(row) else ('gone', reason)
+        if stopped or not _alive(row):
+            unregister(ident)
+            return ('stopped' if stopped else 'gone'), ''
+        # Still alive: keep the row so the panel can list it and the user can try again, and hand
+        # the OS sentence back instead of a success the machine never delivered.
+        return 'failed', reason or 'still running'
+    unregister(ident)
     return 'stopped', ''
 
 

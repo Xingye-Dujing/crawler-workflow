@@ -33,6 +33,7 @@ from pathlib import Path
 from core import machine
 from core.config import Config
 from core.procs import popen_kwargs
+from runtime import policy
 
 from ai import store
 from ai.errors import AIError
@@ -96,6 +97,20 @@ def _cloud() -> bool:
     return bool(Config.CLOUD_MODE)
 
 
+def _refuse_machine() -> None:
+    """The one refusal for a door that reads or runs things outside an account's own tree.
+
+    ``CLOUD_MODE`` has no user machine at all; a shared accounts host has one machine that belongs
+    to the administrator, not to every signed-in user. Without this second half an ordinary
+    account could point the workspace at ``data/users/<other>/`` and read it, or run a command in
+    the checkout beside it — the isolation every other machine-level route already enforces.
+    """
+    if _cloud():
+        raise AIError('ai.workspaceCloud', kind='capability')
+    if not policy.may_administer_machine():
+        raise AIError(policy.machine_refusal_key(), kind='capability')
+
+
 def app_root() -> str:
     """The server's own tree: repository root (web) or install root (desktop)."""
     if _cloud():
@@ -121,7 +136,8 @@ def _exists(path: str) -> bool:
 
 def describe() -> dict:
     root = folder()
-    app = app_root()
+    admin = policy.may_administer_machine()
+    app = app_root() if admin else ''
     return {
         'folder': root,
         'folder_name': os.path.basename(root.rstrip('\\/')) if root else '',
@@ -129,15 +145,15 @@ def describe() -> dict:
         'app_root': app,
         'app_name': os.path.basename(app.rstrip('\\/')) if app else '',
         'cloud': _cloud(),
+        'admin_only': not admin,
         'can_write': bool(root) and _exists(root),
-        'allowed_commands': sorted(ALLOWED_COMMANDS),
+        'allowed_commands': sorted(ALLOWED_COMMANDS) if admin else [],
     }
 
 
 def set_folder(path: str) -> dict:
     """Make *path* this account's working folder. Only an existing directory is accepted."""
-    if _cloud():
-        raise AIError('ai.workspaceCloud', kind='capability')
+    _refuse_machine()
     raw = os.path.expanduser(str(path or '').strip())
     if not raw:
         store.set_pref(PREF_KEY, '')
@@ -155,6 +171,11 @@ def _root(kind: str = 'folder') -> str:
     root = folder() if kind == 'folder' else app_root()
     if _cloud():
         raise AIError('ai.workspaceCloud', kind='capability')
+    if kind == 'app' and not policy.may_administer_machine():
+        # The checkout holds EVERY account's tree under ``data/users/``; a relative read from the
+        # app root would reach another account's cookies and exports. The root itself is a
+        # machine-level surface, so it has the same door as /api/settings.
+        raise AIError(policy.machine_refusal_key(), kind='capability')
     if not root:
         raise (
             AIError('ai.workspaceNoApp', kind='capability')
@@ -194,9 +215,10 @@ def volumes() -> list[dict]:
 
     A picker that only walks DOWN from ``C:\\`` can never leave it: ``dirname('C:\\\\')`` is itself,
     so at the drive root the parent button disappeared and every other disk was unreachable. The
-    list itself is the per-OS table in ``core.machine``; this module only refuses in cloud mode.
+    list itself is the per-OS table in ``core.machine``; this module only refuses the callers it
+    may not serve.
     """
-    if _cloud():
+    if _cloud() or not policy.may_administer_machine():
         return []
     return machine.filesystem_roots()
 
@@ -205,10 +227,10 @@ def browse(path: str = '') -> dict:
     """Directories and files one level down, for the folder picker.
 
     ``path`` may be absolute (a picker walks the real filesystem) or empty (start at the current
-    folder, else the user's home). Only a cloud host is refused: a server has no user machine.
+    folder, else the user's home). A cloud host has no user machine; an accounts host has one
+    machine that belongs to its administrator.
     """
-    if _cloud():
-        raise AIError('ai.workspaceCloud', kind='capability')
+    _refuse_machine()
     raw = os.path.expanduser(str(path or '').strip()) or folder() or str(Path.home())
     if not os.path.isabs(raw):
         raw = os.path.join(folder() or str(Path.home()), raw)
@@ -251,8 +273,7 @@ def pick_folder(start: str = '') -> dict:
     """
     from i18n import t
 
-    if _cloud():
-        raise AIError('ai.workspaceCloud', kind='capability')
+    _refuse_machine()
     hint = os.path.expanduser(str(start or '').strip()) or folder() or str(Path.home())
     if not os.path.isdir(hint):
         hint = str(Path.home())
@@ -402,6 +423,10 @@ def run_command(command: str, *, cwd: str = '', timeout: int = 120, scope: str =
 
     if not environment.capabilities()['user_files']:
         raise AIError('ai.cmdCloud', kind='capability')
+    if not policy.may_administer_machine():
+        # The command runs as this server's OS user, so on a shared host it can read every
+        # account's tree whatever ``cwd`` says. Confining ``cwd`` alone never made that safe.
+        raise AIError(policy.machine_refusal_key(), kind='capability')
     argv = _split(command)
     name = os.path.splitext(os.path.basename(argv[0]))[0].lower()
     if name not in ALLOWED_COMMANDS:

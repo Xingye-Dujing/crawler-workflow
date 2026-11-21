@@ -17,10 +17,9 @@ from ai import agent, context, environment, files, monitors, plugins, references
 from ai.errors import AIError
 from ai.providers import get_provider, list_models, public_catalog
 from flask import Blueprint, Response, jsonify, request, stream_with_context
-from runtime import account_context
+from runtime import account_context, policy
 from runtime.settings import get_setting
 
-from api.auth import accounts_mode, is_admin
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import get_lang, set_lang, t
 from services import python_runtime, python_scripts
@@ -36,6 +35,19 @@ monitors.start()
 
 def _error(exc: AIError, status: int = 400):
     return jsonify(exc.as_dict()), status
+
+
+def _machine_refusal():
+    """Why this caller may not touch the shared script library / interpreter on this box.
+
+    The Python extension is machine-level: scripts are one system-wide library and a run executes
+    as the server's own OS user, so on an accounts host an ordinary account could read every other
+    account's tree. ``run_code`` already refuses cloud mode; this is the accounts half of the same
+    rule, asked here so the panel gets a 403 with the shared sentence instead of a traceback.
+    """
+    if not policy.may_administer_machine():
+        return _error(AIError(policy.machine_refusal_key(), kind='capability'), 403)
+    return None
 
 
 @bp.before_request
@@ -338,8 +350,8 @@ def ai_plugin_install():
     # ``PROVIDERS``/``tools.TOOLS``/``skills.BUILTIN`` — which every account's turn reads.
     # Installing one is therefore a machine-level write, guarded the same way as /api/settings
     # and /api/components; a skill pack only writes this account's own skill library.
-    if str(data.get('kind') or '') != 'skill-pack' and accounts_mode() and not is_admin():
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    if str(data.get('kind') or '') != 'skill-pack' and not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     try:
         return jsonify({'ok': True, 'plugin': plugins.install(data)})
     except (AIError, ValueError) as exc:
@@ -355,14 +367,17 @@ def _plugin_write_refusal(plugin_id: str):
     or uninstalling one releases contributions by plugin id — both are machine-level writes. A
     non-admin may still manage their own skill pack, which only writes their account's library.
     """
-    if not accounts_mode() or is_admin():
+    if policy.may_administer_machine():
         return None
     row = plugins.store.get_plugin(plugin_id)
-    if row is None:
-        return None  # let the plugin layer raise its named not-found
-    kind = str((row.get('manifest') or {}).get('kind') or '')
+    # Refuse unless the row the CALLER can see is their own skill pack. A process-wide pack was
+    # installed into the administrator's (or local owner's) library, so a missing row here can
+    # mean exactly that — answering "not found" would let an ordinary account learn nothing, but
+    # it would also leave the enable/delete door described as a data error instead of the
+    # permission question it is. An id that names nothing gets the same sentence.
+    kind = str((row.get('manifest') or {}).get('kind') or '') if row else ''
     if kind != 'skill-pack':
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     return None
 
 
@@ -613,6 +628,9 @@ def ai_python_status():
 
 @bp.route('/api/ai/python/install', methods=['POST'])
 def ai_python_install():
+    refusal = _machine_refusal()
+    if refusal is not None:
+        return refusal
     data = _json_body()
     if data is None:
         return _bad_body()
@@ -629,6 +647,9 @@ def ai_python_scripts():
 
 @bp.route('/api/ai/python/scripts', methods=['POST'])
 def ai_python_script_save():
+    refusal = _machine_refusal()
+    if refusal is not None:
+        return refusal
     data = _json_body()
     if data is None:
         return _bad_body()
@@ -648,6 +669,9 @@ def ai_python_script(script_id: str):
 
 @bp.route('/api/ai/python/scripts/<script_id>', methods=['DELETE'])
 def ai_python_script_delete(script_id: str):
+    refusal = _machine_refusal()
+    if refusal is not None:
+        return refusal
     try:
         return jsonify({'ok': True, 'deleted': python_scripts.delete_script(script_id)})
     except AIError as exc:
@@ -656,6 +680,9 @@ def ai_python_script_delete(script_id: str):
 
 @bp.route('/api/ai/python/scripts/<script_id>/fork', methods=['POST'])
 def ai_python_script_fork(script_id: str):
+    refusal = _machine_refusal()
+    if refusal is not None:
+        return refusal
     data = _json_body()
     if data is None:
         return _bad_body()
@@ -676,7 +703,15 @@ def ai_python_run():
     if data is None:
         return _bad_body()
     script = python_scripts.get_script(str(data.get('script_id') or '')) if data.get('script_id') else None
-    code = str(data.get('code') or (script or {}).get('code') or '')
+    inline = str(data.get('code') or '').strip()
+    if inline:
+        # Inline code is the authoring surface: it is not in the shared library and nobody
+        # approved it. On an accounts host only the administrator may run it. A stored script is
+        # the admin-maintained library, so an ordinary account may still run that by id.
+        refusal = _machine_refusal()
+        if refusal is not None:
+            return refusal
+    code = str(inline or (script or {}).get('code') or '')
     if not code:
         return _error(AIError('ai.pythonUnknown', kind='bad_request', script=str(data.get('script_id') or '')))
     rows = data.get('rows') if isinstance(data.get('rows'), list) else []
@@ -715,6 +750,9 @@ def ai_python_run():
 
 @bp.route('/api/ai/python/files', methods=['GET'])
 def ai_python_files():
+    refusal = _machine_refusal()
+    if refusal is not None:
+        return refusal
     return jsonify({'ok': True, 'files': python_runtime.list_files()})
 
 

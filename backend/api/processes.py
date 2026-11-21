@@ -29,5 +29,8 @@ def stop_child(ident: str):
     if status == 'refused':
         # Another account's child: naming it would be enough to try stopping it.
         return jsonify({'ok': False, 'error': t('api.processNotYours')}), 403
+    if status == 'failed':
+        # The child is still alive; the panel must keep its row and show the OS's own sentence.
+        return jsonify({'ok': False, 'error': reason or t('api.processStopFailed'), 'reason': reason}), 409
     # 'gone' (already exited) is not an error: the panel just repaints without it.
     return jsonify({'ok': True, 'stopped': status == 'stopped', 'reason': reason if status == 'stopped' else ''})

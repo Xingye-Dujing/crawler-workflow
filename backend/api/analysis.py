@@ -10,6 +10,7 @@ Deps are all cycle-free (``api.resolution``/``stores``/``services.analysis.pipel
 
 from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify
+from runtime import policy
 from runtime.stores import _register_dataset
 
 from analyzers import (
@@ -19,11 +20,9 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
-from api.auth import is_admin
 from api.http import _bad_body, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
-from services.accounts.service import accounts_mode
 from services.analysis.pipeline import LLM_OPS, DataAnalysisService
 from services.datasets.store import SOURCE_ANALYSIS
 
@@ -104,8 +103,8 @@ def _train_refusal():
     sentiment/emotion/tendency step computes from. That is the same machine-level write
     ``/api/settings`` and ``/api/lexicon`` guard, and it gets the same door.
     """
-    if accounts_mode() and not is_admin():
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    if not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     return None
 
 

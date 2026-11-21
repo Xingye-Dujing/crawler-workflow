@@ -795,36 +795,46 @@ class TestMlTraining:
         ``mode='ml'`` run loads the same ``.pkl`` — so an ordinary account training one
         rewrites what every OTHER account computes from. Same machine-level write
         ``/api/settings`` and ``/api/lexicon`` guard, same 403 (and no file written)."""
-        import api.analysis as analysis_module
+
+        from runtime import account_context
+        from runtime.account_context import Account
 
         from analyzers import ml_base
 
         monkeypatch.setattr(ml_base, 'MODEL_DIR', str(tmp_path))
-        monkeypatch.setattr(analysis_module, 'accounts_mode', lambda: True)
-        monkeypatch.setattr(analysis_module, 'is_admin', lambda: False)
+        monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
         dataset_id = paste(_labeled_records(), name='poison.csv')
-        response = client.post(
-            '/api/analysis/train',
-            json={'dataset_id': dataset_id, 'model_type': 'emotion', 'text_column': 'text', 'label_column': 'label'},
-        )
+        with account_context.use(Account('u_reader', 'reader', 'user')):
+            response = client.post(
+                '/api/analysis/train',
+                json={
+                    'dataset_id': dataset_id,
+                    'model_type': 'emotion',
+                    'text_column': 'text',
+                    'label_column': 'label',
+                },
+            )
         assert response.status_code == 403
         assert list(tmp_path.glob('*.pkl')) == [], 'a refused train must never reach the model dir'
 
     def test_the_admin_still_trains_in_accounts_mode(self, client, paste, monkeypatch):
-        """The gate exists for ordinary accounts only: an admin's request passes it and
-        lands on the route's own validation (a bogus ``model_type`` is named there —
-        reaching THAT answer proves the 403 door opened for him)."""
-        import api.analysis as analysis_module
+        """The gate exists for ordinary accounts only: an admin's request passes it.
 
-        monkeypatch.setattr(analysis_module, 'accounts_mode', lambda: True)
-        monkeypatch.setattr(analysis_module, 'is_admin', lambda: True)
-        dataset_id = paste(_labeled_records(), name='admin.csv')
-        response = client.post(
-            '/api/analysis/train',
-            json={'dataset_id': dataset_id, 'model_type': '../../evil', 'text_column': 'text', 'label_column': 'label'},
-        )
-        assert response.status_code == 400
-        assert 'model_type' in response.get_json()['error']
+        The gate itself is asked directly: a request for a synthetic admin account then meets the
+        store registry, which (correctly) refuses an account nobody created. The permission
+        question is what this case is about, and ``_train_refusal`` is its only answer.
+        """
+        import api.analysis as analysis_module
+        from runtime import account_context
+        from runtime.account_context import Account
+
+        monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+        with client.application.test_request_context('/api/analysis/train', method='POST'):
+            with account_context.use(Account('u_aaaaaaaaaaab', 'admin', 'admin')):
+                assert analysis_module._train_refusal() is None
+            with account_context.use(Account('u_aaaaaaaaaaac', 'reader', 'user')):
+                refusal = analysis_module._train_refusal()
+        assert refusal is not None and refusal[1] == 403
 
 
 class TestPanelParamsReachTheOperator:

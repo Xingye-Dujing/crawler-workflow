@@ -9,7 +9,7 @@ requests, which is what the panel asks between runs.
 
 from flask import Blueprint, jsonify
 from runtime import account_context, phases
-from runtime.state import execution_state
+from runtime.state import execution_state, run_is_foreign
 
 bp = Blueprint('phases', __name__)
 
@@ -22,11 +22,15 @@ def run_phases():
     # blanking it the moment a run finishes would hide exactly the timings the user opened
     # it to read. Each entry carries its run id, so the strip can mark a new run's start.
     entries = phases.snapshot(run_id=None, user_id=user_id, limit=60)
+    # ``execution_state`` is process-wide, and its live-run fields are exactly what
+    # /api/runs/status and /api/workflow/status deliberately blank for another account. The
+    # strip answers the same question, so it must not hand out a foreign run's id or liveness.
+    foreign = run_is_foreign()
     return jsonify(
         {
             'ok': True,
-            'run_id': str(execution_state.get('run_id') or ''),
-            'running': bool(execution_state.get('running')),
+            'run_id': '' if foreign else str(execution_state.get('run_id') or ''),
+            'running': (not foreign) and bool(execution_state.get('running')),
             'phases': entries,
         }
     )

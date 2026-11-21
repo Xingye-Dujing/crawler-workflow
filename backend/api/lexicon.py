@@ -11,12 +11,11 @@ import logging
 
 from core.refs import as_bool
 from flask import Blueprint, jsonify, request
+from runtime import policy
 from runtime.stores import get_lexicon_store
 
-from api.auth import is_admin
 from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from i18n import t
-from services.accounts.service import accounts_mode
 from services.analysis.lexicon import reload_userdict
 from services.analysis.lexicon_store import KINDS
 
@@ -44,8 +43,8 @@ def _write_refusal():
     OTHER account's next tokenisation, word cloud and topic analysis produce. That is the same
     machine-level write ``/api/settings`` guards, and it gets the same door.
     """
-    if accounts_mode() and not is_admin():
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    if not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     return None
 
 

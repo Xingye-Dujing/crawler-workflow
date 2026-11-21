@@ -13,13 +13,12 @@ import signal
 import threading
 
 from flask import Blueprint, jsonify
+from runtime import policy
 from runtime import state as runtime_state
 from runtime.state import execution_state
 
-from api.auth import is_admin
 from i18n import t
 from services import update, update_job
-from services.accounts.service import accounts_mode
 
 bp = Blueprint('update', __name__)
 
@@ -33,8 +32,8 @@ def _admin_refusal():
     the administrator may press them. The panel hides the card for other accounts; hiding is
     cosmetic, the 403 is the permission.
     """
-    if accounts_mode() and not is_admin():
-        return jsonify({'ok': False, 'error': t('accounts.adminRequired')}), 403
+    if not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': t(policy.machine_refusal_key())}), 403
     return None
 
 

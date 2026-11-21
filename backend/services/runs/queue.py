@@ -333,7 +333,9 @@ def put_back(entry: QueueEntry) -> None:
         # saying it did not start. Kept in the console the entry belongs to.
         if _console_is_for(entry):
             add_log(t('run.queueGiveUp', name=name, n=PUT_BACK_LIMIT))
-        logger.warning(t('run.queueGiveUp', name=name, n=PUT_BACK_LIMIT))
+        # The file log keeps the fact, the run console does not repeat it: the owner already has
+        # the line above, and for a foreign entry this record is the one place it is recorded.
+        logger.warning(t('run.queueGiveUp', name=name, n=PUT_BACK_LIMIT), extra={'console': False})
         mirror_queue()
         return
     entry['put_backs'] = tries
@@ -360,7 +362,7 @@ def _drain_one(entry: QueueEntry, start_run: Callable[[dict, str], dict]) -> boo
         with account_context.use(account):
             answer = start_run(entry['data'], entry['lang'])
     except Exception as e:  # a broken request must not strand the ones behind it
-        logger.exception(t('run.queueStartFailed'))
+        logger.exception(t('run.queueStartFailed'), extra={'console': False})
         if _console_is_for(entry):
             add_log(t('run.queue_broken', name=name, err=e))
         return True
@@ -374,7 +376,7 @@ def _drain_one(entry: QueueEntry, start_run: Callable[[dict, str], dict]) -> boo
         # The owner-scoped console line above is not enough: a parked request whose
         # owner does not hold the slot (or a boot drain with no owner yet) would vanish
         # with no trace at all, and this is exactly the refusal a retry cannot fix.
-        logger.warning(t('run.queue_broken', name=name, err=body.get('error', '')))
+        logger.warning(t('run.queue_broken', name=name, err=body.get('error', '')), extra={'console': False})
         return True
     if answer.get('status') == 200 and body.get('ok') and body.get('queued'):
         # Someone else claimed the slot while this entry was being started, and the start
@@ -415,13 +417,17 @@ def drain_queue(start_run: Callable[[dict, str], dict]) -> None:
         with queue_lock:
             if _RUN_QUEUE:
                 entry = _RUN_QUEUE.pop(0)
+                # The pop and the marker are ONE critical section: ``_busy_run`` reads the queue
+                # and this marker to answer "does this account have work in flight". Setting it
+                # after ``mirror_queue()`` left a window where the entry was in neither place,
+                # so an account deletion could pass the idle guard and the drain then started a
+                # run for a tree that had already moved.
+                _DRAINING_OWNER = str(entry.get('user_id') or '') if entry is not None else ''
         # The pop removed an entry from the queue; mirror BEFORE branching so a run that
         # starts (and is never put back) leaves the disk mirror without it too.
         mirror_queue()
         if entry is None:
             return
-        with queue_lock:
-            _DRAINING_OWNER = str(entry.get('user_id') or '')
         try:
             if not _drain_one(entry, start_run):
                 return

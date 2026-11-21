@@ -70,18 +70,21 @@ def test_a_restart_waits_for_the_crawl_but_a_download_does_not(client, monkeypat
 
 def test_another_account_may_not_replace_the_program(client, monkeypatch):
     """Hiding the card is cosmetic; the 403 is the permission."""
-    monkeypatch.setattr(update_api, 'accounts_mode', lambda: True)
-    monkeypatch.setattr(update_api, 'is_admin', lambda: False)
-    for method, path in (
-        ('get', '/api/update/check'),
-        ('post', '/api/update/download'),
-        ('get', '/api/update/status'),
-        ('post', '/api/update/restart'),
-        ('post', '/api/update/cancel'),
-    ):
-        response = getattr(client, method)(path)
-        assert response.status_code == 403, path
-        assert response.get_json()['ok'] is False
+    from runtime import account_context
+    from runtime.account_context import Account
+
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    with account_context.use(Account('u_reader', 'reader', 'user')):
+        for method, path in (
+            ('get', '/api/update/check'),
+            ('post', '/api/update/download'),
+            ('get', '/api/update/status'),
+            ('post', '/api/update/restart'),
+            ('post', '/api/update/cancel'),
+        ):
+            response = getattr(client, method)(path)
+            assert response.status_code == 403, path
+            assert response.get_json()['ok'] is False
 
 
 def test_cancelling_without_a_job_is_refused_by_name(client, monkeypatch):
