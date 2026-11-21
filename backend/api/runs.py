@@ -333,7 +333,6 @@ def runs_log_download(run_id: str):
     # console ascending in one pass (a repeated list prepend here would be quadratic).
     blocks: list[list[str]] = []
     total = 0
-    truncated = False
     before_seq = None
     while total < _LOG_DOWNLOAD_CAP:
         page = store.read_log(run_id, wf_idx=wf_idx, level=level, q=q, before_seq=before_seq, limit=_LOG_PAGE_MAX)
@@ -345,9 +344,12 @@ def runs_log_download(run_id: str):
         if not page['has_more']:
             break
         before_seq = page['min_seq']
-    else:
-        truncated = page.get('has_more', False)
-    lines = [line for block in reversed(blocks) for line in block][:_LOG_DOWNLOAD_CAP]
+    lines = [line for block in reversed(blocks) for line in block]
+    # The cap must cut the OLDEST lines, not the newest: a user downloads the log to read how the
+    # run ended. The old slice kept the head (and set ``truncated`` from the older side), so the
+    # finish line and the verdict could be the part that was silently missing.
+    truncated = len(lines) > _LOG_DOWNLOAD_CAP or (total >= _LOG_DOWNLOAD_CAP and page.get('has_more', False))
+    lines = lines[-_LOG_DOWNLOAD_CAP:]
     body = '\n'.join(lines)
     if truncated:
         body += '\n' + t('api.runLogTruncated', n=_LOG_DOWNLOAD_CAP) + '\n'

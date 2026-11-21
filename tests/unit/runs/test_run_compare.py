@@ -99,3 +99,13 @@ class TestCompareRuns:
         with pytest.raises(ValueError) as exc:
             compare_runs(store, 'r1', 'r2', node_id='node-0')
         assert 'node-0' in str(exc.value) and '1' in str(exc.value)
+
+    def test_the_row_cap_refuses_before_loading_either_table(self, store, monkeypatch):
+        """The ceiling exists to prevent the allocation; checking it after both loads is late."""
+        _two_runs(store)
+        monkeypatch.setattr('services.runs.compare.MAX_COMPARE_ROWS', 1)
+        loaded = []
+        monkeypatch.setattr(store, 'load_rows', lambda *args: loaded.append(args) or [])
+        with pytest.raises(ValueError):
+            compare_runs(store, 'r1', 'r2', node_id='node-0')
+        assert loaded == [], 'a refused comparison materialised a table first'

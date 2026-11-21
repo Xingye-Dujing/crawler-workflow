@@ -100,6 +100,13 @@ def compare_runs(store, run_a: str, run_b: str, node_id: str = '', key: str = ''
     chosen_meta = None
     if chosen:
         chosen_meta = next((row for row in common if row['node_id'] == chosen), None)
+        # Ask the index BEFORE materialising either side: the ceiling exists to prevent the
+        # memory blow-up, and comparing two 500k-row tables (the per-node cap) to find out that
+        # they are over it allocated both dict lists first — on a request thread.
+        count_a = store.row_count(left['run_id'], chosen)
+        count_b = store.row_count(right['run_id'], chosen)
+        if count_a > MAX_COMPARE_ROWS or count_b > MAX_COMPARE_ROWS:
+            raise ValueError(t('compare.tooManyRows', node=chosen, max=MAX_COMPARE_ROWS))
         rows_a = store.load_rows(left['run_id'], chosen)
         rows_b = store.load_rows(right['run_id'], chosen)
         if len(rows_a) > MAX_COMPARE_ROWS or len(rows_b) > MAX_COMPARE_ROWS:

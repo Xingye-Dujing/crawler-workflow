@@ -174,10 +174,16 @@ class ExecutionHistoryService:
         if node_id:
             sql += ' AND node_id = ?'
             params.append(node_id)
-        sql += ' ORDER BY timestamp ASC LIMIT ?'
+        # Newest page, then reversed: the chart's x axis is time, so the rows it draws must be
+        # ascending — but the LIMIT must select the NEWEST rows. ``ORDER BY timestamp ASC LIMIT``
+        # selected the OLDEST, so after ~2000 points the trend froze at a date in the past and
+        # every later run was invisible.
+        sql += ' ORDER BY timestamp DESC, id DESC LIMIT ?'
         params.append(limit)
         with self.open() as conn:
             df = pd.read_sql(sql, conn, params=params)
+        if not df.empty:
+            df = df.iloc[::-1].reset_index(drop=True)
         # Reads written before the recorder started deduplicating can hold the
         # same point twice (an output node re-recording its process's
         # distribution). Dropping exact duplicates at read time cleans those

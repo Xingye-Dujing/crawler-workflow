@@ -559,6 +559,25 @@ class TestPromoteStale:
         # A second pass is a no-op.
         assert store.promote_stale_runs() == []
 
+    def test_promotion_never_reports_more_done_nodes_than_this_attempt_has(self, store):
+        """A resumed-then-killed run used to settle at n/N with n > N.
+
+        The first attempt finished three nodes; the canvas then lost two of them and 继续 re-set
+        ``node_total`` to 1. The old ``done`` rows stay on the record (by design), so counting the
+        whole record on restart read 3/1. The claim's own total is the ceiling.
+        """
+        _start(store, 'r1', total=3)
+        for nid in ('n1', 'n2', 'n3'):
+            store.begin_node('r1', nid, 'source')
+            store.finish_node('r1', nid, NODE_DONE)
+        # The 继续 that follows a smaller canvas: same run id, new total, progress starts at 0.
+        _start(store, 'r1', total=1)
+        promoted = store.promote_stale_runs()
+        assert promoted == ['r1']
+        run = store.get_run('r1')
+        assert run['node_total'] == 1
+        assert run['node_done'] == 1, 'the record claimed more completed nodes than the attempt had'
+
 
 # ─── run / node lifecycle ───────────────────────────────────────────────
 
@@ -1075,6 +1094,27 @@ class TestPurgeAndStats:
         store.append_rows('old', 'n1', sample_rows)
         store.purge(keep_per_workflow=50, keep_days=30)
         assert store.row_count('old', 'n1') == 0
+
+    def test_purge_releases_the_watermark_of_the_run_it_destroyed(self, store):
+        """A watermark promises "everything up to here is already collected".
+
+        Retention removes the rows AND the claim that pointed at them (``item_seen``); the other
+        promise — ``source_watermarks.run_id`` — was left behind, so the next watermark crawl
+        started after a boundary whose data no longer existed and returned fewer rows than asked,
+        with nothing in the table showing the gap.
+        """
+        self._aged_run(store, 'old', 'wf', RUN_COMPLETED, started_at='2019-05-05T00:00:00')
+        store.save_watermark('wm:fp', 'bilibili', 'BV号', 'BV9', 'old')
+        assert store.get_watermark('wm:fp') is not None
+        store.purge(keep_per_workflow=50, keep_days=30)
+        assert store.get_watermark('wm:fp') is None
+
+    def test_a_spared_run_keeps_its_watermark(self, store):
+        """Only the runs the sweep actually deleted release the promise they wrote."""
+        self._aged_run(store, 'kept', 'wf', RUN_COMPLETED, started_at='2026-01-01T00:00:00')
+        store.save_watermark('wm:fp', 'bilibili', 'BV号', 'BV9', 'kept')
+        store.purge(keep_per_workflow=50, keep_days=3650)
+        assert store.get_watermark('wm:fp') is not None
 
     def test_purge_releases_the_claims_of_the_rows_it_destroyed(self, store, sample_rows):
         """Retention deletes rows, so "already collected" has to go with them.

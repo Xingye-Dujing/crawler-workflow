@@ -182,6 +182,39 @@ class TestBuildAndImport:
         assert target_datasets.lineage('累积关键词 (2)')['rows'] == 1
         assert target_datasets.lineage('累积关键词')['rows'] == 1
 
+    def test_a_lineages_version_travels_and_missing_history_is_reported(self, stores, tmp_path, monkeypatch):
+        """The bundle carries the current version only; the numbering must still continue."""
+        dataset, template = _seed(stores)
+        lineage = None
+        for index in range(3):
+            lineage = stores['datasets'].append_lineage(
+                '累积关键词',
+                pd.DataFrame([{'标题': f'v{index}'}], columns=['标题']),
+            )
+        assert lineage['lineage']['version'] == 3
+        workflow = _workflow(dataset['dataset_id'], template['id'])
+        workflow['nodes'].append(
+            {
+                'id': 'node-9',
+                'type': 'accumulate',
+                'params': {'lineage_name': '累积关键词', 'identity': 'row', 'key_columns': ''},
+            }
+        )
+        workflow['connections'].append({'from': 'node-0', 'to': 'node-9'})
+        stores['workflows'].save('项目A', workflow)
+        payload, _filename, _warnings = build_bundle(
+            ['项目A'], dataset_store=stores['datasets'], workflow_manager=stores['workflows']
+        )
+
+        other = tmp_path / 'fresh'
+        monkeypatch.setattr(Config, 'REUSABLE_DIR', str(other / 'reusable_nodes'))
+        target_datasets = DatasetStore(str(other / 'datasets.db'))
+        target_workflows = WorkflowManager(str(other / 'workflows'))
+        summary = import_bundle(io.BytesIO(payload), dataset_store=target_datasets, workflow_manager=target_workflows)
+        assert summary['lineages'][0]['version'] == 3
+        assert target_datasets.lineage('累积关键词')['version'] == 3
+        assert any('v3' in note or '历史版本' in note or 'earlier' in note for note in summary['warnings'])
+
     def test_import_never_overwrites_existing_workflows_or_template_names(self, stores, tmp_path, monkeypatch):
         _seed(stores)
         payload, _filename, _warnings = build_bundle(

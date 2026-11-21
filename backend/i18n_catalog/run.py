@@ -124,6 +124,7 @@ ZH = {
     'project.fileTooLarge': '项目包内的文件过大：{file}（上限 {mb} MB）',
     'project.importBusy': '已经有一个项目包正在导入，请等它完成后再试',
     'project.lineageInvalid': '项目包里的累积数据集信息无法读取',
+    'project.lineageHistoryNotCarried': '累积数据集“{name}”只带入了当前版本（v{version}），更早的版本不在包内',
     'project.lineageMissing': '引用的累积数据集不存在，已跳过：{name}',
     'project.noFile': '请选择一个项目包文件',
     'project.noWorkflow': '请先保存一个工作流，再导出项目包',
@@ -591,6 +592,10 @@ EN = {
     'project.fileTooLarge': 'A file inside the bundle is too large: {file} (limit {mb} MB)',
     'project.importBusy': 'Another project bundle is being imported; try again when it finishes',
     'project.lineageInvalid': 'The bundle’s cumulative-dataset information cannot be read',
+    'project.lineageHistoryNotCarried': (
+        'Cumulative dataset “{name}” carries only its current version (v{version}); '
+        'earlier versions are not in the bundle'
+    ),
     'project.lineageMissing': 'A referenced cumulative dataset is missing and was skipped: {name}',
     'project.noFile': 'Choose a project bundle file first',
     'project.noWorkflow': 'Save a workflow before exporting a project bundle',

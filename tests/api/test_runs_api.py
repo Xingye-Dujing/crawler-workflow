@@ -583,6 +583,20 @@ class TestRunLogEndpoints:
         text = resp.get_data(as_text=True)
         assert [ln for ln in text.splitlines() if ln] == ['l0', 'l1', 'l2', 'l3', 'l4']
 
+    def test_the_download_cap_keeps_the_newest_lines_and_says_so(self, client, app_module, monkeypatch):
+        """A user downloads the log to read how the run ENDED; the cap must cut the old head."""
+        import api.runs as runs_api
+
+        monkeypatch.setattr(runs_api, '_LOG_DOWNLOAD_CAP', 3)
+        store = app_module._RUN_STORE
+        _seed(store, 'r1', status=RUN_COMPLETED)
+        _seed_log(store, 'r1', [(f'l{i}', 0, 'info') for i in range(5)])
+        text = client.get('/api/runs/r1/log.txt').get_data(as_text=True)
+        lines = [line for line in text.splitlines() if line]
+        assert lines[:3] == ['l2', 'l3', 'l4']
+        assert len(lines) == 4, 'the truncated download must say that it is truncated'
+        assert '3' in lines[-1]
+
     def test_download_honours_the_same_filters_as_the_page(self, client, app_module):
         """The download must reproduce “所见”: whatever the viewer is showing is what saves."""
         store = app_module._RUN_STORE

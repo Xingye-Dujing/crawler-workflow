@@ -98,6 +98,17 @@ class QueueMixin:
         ids = [row['run_id'] for row in rows if only is None or row['run_id'] in only]
         for run_id in ids:
             stamp = self.now()
+            # The total this attempt claimed is the ceiling for n/N. ``_finished_count(run_id)``
+            # alone counts every done row in the record, including nodes an older attempt ran and
+            # a later 继续 removed from the canvas; ``start_run`` had already re-set node_total to
+            # the smaller graph, so a kill before ``finish_run`` could settle at 5/2 on restart.
+            # Clamping keeps the one definition of "completed" on the one path that skips
+            # ``attempted`` without pretending the old rows are gone (the record keeps them).
+            done = self._finished_count(run_id)
+            claimed = self._query('SELECT node_total FROM runs WHERE run_id = ?', (run_id,))
+            total = int(claimed[0]['node_total'] or 0) if claimed else 0
+            if total > 0:
+                done = min(done, total)
             # One rule for closing a node that never reached finish_node, shared
             # with the end-of-run path. The bulk UPDATE this replaces only moved the
             # status and left ``row_count`` at the 0 ``begin_node`` wrote — and
@@ -114,7 +125,7 @@ class QueueMixin:
                     # The run ENDED at this restart, so its record says when. Left NULL, the
                     # panel printed no end time and no duration for a run it had just closed.
                     stamp,
-                    self._finished_count(run_id),
+                    done,
                     note or t('run.interrupted_by_restart'),
                     run_id,
                 ),

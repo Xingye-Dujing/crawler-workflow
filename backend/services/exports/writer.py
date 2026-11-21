@@ -322,7 +322,29 @@ class DataExporter:
 
     @staticmethod
     def _write_excel(df: pd.DataFrame, filepath: str, sheet_name: str = 'Sheet1', **_):
-        df.to_excel(filepath, index=False, sheet_name=sheet_name, engine='openpyxl')
+        try:
+            from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+        except ImportError as exc:  # a missing engine is a named refusal, like parquet's
+            raise UnsupportedFormatError(t('export.excel_engine_missing')) from exc
+        # A single control character (\\x0b / \\x0c / \\x1b — all legal in crawled text) makes
+        # openpyxl refuse the WHOLE workbook. The row is not the problem: the export was lost
+        # entirely, and the node surfaced openpyxl's English sentence. Strip the characters a
+        # spreadsheet cannot hold and SAY how many cells were cleaned, never silently.
+        cleaned = [0]
+
+        def clean(value):
+            if isinstance(value, str):
+                fixed = ILLEGAL_CHARACTERS_RE.sub('', value)
+                if fixed != value:
+                    cleaned[0] += 1
+                return fixed
+            return value
+
+        frame = df.map(clean)
+        frame.columns = [clean(column) for column in df.columns]
+        if cleaned[0]:
+            logger.warning(t('export.excel_chars_cleaned', n=cleaned[0]))
+        frame.to_excel(filepath, index=False, sheet_name=sheet_name, engine='openpyxl')
 
     @staticmethod
     def _write_txt(df: pd.DataFrame, filepath: str, text_column: str = None, **_):

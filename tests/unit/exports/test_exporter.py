@@ -292,6 +292,19 @@ class TestSave:
         E.save(df, target, fmt='excel', sheet_name='数据')
         assert pd.read_excel(target, sheet_name='数据').equals(df)
 
+    def test_excel_strips_a_control_character_instead_of_losing_the_whole_table(self, tmp_path):
+        """openpyxl refuses the WORKBOOK for one illegal character in one cell.
+
+        Crawled text legally carries ``\\x0b``/``\\x0c``/``\\x1b`` (vertical tab, form feed, ESC).
+        The export used to fail whole with openpyxl's English sentence and leave no file, while the
+        same table exported to CSV fine. The characters are removed and the rest is written.
+        """
+        frame = pd.DataFrame({'t': ['bad\x0bcell', '好\x1b的']})
+        target = str(tmp_path / 'control.xlsx')
+        assert E.save(frame, target)['rows'] == 2
+        back = pd.read_excel(target)
+        assert back['t'].tolist() == ['badcell', '好的']
+
     def test_parquet_round_trips(self, df, tmp_path):
         # pyarrow is an OPTIONAL engine (requirements-optional.txt, not CI-installed); a machine
         # without one must not fail the suite — the format itself refuses by name at runtime, which

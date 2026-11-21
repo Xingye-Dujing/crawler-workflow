@@ -103,6 +103,16 @@ class TestSeries:
     def test_limit_applies_after_ordering(self, recorded):
         assert len(recorded.series(limit=2)) == 2
 
+    def test_a_limit_keeps_the_newest_page_not_the_oldest(self, recorded):
+        """The chart's x axis is time and the LIMIT must cut the OLD end.
+
+        ``ORDER BY timestamp ASC LIMIT n`` kept the first n points forever: after enough runs the
+        执行历史 chart froze at a date in the past while new ones were invisible. The page is
+        selected newest-first and then reversed for drawing.
+        """
+        frame = recorded.series(limit=2)
+        assert frame['timestamp'].tolist() == ['2024-05-08T09:00:00', '2024-05-09T09:00:00']
+
     def test_exact_duplicates_from_older_writers_are_folded_at_read_time(self, history):
         row = _row('r1', 'wf', 'node-9', 'emotion', 'Joy', 3.0, '2024-03-01T00:00:00')
         history.record_many([row, tuple(row)])

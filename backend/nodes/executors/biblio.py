@@ -120,7 +120,14 @@ def execute_biblio_node(node: dict, current_input: list, upstream: list = None, 
 
     if as_bool(params.get('export_files'), True):
         try:
-            files = metrics.export_result(result, paths.active().export_dir, f'{label}-{node.get("id") or "biblio"}')
+            run_id = str((ctx or {}).get('run_id') or '')
+            stem = f'{label}-{node.get("id") or "biblio"}'
+            if run_id:
+                # A run's artifacts belong to THAT run. Named by title alone, run B rewrote run
+                # A's tables while both ledgers kept pointing at one path — the same defect the
+                # visualize executor fixed by putting the run id FIRST (sanitize keeps the head).
+                stem = f'{run_id}-{node.get("id") or "biblio"}-{label}'
+            files = metrics.export_result(result, paths.active().export_dir, stem)
         except Exception as exc:
             raise ValueError(t('biblio.export_failed', err=exc)) from exc
         if ctx and ctx.get('store') and ctx.get('run_id'):

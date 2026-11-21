@@ -458,7 +458,13 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
             current_id = str(entry.get('current_dataset_id') or '').strip()
             if not old_name or not current_id:
                 raise ValueError(t('project.lineageInvalid'))
-            lineage_entries.append({'name': old_name, 'current_dataset_id': current_id})
+            lineage_entries.append(
+                {
+                    'name': old_name,
+                    'current_dataset_id': current_id,
+                    'version': max(1, int(entry.get('version') or 1)),
+                }
+            )
 
         dataset_ids = {row['id'] for row in datasets}
         template_ids = {row['id'] for row in templates}
@@ -501,7 +507,14 @@ def import_bundle(file_obj, dataset_store=None, workflow_manager=None) -> dict:
                 raise ValueError(t('project.datasetRefMissing', id=entry['current_dataset_id']))
             new_name = _unique_lineage_name(entry['name'], taken_lineages)
             taken_lineages.add(new_name.casefold())
-            created = store.create_lineage(new_name, mapped['id'])
+            created = store.create_lineage(new_name, mapped['id'], version=int(entry.get('version') or 1))
+            if int(entry.get('version') or 1) > 1:
+                # The bundle carries the CURRENT version's rows only. Saying nothing made the
+                # panel show “版本 1” over an empty history table, as if the lineage had never
+                # grown; the numbering is kept so later appends continue where the source was.
+                warnings.append(
+                    t('project.lineageHistoryNotCarried', name=new_name, version=int(entry.get('version') or 1))
+                )
             lineage_map[entry['name']] = new_name
             lineage_results.append({'from': entry['name'], 'to': new_name, 'version': created['version']})
 

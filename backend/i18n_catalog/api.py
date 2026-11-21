@@ -113,7 +113,7 @@ ZH = {
     'api.rerunNoRun': '找不到这个工作流已保存的运行结果，无法从该节点重跑（请先运行一次）',
     'api.rerunRunLive': '该运行仍在进行中（或正在停止），不能重跑它的节点——请等它跑完或先停止它',
     'api.resumeMissing': '无法继续：运行记录 {rid} 已被清理，继续会变成一次全新的从零采集，请改用“重新运行”',
-    'api.runLogTruncated': '（日志过长，仅下载前 {n} 行）',
+    'api.runLogTruncated': '（日志过长，仅下载最近 {n} 行）',
     'api.runNotFound': '找不到运行记录：{rid}',
     'api.runSettingOption': '画布设置里的“{setting}”没有“{value}”这个取值（可用：{allowed}）',
     'api.stepsMustBeObjects': 'steps 必须是对象列表，每项含 "op" 与可选 "params"',
@@ -186,6 +186,8 @@ ZH = {
     'export.formula_escaped': '导出时给 {n} 个以 = + - @ 开头的文本单元格加了前导单引号，避免被 Excel 当成公式执行',
     'export.missing_text_column': '导出 TXT 失败：文本列“{column}”不在表里（检查节点里的列名，或清空它按全部列导出）',
     'export.parquet_engine_missing': '导出 Parquet 需要列式引擎 pyarrow，请先安装：pip install pyarrow',
+    'export.excel_engine_missing': '导出 Excel 需要 openpyxl，请先安装：pip install openpyxl',
+    'export.excel_chars_cleaned': 'Excel 无法保存 {n} 个单元格中的控制字符，已剔除后写出（其余内容不变）',
     'export.window_ignored': '节点 {nid}：结果文件照常生成，仅“文件名追加时间范围”被忽略——{reason}',
     'export.window_many': '文件名要求带时间范围，但这条链路上有 {n} 个不同的时间窗，一个文件说不清它装的是哪一段',
     # “文件名带时间范围” asks the save node to print a window it cannot see: the crawl
@@ -363,7 +365,7 @@ EN = {
     'api.resumeMissing': (
         'cannot continue: run {rid} has been purged, so it would re-crawl everything — press Run instead'
     ),
-    'api.runLogTruncated': '(log too long — downloaded the first {n} lines only)',
+    'api.runLogTruncated': '(log too long — downloaded the newest {n} lines only)',
     'api.runNotFound': 'No such run: {rid}',
     'api.runSettingOption': 'The canvas setting "{setting}" has no value "{value}" (available: {allowed})',
     'api.stepsMustBeObjects': 'steps must be a list of objects, each with an "op" and optional "params"',
@@ -448,6 +450,10 @@ EN = {
         '(fix the column name, or clear it to export every column)'
     ),
     'export.parquet_engine_missing': 'Parquet export needs the pyarrow engine — install it: pip install pyarrow',
+    'export.excel_engine_missing': 'Excel export needs openpyxl — install it: pip install openpyxl',
+    'export.excel_chars_cleaned': (
+        'Excel cannot store control characters; {n} cells were cleaned before writing (everything else is unchanged)'
+    ),
     'export.window_ignored': (
         'Node {nid}: the file is written as normal and only "append the crawled time range" was ignored — {reason}'
     ),

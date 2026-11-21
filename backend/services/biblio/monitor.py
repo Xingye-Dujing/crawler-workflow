@@ -149,7 +149,12 @@ def watch(
 
     diff = None if baseline is None else compare_snapshots(biblio.get_snapshot(baseline['snapshot_id']), snapshot)
     watch_rows = _rows_of(diff, snapshot, project_name)
-    path = _write(watch_rows, export_dir, f'{workflow_name or "biblio"}-{node_id}-watch.csv')
+    # The run id keeps two runs' watch files apart; without it the ledger of the older run
+    # resolved to the newer run's bytes (the artifact rule every other export already follows).
+    stem = f'{workflow_name or "biblio"}-{node_id}-watch'
+    if run_id:
+        stem = f'{run_id}-{node_id}-watch'
+    path = _write(watch_rows, export_dir, f'{stem}.csv')
     notes.extend(_narrate(diff, baseline, snapshot, project_name))
     return {
         'project': {'project_id': project_id, 'name': project_name},

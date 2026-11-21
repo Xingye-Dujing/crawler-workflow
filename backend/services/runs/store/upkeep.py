@@ -96,6 +96,19 @@ class UpkeepMixin:
             self.delete_run(run_id)
             self.forget_run_items(run_id)
             removed += 1
+        if doomed:
+            # The OTHER promise retention destroyed: a watermark says "everything at or before
+            # this boundary was already collected", and ``source_watermarks.run_id`` says which
+            # run proved it. Its rows are now gone, so the next watermark crawl would start
+            # after a boundary whose data no longer exists — fewer rows than asked for, from a
+            # table with no visible gap. Deleted with the run that wrote it, exactly like
+            # ``item_seen`` above (an explicit 运行记录 delete keeps its claims; this sweep is
+            # the storage deciding, so it must release both).
+            placeholders = ', '.join('?' * len(doomed))
+            self._execute(
+                f'DELETE FROM source_watermarks WHERE run_id IN ({placeholders})',
+                tuple(doomed),
+            )
         # 3. The answer cache is the other thing that grows without bound.
         cache_cutoff = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(time.time() - max(1, days) * 86400))
         cur = self._execute('DELETE FROM llm_cache WHERE created_at < ?', (cache_cutoff,))
