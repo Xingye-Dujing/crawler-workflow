@@ -30,6 +30,10 @@ def get_config():
             # told once: where its own data lands. It is a fact about the server, so the server
             # says it — a frontend guess would be a second opinion about the deployment.
             'cloud_mode': Config.CLOUD_MODE,
+            # A `?autorun=1` link starts a real run (and can spend accounts/tokens). Only the demo
+            # recorder's isolated servers opt in; the page loads a linked canvas but never starts it
+            # on a host that did not explicitly allow it.
+            'demo_autorun': Config.DEMO_AUTORUN,
             # The installer's component tree exists on this host. A source checkout and a
             # cloud/portable deploy have none: offering “安装器安装的” there names a copy
             # that cannot exist, so the page hides that choice and the installer list.

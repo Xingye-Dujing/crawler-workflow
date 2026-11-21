@@ -338,7 +338,14 @@ def run_group(group: dict, args, manifest_path: Path) -> list[dict]:
     Path(root).mkdir(parents=True, exist_ok=True)
     port = int(group.get('port') or 5001)
     url = f'http://127.0.0.1:{port}'
-    env = {**os.environ, 'CRAWLER_DATA_ROOT': root, 'PORT': str(port)}
+    env = {
+        **os.environ,
+        'CRAWLER_DATA_ROOT': root,
+        'PORT': str(port),
+        # Only this recorder's isolated demo servers accept ?autorun=1; a user's own server never
+        # starts a run from a bare link.
+        'CIXI_DEMO_AUTORUN': '1',
+    }
     server = None
     if not args.no_serve:
         server = subprocess.Popen(

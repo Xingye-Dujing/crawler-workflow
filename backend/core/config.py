@@ -91,6 +91,11 @@ class Config:
     #: cookie is never sent back and the login would silently not stick.
     HTTPS_ONLY = str(os.environ.get('CRAWLER_HTTPS') or '').strip().lower() in ('1', 'true', 'yes', 'on')
 
+    #: Whether a `?workflow=…&autorun=1` deep link may START a run without a click. Off by default:
+    #: a top-level link is a cross-site request that would otherwise spend the user's accounts and
+    #: API keys. Only the demo recorder sets CIXI_DEMO_AUTORUN=1 for the isolated servers it boots.
+    DEMO_AUTORUN = str(os.environ.get('CIXI_DEMO_AUTORUN') or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
     #: The multi-account registry (``services/accounts``): users, server-side sessions and the
     #: audit log. System-level, not inside any account's data folder — a session must outlive the
     #: account's own tree (a deleted account is moved to ``users/.trash/``, its audit rows stay).
