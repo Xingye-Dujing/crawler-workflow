@@ -6,9 +6,10 @@ instead of falling through to option zero.
 """
 
 import json
+from pathlib import Path
 
 import pytest
-from core.config import Config
+from core.config import BASE_DIR, Config
 
 from services.models import catalog, probe
 from services.models.manifest import ManifestError, from_legacy, from_manifest
@@ -44,8 +45,8 @@ def test_missing_registry_adds_no_legacy_rows(tmp_path, monkeypatch):
 def test_defaults_come_from_the_versioned_manifests(tmp_path, monkeypatch):
     monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
     # The measured winner is the declared default; a plain registry row is only a fallback.
-    assert catalog.default_for('sentiment').endswith('sentiment_rbt3')
-    assert catalog.default_for_declared('sentiment').endswith('sentiment_rbt3')
+    assert catalog.default_for('sentiment').endswith('sentiment_mixed_rbt3')
+    assert catalog.default_for_declared('sentiment').endswith('sentiment_mixed_rbt3')
     assert catalog.default_for('emotion').endswith('emotion_ewect_six')
     assert catalog.default_for('tendency').endswith('tendency_stance_v2_cyberbully')
     assert catalog.default_for('no-such-task') == ''
@@ -107,3 +108,34 @@ def test_manifest_validation_names_the_bad_field():
 def test_legacy_row_without_path_is_dropped():
     assert from_legacy({'name': 'ghost'}) is None
     assert from_legacy('not an object') is None
+
+
+#: New 2026-11-21 candidates: addressable, downloadable, but unmeasured — never a silent default.
+NEW_CANDIDATES = (
+    'bge-base-zh',
+    'bge-large-zh',
+    'bge-reranker-v2-m3',
+    'cluener-ner',
+    'cold-offensive',
+)
+
+
+def test_new_candidates_are_addressable_without_claiming_a_default(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
+    rows = {row['id']: row for row in catalog.public_rows()}
+    for model_id in NEW_CANDIDATES:
+        row = rows[model_id]
+        assert row['runnable'] is True, row['why_not']
+        assert row['default_for'] == [], f'{model_id}: an unmeasured model cannot be a default'
+        assert (Path(BASE_DIR) / row['docs']).is_file(), f'{model_id}: missing model doc'
+    # The measured winners keep their defaults after adding candidates.
+    assert catalog.default_for('sentiment').endswith('sentiment_mixed_rbt3')
+    assert catalog.default_for('reranker').endswith('bge-reranker-base')
+
+
+def test_every_new_candidate_has_a_downloader_asset():
+    assets = json.loads((Path(BASE_DIR) / 'ml_train' / 'scripts' / 'assets.json').read_text(encoding='utf-8'))
+    paths = {item['repo'] for item in assets['models']}
+    rows = {row['id']: row for row in catalog.public_rows()}
+    for model_id in NEW_CANDIDATES:
+        assert rows[model_id]['path'] in paths, f'{model_id}: not in the asset table'

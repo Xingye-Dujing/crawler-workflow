@@ -1,0 +1,17 @@
+{
+  "id": "bge-reranker-v2-m3",
+  "name": "语义重排（bge-reranker-v2-m3）",
+  "family": "reranker",
+  "task": "reranker",
+  "source": "hub",
+  "path": "BAAI/bge-reranker-v2-m3",
+  "desc": "多语种交叉编码器重排模型（约 568M）；本机实测 pairwise accuracy 0.69（base 0.68），但 batch 8 仅 0.5 对每秒、峰值 5.4GB，8GB 卡上不建议替换 base。",
+  "labels": [],
+  "outputs": ["score"],
+  "use_for": ["文档检索候选重排", "上下文候选精排"],
+  "avoid_for": ["逐行打标（用分类模型）", "与召回阶段向量分数直接比较（不同打分函数）"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/bge-reranker-v2-m3.md",
+  "requires": ["sentence_transformers"],
+  "default_for": []
+}

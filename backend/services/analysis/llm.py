@@ -58,6 +58,10 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     The daemon address is pinned when the run started, so a settings save mid-run cannot split
     one run across two hosts.
     """
+    # Imported at call time, not at module scope: callers (and tests) patch the settings
+    # module, and a bound module-level import would ignore a changed setting.
+    from runtime.settings import get_setting
+
     cfg = execution_state.get('llm') or {}
     provider = cfg.get('provider') or 'ollama'
     node_id = node.get('id', '')
@@ -66,6 +70,18 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     # handed a daemon tag it has no id for — and a blank node model falls back to the run's
     # global model.
     node_model = str((node.get('params') or {}).get('model') or '').strip() if provider == 'ollama' else ''
+    # Imported here, not at module scope: process -> pipeline -> ops -> this module is an import
+    # cycle, and the policy registry is fully loaded by the time a run builds its context.
+    from services.analysis.process import is_bulk_llm_op
+
+    if provider == 'ollama' and not node_model and is_bulk_llm_op(op, node.get('params') or {}):
+        # An explicit per-node tag always wins. Otherwise a row-at-a-time node may use the
+        # smaller tag from settings while deep/generative nodes keep the run's main model.
+        # The tag is printed so the console and the run's cache scope name what really ran.
+        bulk_model = str(get_setting('llm_bulk_model') or '').strip()
+        if bulk_model:
+            node_model = bulk_model
+            add_log(t('llm.bulkModel', op=op, model=bulk_model))
     client = LLMClient(
         provider=provider,
         model=node_model or (cfg.get('model') or ''),
@@ -88,7 +104,6 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
     # embedding) gets a conversation too — with its resolved local model identity stamped so the
     # AI workspace's bottom chip names what actually ran. The tier decision lives in trace_tier,
     # the one registry shared with the browser's live-confirm gate.
-    from runtime.settings import get_setting
 
     from services.analysis.trace_tier import resolve_model_identity, should_trace
 

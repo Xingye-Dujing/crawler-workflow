@@ -1,5 +1,8 @@
 # sentiment_rbt3（情感极性·蒸馏轻量版）
 
+> 2026-11-21 起**不再是默认**：多语料版 `sentiment_mixed_rbt3` 在同一留出集和三个外部测试集上全胜
+> （见 `docs/models/sentiment_mixed_rbt3.md`）。本模型保留作速度对照与回退路径。
+
 - **任务**：process 节点 `operation=sentiment`，`mode=bert`。
 - **基座**：`hfl/rbt3`（3 层中文 RoBERTa），`ml_train/scripts/train_sentiment_bert.py --base hfl/rbt3` 微调 1 轮，fp16。
 - **标签 / 输出列**：与 110M 极性模型相同（`negative/positive` → `sentiment/score`）。

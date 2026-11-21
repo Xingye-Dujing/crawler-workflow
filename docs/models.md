@@ -30,7 +30,8 @@ ml_train/.locks/gpu.lock     单任务锁
 
 ## 微调模型备份（防误删）
 
-`python ml_train/scripts/backup_assets.py` 为 `ml_train/models/` 下每个权重目录做**独立副本**（不是硬链接），写入 `ml_train/backups/models/<时间戳>/`，并生成带 SHA-256 的 `manifest.json`。`--verify` 只读取并比对当前权重与最新备份。现有 4 个模型已备份并校验通过。
+`python ml_train/scripts/backup_assets.py` 为 `ml_train/models/` 下每个权重目录做**独立副本**（不是硬链接），写入 `ml_train/backups/models/<时间戳>/`，并生成带 SHA-256 的 `manifest.json`。`--verify` 只读取并比对当前权重与最新备份。2026-11-21 留有两次备份：`20261121_102504`（训练前 7 个模型）
+与 `20261121_113903`（清理后 8 个模型，含新默认 `sentiment_mixed_rbt3`），均校验通过。
 
 ## 数据集目录
 
@@ -54,6 +55,22 @@ datasets/raw/<原始语料>/
 ## 选型规则
 
 `ml_train/scripts/bench.py` 在固定留出集上逐模型测 accuracy、rows/s、峰值显存，结果写入 `ml_train/logs/model_bench/` 与 `docs/model_bench.md`。入选规则：**在最优指标 1 个百分点以内的模型中取最快者**；同分取显存更小者。指标必须带数据集、划分、种子；没有实测数字的模型不得进入 `default_for`。
+
+## 已登记但待实测的候选（2026-11-21）
+
+以下五个模型已经按“一模型一清单”入目录，并写入 `ml_train/scripts/assets.json`，可用 `fetch_assets.py --only <id>` 下载；
+因为**没有本机基准数字**，它们的 `default_for` 全部为空，不替换任何已实测默认：
+
+| id | 用途 | 状态 |
+|---|---|---|
+| `bge-base-zh` / `bge-large-zh` | 语义去重、相似检索、主题 embedding | 已实测：召回仅高 0.5–1.5 点（噪声内），吞吐低 3.4–8.5 倍，**不换默认** |
+| `bge-reranker-v2-m3` | AI 检索候选精排 | 已实测：准确率 0.69 vs 0.68（噪声内），吞吐低两个数量级且 5.4GB 显存，**不换默认** |
+| `cluener-ner` | 简体中文细粒度实体抽取 | 与 ckip（繁体标注）互补，测实体 F1 |
+| `cold-offensive` | 中文攻击性二分类 | 只登记，节点模式尚未接入；AI `model_infer` 对该任务按名拒绝 |
+
+LLM 侧另有一个本机设置 `llm_bulk_model`（设置 → AI 工作区）：留空跟随主模型；填 `qwen3.5:4b` 这类已拉取的
+小 tag 后，只有逐行短答案节点（清洗/情感/情绪/倾向/NER/攻击性的 llm 模式）用它，主题命名与质性编码仍用主模型。
+实际 tag 会在运行时打印，并进入缓存 scope。
 
 ## 已接的小模型场景
 

@@ -1,0 +1,18 @@
+{
+  "id": "cold-offensive",
+  "name": "中文攻击性识别（COLD）",
+  "family": "text_classification",
+  "task": "aggression",
+  "source": "hub",
+  "path": "thu-coai/roberta-base-cold",
+  "desc": "COLD 中文攻击性语言检测基线（二分类，label 1 = offensive）；作为 aggression 节点的传统模型候选，比固定词表召回更高、比逐行 LLM 快两个数量级。",
+  "labels": ["non-offensive", "offensive"],
+  "outputs": ["aggression_level", "score", "aggression_hits"],
+  "score_kind": "score",
+  "use_for": ["网暴/攻击性评论的第一遍筛选", "词表漏掉的委婉攻击召回"],
+  "avoid_for": ["判定讽刺与立场（用 tendency）", "当作已校准严重程度（只输出攻击与否）"],
+  "license": "upstream-unspecified (verify before commercial use)",
+  "docs": "docs/models/cold-offensive.md",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

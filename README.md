@@ -52,6 +52,7 @@ cd backend && python app.py                       # http://127.0.0.1:5000
 - **口径即答案**：列重命名撞上已有列名、类型转换做不成（如 `1.5` 转整数）、阶段分组没有可用顺序——都按名拒绝或点名，不留一张看着完整、实际被截断的表。分组聚合会自动沿用“分阶段”写出的阶段序号列；回复传播图按（文章、楼层）连接，多链接评论表不会把 A 文的回复连到 B 文的人。
 - **分析**：情感、倾向、情绪（BERT 默认，跑不动会降级并打印实际方法）、NER、关键词、聚类、异常、相关性、显著性检验、网暴言论识别、分阶段 LDA、主题流向、情感演化、二次爆发预警；另有**语义近重复去重**与**相似文本检索**（小中文向量模型）。
 - **本地模型目录**：模型清单、实测指标、下载与单任务训练、备份与数据集分类见 [`docs/models.md`](docs/models.md)；微调权重先备份到 `ml_train/backups/models/`，所有下载与缓存只在项目目录内。
+- **默认模型更新（2026-11-21）**：情感 BERT 默认改为 `sentiment_mixed_rbt3`（在原微博语料上并入电商/外卖/酒店评论，三个外部测试集全胜）；情绪/倾向保持原默认。检索与重排候选已实测但未入选，结论与避免重复劳动的数字在 [`docs/model_bench.md`](docs/model_bench.md)。设置 → AI 工作区的“批量文本节点使用的轻量 Ollama 模型”可让逐行清洗/打标签走 `qwen3.5:4b`，深度节点仍用主模型。
 - **文献计量**：CNKI/CSSCI/WoS/Scopus/PubMed/RIS/BibTeX 导出件，按时间切片建关键词、作者、机构、共被引网络，输出 GraphML/GML/Pajek，可存快照并与上次对比。
 - **导出**：CSV / JSON / Excel / TXT / HTML / Markdown。
 - 细节： [`docs/analysis.md`](docs/analysis.md)、[`docs/why_finetuned_bert.md`](docs/why_finetuned_bert.md)。

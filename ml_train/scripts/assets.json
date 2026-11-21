@@ -8,17 +8,29 @@
     {"id": "erlangshen-deberta-97m", "repo": "IDEA-CCNL/Erlangshen-DeBERTa-v2-97M-chinese", "task": "encoder-base", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
     {"id": "ckip-ner", "repo": "ckiplab/bert-base-chinese-ner", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
     {"id": "bge-small-zh", "repo": "BAAI/bge-small-zh-v1.5", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
+    {"id": "bge-base-zh", "repo": "BAAI/bge-base-zh-v1.5", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
+    {"id": "bge-large-zh", "repo": "BAAI/bge-large-zh-v1.5", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
     {"id": "gte-small-zh", "repo": "thenlper/gte-small-zh", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
     {"id": "m3e-small", "repo": "moka-ai/m3e-small", "task": "embedding", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
     {"id": "bge-reranker-base", "repo": "BAAI/bge-reranker-base", "task": "reranker", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
+    {"id": "bge-reranker-v2-m3", "repo": "BAAI/bge-reranker-v2-m3", "task": "reranker", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]},
+    {"id": "cluener-ner", "repo": "uer/roberta-base-finetuned-cluener2020-chinese", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
+    {"id": "cold-offensive", "repo": "thu-coai/roberta-base-cold", "task": "aggression", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt"]},
     {"id": "mnli-xnli", "repo": "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli", "task": "zero-shot", "kind": "hub", "patterns": ["*.json", "*.safetensors", "*.bin", "*.txt", "*.model"]}
   ],
   "datasets": [
     {"id": "chnsenticorp", "repo": "seamew/ChnSentiCorp", "task": "sentiment", "kind": "hub", "patterns": ["*.csv", "*.json", "*.parquet", "*.txt"], "target": "classification/sentiment/chnsenticorp"},
+    {"id": "chnsenticorp-8k", "repo": "XiangPan/ChnSentiCorp_htl_8k", "task": "sentiment", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "classification/sentiment/chnsenticorp_8k"},
+    {"id": "online-shopping", "repo": "C-MTEB/OnlineShopping-classification", "task": "sentiment", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "classification/sentiment/online_shopping"},
+    {"id": "jd-review", "repo": "C-MTEB/JDReview-classification", "task": "sentiment", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "classification/sentiment/jd_review"},
+    {"id": "waimai", "repo": "C-MTEB/waimai-classification", "task": "sentiment", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "classification/sentiment/waimai"},
+    {"id": "dialogue-emotion", "repo": "Johnson8187/Chinese_Multi-Emotion_Dialogue_Dataset", "task": "emotion", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "classification/emotion/chinese_multi_emotion_dialogue"},
     {"id": "msra-ner", "repo": "tner/msra", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.txt", "*.parquet"], "target": "ner/msra"},
     {"id": "cluener", "repo": "tner/cluener", "task": "ner", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.txt", "*.parquet"], "target": "ner/cluener"},
     {"id": "lcqmc", "repo": "C-MTEB/LCQMC", "task": "retrieval", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "retrieval/lcqmc"},
     {"id": "bq", "repo": "C-MTEB/BQ", "task": "retrieval", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "retrieval/bq"},
-    {"id": "csts", "repo": "C-MTEB/CSTS", "task": "retrieval", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "retrieval/csts"}
+    {"id": "csts", "repo": "C-MTEB/CSTS", "task": "retrieval", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "retrieval/csts"},
+    {"id": "t2-reranking", "repo": "C-MTEB/T2Reranking", "task": "retrieval", "kind": "hub", "patterns": ["*.json", "*.jsonl", "*.csv", "*.parquet"], "target": "retrieval/t2-reranking"},
+    {"id": "ceval-val", "repo": "ceval/ceval-exam", "task": "multiple_choice", "kind": "hub", "patterns": ["high_school_chinese/val-*.parquet", "high_school_history/val-*.parquet", "high_school_geography/val-*.parquet", "computer_network/val-*.parquet", "chinese_language_and_literature/val-*.parquet", "professional_law/val-*.parquet"], "target": "evaluation/multiple_choice/ceval_val"}
   ]
 }

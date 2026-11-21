@@ -12,6 +12,7 @@ Datasets are fetched into the Hugging Face cache and then given a task-shaped fo
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 from datetime import UTC, datetime
 from functools import partial
@@ -46,8 +47,11 @@ def download(entry: dict, kind: str) -> dict:
     if not repo:
         return {'id': entry.get('id', ''), 'ok': False, 'error': 'repo id is missing'}
     try:
+        # Datasets live under /api/datasets; without repo_type the hub reads them as model
+        # repos and every dataset id 404s (the mirror returned the same named refusal).
         local = snapshot_download(
             repo_id=repo,
+            repo_type='dataset' if kind == 'datasets' else None,
             cache_dir=str(_env.HF_HOME_DIR / 'hub'),
             allow_patterns=entry.get('patterns') or None,
             max_workers=1,
@@ -67,11 +71,24 @@ def download(entry: dict, kind: str) -> dict:
         row['target'] = str(target)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
+            # An earlier failed run may have left the task-shaped folder empty. Treat that as
+            # "not linked" instead of reporting a downloaded dataset with zero readable rows.
+            if target.is_dir() and not any(target.iterdir()):
+                target.rmdir()
             if not target.exists():
-                target.symlink_to(local_path, target_is_directory=local_path.is_dir())
-            row['linked'] = True
+                try:
+                    target.symlink_to(local_path, target_is_directory=local_path.is_dir())
+                except OSError:
+                    # Windows without developer mode cannot create symlinks; copy instead of
+                    # leaving an empty task-shaped folder that looks downloaded but has no rows.
+                    if local_path.is_dir():
+                        shutil.copytree(local_path, target)
+                    else:
+                        shutil.copy2(local_path, target)
+                row['linked'] = False
+            else:
+                row['linked'] = True
         except OSError as exc:
-            # Windows needs a developer-mode-free fallback; a plain copy keeps every byte local.
             row['linked'] = False
             row['link_error'] = str(exc)
     row['files'] = _files(local_path)

@@ -1,0 +1,17 @@
+{
+  "id": "bge-base-zh",
+  "name": "句向量（bge-base-zh-v1.5）",
+  "family": "encoder",
+  "task": "embedding",
+  "source": "hub",
+  "path": "BAAI/bge-base-zh-v1.5",
+  "desc": "中文通用句向量基座（102M）；本机 T2Reranking 实测 recall@10 0.985 / 42.5 行每秒，质量与现默认的差距在噪声内但吞吐低 3.4 倍，保留为候选。",
+  "labels": [],
+  "outputs": ["vector"],
+  "use_for": ["语义去重与相似文本检索", "主题步骤 embedding 路径的候选编码器"],
+  "avoid_for": ["与 bge-small 的分数直接比较（向量空间不同）", "未经基准就替换 default_for"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/bge-base-zh.md",
+  "requires": ["sentence_transformers"],
+  "default_for": []
+}

@@ -1,0 +1,17 @@
+{
+  "id": "bge-large-zh",
+  "name": "句向量（bge-large-zh-v1.5）",
+  "family": "encoder",
+  "task": "embedding",
+  "source": "hub",
+  "path": "BAAI/bge-large-zh-v1.5",
+  "desc": "中文通用句向量大模型（326M）；本机实测 recall@10 0.990 / 17.2 行每秒（峰值 2.8GB），比现默认仅高 3 行/200 query，吞吐低 8.5 倍，保留为质量候选。",
+  "labels": [],
+  "outputs": ["vector"],
+  "use_for": ["短文本语义去重与相似检索的高质量候选", "主题 embedding 路径的质量候选"],
+  "avoid_for": ["超大批量逐行调用（先测吞吐）", "未经基准就替换 default_for"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/bge-large-zh.md",
+  "requires": ["sentence_transformers"],
+  "default_for": []
+}

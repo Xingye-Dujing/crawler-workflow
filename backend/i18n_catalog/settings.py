@@ -96,6 +96,7 @@ ZH = {
     'llm.row_done': '[{label}] 第 {done}/{total} 行完成',
     'llm.row_exception': '[{label}] 行处理异常：{err}',
     'llm.start': '[{label}] 共 {total} 行待处理，调用方式：{transport}（每条数据一次询问，文本越长越耗 token）',
+    'llm.bulkModel': '[{op}] 批量节点使用轻量模型 {model}（可在设置 → AI 工作区修改；深度节点仍用主模型）',
     'llm.stopped': '[{label}] 已停止，已完成行的结果已保存',
     'llm.unfinished': '[{label}] {n} 行未处理（标记为 {mark}）。重新执行同一节点将从断点续跑，只补这些行。',
     'misc.browserNotFound': '这台机器没有可接住地址的默认浏览器，请手动打开：{url}',
@@ -255,6 +256,8 @@ EN = {
     'llm.row_done': '[{label}] row {done}/{total} done',
     'llm.row_exception': '[{label}] Row processing error: {err}',
     'llm.start': '[{label}] {total} rows queued via {transport} (one request per row — longer text costs more tokens)',
+    'llm.bulkModel': '[{op}] bulk node uses the small model {model} (change it in Settings → AI workspace; '
+    'deep nodes keep the run model)',
     'llm.stopped': '[{label}] stopped; finished rows are saved',
     'llm.unfinished': '[{label}] {n} rows not processed (marked {mark}). Re-running this node resumes from '
     'the checkpoint and fills only those.',

@@ -1,0 +1,30 @@
+{
+  "id": "sentiment_mixed_rbt3",
+  "name": "情感极性·多语料版（rbt3）",
+  "family": "text_classification",
+  "task": "sentiment",
+  "operation": "sentiment",
+  "path": "ml_train/models/sentiment_mixed_rbt3",
+  "desc": "在 weibo_senti_100k 基础上并入 ChnSentiCorp、JDReview、OnlineShopping 与 waimai，按来源各留 5% 留出；同留出集与三个外部测试集上均优于旧默认。",
+  "labels": ["negative", "positive"],
+  "outputs": ["sentiment", "score"],
+  "score_kind": "polarity",
+  "precision": "fp16",
+  "size_mb": 54,
+  "vram_mb": 719,
+  "rows_per_sec": 334.6,
+  "quality": [
+    {"dataset": "mixed_holdout", "split": "各来源 5% 留出 seed=42", "metric": "accuracy", "value": 0.9597},
+    {"dataset": "jd_review", "split": "官方 test 533 行", "metric": "accuracy", "value": 0.8987},
+    {"dataset": "online_shopping", "split": "官方 test 1000 行", "metric": "accuracy", "value": 0.923},
+    {"dataset": "waimai", "split": "官方 test 1000 行", "metric": "accuracy", "value": 0.899},
+    {"dataset": "weibo_senti_100k", "split": "bench.py 抽样 2000 行（同机对照，含训练行）", "metric": "accuracy", "value": 0.9845}
+  ],
+  "use_for": ["需要跨领域泛化的逐行极性分类", "8GB 显存下的高吞吐推理"],
+  "avoid_for": ["需要生成解释的场景", "未见过的新语言/任务域的零样本判断"],
+  "license": "Apache-2.0",
+  "docs": "docs/models/sentiment_mixed_rbt3.md",
+  "pack": "bert-models",
+  "requires": ["torch", "transformers"],
+  "default_for": ["sentiment"]
+}

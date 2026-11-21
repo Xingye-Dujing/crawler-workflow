@@ -1,0 +1,17 @@
+{
+  "id": "cluener-ner",
+  "name": "中文 NER（CLUENER 细粒度）",
+  "family": "token_classification",
+  "task": "ner",
+  "source": "hub",
+  "path": "uer/roberta-base-finetuned-cluener2020-chinese",
+  "desc": "CLUENER2020 细粒度中文实体模型，10 类（人名/Organization/地址/职位等）简体语料；用于简体社媒实体抽取，与 ckip-ner 的繁体标注互补。",
+  "labels": ["PERSON", "ORG", "LOC", "TITLE", "COMPANY", "GOVERNMENT", "SCENE", "BOOK", "GAME", "MOVIE"],
+  "outputs": ["row", "text", "label", "start", "end"],
+  "use_for": ["简体微博正文中的人物、机构、地点与职位抽取", "替换繁体语料 NER 模型的候选"],
+  "avoid_for": ["模型未训练过的新实体类别", "跨度超过模型窗口的超长文本"],
+  "license": "upstream-unspecified (verify before commercial use)",
+  "docs": "docs/models/cluener-ner.md",
+  "requires": ["torch", "transformers"],
+  "default_for": []
+}

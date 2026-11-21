@@ -100,6 +100,18 @@ def op_calls_llm(op: str, params: dict | None = None) -> bool:
     return value in wanted
 
 
+#: Row-by-row LLM work whose answer is one short label or a short rewrite. A small local model
+#: is enough here; the deep/generative ops (qualitative coding, topic/cluster labelling) keep the
+#: run's main model. This is a ROLE, not a quality verdict: the same op in `bert`/`regex` mode
+#: does not call an LLM at all and is therefore not bulk-LLM work.
+BULK_LLM_OPS = frozenset({'clean', 'emotion', 'tendency', 'sentiment', 'ner', 'aggression'})
+
+
+def is_bulk_llm_op(op: str, params: dict | None = None) -> bool:
+    """Whether this node is the row-at-a-time kind of LLM call a small tag can serve."""
+    return str(op or '') in BULK_LLM_OPS and op_calls_llm(str(op), params)
+
+
 #: Every operation the process executor dispatches, including the four with no select-shaped
 #: parameter (``PROCESS_ENUMS`` only lists the ones that have one). ``bot``/``anomaly``/
 #: ``correlation``/``significance`` read typed column names instead.

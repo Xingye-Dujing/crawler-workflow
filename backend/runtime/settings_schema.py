@@ -834,6 +834,19 @@ SETTINGS = (
         consumer='both',
     ),
     Setting(
+        'llm_bulk_model',
+        'str',
+        '',
+        'ai',
+        'set.llmBulkModel',
+        hint='set.llmBulkModelHint',
+        # Blank means "follow the run's model": no machine-specific tag is baked into a default.
+        # A row-by-row classifier/cleaner can be pointed at a smaller pulled Ollama tag here while
+        # the deep/generative nodes keep the run's main model. The resolved tag is printed at run
+        # time so the console never claims a model it did not use.
+        consumer='server',
+    ),
+    Setting(
         'ai_context_scope',
         'enum',
         'summary',
