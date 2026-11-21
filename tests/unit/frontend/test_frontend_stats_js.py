@@ -94,3 +94,15 @@ class TestPieOptions:
         assert label['color'] == 'var(--text-dim)', label
         assert 'JetBrains Mono' not in label['fontFamily'], 'a font the page never loads'
         assert option['series'][0]['data'] == [{'name': 'Joy', 'value': 3, 'itemStyle': {'color': '#f1c40f'}}]
+
+
+def test_switching_a_stats_tab_cannot_hide_another_panels_chart():
+    """``.chart-container`` is shared with the studio, fullscreen and 执行历史 panels.
+
+    Hiding every match blanked ``#history-chart`` for the rest of the page session: its renderer
+    sets the option but never resets ``display``. The switch must stay inside its own panel.
+    """
+    source = (JS_DIR / 'stats.js').read_text(encoding='utf-8')
+    assert "document.querySelectorAll('.chart-container')" not in source
+    assert "document.querySelectorAll('.tab-btn')" not in source
+    assert "getElementById('stats-panel')" in source
