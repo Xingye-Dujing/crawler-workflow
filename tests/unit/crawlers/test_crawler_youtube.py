@@ -453,6 +453,7 @@ class _YtWalkSession:
         self.driver = object()
         self.blocked = []
         self.logged = []
+        self.unproven = []
 
     def get(self, url):
         pass
@@ -467,7 +468,7 @@ class _YtWalkSession:
         self.blocked.append(True)
 
     def mark_unproven(self, url):
-        self.unproven = getattr(self, 'unproven', []) + [url]
+        self.unproven.append(url)
 
     def nap(self, seconds):
         pass

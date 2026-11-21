@@ -50,8 +50,6 @@ def _xlsx_expansion_refusal(stream) -> str:
     named error that the caller already turns into a 400, and refusing it here would report the wrong
     reason.
     """
-    import zipfile
-
     position = stream.tell() if hasattr(stream, 'tell') else None
     try:
         with zipfile.ZipFile(stream) as handle:

@@ -28,6 +28,7 @@ def _flag(value):
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
     return answer.stdout.strip()
 
