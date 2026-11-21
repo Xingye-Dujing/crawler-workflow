@@ -120,16 +120,21 @@ const stats = {
 };
 
 function switchTab(tab) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.chart-container').forEach(c => c.style.display = 'none');
+    var panel = document.getElementById('stats-panel');
+    var scope = panel || document;
+    scope.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    /* Only THIS panel's chart boxes. ``.chart-container`` is the shared class of the studio
+       preview, the fullscreen preview and 执行历史 too: hiding every one of them blanked
+       ``#history-chart`` for the rest of the page session (its renderer never resets display). */
+    scope.querySelectorAll('.chart-container').forEach(c => c.style.display = 'none');
     /* The buttons live in the panel and stay clickable even with no chart library;
        resizing a chart that was never built threw there. */
     const chart = tab === 'emotion' ? stats.emotionChart : stats.tendencyChart;
     if (tab === 'emotion') {
-        document.querySelector('.tab-btn:first-child').classList.add('active');
+        scope.querySelector('.tab-btn:first-child').classList.add('active');
         document.getElementById('chart-emotion').style.display = 'block';
     } else {
-        document.querySelector('.tab-btn:last-child').classList.add('active');
+        scope.querySelector('.tab-btn:last-child').classList.add('active');
         document.getElementById('chart-tendency').style.display = 'block';
     }
     if (chart) chart.resize();

@@ -342,7 +342,7 @@ var datasetManager = {
             return;
         }
         var ok = await showDialog({
-            message: I18n.t('datasetMgr.confirmRemove').replace('{name}', name || id),
+            message: I18n.t('datasetMgr.confirmRemove', { name: name || id }),
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: false },
                 { label: I18n.t('datasetMgr.remove'), value: true, primary: true },

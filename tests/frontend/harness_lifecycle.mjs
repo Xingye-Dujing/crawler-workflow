@@ -205,7 +205,7 @@ for (const sc of scenarios) {
     if (sc.reload) await workflow.reloadOpenFile();
 
     for (const t of sc.add || []) canvas.addNode(t);
-    if (sc.load) workflow.loadFromJSON(sc.load);
+    if (sc.load) workflow.loadFromJSON(sc.load, sc.loadOptions || undefined);
     if (sc.loadByName) await workflow._loadByName(sc.loadByName);
     /* A scenario pans before it saves, so the SAVE body shows whether the camera
        rides along with the file — which is what makes a saved 适应 survive reopen. */

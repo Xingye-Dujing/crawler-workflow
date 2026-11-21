@@ -16,14 +16,29 @@ const AIRender = {
     },
 
     inline(text) {
-        let out = this.escape(text);
+        /* Links are lifted out BEFORE escaping. Escaping first turned a URL's ``&`` into ``&amp;``
+           and the link pass then escaped it again, so ``?a=1&b=2`` became ``?a=1&amp;amp;b=2`` and
+           every link with a query string opened the wrong address. The placeholders survive the
+           escape and the emphasis passes; the anchors are inserted last. */
+        const anchors = [];
+        const linked = String(text == null ? '' : text).replace(
+            /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+            (match, label, url) => {
+                const safe = this.safeUrl(url);
+                if (!safe) return match;
+                const token = '\u0000LINK' + anchors.length + '\u0000';
+                anchors.push(
+                    '<a href="' + this.escape(safe) + '" target="_blank" rel="noopener noreferrer">' +
+                        this.escape(label) + '</a>'
+                );
+                return token;
+            }
+        );
+        let out = this.escape(linked);
         out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
         out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
         out = out.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
-        out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (match, label, url) => {
-            const safe = this.safeUrl(url);
-            return safe ? '<a href="' + this.escape(safe) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>' : label;
-        });
+        out = out.replace(/\u0000LINK(\d+)\u0000/g, (match, index) => anchors[Number(index)] || '');
         return out;
     },
 

@@ -194,9 +194,13 @@ var ReusableNodes = {
             info.ids.forEach(function (id) { selected[id] = true; });
             info.ids.forEach(function (id) {
                 var el = canvas._nodeEl(id);
-                if (el) el.remove();
+                if (el) {
+                    canvas._forgetNodeEl(el);
+                    el.remove();
+                }
                 delete canvas.nodes[id];
             });
+            canvas.closeSettingsIfStale();
             var groupId = canvas.addNode('reusable', info.x, info.y);
             var group = canvas.nodes[groupId];
             group.title = template.name;
@@ -401,8 +405,12 @@ var ReusableNodes = {
         var newIds = [];
         canvas.batchHistory(function () {
             var original = canvas.connections.slice();
-            if (groupEl) groupEl.remove();
+            if (groupEl) {
+                canvas._forgetNodeEl(groupEl);
+                groupEl.remove();
+            }
             delete canvas.nodes[groupId];
+            canvas.closeSettingsIfStale();
             var idMap = {};
             nodes.forEach(function (inner) {
                 var nid = canvas.addNode(

@@ -836,6 +836,16 @@ def life(tmp_path_factory, capabilities_matrix):
         },
         {'id': 'save_cancel', 'dialogAnswer': None, 'save': True},
         {'id': 'save_prompt_ok', 'dialogAnswer': '新工作流', 'save': True},
+        {
+            # The AI workspace's 载入画布 replaces the graph wholesale. It must DETACH the open
+            # file, or the next autosave writes the assistant's canvas over the user's workflow.
+            'id': 'load_detaches_the_open_file',
+            'storedOpenFile': '甲流程',
+            'hasDraft': True,
+            'restore': True,
+            'load': opened,
+            'loadOptions': {'detachFile': True},
+        },
         {'id': 'open_by_name', 'loadByName': '我的流程', 'loadResponse': {'ok': True, 'workflow': opened}},
         {
             # A file with nothing the browser has to normalize (no dead upload id, so
@@ -962,6 +972,13 @@ class TestFileLifecycle:
     def test_a_file_without_settings_changes_neither(self, life):
         """An absent block is "leave the user's choice alone", not "reset it"."""
         assert life['load_without_settings']['runState'] == []
+
+    def test_a_foreign_canvas_detaches_the_open_file(self, life):
+        """The AI's 载入画布 must not leave the user's file name on the assistant's graph."""
+        refreshed = life['load_detaches_the_open_file']
+        assert refreshed['nodes'], 'the foreign canvas still loaded'
+        assert refreshed['currentFile'] is None, refreshed['currentFile']
+        assert refreshed['openFileStored'] is None, 'the next boot would reopen the user file under it'
 
     def test_a_boot_reload_does_not_reset_the_run_switches(self, life):
         """The remembered file is re-read on every start; that must not overwrite the

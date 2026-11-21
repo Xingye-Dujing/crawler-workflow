@@ -1092,6 +1092,11 @@ const paidDefault = workspace._thinkingOn();
 sandbox.AISettings.save({ thinkingLocal: false });
 out.thinking = { localDefault: localDefault, localOn: localOn, paidDefault: paidDefault };
 
+/* A URL with a query string must be escaped exactly once. The old inline() escaped the whole
+   string first and then escaped the captured URL again: `&` became `&amp;amp;` and the browser
+   opened `?a=1&amp;b=2`. */
+out.markdownLink = sandbox.AIRender.inline('[知乎](https://www.zhihu.com/search?q=爬虫&type=content)');
+
 
 /* A stored `present_artifact` row must still draw its artifact card (the reloaded transcript used to
    show only the tool card, so the plan looked like it had never been produced). */

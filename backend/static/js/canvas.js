@@ -2705,7 +2705,16 @@ const canvas = {
     },
 
     saveState() {
-        localStorage.setItem('crawler_canvas', JSON.stringify(this.serializeDraft()));
+        /* A failed draft write must not skip the IN-MEMORY hooks below. ``setItem`` throws in
+           private mode and over quota, and the old order aborted the whole method: undo history
+           froze, ``dirty`` kept its previous value, autosave never armed and ``beforeunload``
+           stayed silent — the edits were lost with no warning. Every other writer of this key
+           already guards it; the canvas kept the one unguarded call. */
+        try {
+            localStorage.setItem('crawler_canvas', JSON.stringify(this.serializeDraft()));
+        } catch (e) {
+            console.warn('canvas draft not saved to localStorage', e);
+        }
         this._pushState();
         /* The outline is a pure read of the model, and saveState is the ONE chokepoint
            every structural change (add / delete / rename / enable / undo / load) passes

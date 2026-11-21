@@ -146,19 +146,24 @@ var wfFiles = {
     async refresh() {
         var body = document.getElementById('workflows-mgr-body');
         if (!body) return;
+        /* One generation per refresh. Two requests are in flight the moment the user clicks
+           another tab (or the language changes); whichever ANSWER lands last used to paint into
+           the tab now on screen, so the header said 画布历史 while the body showed the file table. */
+        var gen = (this._gen = (this._gen || 0) + 1);
         this.renderTabs();
         var bar = document.getElementById('workflows-history-bar');
         if (bar) bar.hidden = this._tab !== 'history';
         if (this._tab === 'history') {
-            await this.refreshHistory();
+            await this.refreshHistory(gen);
             return;
         }
         if (this._tab === 'reusable') {
-            await this.refreshReusable();
+            await this.refreshReusable(gen);
             return;
         }
         body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loading') + '</div>';
         var result = await fetchJSON('/api/workflow/list').catch(function () { return null; });
+        if (gen !== this._gen) return;
         if (!result || !result.ok) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfMgr.loadFailed') + '</div>';
             return;
@@ -215,11 +220,12 @@ var wfFiles = {
         this.refresh();
     },
 
-    async refreshHistory() {
+    async refreshHistory(gen) {
         var body = document.getElementById('workflows-mgr-body');
         if (!body) return;
         body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loading') + '</div>';
         var result = await fetchJSON('/api/workflow/history');
+        if (gen !== undefined && gen !== this._gen) return;
         if (!result || !result.ok) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loadFailed') + '</div>';
             return;
@@ -229,6 +235,7 @@ var wfFiles = {
         /* The baseline tag belongs to the same row list; one read keeps the tag and
            the Style menu's hint from disagreeing after a delete. */
         if (typeof LayoutStrategy !== 'undefined') await LayoutStrategy.refresh();
+        if (gen !== undefined && gen !== this._gen) return;
         this.renderTabs();
         this.renderHistory();
     },
@@ -282,11 +289,12 @@ var wfFiles = {
        without a list a saved template could only be removed through the API.
        This is the management door, and it says plainly that deleting a template
        does not touch instances (they carry their own snapshot). */
-    async refreshReusable() {
+    async refreshReusable(gen) {
         var body = document.getElementById('workflows-mgr-body');
         if (!body) return;
         body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('wfHistory.loading') + '</div>';
         var result = await fetchJSON('/api/reusable');
+        if (gen !== undefined && gen !== this._gen) return;
         if (!result || !result.ok) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('reusable.loadFailed') + '</div>';
             return;
@@ -750,7 +758,7 @@ var wfFiles = {
            canvas, so reopening a file you just saved does not nag. */
         if (typeof canvas !== 'undefined' && canvas.dirty) {
             var ok = await showDialog({
-                message: I18n.t('wfMgr.confirmOpen').replace('{name}', name),
+                message: I18n.t('wfMgr.confirmOpen', { name: name }),
                 buttons: [
                     { label: I18n.t('dialog.cancel'), value: false },
                     { label: I18n.t('wfMgr.open'), value: true, primary: true },
@@ -768,7 +776,7 @@ var wfFiles = {
            one with that value, ignoring the typed input (the dataset rename once
            stored the literal 'ok' this way). */
         var answer = await showDialog({
-            message: I18n.t('wfMgr.renamePrompt').replace('{name}', name),
+            message: I18n.t('wfMgr.renamePrompt', { name: name }),
             input: { value: name, placeholder: I18n.t('wfMgr.renamePlaceholder') },
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: null },
@@ -815,7 +823,7 @@ var wfFiles = {
     async remove(name) {
         if (refuseWhileRunning()) return;
         var ok = await showDialog({
-            message: I18n.t('wfMgr.confirmRemove').replace('{name}', name),
+            message: I18n.t('wfMgr.confirmRemove', { name: name }),
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: false },
                 { label: I18n.t('wfMgr.remove'), value: true, primary: true },

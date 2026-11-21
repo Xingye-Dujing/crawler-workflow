@@ -649,7 +649,8 @@ const AIWorkspace = {
         if (!this._dom.attachments) return;
         this._dom.attachments.innerHTML = this._attachments.map((row) =>
             '<span class="ai-attachment"><span>' + AIRender.escape(row.name || 'file') + '</span>' +
-            '<button type="button" class="ai-attachment-x" data-ai-remove-attachment="' + AIRender.escape(row.id) + '" aria-label="Remove ' + AIRender.escape(row.name || 'file') + '">×</button></span>'
+            '<button type="button" class="ai-attachment-x" data-ai-remove-attachment="' + AIRender.escape(row.id) +
+            '" aria-label="' + AIRender.escape(I18n.t('ai.removeAttachment', { name: row.name || 'file' })) + '">×</button></span>'
         ).join('');
     },
 
@@ -1515,15 +1516,30 @@ const AIWorkspace = {
     },
 
     /* ─── Applying a workflow the assistant produced ─── */
-    async _applyWorkflowPayload(payload, run, title) {
+    async _applyWorkflowPayload(payload, run, title, options) {
         if (typeof workflow === 'undefined' || !workflow || typeof workflow.loadFromJSON !== 'function') {
             this._toast(I18n.t('toast.workflowFileInvalid'));
             return false;
         }
+        var opts = options || {};
+        /* Replacing the canvas is the same destructive act as 打开 another file: confirm when
+           there is unsaved work. The artifact button passes confirm:true; the live `workflow_apply`
+           event cannot ask mid-turn and replaces the canvas without a prompt, but it still detaches
+           the file name (below) so it can never overwrite what the user had open. */
+        if (opts.confirm && typeof canvas !== 'undefined' && canvas.dirty && typeof showDialog === 'function') {
+            var proceed = await showDialog({
+                message: I18n.t('ai.confirmReplaceCanvas'),
+                buttons: [
+                    { label: I18n.t('dialog.cancel'), value: false },
+                    { label: I18n.t('wfMgr.open'), value: true, primary: true },
+                ],
+            });
+            if (!proceed) return false;
+        }
         let ok = false;
         let detail = '';
         try {
-            ok = workflow.loadFromJSON(payload) !== false;
+            ok = workflow.loadFromJSON(payload, { detachFile: !!opts.detach }) !== false;
             if (!ok) detail = 'loadFromJSON refused the file';
         } catch (error) {
             detail = String((error && error.message) || error);
@@ -1532,6 +1548,7 @@ const AIWorkspace = {
             this._workflowFeedback(title, detail);
             return false;
         }
+        if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
         this._toast(I18n.t('ai.workflowApplied', { name: title || '' }));
         if (run) {
             try {
@@ -1944,7 +1961,10 @@ const AIWorkspace = {
                 this._toast(I18n.t('ai.error'));
                 return;
             }
-            this._applyWorkflowPayload(artifact.payload || {}, run, artifact.title || '');
+            this._applyWorkflowPayload(artifact.payload || {}, run, artifact.title || '', {
+                confirm: true,
+                detach: true,
+            });
             return;
         }
         if (target.hasAttribute('data-ai-apply-chart')) {
@@ -2216,9 +2236,13 @@ const AIWorkspace = {
         this._conversationId = id;
         this._mode = 'chat';
         this._editingSkill = null;
+        /* A slow answer for the conversation the user just left must not replace the one they
+           clicked next. Every await below is preceded by one token check; the last click wins. */
+        const token = (this._selectToken = (this._selectToken || 0) + 1);
         try {
             const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id));
             const data = await response.json();
+            if (token !== this._selectToken) return;
             if (!data.ok) {
                 /* A conversation deleted here or in another tab: forget it instead of reopening a
                    chat that no longer exists on every reload. */
@@ -3071,7 +3095,7 @@ const AIWorkspace = {
             return;
         }
         if (type === 'workflow_apply') {
-            this._applyWorkflowPayload(event.workflow || {}, !!event.run, String(event.name || ''));
+            this._applyWorkflowPayload(event.workflow || {}, !!event.run, String(event.name || ''), { detach: true });
             return;
         }
         if (type === 'usage') {

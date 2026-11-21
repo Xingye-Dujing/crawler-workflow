@@ -79,6 +79,9 @@ var Diagnostics = {
         /* A canvas-only or workflow-only harness has no `canvas`; and a failed
            diagnostic must never crash the page it decorates — guard the whole body. */
         if (typeof canvas === 'undefined' || !canvas || !canvas.nodes) return;
+        /* An edit during an in-flight request starts a second one; the older answer used to land
+           last and paint badges from a graph that no longer exists. Only the newest may assign. */
+        var generation = (this._generation = (this._generation || 0) + 1);
         try {
             /* Only the serialisable model goes over the wire: a node's `el` is a live DOM
                element (circular), so the whole node object cannot be JSON.stringify'd. */
@@ -97,6 +100,7 @@ var Diagnostics = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             }).catch(function () { return null; });
+            if (generation !== this._generation) return;
             if (!result || !result.ok) return; /* offline: keep the last known picture */
             this._columns = result.columns || {};
             this._reads = result.reads || {};

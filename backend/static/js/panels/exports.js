@@ -310,7 +310,7 @@ var exportsManager = {
        confirm and while a run is writing here. */
     async clearPartsByName(name) {
         var go = await showDialog({
-            message: I18n.t('exportsMgr.confirmClearName').replace('{name}', name),
+            message: I18n.t('exportsMgr.confirmClearName', { name: name }),
             buttons: [
                 { label: I18n.t('dialog.cancel'), value: null },
                 { label: I18n.t('exportsMgr.clearGo'), value: 'go', primary: true },

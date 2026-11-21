@@ -335,7 +335,14 @@ const workflow = {
                     if (typeof LayoutStrategy !== 'undefined') LayoutStrategy.reset();
                 }
                 showToast(I18n.t('toast.workflowSaved') + ': ' + name);
-                localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
+                try {
+                    /* A successful server save is a success even when this browser refuses the
+                       draft copy (quota / private mode): the old unguarded call threw into the
+                       catch below and reported 保存失败 for a file that was already on disk. */
+                    localStorage.setItem('crawler_canvas', JSON.stringify(canvas.serializeDraft()));
+                } catch (e) {
+                    console.warn('canvas draft not saved to localStorage', e);
+                }
                 this._persistOpenFile();
                 canvas.markSaved();
             } else {
@@ -522,6 +529,13 @@ const workflow = {
         canvas.connections = canvas._remapConnections(workflowData.connections, idMap);
         canvas.scheduleRender();
         canvas.updateStatus();
+        if (opts.detachFile) {
+            /* A canvas that did not come from the open file must not be autosaved onto it. The AI
+               assistant's 载入画布 passes this: without it, `currentFile` still named the user's
+               workflow, scheduleAutosave fired two seconds later, and the assistant's graph
+               overwrote that file (and attributed its run record to the same name). */
+            this.forgetOpenFile();
+        }
         canvas.saveState();
         /* The nodes we just built may point at files the server still has —
            check each one instead of assuming it must be re-uploaded. */

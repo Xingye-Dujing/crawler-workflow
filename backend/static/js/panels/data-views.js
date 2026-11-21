@@ -254,7 +254,7 @@ var dataNodes = {
             if (el) el.classList.remove('node-missing');
             canvas.updateNodeDisplay(nodeId);
             canvas.saveState();
-            showToast(I18n.t('dataSource.datasetSelected').replace('{name}', meta.name || meta.dataset_id));
+            showToast(I18n.t('dataSource.datasetSelected', { name: meta.name || meta.dataset_id }));
             dataNodes._refreshDerived();
             if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
         };

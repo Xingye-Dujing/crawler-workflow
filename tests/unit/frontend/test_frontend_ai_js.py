@@ -416,6 +416,13 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['localOn'] is True, 'the local switch did not turn thinking on'
         assert out['paidDefault'] is True, out
 
+    def test_a_markdown_link_is_escaped_exactly_once(self):
+        """``&`` in a query string became ``&amp;amp;``: every link with two parameters opened wrong."""
+        link = _run_workspace()['markdownLink']
+        assert 'href="https://www.zhihu.com/search?q=爬虫&amp;type=content"' in link, link
+        assert '&amp;amp;' not in link, link
+        assert '>知乎</a>' in link, link
+
     def test_choosing_an_option_on_a_multi_question_card_shows_it(self):
         """The card submits only when every question is answered; the first click must still show
         that it registered (selected style + how many are left), or it reads as a dead button."""
