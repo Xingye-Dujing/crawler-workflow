@@ -377,14 +377,19 @@ class LLMClient:
             'temperature': self.temperature,
             'max_tokens': self.max_tokens,
         }
-        if on_delta is not None:
+        streaming = on_delta is not None
+        if streaming:
             payload['stream'] = True
         delay = 2.0
         last = None
         for attempt in range(1, max_retries + 1):
             self._check_cancel()
             try:
-                resp = requests.post(OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout)
+                # stream=True is required for real token-by-token deltas; without it requests
+                # buffers the whole body and the trace sees one late chunk.
+                resp = requests.post(
+                    OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout, stream=streaming
+                )
             except requests.RequestException as e:
                 last = LLMError(t('llm.net_error', err=e), 'network')
                 logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=e))
@@ -399,25 +404,28 @@ class LLMClient:
                     except (KeyError, IndexError, TypeError, ValueError) as e:
                         raise LLMError(t('llm.or_bad_format', err=e), 'bad_response') from e
                 else:
-                    # Same canonical SSE lines the provider catalog reads; no second opinion about
-                    # how a token delta is shaped.
-                    from ai.providers.base import stream_lines
+                    # OpenRouter speaks OpenAI-compatible SSE: lines are `data: {...}` plus blank
+                    # separators and `[DONE]`. Feed them through the SAME framer the provider
+                    # catalog uses (strips `data:`, honours keep-alive comments and [DONE]) instead
+                    # of json.loads on raw lines — that skipped every frame, so every traced
+                    # OpenRouter call ended as "empty content" after two needless retries.
+                    from ai.errors import AIError
+                    from ai.providers.base import data_frames
 
                     pieces = []
-                    for line in stream_lines(resp, self._cancel):
-                        if not line:
-                            continue
-                        try:
-                            frame = json.loads(line)
-                        except ValueError:
-                            continue
-                        choices = frame.get('choices') or []
-                        if not choices:
-                            continue
-                        delta = ((choices[0].get('delta') or {}).get('content')) or ''
-                        if delta:
-                            pieces.append(str(delta))
-                            on_delta(str(delta))
+                    try:
+                        for kind, frame in data_frames(resp, self._cancel):
+                            if kind != 'message' or not isinstance(frame, dict):
+                                continue
+                            choices = frame.get('choices') or []
+                            if not choices:
+                                continue
+                            delta = ((choices[0].get('delta') or {}).get('content')) or ''
+                            if delta:
+                                pieces.append(str(delta))
+                                on_delta(str(delta))
+                    except AIError as exc:
+                        raise LLMError(t('llm.or_bad_format', err=exc), 'bad_response') from exc
                     content = ''.join(pieces)
                 if content.strip():
                     return content
