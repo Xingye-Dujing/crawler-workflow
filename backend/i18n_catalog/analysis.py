@@ -93,6 +93,9 @@ ZH = {
     'quant.code_label': '内容分析编码（编码员 {coder}）',
     'quant.reliability': '内容分析信度：Cohen kappa={kappa}，一致率={agreement}',
     'quant.bad_mode': '未知内容分析模式“{mode}”，只支持 code/dual/report',
+    'quant.report_needs_coding': (
+        '频次统计需要上游编码节点先产出“{col}”列：请把 report 接在 code/dual 节点之后，不要直接对原始表格做统计'
+    ),
     'coding.no_client': '编码节点没有可用的 LLM 客户端：请在运行时选择本地 Ollama 或 API 供应商，不会静默改用别的模型',
     'coding.no_codebook': '主轴/选择性编码必须先指定一个码本 id，节点不会替你新建或猜测',
     'coding.bad_phase': '未知编码阶段“{phase}”，只支持 open/axial/selective',
@@ -539,6 +542,10 @@ EN = {
     'quant.code_label': 'Content-analysis coding (coder {coder})',
     'quant.reliability': 'Content-analysis reliability: Cohen kappa={kappa}, agreement={agreement}',
     'quant.bad_mode': 'Unknown content-analysis mode "{mode}"; only code/dual/report are supported',
+    'quant.report_needs_coding': (
+        'The frequency table needs an upstream coding node to produce the "{col}" column: '
+        'place report after a code/dual node instead of a raw table'
+    ),
     'coding.no_client': (
         'The coding node has no LLM client: choose local Ollama or an API provider for this run; no silent substitution'
     ),

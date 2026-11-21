@@ -6,6 +6,8 @@ independent passes give a Cohen's kappa the paper can report, and disagreements 
 for adjudication instead of being silently averaged away.
 """
 
+import hashlib
+import json
 import logging
 import re
 
@@ -19,6 +21,21 @@ logger = logging.getLogger(__name__)
 CODE_RE = re.compile(r'^\s*CODE\s*[:：]\s*(.+?)\s*$', re.M)
 EVIDENCE_RE = re.compile(r'^\s*EVIDENCE\s*[:：]\s*(.+?)\s*$', re.M)
 SCORE_RE = re.compile(r'^\s*SCORE\s*[:：]\s*([0-9.]+)\s*$', re.M)
+
+
+def _codebook_scope(codebook: dict, coder: str) -> str:
+    """Cache scope for one coder's view of a codebook.
+
+    The prompt builder passed to ``run_llm_dataframe`` is a closure: its *source* is identical for
+    every codebook and every coder, so ``prompt_version`` cannot see the two values that actually
+    decide the answer. Without this scope an edited codebook (a new version with different codes or
+    decision rules) would replay the previous version's answers, and coder B would replay coder A's
+    answers in a dual run — making kappa 1.0 by construction. The scope is therefore the digest of
+    the codebook as the prompt renders it, plus the coder tag.
+    """
+    payload = json.dumps(codebook, sort_keys=True, ensure_ascii=False, default=str)
+    digest = hashlib.sha1(payload.encode('utf-8')).hexdigest()[:20]
+    return f'content_analysis|{coder.strip().lower()}|{digest}'
 
 
 class ContentAnalysisError(ValueError):
@@ -99,6 +116,9 @@ def code_rows(df: pd.DataFrame, text_column: str, codebook: dict, ctx: dict | No
         build_prompt=build_prompt,
         parse=parse,
         ctx=ctx,
+        # The closure's source cannot distinguish codebooks/coders: pin the cache to both so an
+        # edited codebook re-pays for its answers and the two coders stay independent.
+        extra_key=_codebook_scope(codebook, coder),
         label=t('quant.code_label', coder=coder.upper()),
     )
 
@@ -123,9 +143,16 @@ def cohen_kappa(a: list[str], b: list[str]) -> float:
 
 
 def dual_code(df: pd.DataFrame, text_column: str, codebook: dict, ctx: dict | None = None) -> tuple[pd.DataFrame, dict]:
-    """Two independent passes; the result table keeps BOTH codes and flags disagreements."""
-    first = code_rows(df, text_column, codebook, ctx=ctx, coder='a')
-    second = code_rows(df, text_column, codebook, ctx=ctx, coder='b')
+    """Two independent passes; the result table keeps BOTH codes and flags disagreements.
+
+    ``run_llm_dataframe`` writes its result columns into the frame it is handed and returns THAT
+    same object. Passing the caller's ``df`` to both passes aliased them: coder B overwrote coder A's
+    ``qa_code`` before ``first.copy()`` ran, so both columns held B's answer and kappa was 1.0 by
+    construction. Each pass gets its own copy, and the two cache scopes differ by coder (see
+    ``_codebook_scope``), so the two coders are genuinely independent.
+    """
+    first = code_rows(df.copy(), text_column, codebook, ctx=ctx, coder='a')
+    second = code_rows(df.copy(), text_column, codebook, ctx=ctx, coder='b')
     result = first.copy()
     result['qa_code_b'] = second['qa_code'].tolist()
     result['qa_evidence_b'] = second['qa_evidence'].tolist()
@@ -140,10 +167,23 @@ def dual_code(df: pd.DataFrame, text_column: str, codebook: dict, ctx: dict | No
 
 
 def frequencies(frame: pd.DataFrame, code_column: str = 'qa_code') -> list[dict]:
-    total = int(frame[code_column].notna().sum()) if code_column in frame.columns else 0
-    rows = []
-    for code, count in frame[code_column].value_counts().items():
-        if pd.isna(code) or not str(code).strip():
-            continue
-        rows.append({'code': str(code), 'n': int(count), 'pct': round(100.0 * int(count) / max(1, total), 2)})
-    return rows
+    """Frequency table for one coding column; refuse by name when it is absent.
+
+    A ``report`` node pointed at a raw table (no coding pass upstream) used to fall through to a
+    pandas ``KeyError``. That is an unexplained node failure; the caller must be told that the
+    column is produced by a coding node. Blank-string cells are excluded from BOTH the counts and
+    the denominator, so percentages always sum to 100 over coded rows.
+    """
+    if code_column not in frame.columns:
+        raise ContentAnalysisError(t('quant.report_needs_coding', col=code_column))
+    coded = (
+        frame[code_column]
+        .astype('object')
+        .map(lambda value: None if pd.isna(value) or not str(value).strip() else str(value))
+    )
+    counts = coded.dropna().value_counts()
+    total = int(counts.sum())
+    return [
+        {'code': str(code), 'n': int(count), 'pct': round(100.0 * int(count) / max(1, total), 2)}
+        for code, count in counts.items()
+    ]
