@@ -297,6 +297,8 @@
         'quant.modeDual': 'Two coders + reliability (kappa)',
         'quant.modeReport': 'Frequency table',
         'settings.codebookId': 'Codebook id (open creates one; axial/selective need an existing id)',
+        'settings.quantCodebookId': 'Existing codebook id',
+        'settings.quantCodebookHint': 'Content analysis codes against a codebook you define BEFORE the run. Create one with the 内容分析 skill or import samples/workflows/codebooks/content_analysis_sample.json; report mode reads codes from an upstream code/dual node.',
         'settings.codebookName': 'Codebook name (open only)',
         'coding.phaseOpen': 'Open coding',
         'coding.phaseAxial': 'Axial coding',
@@ -337,6 +339,10 @@
         'set.pageLoad': 'Page load timeout (s)',
         'set.elementWait': 'Element wait timeout (s)',
         'set.ollamaHost': 'Ollama server address',
+        'set.llmBulkModel': 'Small Ollama tag for bulk LLM nodes',
+        'set.llmBulkModelHint':
+            'Blank = follow the run model. Pulled tags such as qwen3.5:4b make row-by-row cleaning and '
+            + 'short-label classification much faster; deep/generative nodes still use the run model.',
         'set.cookiePreflight': 'Verify Cookie before run',
         'set.overseasAsk': 'Ask about the VPN for overseas platforms',
         'set.overseasAskInline': 'Before a run, ask whether the VPN is up when the canvas crawls an overseas platform',
@@ -1063,6 +1069,8 @@
         'quant.modeDual': '双人独立编码 + 信度（kappa）',
         'quant.modeReport': '频次统计表',
         'settings.codebookId': '码本 id（开放编码会新建；主轴/选择性需填已有 id）',
+        'settings.quantCodebookId': '已有码本 id',
+        'settings.quantCodebookHint': '内容分析按运行前定义的码本逐行归类。请先用“内容分析”技能新建码本，或导入 samples/workflows/codebooks/content_analysis_sample.json；频次统计读取上游 code/dual 节点产出的编码列。',
         'settings.codebookName': '码本名称（仅开放编码）',
         'coding.phaseOpen': '开放编码',
         'coding.phaseAxial': '主轴编码',
@@ -1103,6 +1111,10 @@
         'set.pageLoad': '页面加载超时(秒)',
         'set.elementWait': '元素等待超时(秒)',
         'set.ollamaHost': 'Ollama 服务地址',
+        'set.llmBulkModel': '批量文本节点使用的轻量 Ollama 模型',
+        'set.llmBulkModelHint':
+            '留空表示跟随本次运行的主模型。填已拉取的 qwen3.5:4b 等小模型可显著加快逐行清洗和短标签分类；'
+            + '主题命名、质性编码等深度节点仍用主模型。',
         'set.cookiePreflight': '执行前自动验证 Cookie',
         'set.overseasAsk': '海外平台运行前问一句外网',
         'set.overseasAskInline': '画布里有海外平台时，运行前先问一句 VPN 是否已开',

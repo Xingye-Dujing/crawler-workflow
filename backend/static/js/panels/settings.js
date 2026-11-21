@@ -835,8 +835,12 @@ function openSettings(nodeId) {
             html += renderParamSelect(nodeId, p, 'mode', 'settings.analysisMode', 'code',
                 [{ v: 'code', l: I18n.t('quant.modeCode') }, { v: 'dual', l: I18n.t('quant.modeDual') },
                  { v: 'report', l: I18n.t('quant.modeReport') }]);
-            html += renderParamInput(nodeId, p, 'codebook_id', 'settings.codebookId', 'text', '') +
-                renderParamInput(nodeId, p, 'text_column', 'settings.textColumn', 'text', '正文');
+            /* The text column is already rendered for every process node above — a second input
+               here bound the same param twice and left one stale after an edit. The codebook hint
+               is content-analysis specific: "open creates one" describes qualitative coding. */
+            html += renderParamInput(nodeId, p, 'codebook_id', 'settings.quantCodebookId', 'text', '') +
+                '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t('settings.quantCodebookHint') + '</div></div>';
         }
 
         /* Qualitative coding: the three grounded-theory passes. Every provider call is mirrored
@@ -1221,8 +1225,9 @@ function nodeNeedsLlm(params, nodeOperation) {
         }
     }
     if (llmStepOps.indexOf(op) >= 0) return true;
-    /* The process half is answered by the server's LLM-call registry (published in /api/config),
-       not by a local list: one source of truth shared with the cost gate and the trace seam. */
+    /* The process half is answered by opCallsLlmProcess (workflow.js) — a deliberate mirror of the
+       server's LLM_POLICY, pinned by test_frontend_contract.py against that registry. Keep the two
+       in sync there; this panel must not grow its own second list. */
     if (opCallsLlmProcess(op, p)) return true;
     return false;
 }

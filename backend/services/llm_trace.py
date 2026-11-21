@@ -261,10 +261,12 @@ def _finish_trace(run: str, node_id: str, summary: dict) -> None:
         if f'| {node_id} |' not in title:
             continue
         # Traditional-model nodes have no chat loop, so show a bounded in/out sample — the exact
-        # text the model saw and what it produced. This is what makes their trace auditable rather
-        # than an empty shell. LLM nodes already carry their full prompts/answers as trace_calls,
-        # so they skip this (no input_rows passed).
-        sample = _in_out_sample(summary.get('input_rows') or [], summary.get('output_rows') or [])
+        # text the model saw and what it produced. LLM nodes already carry their full prompts and
+        # answers as trace_call rows; appending a second sample there duplicates evidence. Decide
+        # from the stored transcript, not from the caller (the engine passes rows for every node).
+        conversation_messages = store.list_messages(conversation['id'], limit=400)
+        has_chat = any((message.get('meta') or {}).get('kind') == 'trace_call' for message in conversation_messages)
+        sample = '' if has_chat else _in_out_sample(summary.get('input_rows') or [], summary.get('output_rows') or [])
         if sample:
             store.append_message(
                 conversation['id'],

@@ -350,7 +350,9 @@ def run_node_durable(
         run_id,
         nid,
         {
-            'op': str(ntype or ''),
+            # The operation the node actually ran, not its type ('process'/'analysis'). The trace
+            # result meta is read by the apply route and the workspace; a type is not an answer.
+            'op': str(node.get('operation') or (node.get('params') or {}).get('operation') or ntype or ''),
             'rows': len(result) if isinstance(result, list) else 0,
             'workflow_name': str(ambient().get('workflow_name') or ''),
             'text': t('trace.finished', node=label, rows=len(result) if isinstance(result, list) else 0),

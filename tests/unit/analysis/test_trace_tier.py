@@ -30,6 +30,9 @@ def test_tier_order_and_unknown_reads_as_off():
         (_node('sentiment', mode='llm'), 'sentiment', 'deepseek', 'api'),
         (_node('zero_shot'), 'zero_shot', 'ollama', 'traditional'),
         (_node('semantic_dedupe'), 'semantic_dedupe', 'ollama', 'traditional'),
+        (_node('topic_model', method='embedding'), 'topic_model', 'ollama', 'traditional'),
+        (_node('topic_model', method='lda'), 'topic_model', 'ollama', 'off'),
+        (_node('topic_map', method='lda'), 'topic_map', 'ollama', 'off'),
         (_node('qualitative_code'), 'qualitative_code', 'ollama', 'llm'),
         (_node('content_analysis', mode='dual'), 'content_analysis', 'ollama', 'llm'),
         (_node('content_analysis', mode='report'), 'content_analysis', 'ollama', 'off'),
@@ -81,6 +84,17 @@ def test_non_bert_mode_never_claims_a_stale_bert_model():
     )
     assert prov == 'SnowNLP'
     assert name == '', 'a stale bert_model field must not be named for a SnowNLP run'
+
+
+def test_embedding_topic_identity_names_the_encoder(monkeypatch):
+    import services.analysis.topic_kernels as kernels
+
+    monkeypatch.setattr(kernels, '_resolve_topic_method', lambda _method: 'embedding')
+    node = _node('topic_model', method='embedding')
+    assert tt.should_trace(node, 'topic_model', 'ollama', 'traditional')
+    prov, name = tt.resolve_model_identity(node, 'topic_model', 'ollama')
+    assert prov == 'local model'
+    assert 'bge' in name.lower()
 
 
 def test_cloud_provider_uses_the_run_model_not_a_node_model():

@@ -35,12 +35,23 @@ TRADITIONAL_OPS = frozenset(
         'zero_shot',
         'semantic_dedupe',
         'similar_to',
-        'topic',  # topic discovery / embedding views use a local encoder
     }
 )
 
 #: Classifier ops whose non-LLM modes (bert/ml/snownlp/regex) are traditional models.
 _CLASSIFIER_OPS = frozenset({'clean', 'emotion', 'tendency', 'sentiment', 'ner', 'aggression'})
+
+#: Topic steps use a local encoder ONLY when their (possibly auto-resolved) method is 'embedding'.
+#: Their real op ids are topic_model/topic_map/... — 'topic' is a column name, never an op, so a
+#: registry entry for it could never match and embedding topic nodes were silently untraced.
+_TOPIC_OPS = frozenset({'topic_model', 'topic_map', 'topic_salience', 'topic_by_stage', 'topic_coherence'})
+
+
+def _topic_uses_encoder(params: dict) -> bool:
+    """Resolve a topic step's method through the SAME resolver the op uses at run time."""
+    from services.analysis.topic_kernels import _resolve_topic_method
+
+    return _resolve_topic_method(str(params.get('method') or 'auto')) == 'embedding'
 
 
 def tier_rank(name: str) -> int:
@@ -61,6 +72,8 @@ def node_tier(node: dict, op: str, provider: str = 'ollama') -> str:
     if op_calls_llm(op, node.get('params') or {}):
         return 'api' if provider not in ('', 'ollama') else 'llm'
     if op in TRADITIONAL_OPS or (op in _CLASSIFIER_OPS and _has_local_model_mode(node, op)):
+        return 'traditional'
+    if op in _TOPIC_OPS and _topic_uses_encoder(node.get('params') or {}):
         return 'traditional'
     return 'off'
 
@@ -161,14 +174,22 @@ def resolve_model_identity(node: dict, op: str, provider: str, run_model: str = 
                 # family-only identity rather than naming a model we cannot verify.
                 return family, ''
 
-        if op in _FIXED_MODEL_OPS:
-            module_name, attr = _FIXED_MODEL_OPS[op]
-            try:
-                import importlib
+        if op in _FIXED_MODEL_OPS or (op in _TOPIC_OPS and _topic_uses_encoder(params)):
+            if op in _TOPIC_OPS:
+                name = str(params.get('embedding_model') or '').strip()
+                if not name:
+                    from analyzers.backends.encoder import DEFAULT_EMBED_MODEL
 
-                name = str(getattr(importlib.import_module(module_name), attr) or '')
-            except Exception:
-                name = ''
+                    name = DEFAULT_EMBED_MODEL
+                family = 'local model'
+            else:
+                module_name, attr = _FIXED_MODEL_OPS[op]
+                try:
+                    import importlib
+
+                    name = str(getattr(importlib.import_module(module_name), attr) or '')
+                except Exception:
+                    name = ''
         return family, name
 
     return '', ''

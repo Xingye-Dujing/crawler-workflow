@@ -196,6 +196,42 @@ class TestLlmGateParity:
             node['operation'] = operation
         assert js_answers[name] == workflow_needs_llm({'nodes': [node]}), name
 
+    def test_every_server_policy_op_is_mirrored_in_the_browser_registry(self, tmp_path_factory):
+        """A new model-calling op must fail this test until its JS copy is updated.
+
+        The fixed CASES above cannot see a newly added registry entry, so a new op used to drift
+        silently: the server charged for a model while the browser's pre-run gate saw none.
+        """
+        from services.analysis.process import LLM_POLICY
+
+        if shutil.which('node') is None:
+            pytest.skip('node not available')
+        scenarios = []
+        for op, policy in sorted(LLM_POLICY.items()):
+            variants = [{'operation': op}]
+            if policy[0] == 'mode':
+                variants += [{'operation': op, 'mode': policy[1]}, {'operation': op, 'mode': 'not-a-mode'}]
+            elif policy[0] == 'mode_in':
+                variants += [{'operation': op, 'mode': mode} for mode in sorted(policy[1])]
+                variants += [{'operation': op, 'mode': 'not-a-mode'}]
+            for index, params in enumerate(variants):
+                scenarios.append({'id': f'{op}_{index}', 'needsLlm': params})
+
+        path = tmp_path_factory.mktemp('gate_registry') / 'scenarios.json'
+        path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
+        proc = run_node(VALIDATE_HARNESS, JS_DIR / 'workflow.js', path)
+        assert proc.returncode == 0, proc.stderr
+        js = json.loads(proc.stdout)['needsLlm']
+
+        from engine.plan import workflow_needs_llm
+
+        for scenario in scenarios:
+            node = {'type': 'process', 'params': scenario['needsLlm']}
+            expected = workflow_needs_llm({'nodes': [node]})
+            assert js[scenario['id']] == expected, (
+                f'{scenario["id"]}: browser {js[scenario["id"]]} vs server {expected}'
+            )
+
     def test_an_analysis_step_that_calls_a_model_is_seen_on_both_sides(self, tmp_path_factory):
         """``nodeNeedsLlm`` (settings.js) and ``workflow_needs_llm`` (engine/plan.py) must also
         agree on ANALYSIS nodes: a scheduled canvas carrying ``topic_label`` passes the verdict,

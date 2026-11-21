@@ -107,6 +107,9 @@ class FakeStore:
     def list_conversations(self, limit=80, q='', **kwargs):
         return [row for row in self.conversations if q in str(row.get('title') or '')]
 
+    def list_messages(self, conversation_id, limit=400):
+        return [row for row in self.messages if row['conversation_id'] == conversation_id][-limit:]
+
 
 def test_trace_client_records_both_sides_without_touching_the_key(monkeypatch):
     import services.llm_trace as trace
