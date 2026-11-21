@@ -385,11 +385,13 @@ class LLMClient:
         for attempt in range(1, max_retries + 1):
             self._check_cancel()
             try:
-                # stream=True is required for real token-by-token deltas; without it requests
-                # buffers the whole body and the trace sees one late chunk.
-                resp = requests.post(
-                    OPENROUTER_CHAT_URL, headers=headers, json=payload, timeout=self.timeout, stream=streaming
-                )
+                # Pass `stream` only when actually streaming: the buffered path must keep the exact
+                # call shape transports and test doubles have always seen, while stream=True is
+                # required for real token-by-token deltas in a traced run.
+                post_kwargs = {'headers': headers, 'json': payload, 'timeout': self.timeout}
+                if streaming:
+                    post_kwargs['stream'] = True
+                resp = requests.post(OPENROUTER_CHAT_URL, **post_kwargs)
             except requests.RequestException as e:
                 last = LLMError(t('llm.net_error', err=e), 'network')
                 logger.warning(t('llm.or_net_exception', i=attempt, n=max_retries, err=e))

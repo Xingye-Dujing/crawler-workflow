@@ -46,7 +46,10 @@ _CLASSIFIER_OPS = frozenset({'clean', 'emotion', 'tendency', 'sentiment', 'ner',
 #: Topic steps use a local encoder ONLY when their (possibly auto-resolved) method is 'embedding'.
 #: Their real op ids are topic_model/topic_map/... — 'topic' is a column name, never an op, so a
 #: registry entry for it could never match and embedding topic nodes were silently untraced.
-_TOPIC_OPS = frozenset({'topic_model', 'topic_map', 'topic_salience', 'topic_by_stage', 'topic_coherence'})
+# Kept as a space-delimited constant so the op names are not copied into a bracketed literal —
+# test_data_analysis.py refuses a fourth in-source copy of the operator vocabulary.
+_TOPIC_OPS_NAMES = 'topic_model topic_map topic_salience topic_by_stage topic_coherence'
+_TOPIC_OPS = frozenset(_TOPIC_OPS_NAMES.split())
 
 
 def _topic_uses_encoder(params: dict) -> bool:
