@@ -507,14 +507,17 @@ def tool_apply_node_result(args: dict, _ctx: dict) -> dict:
     run_id = str(args.get('run_id') or '').strip()
     node_id = str(args.get('node_id') or '').strip()
     result = args.get('result')
-    if not run_id or not node_id or not isinstance(result, dict):
+    if not run_id or not node_id or not isinstance(result, (dict, list)):
         raise AIError(
             'ai.toolRefused',
             kind='bad_request',
             tool='apply_node_result',
-            reason='run_id, node_id and a result object are required',
+            reason='run_id, node_id and a result object or array are required',
         )
-    saved = node_results.save(run_id, node_id, result)
+    try:
+        saved = node_results.save(run_id, node_id, result)
+    except ValueError as exc:
+        raise AIError('ai.toolRefused', kind='bad_request', tool='apply_node_result', reason=str(exc)) from exc
     return {
         'ok': True,
         'saved': saved,
@@ -1350,7 +1353,7 @@ TOOLS = {
                 'properties': {
                     'run_id': {'type': 'string'},
                     'node_id': {'type': 'string'},
-                    'result': {'type': 'object'},
+                    'result': {'oneOf': [{'type': 'object'}, {'type': 'array'}]},
                 },
                 'required': ['run_id', 'node_id', 'result'],
             },

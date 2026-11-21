@@ -234,6 +234,21 @@ def run_node_durable(
         add_log(t('run.skipped_empty', nid=label), wf_idx=wf_idx)
         return [], NODE_SKIPPED
 
+    # An edit explicitly applied from a node-trace conversation (apply_node_result) overrides this
+    # node's execution on a rerun of the SAME run. consume() removes the edit so a later rerun
+    # executes for real instead of replaying a stale answer forever. This is the read side of
+    # services/coding/node_results.save — without it the "confirm the edit, then rerun" promise
+    # wrote a file that nobody ever opened.
+    from services.coding import node_results
+
+    applied = node_results.consume(run_id, nid)
+    if applied is not None and isinstance(applied.get('result'), list):
+        rows = applied['result']
+        store.replace_rows(run_id, nid, rows, label=label)
+        add_log(t('run.applied_trace_result', nid=label, n=len(rows)), wf_idx=wf_idx)
+        store.finish_node(run_id, nid, NODE_DONE)
+        return rows, NODE_DONE
+
     try:
         # A stopped run executes no further node. The graph loops already check
         # ``running`` between levels and between workflows, so this is the narrow case

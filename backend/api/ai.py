@@ -424,7 +424,16 @@ def ai_trace_apply(conversation_id: str):
     node_id = str(provenance.get('node_id') or '')
     if not run_id or not node_id:
         return jsonify({'ok': False, 'error': 'this trace has no settled node result yet'}), 400
-    saved = node_results.save(run_id, node_id, dict(data.get('result') or data))
+    # The edited rows of a node are a list, not an object: accepting only a dict made the generic
+    # apply path useless for every table-producing node, and dict([...]) raised a 500. Accept both
+    # shapes and refuse anything else with the JSON envelope the panel parses.
+    result = data['result'] if 'result' in data else data
+    if not isinstance(result, (dict, list)):
+        return _bad_param('result')
+    try:
+        saved = node_results.save(run_id, node_id, result)
+    except ValueError:
+        return _bad_param('run_id/node_id')
     return jsonify(
         {
             'ok': True,
