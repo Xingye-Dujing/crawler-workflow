@@ -173,6 +173,29 @@ class TestTheManualCheck:
         assert 'installer' in results['manualNoChannelToast']
 
 
+class TestAnOldAppliedJob:
+    """After an update the persisted `applied` job still travels with every /check answer.
+
+    Its version is history, not the offer: the header used to paint the already-installed number
+    next to a dialog naming the new one, and a 稍后 under that stale number silenced every later
+    release forever.
+    """
+
+    def test_the_header_names_the_offered_version(self, results):
+        offer = results['appliedJobOffer']
+        assert offer['hidden'] is False
+        assert offer['version'] == '2026.11.21.1'
+        assert '2026.11.21.1' in offer['text']
+        assert '2026.11.17.1' not in offer['version']
+
+    def test_the_dialog_still_states_both_versions(self, results):
+        message = results['appliedJobDialog']
+        assert '2026.11.17.1' in message and '2026.11.21.1' in message
+
+    def test_postpone_keys_the_new_version_not_the_old_job(self, results):
+        assert results['appliedJobSnooze']['version'] == '2026.11.21.1'
+
+
 # ─── The stylesheet ───
 
 

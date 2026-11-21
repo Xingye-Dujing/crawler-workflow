@@ -223,4 +223,25 @@ await run('UpdatePanel.checkNow()');
 report.manualNoChannel = paint();
 report.manualNoChannelToast = calls.toast[calls.toast.length - 1];
 
+/* 17. A persisted `applied` job is history: its OLD version must not become the header of a
+ * new offer (nor the snooze key that would silence every later version). */
+sandbox.localStorage.removeItem('update-snooze');
+replies.check = {
+    ok: true,
+    supported: true,
+    current: '2026.11.17.1',
+    latest: '2026.11.21.1',
+    update_available: true,
+    apply_supported: true,
+    signed: false,
+    notes: '',
+    job: { state: 'applied', version: '2026.11.17.1' },
+};
+await run('UpdatePanel.checkNow()');
+report.appliedJobOffer = paint();
+await run('UpdatePanel._ask()');
+report.appliedJobDialog = calls.dialogs[calls.dialogs.length - 1].message;
+await run("document.querySelector('.update-later').onclick()");
+report.appliedJobSnooze = JSON.parse(sandbox.localStorage.getItem('update-snooze') || '{}');
+
 process.stdout.write(JSON.stringify(report));

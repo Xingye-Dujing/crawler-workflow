@@ -183,13 +183,26 @@ const UpdatePanel = {
         };
     },
 
+    /* The version the CARD is talking about. A persisted `applied` job is history: its version is
+       the one already running, while `info.latest` is the offer. Painting job.version there showed
+       the OLD number in the header next to a dialog that correctly named the new one, and snoozed
+       every future offer under that stale number. Active jobs keep their own version — a staged or
+       downloading card must name the bytes it is handling, not whatever the feed says now. */
+    _offerVersion() {
+        const info = this._info || {};
+        const job = this._job || {};
+        const state = String(job.state || 'idle');
+        const history = state === 'idle' || state === 'cancelled' || state === 'applied';
+        return String((history ? '' : job.version) || info.latest || '').trim();
+    },
+
     /* The one painter. Every state the server can report has a row here, so a new state shows up
        as an unlit card rather than as a silently frozen sentence from three states ago. */
     _render() {
         const info = this._info || {};
         const job = this._job || { state: 'idle' };
         const state = String(job.state || 'idle');
-        const version = String(job.version || info.latest || '').trim();
+        const version = this._offerVersion();
         if (!this._shouldShow(info, job)) {
             this._hide();
             return;
@@ -246,7 +259,7 @@ const UpdatePanel = {
 
     _shouldShow(info, job) {
         const state = String(job.state || 'idle');
-        const version = String(job.version || info.latest || '');
+        const version = this._offerVersion();
         if (state !== 'applying' && !this._manual && this._snoozed(version)) return false;
         if (state !== 'idle' && state !== 'cancelled' && state !== 'applied') return true;
         return !!info.update_available;
@@ -424,15 +437,12 @@ const UpdatePanel = {
     },
 
     _postponeAndHide() {
-        const job = this._job || {};
-        this._snooze(String(job.version || (this._info || {}).latest || ''));
+        this._snooze(this._offerVersion());
         this._hide();
     },
 
     _currentVersion() {
-        const job = this._job || {};
-        const info = this._info || {};
-        return String(job.version || info.latest || '');
+        return this._offerVersion();
     },
 
     /* ── words, notices ─────────────────────────────────────────────────── */
