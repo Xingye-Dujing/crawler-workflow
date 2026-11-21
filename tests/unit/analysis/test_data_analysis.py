@@ -296,12 +296,12 @@ class TestRows:
         filled = D.fill_null(frame, value=0)
         assert filled['a'].tolist() == [0] and filled['b'].tolist() == [0]
 
-    def test_fill_null_with_nothing_to_fill_refuses_instead_of_mutating(self):
-        """A node saved before the 填充值 box existed mutated ``''`` into NA and claimed success."""
+    def test_fill_null_with_nothing_to_fill_is_a_no_op(self):
+        """A node saved before the 填充值 box existed must not turn ``''`` into NA and claim success."""
         frame = pd.DataFrame({'a': ['x', '']})
-        with pytest.raises(UnknownOperationError):
-            D.fill_null(frame, columns=['a'])
-        assert frame['a'].tolist() == ['x', ''], 'a refused step must not touch the caller table'
+        out = D.fill_null(frame, columns=['a'])
+        assert out['a'].tolist() == ['x', '']
+        assert frame['a'].tolist() == ['x', ''], 'the caller table was mutated'
 
     def test_drop_duplicates_keeps_first_by_default(self):
         frame = pd.DataFrame({'a': ['x', 'x', 'y']})
