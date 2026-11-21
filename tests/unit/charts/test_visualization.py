@@ -752,6 +752,22 @@ class TestChartDisplayLocalisation:
         assert localize('Topic modeling') == 'Topic modeling'
         assert localize('Topic-12') == '主题-12'
 
+    def test_an_untouched_topic_map_node_uses_the_contract_columns(self):
+        """A dropped-but-unconfigured node used to refuse at RUN time, after the crawl was paid for."""
+        from nodes.executors.visualize import execute_visualize_node
+
+        rows = [{'pc1': 0.1, 'pc2': 0.2, 'topic': 'Topic-1', 'prevalence_pct': 50.0}]
+        result = execute_visualize_node(
+            {
+                'id': 'v1',
+                'title': '主题距离',
+                'params': {'chart_type': 'topic_map', 'emit_latex': False, 'emit_latex_table': False},
+            },
+            rows,
+        )
+        assert result.get('engine') == 'echarts', result
+        assert result['option']['series'], result
+
     def test_topic_map_series_and_axes_are_chinese_in_a_zh_run(self):
         from i18n import set_lang
 
