@@ -241,7 +241,10 @@ def run_node_durable(
     # wrote a file that nobody ever opened.
     from services.coding import node_results
 
-    applied = node_results.consume(run_id, nid)
+    try:
+        applied = node_results.consume(run_id, nid)
+    except ValueError:
+        applied = None  # an odd node id must never stop the node it belongs to
     if applied is not None and isinstance(applied.get('result'), list):
         rows = applied['result']
         store.replace_rows(run_id, nid, rows, label=label)
