@@ -28,6 +28,45 @@ def _patch(client, conversation_id: str, **fields):
     return response.get_json()['conversation']
 
 
+def _trace_conversation(client, run_id: str = 'run_abc', node_id: str = 'n1') -> str:
+    created = client.post('/api/ai/conversations', json={'provider': 'ollama', 'model': 'm', 'skill': 'node_trace'})
+    assert created.status_code == 200
+    cid = created.get_json()['conversation']['id']
+    from ai import store
+
+    store.append_message(
+        cid,
+        'assistant',
+        'done',
+        meta={
+            'kind': 'trace_result',
+            'run_id': run_id,
+            'node_id': node_id,
+            'workflow_name': 'demo',
+            'rows': 1,
+        },
+    )
+    return cid
+
+
+def test_trace_apply_accepts_a_list_of_edited_rows(client):
+    """Node results are row arrays; the old dict(data) raised a 500 for them."""
+    from services.coding import node_results
+
+    cid = _trace_conversation(client)
+    response = client.post('/api/ai/traces/' + cid + '/apply', json={'result': [{'正文': 'edited'}]})
+    assert response.status_code == 200, response.get_json()
+    assert response.get_json()['run_id'] == 'run_abc'
+    assert node_results.load('run_abc', 'n1')['result'] == [{'正文': 'edited'}]
+
+
+def test_trace_apply_refuses_a_scalar_result_with_json_envelope(client):
+    cid = _trace_conversation(client, run_id='run_scalar', node_id='n2')
+    response = client.post('/api/ai/traces/' + cid + '/apply', json={'result': 42})
+    assert response.status_code == 400
+    assert response.get_json()['ok'] is False
+
+
 def test_stop_does_not_signal_a_conversation_this_account_cannot_see(client, monkeypatch):
     """ACTIVE_STREAMS is process-wide; without the owner check a known id could cancel a
     foreign account's paid turn and make it look like the victim pressed 停止. Process-only
