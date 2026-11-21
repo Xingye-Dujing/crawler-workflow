@@ -39,6 +39,20 @@ def _forward_executor_seams(monkeypatch):
     forward(monkeypatch, source, 'add_log', app_module)
 
 
+@pytest.fixture
+def no_bert_weights(monkeypatch):
+    """Make the documented bert -> general degradation deterministic across machines.
+
+    The default sentiment node names a registered model, but the weights are gitignored: CI has no
+    model folder and no torch stack, while a developer box may have both. The contract under test is
+    that the node COMPLETES through the printed fallback when bert cannot run, so force that branch
+    here instead of letting the machine decide which path the node takes.
+    """
+    from nodes.executors import process as process_exec
+
+    monkeypatch.setattr(process_exec, 'bert_backend', lambda: 'torch, transformers')
+
+
 def _note_window(*args):
     """The crawl-window ledger now lives in ``services.runs.windows`` (shared by output too)."""
     from services.runs.windows import note_window
@@ -808,7 +822,9 @@ class TestSentimentNode:
             [{'from': 'node-1', 'to': 'node-2'}, {'from': 'node-2', 'to': 'node-3'}],
         )
 
-    def test_the_default_mode_labels_the_column_and_writes_it_out(self, client, app_module, paste, data_root):
+    def test_the_default_mode_labels_the_column_and_writes_it_out(
+        self, client, app_module, paste, data_root, no_bert_weights
+    ):
         ds = paste(self.ROWS, name='senti.csv')
         started = client.post('/api/workflow/execute', json={'workflow': self._chain(ds), 'workflow_name': 'senti'})
         run_id = started.get_json()['run_id']
@@ -859,7 +875,9 @@ class TestSentimentNode:
         assert statuses['node-2']['status'] == 'failed', statuses['node-2']
         assert '0.2' in statuses['node-2']['error'], statuses['node-2']['error']
 
-    def test_bert_degrades_to_the_general_mode_and_completes_when_it_cannot_run(self, client, app_module, paste):
+    def test_bert_degrades_to_the_general_mode_and_completes_when_it_cannot_run(
+        self, client, app_module, paste, no_bert_weights
+    ):
         """An explicit ``bert`` the machine cannot run — no torch stack, or (as here) no model named
         — now falls back to the op's dependency-free mode instead of failing the node. The node
         COMPLETES with real SnowNLP scores. The never-silent rule is kept because the executor prints

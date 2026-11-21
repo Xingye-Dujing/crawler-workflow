@@ -243,6 +243,14 @@ loader 才在管理员令牌下解包。其余保持 `CloseApplications=yes`、U
 
 ## 体积边界
 
+**2026-11-21 构建（2026.11.21.1：AI 工作区与画布打通、量化内容分析、本地小模型、追踪与演示库；另修复 AI 数据库重建后 schema 缓存失效）**：
+`CaiXiHui-win64.zip` **159,474,374 B（152.1 MB）**、`CaiXiHui-Setup.exe` **147,244,841 B（140.4 MB）**；
+`CaiXiHui-Online-Setup.exe` 仍是上一版那份 **18,425,757 B（17.6 MB）**（安装器代码未变）。
+构建用 `-Clean -Installer -Version 2026.11.21.1`，UPX 默认开；zip 顶层仍只有 `CaiXiHui/`。
+Gitee 分片按 **99,614,720 B** 切（zip：99,614,720 + 59,859,654；Setup：99,614,720 + 47,630,121）。
+本版只发 Windows，`version.json` 用 `--windows-only` 删掉旧的 `darwin-*` 条目，Mac 端不提示。
+发布前全量 fast **10,568 passed / 7 skipped**，设备层（真 Chrome + Ollama）**213 passed / 5 skipped**，ruff 与两档 pylint 均通过。
+
 **2026-11-20 构建（2026.11.20.2：一批缺陷修复——搜索 count 归一、诊断日志、按账号恢复、评论导出与表格一致、前端竞态与转义、分片 CSV 公式中性化、组件目录 HTTPS 重定向、CatBus 异常字段、模型一致率重复 ID）**：
 `CaiXiHui-win64.zip` **138,291,055 B（131.9 MB）**、`CaiXiHui-Setup.exe` **127,790,394 B（121.9 MB）**；
 `CaiXiHui-Online-Setup.exe` 仍是上一版那份 **18,425,757 B（17.6 MB）**（安装器代码未变，它读 `version.json` 装当次最新版）。

@@ -1,37 +1,25 @@
 {
   "schema": 1,
-  "version": "2026.11.20.2",
-  "released": "2026-11-20",
-  "notes": "本版为缺陷修复版，聚焦数据一致性、下载与导出安全、跨账号隔离和前端竞态。\n\n修复：搜索接口对非法 count 参数不再返回 500；工作流诊断日志保留完整 traceback；AI 启动恢复按账号判定活跃流，避免一个账号的会话抑制另一个账号的中断消息回收。\n\n数据一致性：评论时间范围现在同时作用于分析表和下载用的导出文件；模型一致率矩阵遇到重复行 ID 改为具名拒绝，不再抛底层错误。\n\n安全：分片导出的 CSV 复用公式中性化，爬取的标题不再可能在 Excel 中被执行；组件目录下载拒绝 HTTPS 降级到 HTTP 的重定向；技能编辑器的上下文来源在属性中正确转义。\n\n健壮性：CatBus 适配器返回异常字段时按名拒绝，预检与摘要不再崩成 500；阶段耗时条、来源指南的语言切换引入请求代次，旧响应不会再覆盖新状态。",
+  "version": "2026.11.21.1",
+  "released": "2026-11-21",
+  "notes": "本版把 AI 工作区与画布打通，并加入量化内容分析、本地小模型与演示库。\n\nAI 工作区：画布与 AI 工作区打通，节点 LLM 调用在会话里可见；新增三等级模型调用追踪与可复用的追踪会话；AI 回合不再丢失同轮工具调用，截断如实上报，所有写操作一律先征得同意；OpenRouter 流式响应按 SSE 帧解析。本次还在 OpenCode Go 通道加入了免费的 Hy4 flash Free 模型（工具、推理、视觉，100 万上下文）。\n\n内容分析：引入量化内容分析的演绎编码与编码信度（码本缓存隔离）；未判定、缺测与图表默认值在三种投影里得到同一个答案；阶段/分组相关的一致性修复随包。\n\n模型与选型：接入本地模型目录与 NER / 零样本 / 重排轻量模型，补全实测基准与备份；LLM 分层与本地模型实测选型，情感分析默认切换为多语料权重；扩展向量算子与缓存备份；追踪写入改为旁路且不逐 token 落库。\n\n演示与录屏：新增五个最佳实践演示工作流，演示库分类整理，加入可复用的全屏浏览器录屏脚本与桌面实机录屏。\n\n修复与健壮性：采集只轮换该轮换的账号并按账号校验 Cookie 路径、如实计数；请求字段按类型读取，错型输入得到具名 4xx 而不是 500；机器级入口收口到同一个权限判定，进程与排队行不再谎报归属；前端竞态、草稿持久化与链接转义不再悄悄丢改动；未配置的填充步骤是空操作；留存、日志与导出只释放/保留它真正处理过的那部分；AI 存储在数据库文件被重建后重新建表，避免后续调用落到空库。\n\n文档：校正 AGENTS.md 的命令、路径与 CI 说明，架构地图补上 runtime/policy 机器级权限入口，账号池文档同步轮换条件，README 增加宣传片章节。",
   "platforms": {
     "win32": {
       "archive": "zip",
-      "sha256": "6f6f407acfd4bb5d1b91b2268a926b7d9dd89d326943bbf13dcac2b62c0d4a94",
-      "size": 138291055,
+      "sha256": "ddcd85e0c9998e0f0a2d90a3d8d1b32af2de772248d497932b89b96febfa7add",
+      "size": 159474374,
       "parts": [
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-win64.zip.001",
-          "sha256": "27566e583f317b160b6ddb6cc527177d246d49277e687834f5f4d7f75c0d1acb",
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-21.1/CaiXiHui-win64.zip.001",
+          "sha256": "b554c4ef05aed9998162d1452ee38ccadaf13b30deb197561317b3f63d14683e",
           "size": 99614720
         },
         {
-          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-win64.zip.002",
-          "sha256": "9d193168121cde2414287b052a63820ad61929586b5ae4b8c68de471a5f8d2f5",
-          "size": 38676335
+          "url": "https://gitee.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-21.1/CaiXiHui-win64.zip.002",
+          "sha256": "fba14fbc6c42a640eccc7bdb8ba43e5cabfa53903fbe64e566209e0d67c72a93",
+          "size": 59859654
         }
       ]
-    },
-    "darwin-arm64": {
-      "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-macOS-arm64.dmg",
-      "sha256": "63d3a0a2811b01e6db9918858328e1f711401bdfe62828052fd4998b63b8a04e",
-      "size": 194060412
-    },
-    "darwin-x64": {
-      "archive": "dmg",
-      "url": "https://github.com/Xingye-Dujing/crawler-workflow/releases/download/exe-2026-11-20.2/CaiXiHui-macOS-x86_64.dmg",
-      "sha256": "b88fb7e608f5e0a8078e9405690b8ebcb8fb575d8b2ef8cf45f2830a09d8c8e0",
-      "size": 204078947
     }
   }
 }

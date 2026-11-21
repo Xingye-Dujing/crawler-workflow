@@ -44,6 +44,12 @@ def test_ner_bert_mode_keeps_the_five_column_contract(monkeypatch):
 
 
 def test_ner_bert_mode_refuses_an_empty_model(monkeypatch):
+    # CI has no transformers, so without a stub the "missing runtime" refusal fires before the
+    # empty-name check this test is about. Stub the import the same way the neighbouring mode test
+    # does, then the patched resolver reaches the named empty-model refusal on every machine.
+    fake = types.ModuleType('transformers')
+    fake.pipeline = lambda *args, **kwargs: lambda texts: []
+    monkeypatch.setitem(sys.modules, 'transformers', fake)
     monkeypatch.setattr('analyzers.sentiment.resolve_bert_model', lambda name: '')
     with pytest.raises(ValueError, match='模型名为空|no model name'):
         NamedEntityRecognizer(mode='bert', model_name='').analyze_dataframe(pd.DataFrame({'正文': ['x']}), '正文')

@@ -21,6 +21,20 @@ def _registry(tmp_path, rows):
     (tmp_path / 'model_registry.json').write_text(json.dumps(rows, ensure_ascii=False), encoding='utf-8')
 
 
+def _assert_machine_verdict(row):
+    """``runnable`` is a per-machine fact, not a promise that optional deps are installed.
+
+    CI deliberately omits torch/transformers/sentence_transformers (requirements-optional), while a
+    developer machine may have them. The contract is that the public row reports the SAME verdict
+    the probe reaches and names the reason when it cannot run — not that every machine says True.
+    """
+    ok, why_not = probe.runnable(catalog.get(row['id']))
+    assert row['runnable'] is ok, why_not
+    assert bool(row['why_not']) is (not ok)
+    if not ok:
+        assert why_not and ('missing' in why_not or 'weights' in why_not)
+
+
 def test_legacy_registry_rows_keep_their_four_keys(tmp_path, monkeypatch):
     monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
     _registry(
@@ -64,7 +78,7 @@ def test_public_rows_carry_the_machine_verdict(tmp_path, monkeypatch):
     rows = catalog.public_rows()
     by_id = {row['id']: row for row in rows}
     chosen = by_id['sentiment_weibosenti_bin']
-    assert chosen['runnable'] is True, chosen['why_not']
+    _assert_machine_verdict(chosen)
     assert chosen['outputs'] == ['sentiment', 'score']
     assert chosen['score_kind'] == 'polarity'
     assert chosen['quality'][0]['metric'] == 'accuracy'
@@ -125,7 +139,7 @@ def test_new_candidates_are_addressable_without_claiming_a_default(tmp_path, mon
     rows = {row['id']: row for row in catalog.public_rows()}
     for model_id in NEW_CANDIDATES:
         row = rows[model_id]
-        assert row['runnable'] is True, row['why_not']
+        _assert_machine_verdict(row)
         assert row['default_for'] == [], f'{model_id}: an unmeasured model cannot be a default'
         assert (Path(BASE_DIR) / row['docs']).is_file(), f'{model_id}: missing model doc'
     # The measured winners keep their defaults after adding candidates.

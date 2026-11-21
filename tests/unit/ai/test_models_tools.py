@@ -1,10 +1,33 @@
 """The local-model tools are read-only and bounded: a wrong id refuses, a big table is sampled."""
 
+import types
+
 import pytest
 from ai import skills, tools
 from ai.errors import AIError
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture
+def runnable_model(monkeypatch):
+    """Bypass the per-machine availability gate: these tests pin the tool's own contract.
+
+    Whether torch/transformers are installed decides if the REAL model can run, and CI omits them.
+    The unknown-id test below deliberately keeps the real gate; these tests are about columns and
+    row bounds, so they name a deterministic stand-in instead of depending on the developer's box.
+    """
+    from services.models import catalog
+
+    fake = types.SimpleNamespace(
+        id='sentiment_weibosenti_bin',
+        name='Weibo sentiment',
+        family='text_classification',
+        task='sentiment',
+        path='/models/weibo',
+    )
+    monkeypatch.setattr(catalog, 'runnable_or_refuse', lambda model_id: fake)
+    return fake
 
 
 def test_catalog_tool_lists_models_and_filters_by_task():
@@ -23,7 +46,7 @@ def test_infer_refuses_an_unknown_model_by_name():
     assert 'no-such-model' in str(caught.value)
 
 
-def test_infer_refuses_a_missing_column():
+def test_infer_refuses_a_missing_column(runnable_model):
     with pytest.raises(AIError, match='column'):
         tools.tool_model_infer(
             {
@@ -35,7 +58,7 @@ def test_infer_refuses_a_missing_column():
         )
 
 
-def test_infer_is_bounded_and_reports_truncation(monkeypatch):
+def test_infer_is_bounded_and_reports_truncation(monkeypatch, runnable_model):
     seen = {}
 
     def fake(manifest, texts, args):

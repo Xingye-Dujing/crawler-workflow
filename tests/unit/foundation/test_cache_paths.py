@@ -41,7 +41,13 @@ def test_setup_points_every_cache_inside_the_project(clean_cache_env):
     assert chosen['TORCH_HOME'] == str(REPO / 'ml_train' / '.cache' / 'torch')
     assert chosen['MPLCONFIGDIR'] == str(REPO / 'ml_train' / '.cache' / 'matplotlib')
     for value in chosen.values():
-        assert home not in value, f'{value} would write to the user home directory'
+        # A checkout can itself live under the user's home (GitHub runners use /home/runner/work),
+        # so "home is not a substring" is not the invariant. What matters is that every cache is
+        # inside the checkout and never the home directory itself or one of its dot-folders.
+        assert Path(value) != Path(home), f'{value} is the user home directory'
+        assert not Path(value).is_relative_to(home) or Path(value).is_relative_to(REPO), (
+            f'{value} would write to the user home directory'
+        )
         assert value.startswith(str(REPO)), f'{value} escaped the checkout'
 
 
@@ -70,7 +76,8 @@ def test_started_app_already_has_a_project_local_hf_home(clean_cache_env):
     # the same project directory the app uses, whatever the test runner's own environment said.
     chosen = cache_module.setup(config_module.BASE_DIR)
     assert Path(chosen['HF_HOME']).resolve() == (REPO / 'ml_train' / '.hf-cache').resolve()
-    assert str(Path.home()) not in os.environ.get('HF_HOME', '')
+    # Compare the resolved path, not a substring: on CI the checkout is itself under Path.home().
+    assert Path(os.environ['HF_HOME']).resolve() == (REPO / 'ml_train' / '.hf-cache').resolve()
 
 
 def test_download_manifest_targets_stay_under_the_dataset_folder():
