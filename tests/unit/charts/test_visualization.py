@@ -742,6 +742,16 @@ class TestChartDisplayLocalisation:
         assert localize('') == ''
         assert localize('author') == 'author', 'a column the tool does not know is left alone'
 
+    def test_a_word_that_merely_starts_with_topic_is_data(self):
+        """Only the model's own numbering is a topic label; ``Topics`` is somebody's keyword."""
+        from i18n import set_lang
+        from services.charts.visualizer import _localize_label as localize
+
+        set_lang('zh')
+        assert localize('Topics') == 'Topics'
+        assert localize('Topic modeling') == 'Topic modeling'
+        assert localize('Topic-12') == '主题-12'
+
     def test_topic_map_series_and_axes_are_chinese_in_a_zh_run(self):
         from i18n import set_lang
 
@@ -1102,6 +1112,11 @@ class TestAggregation:
         """Aggregation-by-a-named-column that is absent used to become a silent row count."""
         with pytest.raises(ChartConfigError, match='Field not found in the data: 分值'):
             V.to_echarts_option(df, 'heatmap', x='作者', y='平台', value_field='分值')
+
+    def test_heatmap_refuses_a_text_value_column_instead_of_drawing_zeros(self, df):
+        """A text column coerced to NaN everywhere rendered a complete-looking zero matrix."""
+        with pytest.raises(ChartConfigError, match='平台'):
+            V.to_echarts_option(df, 'heatmap', x='作者', y='平台', value_field='平台')
 
     def test_sankey_refuses_a_named_value_column_it_cannot_find(self, df):
         with pytest.raises(ChartConfigError, match='Field not found in the data: 分值'):

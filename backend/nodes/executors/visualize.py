@@ -14,6 +14,7 @@ from i18n import t
 from nodes.context import NodeCall, columns_from_params, node_params, split_panel_columns
 from services.charts.contracts import BIBLIO_CHART_READS
 from services.charts.outputs import build_latex_outputs
+from services.charts.registry import with_chart_defaults
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
 
@@ -45,6 +46,7 @@ def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     """
     params = node.get('params', {})
     chart_type = params.get('chart_type', 'bar')
+    params = with_chart_defaults(chart_type, params)
     x_field = params.get('x_field')
     y_field = params.get('y_field')
     value_field = params.get('value_field')

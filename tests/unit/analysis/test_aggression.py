@@ -145,14 +145,15 @@ class TestAnswerParsing:
 
     def test_an_unrecognisable_answer_is_reported_not_invented(self):
         # A local model that answers with prose is not a licence to guess. The raw phrase is kept
-        # in the hits column so the reader can see the parser did not understand it.
+        # in the hits column so the reader can see the parser did not understand it, and the LEVEL
+        # stays 未判定 — writing 'none' here is a clean verdict the parser has no evidence for.
         level, hits = AggressionAnalyzer.parse_answer('这条评论包含攻击性语言，建议删除')
-        assert level == 'none'
+        assert level == aggression_module.UNJUDGED
         assert hits, 'the words the model said are not thrown away'
 
     def test_nothing_at_all_is_no_verdict(self):
-        assert AggressionAnalyzer.parse_answer('') == ('none', '')
-        assert AggressionAnalyzer.parse_answer(None) == ('none', '')
+        assert AggressionAnalyzer.parse_answer('') == (aggression_module.UNJUDGED, '')
+        assert AggressionAnalyzer.parse_answer(None) == (aggression_module.UNJUDGED, '')
 
 
 class TestPrompt:

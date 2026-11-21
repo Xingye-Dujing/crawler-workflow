@@ -40,6 +40,10 @@ class ChartSpec:
     reads: tuple[str, ...] = ()
     #: True when the type's x axis is not a user-chosen column (validation must not demand it).
     no_x: bool = False
+    #: Field defaults this type's contract names: ``(param, column)``. A blank box means "use the
+    #: contract" — an untouched 主题距离图 / 显著词图 node used to refuse at RUN time (after the
+    #: upstream crawl was paid for) because nobody had typed ``pc1``/``term`` into the panel.
+    defaults: tuple[tuple[str, str], ...] = ()
 
     @property
     def label_key(self) -> str:
@@ -65,8 +69,18 @@ SPECS: tuple[ChartSpec, ...] = (
     ChartSpec('line', FAMILY_CONSOLE),
     ChartSpec('dual_line', FAMILY_CONSOLE, echarts_only=True),
     ChartSpec('stack_pct', FAMILY_CONSOLE),
-    ChartSpec('topic_map', FAMILY_CONSOLE, echarts_only=True),
-    ChartSpec('topic_terms', FAMILY_CONSOLE, echarts_only=True),
+    ChartSpec(
+        'topic_map',
+        FAMILY_CONSOLE,
+        echarts_only=True,
+        defaults=(('x_field', 'pc1'), ('y_field', 'pc2'), ('label_field', 'topic'), ('value_field', 'prevalence_pct')),
+    ),
+    ChartSpec(
+        'topic_terms',
+        FAMILY_CONSOLE,
+        echarts_only=True,
+        defaults=(('x_field', 'term'), ('y_field', 'overall_freq'), ('y2_field', 'within_freq')),
+    ),
     ChartSpec('pie', FAMILY_CONSOLE),
     ChartSpec('scatter', FAMILY_CONSOLE),
     ChartSpec('histogram', FAMILY_CONSOLE),
@@ -112,6 +126,21 @@ BIBLIO_CHART_READS = {spec.key: spec.reads for spec in SPECS if spec.reads}
 
 def spec_for(chart_type: str) -> ChartSpec | None:
     return _BY_KEY.get(str(chart_type or '').strip())
+
+
+def with_chart_defaults(chart_type: str, fields: dict) -> dict:
+    """A copy of *fields* with every blank box this chart type declares a default for filled.
+
+    One declaration (``ChartSpec.defaults``) serves the node executor and the HTTP preview, so the
+    ``/api/visualize/render`` caller and a saved canvas cannot disagree about what an untouched
+    topic chart reads. A typed value always wins; only absent/blank fields are filled.
+    """
+    result = dict(fields or {})
+    spec = spec_for(chart_type)
+    for key, value in spec.defaults if spec else ():
+        if not str(result.get(key) or '').strip():
+            result[key] = value
+    return result
 
 
 def is_biblio(chart_type: str) -> bool:

@@ -68,6 +68,18 @@ class TestTheRegistryIsTheOneDeclaration:
     def test_a_spec_carries_its_own_catalogue_key(self):
         assert registry.spec_for('dual_map').label_key == 'chart.dual_map'
 
+    def test_a_blank_field_falls_back_to_the_types_declared_default(self):
+        """An untouched topic chart used to refuse at run time, after the crawl was paid for."""
+        filled = registry.with_chart_defaults('topic_map', {'x_field': ''})
+        assert filled['x_field'] == 'pc1'
+        assert filled['y_field'] == 'pc2'
+        assert filled['label_field'] == 'topic'
+        assert filled['value_field'] == 'prevalence_pct'
+        typed = registry.with_chart_defaults('topic_map', {'x_field': '我的横轴'})
+        assert typed['x_field'] == '我的横轴', 'a typed value always wins'
+        assert registry.with_chart_defaults('bar', {}) == {}
+        assert registry.with_chart_defaults('nope', {'x_field': 'x'}) == {'x_field': 'x'}
+
 
 class TestTheFrontEndIsPinnedNotASecondOpinion:
     def test_the_page_offers_exactly_the_registry_types(self):

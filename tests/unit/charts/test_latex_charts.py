@@ -375,6 +375,25 @@ class TestTable:
         # 发酵期 row: 8 / 20 / 72
         assert '8' in out and '72' in out
 
+    def test_stack_pct_table_reads_the_same_numeric_strings_as_the_figure(self):
+        """Pasted JSON / dtype=str imports carry numeric strings; the table used a raw ``sum``."""
+        frame = pd.DataFrame({'阶段': ['发酵期', '爆发期'], '正面': ['20', '40'], '负面': ['80', '60']})
+        out = L.to_latex_table(frame, 'stack_pct', x='阶段', stack_fields='正面,负面')
+        assert '20' in out and '40' in out
+
+    def test_stack_pct_table_leaves_an_unmeasured_cell_empty(self):
+        """A phase nobody scored for a field is a gap, not a printed 0 %."""
+        frame = pd.DataFrame(
+            {
+                '阶段': ['发酵期', '爆发期'],
+                '正面': [10.0, None],
+                '负面': [90.0, None],
+            }
+        )
+        out = L.to_latex_table(frame, 'stack_pct', x='阶段', stack_fields='正面,负面')
+        # The unmeasured row carries two adjacent empty cells, where 0 / 0 used to be printed.
+        assert ' &  & ' in out
+
     def test_dual_map_table_localises_the_machine_tokens(self):
         """The table's own columns are a chart contract (``map``/``source``/…), but a paper
         table prints the words the figure uses, not the tokens."""

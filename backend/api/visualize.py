@@ -16,6 +16,7 @@ from api.http import _bad_body, _json_body
 from api.resolution import NoRunDataError, _resolve_dataframe
 from i18n import t
 from services.charts.outputs import build_latex_outputs
+from services.charts.registry import with_chart_defaults
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ def render_visualization():
         return jsonify({'ok': False, 'error': str(e)}), 400
 
     chart_type = data.get('chart_type', 'bar')
+    data = with_chart_defaults(chart_type, data)
     x_field = data.get('x_field')
     y_field = data.get('y_field')
     value_field = data.get('value_field')

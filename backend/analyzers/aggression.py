@@ -111,10 +111,16 @@ PATTERNS = {
 #: against the evidence instead of trusting a number.
 COLUMNS = ('aggression', 'aggression_score', 'aggression_hits')
 
+#: What an unparsable answer is filed as. ``none`` is a VERDICT the detector makes ("nothing in this
+#: comment is violent"); it must never be written for a row the model answered but this parser could
+#: not read, because a level-distribution chart would then count an unmeasured row as judged-clean.
+#: The sibling analyzers use the same value, so a mixed table reads one way.
+UNJUDGED = '未判定'
+
 
 #: A small local model answers in whichever language its prompt happened to be, and it says 严重
-#: as often as ``severe``. Unmapped spellings fall to ``none``, which is why the raw answer is
-#: kept in ``aggression_hits``: a reader can see the model said something this parser did not know.
+#: as often as ``severe``. A spelling this table does not know is filed as ``UNJUDGED`` (with the
+#: raw answer in ``aggression_hits``), never as ``none`` — see the constant above.
 _LEVEL_WORDS = {
     'severe': ('severe', '严重', '重度', '高度'),
     'mild': ('mild', '轻微', '轻度', '一般'),
@@ -216,11 +222,12 @@ class AggressionAnalyzer:
         A local model returns “严重” for ``severe``, a stray ``` in the level slot, or a whole
         sentence. The first field is matched against the level words (in both languages) and the
         rest is kept as the type list, so a reader can see what the model actually said rather
-        than a coerced value.
+        than a coerced value. An answer with no recognisable level is ``未判定`` — never ``none``,
+        which is a clean-verdict claim this parser has no evidence for.
         """
         text = str(answer or '').strip()
         if not text:
-            return 'none', ''
+            return UNJUDGED, ''
         line = text.splitlines()[0]
         parts = [item.strip() for item in line.replace('｜', '|').split('|')]
         said = parts[0].lower()
@@ -230,7 +237,7 @@ class AggressionAnalyzer:
             # Nothing in the answer was a level this parser knows, and no type came either: the
             # model replied with prose. Keeping its words is the only honest reading.
             kinds = [said[:40]]
-        return known or 'none', '；'.join(kinds)
+        return known or UNJUDGED, '；'.join(kinds)
 
     def _analyze_with_llm(self, work: pd.DataFrame, text_column: str, ctx) -> pd.DataFrame:
         def parse(answer):
@@ -253,7 +260,7 @@ class AggressionAnalyzer:
             # the sentinel — stamped 未处理 it pinned a clean run to PARTIAL forever, the row
             # counted into ``unfinished`` on every resume though the model was never owed it.
             blank=['', '', ''],
-            fail_value=('none', '', '模型未判定'),
+            fail_value=(UNJUDGED, '', '模型未判定'),
             build_prompt=self.build_prompt,
             parse=parse,
             ctx=ctx,

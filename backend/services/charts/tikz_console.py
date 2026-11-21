@@ -12,6 +12,7 @@ import pandas as pd
 
 from i18n import t
 from services.charts.contracts import BIBLIO_CHART_TYPES
+from services.charts.stack import share_percent, stacked_shares
 from services.charts.visualizer import (
     ChartConfigError,
     VisualizationService,
@@ -51,6 +52,27 @@ def _flat_cell(value) -> str:
     return ' '.join(str(value).replace('\r', '\n').split('\n')).strip()
 
 
+def _coordinate_runs(values) -> list[list[tuple[int, float]]]:
+    """Consecutive finite points, one run per unbroken stretch.
+
+    A missing aggregate is a GAP on screen (ECharts receives ``null`` and breaks the line), but a
+    single ``coordinates`` list joined the neighbours with a straight segment — the printed figure
+    drew a measurement across a period nobody measured. One ``\\addplot`` per run draws the same
+    gap: nothing connects across it, and the markers on either side stay where they were.
+    """
+    runs: list[list[tuple[int, float]]] = []
+    current: list[tuple[int, float]] = []
+    for index, value in enumerate(values):
+        if math.isfinite(value):
+            current.append((index, value))
+        elif current:
+            runs.append(current)
+            current = []
+    if current:
+        runs.append(current)
+    return runs
+
+
 class ConsoleFigureMixin:
     @staticmethod
     def _require_pair(x, y, what):
@@ -66,13 +88,9 @@ class ConsoleFigureMixin:
             raise ChartConfigError(f'{chart_type} LaTeX requires a category field (x)')
         labels, values = VisualizationService.aggregate(df, x, y, agg)
         # Slots, not names: ``_cat_ref`` explains why (a comma in a category broke the tuple, a
-        # brace in one could inject TeX). A non-finite aggregate is DROPPED rather than written
-        # as 0 — an empty group is a missing measurement, and a bar at zero is a claim.
-        marks = ' '.join(
-            f'({_cat_ref(i)},{_num(v)})'
-            for i, (_lab, v) in enumerate(zip(labels, values, strict=True), 1)
-            if math.isfinite(v)
-        )
+        # brace in one could inject TeX). A non-finite aggregate is a GAP rather than a bar at 0 —
+        # an empty group is a missing measurement, and a bar at zero is a claim.
+        runs = _coordinate_runs(values)
         if chart_type == 'bar':
             # Reference fig-3: a solid bar wearing its own value on top, a width that narrows as categories crowd.
             width = '0.62cm' if len(labels) <= 6 else '0.4cm' if len(labels) <= 12 else '0.25cm'
@@ -81,12 +99,19 @@ class ConsoleFigureMixin:
                 r'nodes near coords,'
                 r'nodes near coords style={font=\scriptsize,text=black,/pgf/number format/1000 sep={,}}'
             )
+            marks = ' '.join(f'({_cat_ref(index + 1)},{_num(value)})' for run in runs for index, value in run)
+            plots = [f'\\addplot[{mark}] coordinates {{{marks}}};'] if marks else []
         else:
             # Reference fig-2: rounded joins and a filled marker read as a measured series, not a spreadsheet spark.
             mark = 'mark=*,mark size=1.8pt,line width=0.9pt,line join=round,color=cA,mark options={solid,fill=cA}'
+            plots = []
+            for run_index, run in enumerate(runs):
+                points = ' '.join(f'({_cat_ref(index + 1)},{_num(value)})' for index, value in run)
+                forget = '' if run_index == 0 else 'forget plot,'
+                plots.append(f'\\addplot[{forget}{mark}] coordinates {{{points}}};')
         ylabel = f',ylabel={{{_esc(_localize_label(y)) if y else _esc(t("chart.count"))}}}'
         head = f'\\begin{{axis}}[cixi,{_cat_axis(labels, x)}{ylabel}]'
-        return f'{head}\n\\addplot[{mark}] coordinates {{{marks}}};\n\\end{{axis}}'
+        return head + '\n' + '\n'.join(plots) + '\n\\end{axis}'
 
     @classmethod
     def _dual_line(cls, df, x, y, agg, y2, agg2):
@@ -97,8 +122,10 @@ class ConsoleFigureMixin:
         # ``agg2`` at all (its select displays 合计/``sum``). The paper's right line used to be a
         # mean while the screen drew a sum — two answers to one figure.
         _, right = VisualizationService.aggregate(df, x, y2, agg2 or agg)
-        pts_l = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(left, 1) if math.isfinite(v))
-        pts_r = ' '.join(f'({_cat_ref(i)},{_num(v)})' for i, v in enumerate(right, 1) if math.isfinite(v))
+        # Same gap rule as the single line: one plot per unbroken stretch, so a blank group is not
+        # bridged by a straight segment the screen never drew.
+        runs_l = _coordinate_runs(left)
+        runs_r = _coordinate_runs(right)
         ln = _esc(_localize_label(y) if y else t('chart.count'))
         rn = _esc(_localize_label(y2))
         sym = _cat_axis(labels, '')
@@ -111,14 +138,28 @@ class ConsoleFigureMixin:
             'mark=triangle*,mark size=1.6pt,line join=round,line width=0.9pt,draw opacity=0.4,color=cD,'
             'mark options={solid}'
         )
+        left_plots = []
+        for run_index, run in enumerate(runs_l):
+            points = ' '.join(f'({_cat_ref(index + 1)},{_num(value)})' for index, value in run)
+            entry = f'\\addlegendentry{{{ln}}}\n' if run_index == 0 else '\n'
+            left_plots.append(
+                f'\\addplot[{"forget plot," if run_index else ""}{line}] coordinates {{{points}}};{entry}'
+            )
+        right_plots = []
+        for run_index, run in enumerate(runs_r):
+            points = ' '.join(f'({_cat_ref(index + 1)},{_num(value)})' for index, value in run)
+            entry = f'\\addlegendentry{{{rn}}}\n' if run_index == 0 else '\n'
+            right_plots.append(
+                f'\\addplot[{"forget plot," if run_index else ""}{line2}] coordinates {{{points}}};{entry}'
+            )
         return (
             f'\\begin{{axis}}[cixi,{sym},ylabel={{{ln}}}]\n'
-            f'\\addplot[{line}] coordinates {{{pts_l}}};\\addlegendentry{{{ln}}}\n\\end{{axis}}\n'
-            f'\\begin{{axis}}[cixi,{sym},axis lines=right,axis x line=none,xtick=\\empty,'
+            + ''.join(left_plots)
+            + '\\end{axis}\n'
+            + f'\\begin{{axis}}[cixi,{sym},axis lines=right,axis x line=none,xtick=\\empty,'
             f'legend style={{font=\\scriptsize,draw=none,at={{(1.0,1.03)}},anchor=south east}},'
             f'scale only axis=true,width=9cm,height=5.6cm,ylabel={{{rn}}},'
-            f'ylabel style={{color=cD}},yticklabel style={{color=cD}}]\n'
-            f'\\addplot[{line2}] coordinates {{{pts_r}}};\\addlegendentry{{{rn}}}\n\\end{{axis}}'
+            f'ylabel style={{color=cD}},yticklabel style={{color=cD}}]\n' + ''.join(right_plots) + '\\end{axis}'
         )
 
     @classmethod
@@ -679,15 +720,20 @@ class ConsoleFigureMixin:
             if not x or not fields:
                 raise ChartConfigError('stack_pct LaTeX table requires a category field (x) and stacked fields')
             VisualizationService.require_columns(df, x, *fields)
-            grouped = df.groupby(x, sort=False)
-            keys = list(grouped.groups.keys())
-            cols = {f: grouped[f].sum().reindex(keys).fillna(0).tolist() for f in fields}
-            totals = [sum(cols[f][i] for f in fields) for i in range(len(keys))]
-            head = [_esc(_localize_label(x))] + [f'{_esc(_localize_label(f))} (\\%)' for f in fields]
-            rows = [
-                [_esc(str(k))] + [_num(round(cols[f][i] / totals[i] * 100, 2) if totals[i] else 0) for f in fields]
-                for i, k in enumerate(keys)
-            ]
+            # The SAME helper the figure and the PNG use. Computing the table from raw cells made a
+            # numeric-string column raise ``TypeError`` on the division and printed ``0 %`` for a
+            # category nobody measured — two answers to one question, beside each other on a page.
+            keys, columns, totals = stacked_shares(df, x, fields)
+            head = [_esc(_localize_label(x))] + [f'{_esc(_localize_label(field))} (\\%)' for field in fields]
+            rows = []
+            for index, key in enumerate(keys):
+                cells = []
+                for field in fields:
+                    share = share_percent(columns, totals, field, index)
+                    # Empty, not 0: "this category never measured this field" is a gap in the
+                    # printed table exactly as it is a gap on screen.
+                    cells.append(_num(share) if share is not None else '')
+                rows.append([_esc(str(key))] + cells)
             return head, rows
         if chart_type in ('sankey', 'network'):
             _, links = VisualizationService.sankey_links(df, x, y, value_field, agg)

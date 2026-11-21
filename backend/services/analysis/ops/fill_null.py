@@ -19,6 +19,13 @@ def fill_null(df: pd.DataFrame, columns: list = None, value=None, method: str = 
     # Forward/backward filling is its own method now — pandas 3 removed the
     # ``fillna(method=…)`` keyword the original code relied on.
     filler = {'ffill': 'ffill', 'pad': 'ffill', 'bfill': 'bfill', 'backfill': 'bfill'}.get(str(method or ''))
+    if value is None and not filler:
+        # With nothing to fill with, ``fillna(None)`` is a no-op in pandas 3 — but the loop below
+        # still turned every '' into NA, so a node saved before the 填充值 box existed MUTATED the
+        # table (and a downstream drop_null then deleted those rows) while the console said 填充完成.
+        # "Nothing stated" is a configuration mistake, refused by name; an explicit empty string is
+        # a real fill and still reaches ``fillna('')``.
+        raise UnknownOperationError(t('analysis.need_param', op='fill_null', param='value'))
     for c in cols:
         work[c] = work[c].replace('', pd.NA)
         if filler == 'ffill':

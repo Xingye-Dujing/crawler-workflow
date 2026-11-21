@@ -295,6 +295,13 @@ _CHART_VALUE_TOKENS = {
 }
 
 
+#: A model topic id: ``Topic-1``, ``TopicⅠ-1``, ``TopicⅤ-4``. Only THIS shape is a model label;
+#: a real category that merely starts with the English word (``Topics``, ``Topic modeling``) is
+#: data and must be shown verbatim. ``str.startswith('Topic')`` rewrote those and is not injective —
+#: a corpus holding both ``positive`` and ``正面`` collapsed into one axis label.
+_TOPIC_TOKEN = re.compile(r'^Topic(?=[-－–—ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫ0-9])')
+
+
 def _localize_label(value) -> str:
     """Translate a chart *display* string — a column-name-as-label or a category value.
 
@@ -306,7 +313,7 @@ def _localize_label(value) -> str:
     key = _CHART_COL_TOKENS.get(text) or _CHART_VALUE_TOKENS.get(text)
     if key:
         return t(key)
-    if text.startswith('Topic'):
+    if _TOPIC_TOKEN.match(text):
         return t('chart.col.topic') + text[len('Topic') :]
     return text
 

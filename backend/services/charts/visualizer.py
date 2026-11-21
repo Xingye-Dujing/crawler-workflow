@@ -30,6 +30,7 @@ from i18n import t
 from services.charts.contracts import MATRIX_CELL_LIMIT, ChartConfigError
 from services.charts.options import OptionMixin
 from services.charts.registry import CHART_TYPES, ECHARTS_ONLY_TYPES
+from services.charts.stack import share_percent, stacked_shares
 from services.charts.style import (
     _CJK_CANDIDATES as _CJK_CANDIDATES,
 )
@@ -376,7 +377,14 @@ class VisualizationService(OptionMixin):
             # A value field named but absent is refused by name, not silently replaced by a row
             # count — a heatmap the user asked to aggregate by “分值” that quietly showed 条数 lies.
             VisualizationService.require_columns(df, value_field)
-            work['_v'] = pd.to_numeric(df[value_field], errors='coerce')
+            numeric = pd.to_numeric(df[value_field], errors='coerce')
+            if df[value_field].notna().any() and not numeric.notna().any():
+                # Text where a value is expected used to coerce to NaN everywhere and render a
+                # complete-looking matrix of ZEROS — a figure claiming every cell measured 0 about
+                # a column that was never numeric. ``aggregate`` and the topic builders already
+                # refuse this input by name; the heatmap is the same question.
+                raise ChartConfigError(t('chart.y_not_numeric', col=value_field))
+            work['_v'] = numeric
             grouped = _agg(work.groupby(['_yc', '_xc'], sort=False)['_v'], agg)
         else:
             grouped = work.groupby(['_yc', '_xc'], sort=False).size()
@@ -537,32 +545,24 @@ class VisualizationService(OptionMixin):
                 fields = [s.strip() for s in str(stack_fields or '').replace('，', ',').split(',') if s.strip()]
                 if not fields:
                     raise ChartConfigError('stack_pct chart requires stacked fields (stack_fields)')
-                cls.require_columns(df, *fields)
-                grouped = df.groupby(x, sort=False)
-                keys = list(grouped.groups.keys())
-                cats = [str(k) for k in keys]
-                cols = {}
-                for f in fields:
-                    # A stacked SHARE divides numbers. With raw cells a numeric-string column
-                    # (pasted JSON, dtype=str import) had its strings CONCATENATED by sum, so the
-                    # print figure disagreed with ECharts (which coerces) or crashed. Refuse a
-                    # text-only column by name, exactly like the ECharts branch does.
-                    numeric = pd.to_numeric(df[f], errors='coerce')
-                    if df[f].notna().any() and not numeric.notna().any():
-                        raise ChartConfigError(t('chart.y_not_numeric', col=f))
-                    cols[f] = numeric.groupby(df[x], sort=False).sum().reindex(keys).fillna(0).tolist()
-                totals = [sum(cols[f][i] for f in fields) for i in range(len(cats))]
+                cls.require_columns(df, x, *fields)
+                cats, columns, totals = stacked_shares(df, x, fields)
+                # Same arithmetic as ECharts, and the same choice for an unmeasured cell: a NaN
+                # height draws NO segment, where a 0.0 bar would claim the category measured zero.
+                # The running bottom skips that gap so the fields above it stay where the option
+                # builder puts them.
                 bottoms = [0.0] * len(cats)
-                for idx, f in enumerate(fields):
-                    shares = [cols[f][i] / totals[i] * 100 if totals[i] else 0.0 for i in range(len(cats))]
+                for idx, field in enumerate(fields):
+                    shares = [share_percent(columns, totals, field, index) for index in range(len(cats))]
+                    heights = [float('nan') if value is None else value for value in shares]
                     ax.bar(
                         cats,
-                        shares,
+                        heights,
                         bottom=bottoms,
-                        label=_localize_label(f),
+                        label=_localize_label(field),
                         color=CATEGORY_COLORS[idx % len(CATEGORY_COLORS)],
                     )
-                    bottoms = [b + s for b, s in zip(bottoms, shares, strict=True)]
+                    bottoms = [round(base + (value or 0.0), 4) for base, value in zip(bottoms, heights, strict=True)]
                 ax.set_ylabel(t('chart.col.share'))
                 ax.set_ylim(0, 100)
                 ax.legend(frameon=False, fontsize=8, ncol=len(fields))

@@ -120,7 +120,10 @@ def topic_by_stage(
             vectors, _name = _embed_vectors(texts, embedding_model)
             doc_topic, components = _embedding_assignment(vectors, matrix, wanted)
             model = _EmbeddingTopicModel(components)
-            perplexity = float('nan')
+            # Embedding clustering has no held-out word likelihood, so this stage has no
+            # perplexity. ``None`` (not ``float('nan')``) keeps "not measured" distinguishable
+            # from a real number in the column, and a downstream aggregate skips it.
+            perplexity = None
         else:
             model = LatentDirichletAllocation(n_components=wanted, random_state=42, learning_method='batch')
             doc_topic = model.fit_transform(matrix)

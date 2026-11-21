@@ -39,15 +39,18 @@ def _distance(value) -> int:
         raise UnknownOperationError(t('analysis.match_distance_type', value=value)) from exc
 
 
-def _similar_key(row: dict, columns) -> str:
+def _similar_key(row: dict, columns, ignore_case: bool = False) -> str:
     """One row's composite text for ``similar`` matching, or ``''`` when any part is blank.
 
     The same identity rule :func:`row_key` applies to every other mode: a partially blank
     tuple is incomplete, not a weaker key. ``clean_cell`` also folds ``None``/``NaN`` to ``''``
     — ``str(nan)`` would otherwise become the literal token 'nan', a fingerprint every empty
-    cell would share.
+    cell would share. ``ignore_case`` folds the text before hashing, exactly as the other modes do;
+    it used to be silently dropped in this branch, so ticking 忽略大小写 did nothing.
     """
     parts = [clean_cell(row.get(name)) for name in columns]
+    if ignore_case:
+        parts = [part.casefold() for part in parts]
     return ' '.join(parts) if parts and all(parts) else ''
 
 
@@ -115,8 +118,8 @@ def anti_join(
     left_records = df.to_dict('records')
     right_records = other_df.to_dict('records')
     if mode == 'similar':
-        left_values = [_similar_key(row, left_columns) for row in left_records]
-        right_values = [_similar_key(row, right_columns) for row in right_records]
+        left_values = [_similar_key(row, left_columns, ignore_case) for row in left_records]
+        right_values = [_similar_key(row, right_columns, ignore_case) for row in right_records]
         mask, stats = match_mask(left_values, right_values, mode=mode, max_distance=_distance(max_distance))
     else:
         # Composite keys go through ``row_key``: two columns of one row are ONE identity,

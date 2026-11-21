@@ -1,10 +1,9 @@
 """Category-axis series: bar, line, dual-axis line and the 100% stacked share."""
 
-import pandas as pd
-
 from i18n import t
 
 from ..contracts import ChartConfigError
+from ..stack import share_percent, stacked_shares
 from ..style import _GRID, _TEXT_STYLE, _annotation_lines, _localize_label, _parse_annotations
 from .base import ChartRequest, builder
 
@@ -195,42 +194,20 @@ def _stack_pct(cls, base: dict, req: ChartRequest) -> dict:
     # name reads the same whether it is the axis or one of the stacked shares.
     cls.require_columns(req.df, req.x, *stack_fields)
     color = base['color']
-    grouped = req.df.groupby(req.x, sort=False)
-    keys = list(grouped.groups.keys())
-    labels = [str(k) for k in keys]
-    # A stacked SHARE has to divide numbers: with the raw column, a text field made ``sum``
-    # concatenate its cells and the division raised a bare TypeError, while a field holding blanks
-    # counted them as 0% of the total. Each field is coerced FIRST (a group-by object cannot be
-    # converted), summed with ``min_count=1`` so a category nobody measured stays empty rather than
-    # 0%, and refused by name when it holds no number at all.
-    measured = {}
-    for field in stack_fields:
-        numeric = pd.to_numeric(req.df[field], errors='coerce')
-        if req.df[field].notna().any() and not numeric.notna().any():
-            # Written text where a share is expected: refuse by name. A column that is missing
-            # EVERYWHERE is not a mistake — it sums to nothing and the frame still serialises.
-            raise ChartConfigError(t('chart.y_not_numeric', col=field))
-        measured[field] = numeric.groupby(req.df[req.x], sort=False).sum(min_count=1)
-    cols = {field: measured[field].reindex(keys).tolist() for field in stack_fields}
-    totals = [
-        float(sum(value for value in (cols[f][i] for f in stack_fields) if pd.notna(value))) for i in range(len(labels))
-    ]
+    labels, columns, totals = stacked_shares(req.df, req.x, stack_fields)
     series = [
         {
-            'name': _localize_label(f),
+            'name': _localize_label(field),
             'type': 'bar',
             'stack': 'total',
             # ``None`` (not 0.0) for a category whose total is zero or whose own cell is blank:
             # the chart draws a gap and the reader sees “not measured”, where a 0.0 bar is a
             # measurement the table never made.
-            'data': [
-                round(cols[f][i] / totals[i] * 100, 2) if totals[i] and pd.notna(cols[f][i]) else None
-                for i in range(len(labels))
-            ],
+            'data': [share_percent(columns, totals, field, index) for index in range(len(labels))],
             'barMaxWidth': 60,
-            'itemStyle': {'color': color[idx % len(color)]},
+            'itemStyle': {'color': color[field_index % len(color)]},
         }
-        for idx, f in enumerate(stack_fields)
+        for field_index, field in enumerate(stack_fields)
     ]
     base['grid'] = dict(_GRID)
     base['legend'] = {'data': [s['name'] for s in series], 'top': 28, 'textStyle': _TEXT_STYLE}

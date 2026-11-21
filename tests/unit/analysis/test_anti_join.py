@@ -109,6 +109,21 @@ class TestTheSetDifference:
         out = anti_join(left, right, left_on='平台,链接', right_on='平台,链接', mode='similar')
         assert len(out) == 2
 
+    def test_ignore_case_is_honoured_in_similar_mode_too(self):
+        """The switch was read and then dropped on the ``similar`` branch, so ticking it did nothing."""
+        left = pd.DataFrame([{'评论': 'Same Text One'}, {'评论': 'unrelated'}])
+        right = pd.DataFrame([{'旧评论': 'same text one'}])
+        out = anti_join(
+            left,
+            right,
+            left_on='评论',
+            right_on='旧评论',
+            mode='similar',
+            ignore_case=True,
+            max_distance=0,
+        )
+        assert out['评论'].tolist() == ['unrelated']
+
 
 class TestTheRefusals:
     def test_no_second_table_is_named(self):
