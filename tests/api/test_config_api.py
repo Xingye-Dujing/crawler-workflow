@@ -41,6 +41,7 @@ CONFIG_KEYS = {
     'installer_available',
     'auth_required',
     'auth',
+    'demo_autorun',
 }
 # The cookie panel's platform set is the manager's own list — mirroring it here
 # would only ever record the last time someone forgot the other side.
@@ -73,6 +74,7 @@ class TestConfigEndpoint:
             'cloud_mode': Config.CLOUD_MODE,
             'installer_available': component_source.installer_available(),
             'auth_required': accounts_mode(),
+            'demo_autorun': Config.DEMO_AUTORUN,
             'auth': {
                 'enabled': accounts_mode(),
                 'must_change_password': False,
