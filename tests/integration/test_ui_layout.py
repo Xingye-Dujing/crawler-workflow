@@ -6180,11 +6180,21 @@ def test_the_composer_can_reference_a_dataset_instead_of_uploading_it(app_url, d
     menu = driver.execute_script(
         """
         const menu = document.getElementById('ai-ref-menu');
+        const style = getComputedStyle(menu);
         return {hidden: menu.hidden, rows: menu.querySelectorAll('[data-ai-ref]').length,
-                text: menu.textContent};
+                text: menu.textContent, background: style.backgroundColor, z: Number(style.zIndex)};
         """
     )
     assert menu['rows'] == 2, f'the @ menu did not offer the server list: {menu}'
+    # An undefined --panel used to compute to transparent, so transcript text showed through the
+    # picker. Measure the painted pixel, not the stylesheet: alpha must be 1 and the menu must sit
+    # above the composer's jump button (z 30).
+    background = menu['background']
+    if background.startswith('rgba('):
+        assert background.rstrip(')').split(',')[-1].strip() == '1', f'the @ menu is translucent: {background}'
+    else:
+        assert background.startswith('rgb('), f'the @ menu has no opaque background: {background}'
+    assert menu['z'] > 30, f'the @ menu is under another control: {menu}'
     picked = driver.execute_script(
         """
         const row = document.querySelector('#ai-ref-menu [data-ai-ref]');

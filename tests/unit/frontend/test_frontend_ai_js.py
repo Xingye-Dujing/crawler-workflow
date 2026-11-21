@@ -569,3 +569,24 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['thinking'] is True, 'the streaming repaint closed the thinking block'
         assert out['tool'] is True, 'the streaming repaint closed the tool result'
         assert out['sameNode'] is True, 'an unchanged paint rebuilt the DOM'
+
+
+class TestTheReferenceMenuSurface:
+    """The @ picker floats over the transcript; an invalid token made its background transparent."""
+
+    BASE = (ROOT / 'backend' / 'static' / 'css' / 'base.css').read_text(encoding='utf-8')
+    AI = (ROOT / 'backend' / 'static' / 'css' / 'ai.css').read_text(encoding='utf-8')
+
+    def test_panel_is_a_declared_opaque_surface(self):
+        import re
+
+        assert '--panel: var(--paper)' in self.BASE
+        assert re.search(r'--card\s*:', self.BASE) is None, 'an undefined --card fallback computes to transparent'
+
+    def test_the_reference_menu_paints_opaque_and_above_the_composer(self):
+        import re
+
+        block = re.search(r'\.ai-ref-menu\s*\{(.*?)\}', self.AI, re.S).group(1)
+        assert 'background: var(--panel' in block or 'background: var(--paper)' in block, block
+        z = int(re.search(r'z-index:\s*(\d+)', block).group(1))
+        assert z > 30, 'the composer jump button (30) must not cover the open @ menu'

@@ -20,6 +20,10 @@
   /* ── ground & ink ── */
   --bg: #fff;
   --paper: #fff;
+  /* The opaque surface for popups that float over content (the @ menu, the resume banner).
+     Several stylesheets already read --panel; without a declaration the background fell back to
+     an undefined --card and computed to transparent, so transcript text showed through popups. */
+  --panel: var(--paper);
   --text: #1a1a1a;
   --text-dim: rgba(26, 26, 26, 0.4);
   --text-faint: rgba(26, 26, 26, 0.15);

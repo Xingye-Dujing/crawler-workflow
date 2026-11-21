@@ -128,7 +128,9 @@
   left: 10px;
   right: 10px;
   bottom: calc(100% - 4px);
-  z-index: 3;
+  /* Above the composer's jump button (30) but below the folder dialog (40): a popup that lists
+     references must never sit under another control of the same panel. */
+  z-index: 35;
   max-height: 240px;
   overflow: auto;
   padding: 6px;
