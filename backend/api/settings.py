@@ -14,6 +14,7 @@ Who may do what:
   because they are a fingerprint of the host, not something its runs need.
 """
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime import policy
 from runtime.settings import (
@@ -131,8 +132,8 @@ def import_settings():
     result = import_payload(
         payload,
         mode=mode,
-        include_machine=bool(data.get('include_machine')),
-        dry_run=bool(data.get('dry_run')),
+        include_machine=as_bool(data.get('include_machine')),
+        dry_run=as_bool(data.get('dry_run')),
     )
     status = 200 if result.get('ok') else 400
     return jsonify(result), status

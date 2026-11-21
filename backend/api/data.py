@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import tempfile
+import zipfile
 
 import pandas as pd
 from core.refs import as_bool, sanitize_filename
@@ -178,8 +179,20 @@ def upload_dataset():
             # a Parquet or a PDF as CSV produces a table that is technically
             # valid and completely wrong.
             return jsonify({'ok': False, 'error': t('api.unsupportedUpload', name=filename)}), 400
-    except (ValueError, OSError, UnicodeDecodeError, pd.errors.ParserError, ImportError) as e:
+    except (
+        ValueError,
+        OSError,
+        UnicodeDecodeError,
+        pd.errors.ParserError,
+        pd.errors.OptionError,
+        zipfile.BadZipFile,
+        ImportError,
+    ) as e:
         # A corrupt or mis-encoded file is a user-input problem, not a crash.
+        # ``OptionError``/``BadZipFile`` are the two shapes of "this is a ZIP, but not a workbook":
+        # a .docx renamed to .xlsx is a valid archive, so the expansion guard lets it through and
+        # pandas 3 answers ``OptionError: No such keys(s): 'io.excel.zip.reader'`` — outside the
+        # old tuple, i.e. an HTML 500 for a file the user can simply re-save.
         # ImportError belongs here too: reading .xlsx needs openpyxl, and a
         # missing engine is a fixable environment gap, not a 500.
         return jsonify({'ok': False, 'error': t('api.parseFailed', err=e)}), 400

@@ -17,7 +17,7 @@ from flask import Blueprint, Response, jsonify, request
 from runtime.state import execute_lock, execution_state, live_run_ids, run_is_foreign
 from runtime.stores import get_run_store
 
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _json_body, _optional_int, _safe_int
 from engine.workflow import effective_workflow
 from i18n import t
 from services import lock_store
@@ -287,7 +287,11 @@ def _log_filters(req):
     # ``wf`` is a tab ORDINAL (0..N-1). A negative value is not a tab that exists; filtering on
     # it matched nothing and left the viewer showing “无内容” for a run that has lines. Read an
     # impossible index as the “全部” tab (no filter) rather than a filter that empties the panel.
-    wf_idx = int(wf_raw) if wf_raw.isdigit() else None
+    # ``str.isdigit()`` is not a number test ('²'.isdigit() is True and int('²') raises), so the
+    # one shared reader answers and an unreadable value is also “全部”.
+    wf_idx = _optional_int(wf_raw)
+    if wf_idx is not None and wf_idx < 0:
+        wf_idx = None
     level = str(req.args.get('level') or '').strip().lower()
     level = level if level in ('info', 'warning', 'error') else None
     q = str(req.args.get('q') or '').strip() or None
@@ -308,7 +312,9 @@ def runs_log_page(run_id: str):
     wf_idx, level, q = _log_filters(request)
     limit = _safe_int(request.args.get('limit'), _LOG_PAGE, minimum=1, maximum=_LOG_PAGE_MAX)
     before_raw = str(request.args.get('before') or '').strip()
-    before_seq = int(before_raw) if before_raw.lstrip('-').isdigit() else None
+    before_seq = _optional_int(before_raw)
+    if before_seq is not None and before_seq < 0:
+        before_seq = None
     page = store.read_log(run_id, wf_idx=wf_idx, level=level, q=q, before_seq=before_seq, limit=limit)
     return jsonify({'ok': True, **page})
 

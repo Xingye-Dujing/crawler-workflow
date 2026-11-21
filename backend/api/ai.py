@@ -16,6 +16,7 @@ from urllib.parse import quote
 from ai import agent, context, environment, files, monitors, plugins, references, skills, store, tools
 from ai.errors import AIError
 from ai.providers import get_provider, list_models, public_catalog
+from core.refs import as_bool
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 from runtime import account_context, policy
 from runtime.settings import get_setting
@@ -390,7 +391,7 @@ def ai_plugin_enable(plugin_id: str):
     if refusal is not None:
         return refusal
     try:
-        plugins.set_enabled(plugin_id, bool(data.get('enabled', True)))
+        plugins.set_enabled(plugin_id, as_bool(data.get('enabled'), True))
         return jsonify({'ok': True})
     except AIError as exc:
         return _error(exc)
@@ -487,7 +488,10 @@ def ai_codebook_save():
 
 @bp.route('/api/ai/codebooks/<codebook_id>', methods=['DELETE'])
 def ai_codebook_delete(codebook_id: str):
-    return jsonify({'ok': True, 'deleted': codebooks.delete_codebook(codebook_id)})
+    try:
+        return jsonify({'ok': True, 'deleted': codebooks.delete_codebook(codebook_id)})
+    except codebooks.CodebookError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 404
 
 
 @bp.route('/api/ai/memories', methods=['GET'])
@@ -570,7 +574,7 @@ def ai_monitor_create():
         monitor = monitors.create(
             str(data.get('conversation_id') or ''),
             data.get('spec') if isinstance(data.get('spec'), dict) else data,
-            bool(data.get('auto_analyze')),
+            as_bool(data.get('auto_analyze')),
         )
     except AIError as exc:
         return _error(exc)
@@ -635,7 +639,7 @@ def ai_python_install():
     if data is None:
         return _bad_body()
     try:
-        return jsonify({'ok': True, 'result': python_runtime.install_interpreter(bool(data.get('allow_download')))})
+        return jsonify({'ok': True, 'result': python_runtime.install_interpreter(as_bool(data.get('allow_download')))})
     except AIError as exc:
         return _error(exc)
 
@@ -690,7 +694,9 @@ def ai_python_script_fork(script_id: str):
         return jsonify(
             {
                 'ok': True,
-                'script': python_scripts.fork_script(script_id, str(data.get('id') or ''), bool(data.get('overwrite'))),
+                'script': python_scripts.fork_script(
+                    script_id, str(data.get('id') or ''), as_bool(data.get('overwrite'))
+                ),
             }
         )
     except AIError as exc:
@@ -1069,7 +1075,7 @@ def ai_search():
             # while evaluating the argument, before files.search could clamp it, and fell through
             # to a 500. Use the shared coercion with the same 1-50 bounds the tool applies.
             count=_safe_int(data.get('count'), 10, minimum=1, maximum=50),
-            need_content=bool(data.get('need_content')),
+            need_content=as_bool(data.get('need_content')),
             ori_question=str(data.get('ori_question') or ''),
             localization=str(data.get('localization') or ''),
         )
@@ -1247,7 +1253,10 @@ def ai_context():
     data = _json_body()
     if data is None:
         return _bad_body()
-    return jsonify(context.context_preview(str(data.get('query') or ''), data.get('context') or {}))
+    payload = data.get('context')
+    if payload is not None and not isinstance(payload, dict):
+        return _bad_param('context')
+    return jsonify(context.context_preview(str(data.get('query') or ''), payload or {}))
 
 
 @bp.route('/api/ai/conversations/<conversation_id>/context', methods=['POST'])
@@ -1258,7 +1267,10 @@ def ai_context_preview(conversation_id: str):
     if store.get_conversation(conversation_id) is None:
         return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
     query = str(data.get('query') or '')
-    return jsonify(context.context_preview(query, data.get('context') or {}))
+    payload = data.get('context')
+    if payload is not None and not isinstance(payload, dict):
+        return _bad_param('context')
+    return jsonify(context.context_preview(query, payload or {}))
 
 
 @bp.route('/api/ai/chat', methods=['POST'])

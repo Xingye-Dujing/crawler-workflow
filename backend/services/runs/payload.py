@@ -51,6 +51,12 @@ def workflow_shape_error(data: dict) -> str:
     settings = workflow.get('settings')
     if settings is not None and not isinstance(settings, dict):
         return t('api.workflowShapeInvalid')
+    # The run's transport is read by ``plan.llm_provider`` through ``.get`` before the worker
+    # exists; a string here (a hand-built/AI-written POST) was an AttributeError the route could
+    # only answer as an internal error, and a queued one would fail minutes later.
+    llm = data.get('llm')
+    if llm is not None and not isinstance(llm, dict):
+        return t('api.workflowShapeInvalid')
     return ''
 
 

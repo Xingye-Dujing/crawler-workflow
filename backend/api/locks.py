@@ -5,6 +5,7 @@ state and no store singleton, so it stands entirely on its own; paths and behavi
 unchanged from when these two handlers lived in ``app.py``.
 """
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify
 
 from api.http import _bad_body, _json_body
@@ -39,6 +40,6 @@ def locks_set():
     key = data.get('key')
     if panel not in lock_store.PANELS or not isinstance(key, str) or not key.strip():
         return jsonify({'ok': False, 'error': t('lock.badKey')}), 400
-    locked = bool(data.get('locked'))
+    locked = as_bool(data.get('locked'))
     current = lock_store.set_locked(panel, key.strip(), locked)
     return jsonify({'ok': True, 'panel': panel, 'key': key.strip(), 'locked': locked, 'locks': current})

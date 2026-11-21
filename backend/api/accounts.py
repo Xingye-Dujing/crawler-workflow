@@ -10,6 +10,7 @@ import logging
 import os
 import sqlite3
 
+from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime import paths, stores
 from runtime.state import _RUN_QUEUE, execute_lock, execution_state
@@ -201,7 +202,7 @@ def accounts_reset_password(user_id: str):
             current_user(),
             user_id,
             payload.get('password'),
-            bool(payload.get('must_change', True)),
+            as_bool(payload.get('must_change'), True),
         )
     except AccountError as exc:
         return _fail(exc)

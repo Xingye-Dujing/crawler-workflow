@@ -20,7 +20,7 @@ from analyzers import (
     build_training_data,
     get_classifier,
 )
-from api.http import _bad_body, _json_body
+from api.http import _bad_body, _bad_param, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.analysis.pipeline import LLM_OPS, DataAnalysisService
@@ -142,6 +142,10 @@ def train_ml_model():
         ), 400
     text_column = data.get('text_column', '正文')
     label_column = data.get('label_column') or _ML_LABEL_COLUMNS.get(model_type, 'emotion')
+    if not isinstance(text_column, str):
+        return _bad_param('text_column')
+    if not isinstance(label_column, str):
+        return _bad_param('label_column')
 
     if text_column not in df.columns:
         return jsonify({'ok': False, 'error': t('api.columnMissing', column=text_column)}), 400

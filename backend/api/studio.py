@@ -24,7 +24,7 @@ from runtime import paths
 from runtime.state import _results_snapshot, execution_state, run_is_foreign
 from runtime.stores import _load_dataset, get_run_store
 
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body, _safe_int
 from api.resolution import _durable_node_rows, _resolve_dataframe
 from i18n import get_lang, t
 from services.charts import pdf
@@ -546,6 +546,8 @@ def studio_save_image():
     if data is None:
         return _bad_body()
     image = data.get('image') or ''
+    if not isinstance(image, str):
+        return _bad_param('image')
     match = re.match(r'^data:image/(png|jpeg|jpg|webp);base64,(.+)$', image, re.DOTALL)
     if not match:
         return jsonify({'ok': False, 'error': t('api.badRequest', what='image data URL')}), 400

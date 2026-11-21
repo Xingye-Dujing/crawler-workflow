@@ -57,7 +57,12 @@ def workflow_diagnostics():
     connections = body.get('connections')
     if not isinstance(connections, list):
         connections = []
-    workflow = {'nodes': list(nodes.values()), 'connections': connections, 'settings': body.get('settings') or {}}
+    settings = body.get('settings')
+    if not isinstance(settings, dict):
+        # ``effective_workflow`` reads ``settings.get(...)`` before this route's guarded block, so
+        # a string here used to kill the very route that exists to survive a malformed canvas.
+        settings = {}
+    workflow = {'nodes': list(nodes.values()), 'connections': connections, 'settings': settings}
     # Validate on the SAME effective graph a run would use: a disabled node (or one
     # starved by a disabled upstream) is not on the canvas, so it must not be judged.
     effective = effective_workflow(workflow)

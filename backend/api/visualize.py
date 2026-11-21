@@ -57,8 +57,8 @@ def render_visualization():
     title = data.get('title', '')
     tokenize = as_bool(data.get('tokenize'))
     wordcloud_style = data.get('wordcloud_style')
-    emit_latex = as_bool(data.get('emit_latex', True))
-    emit_latex_table = as_bool(data.get('emit_latex_table', True))
+    emit_latex = as_bool(data.get('emit_latex'), True)
+    emit_latex_table = as_bool(data.get('emit_latex_table'), True)
     latex_extra = {}
     if emit_latex or emit_latex_table:
         # Computed outside the render ``try`` because ``build_latex_outputs`` guards each branch

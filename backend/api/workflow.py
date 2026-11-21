@@ -280,7 +280,12 @@ def rename_workflow():
         return jsonify({'ok': False, 'error': t('api.alreadyRunning')}), 409
     if os.path.exists(get_workflow_manager().path_for(new)):
         return jsonify({'ok': False, 'error': t('api.workflowNameTaken', name=new)}), 409
-    moved = get_workflow_manager().rename(old, new)
+    try:
+        moved = get_workflow_manager().rename(old, new)
+    except FileExistsError:
+        # Two tabs (or a save) minted the same target between the check above and the manager's
+        # own exclusive create; the manager is what owns atomicity, so its refusal is the 409.
+        return jsonify({'ok': False, 'error': t('api.workflowNameTaken', name=new)}), 409
     if moved is None:
         # Unlike delete (idempotent), a rename of a missing file is a lost edit.
         return jsonify({'ok': False, 'error': t('api.workflowMissing', name=old)}), 404
