@@ -15,6 +15,15 @@ jieba.cache
 samples/workflows/videos/*.mkv
 samples/workflows/videos/frames/
 
+# ─── Promo film ───
+# The Remotion source, capture script, fonts and script are committed; the rendered film, the
+# captured browser footage and the dependency/temp trees are not.
+/video/node_modules/
+/video/out/
+/video/public/real/
+/video/.remotion/
+/video/.data/
+
 # ─── Runtime state ───
 # data/ holds runs.db / datasets.db / cookies / exports. A saved workflow is authored work and IS
 # versioned: it references datasets by id, so a checkout is only useful beside the same data/.

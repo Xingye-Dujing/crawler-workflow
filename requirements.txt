@@ -12,6 +12,7 @@ flask-cors==6.0.5
 requests==2.34.2
 # Directly imported by tools/record_demo.py to close ONLY the browser processes the recorder opened.
 psutil==7.2.2
+websocket-client==1.9.0
 # Directly imported by backend/test_dead_driver.py (Retry). Declared rather than leaned on:
 # urllib3 arrives today only as requests' own dependency, and a transitive package is not an
 # API another module may import through -- a resolver change would break the probe silently.

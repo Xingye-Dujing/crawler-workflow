@@ -10,6 +10,14 @@ scikit-learn；拖节点、连线条、点执行，中断后从断点续跑，�
 
 使用说明见[图文手册](docs/manual/)，工程细节见[文档索引](#文档)，AI agent 的改动规则见 [`AGENTS.md`](AGENTS.md)。
 
+## 宣传片
+
+<img src="docs/promo/promo-cover.png" alt="采析绘宣传片封面：把研究画成一条路" width="100%">
+
+[`video/`](video/) 是宣传片的可复现工程：**B 站 16:9 约 95 秒、抖音 9:16 约 49 秒**，画面来自采析绘的实机浏览器录屏
+与实机截图，不是重绘界面。`video/README.md` 说明如何采集与渲染，`video/SCRIPT.md` 是旁白稿；成片与采集素材在本地
+`video/out/`、`video/public/real/`，不进 git。
+
 ## 快速开始
 
 源码版 Windows / Linux / macOS 均可运行（云端部署目标是 Linux）。

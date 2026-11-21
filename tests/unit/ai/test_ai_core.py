@@ -28,6 +28,35 @@ def test_deepseek_has_the_full_suite_and_go_does_not_pretend():
     assert not go.supports('files', 'deepseek-v4.1-flash')
 
 
+def test_go_carries_the_free_hy4_flash_model():
+    """The free Hy4 flash tier is a model on the existing Go endpoint, so it inherits the Go
+    capabilities (thinking, tools, ask_user, vision) and must not claim DeepSeek's server tools."""
+    from ai.providers import get_provider
+    from ai.providers.registry import public_catalog
+
+    go = get_provider('opencode_go')
+    model = go.spec.model('hy4-flash-free')
+    assert model is not None
+    assert model.capabilities == frozenset({'thinking', 'tools', 'ask_user', 'vision'})
+    assert go.context_window('hy4-flash-free') == 1048576
+    assert go.supports('thinking', 'hy4-flash-free')
+    assert go.supports('vision', 'hy4-flash-free')
+    assert not go.supports('web_search', 'hy4-flash-free')
+    assert not go.supports('files', 'hy4-flash-free')
+    payload = go._payload({'model': 'hy4-flash-free', 'messages': [], 'thinking': True, 'reasoning_effort': 'high'})
+    assert payload['model'] == 'hy4-flash-free'
+    assert payload['reasoning_effort'] == 'high'
+    row = next(
+        item
+        for provider in public_catalog()
+        if provider['id'] == 'opencode_go'
+        for item in provider['models']
+        if item['id'] == 'hy4-flash-free'
+    )
+    assert row['label'] == 'Hy4 flash Free (Go)'
+    assert row['max_context'] == 1048576
+
+
 def test_cloud_refuses_only_the_local_transport(monkeypatch):
     from ai.providers.registry import local_transport_refusal, public_catalog
     from core.config import Config
@@ -922,6 +951,34 @@ def test_store_uses_max_seq_and_round_trips_blocks():
         assert [message['id'] for message in loaded] == [first['id'], second['id'], third['id']]
     finally:
         store.delete_conversation(conversation['id'])
+
+
+def test_store_recreates_schema_when_the_db_file_is_replaced(tmp_path, monkeypatch):
+    """A process-level "schema ready" set keyed only by path went stale the moment the db file was
+    deleted and recreated at that path: later calls trusted an empty database and failed with
+    `no such table`, and the monitor worker logged a warning for every run event."""
+    from ai import store
+    from core.config import Config
+
+    monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
+    ready_before = dict(store._SCHEMA_READY)
+    try:
+        store._SCHEMA_READY.clear()
+        with store.connect() as conn:
+            conn.execute('SELECT 1 FROM conversations').fetchall()
+        db = tmp_path / 'ai.db'
+        assert db.exists()
+        db.unlink()
+        with store.connect() as conn:
+            assert (
+                conn.execute(
+                    "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='conversations'"
+                ).fetchone()[0]
+                == 1
+            )
+    finally:
+        store._SCHEMA_READY.clear()
+        store._SCHEMA_READY.update(ready_before)
 
 
 def test_a_second_answer_to_one_question_is_refused():

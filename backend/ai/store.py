@@ -180,10 +180,21 @@ def _db_path() -> str:
     return target
 
 
-#: Paths whose tables this process has already created. ``connect`` used to run the whole schema
-#: (and two PRAGMA probes) on EVERY call, which put a schema write on the run thread for each
-#: delivered monitor event. Creating tables is a one-time fact, not a per-connection one.
-_SCHEMA_READY: set[str] = set()
+#: The identity of the db file whose tables this process has already created. ``connect`` used to
+#: run the whole schema (and two PRAGMA probes) on EVERY call, which put a schema write on the run
+#: thread for each delivered monitor event. Creating tables is a one-time fact, not a per-connection
+#: one — but it is a fact about the FILE, not merely its path: a reset that deletes and recreates
+#: the db at the same path produced an empty database that every later call trusted as "ready"
+#: (``no such table: messages``), and the monitor worker logged a warning for every run event.
+def _schema_stamp(path: str) -> tuple:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return ()
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns)
+
+
+_SCHEMA_READY: dict[str, tuple] = {}
 _SCHEMA_LOCK = threading.Lock()
 
 
@@ -193,8 +204,9 @@ def connect():
     conn = sqlite3.connect(path, timeout=15)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys = ON')
+    stamp = _schema_stamp(path)
     with _SCHEMA_LOCK:
-        ready = path in _SCHEMA_READY
+        ready = bool(stamp) and _SCHEMA_READY.get(path) == stamp
     if not ready:
         conn.executescript(SCHEMA)
         columns = {row['name'] for row in conn.execute('PRAGMA table_info(user_skills)').fetchall()}
@@ -203,7 +215,8 @@ def connect():
         if 'description' not in columns:
             conn.execute("ALTER TABLE user_skills ADD COLUMN description TEXT NOT NULL DEFAULT ''")
         with _SCHEMA_LOCK:
-            _SCHEMA_READY.add(path)
+            # Re-stat after the writes: the schema changed the file's size and mtime.
+            _SCHEMA_READY[path] = _schema_stamp(path)
     try:
         yield conn
         conn.commit()

@@ -24,6 +24,7 @@ SPEC = ProviderSpec(
         ModelSpec('glm-5.3-flash', 'GLM-5.3 Flash (Go)', 256000, GO_CAPABILITIES),
         ModelSpec('kimi-k3', 'Kimi K3 (Go)', 256000, GO_CAPABILITIES),
         ModelSpec('qwen3.8-flash', 'Qwen3.8 Flash (Go)', 256000, GO_CAPABILITIES),
+        ModelSpec('hy4-flash-free', 'Hy4 flash Free (Go)', 1048576, GO_CAPABILITIES),
     ),
     capabilities=GO_CAPABILITIES,
     models_url='https://opencode.ai/inference/go/openai/v1/models',
