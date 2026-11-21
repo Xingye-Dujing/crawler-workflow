@@ -206,12 +206,17 @@ class TestClearAll:
             os.utime(path, (stamp, stamp))
         lock_store.set_locked('exports', 'pinned-1.csv', True)
         lock_store.set_locked('exports', 'pinned-2.csv', True)
+        try:
+            body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
 
-        body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
-
-        assert body['ok'] is True and body['left'] == 2, body
-        assert not os.path.exists(os.path.join(export_dir, 'free.csv'))
-        assert os.path.exists(os.path.join(export_dir, 'pinned-1.csv'))
+            assert body['ok'] is True and body['left'] == 2, body
+            assert not os.path.exists(os.path.join(export_dir, 'free.csv'))
+            assert os.path.exists(os.path.join(export_dir, 'pinned-1.csv'))
+        finally:
+            # The lock ledger is process-wide and outlives the request: leaving these pinned
+            # changes the answer every later locks/clear test reads.
+            lock_store.set_locked('exports', 'pinned-1.csv', False)
+            lock_store.set_locked('exports', 'pinned-2.csv', False)
 
 
 class TestSmartClear:

@@ -106,4 +106,4 @@ def test_a_switch_reads_its_value_instead_of_its_truthiness(client):
     body = response.get_json()
     assert body['ok'] is True
     assert body['locked'] is False
-    assert all(row['key'] != 'demo' for row in body['locks'])
+    assert 'demo' not in body['locks']

@@ -688,7 +688,11 @@ class TestAggressionLlmMode:
         # it is NOT 未处理 — the executor scans every cell for 未处理 to settle a node PARTIAL, so
         # a genuinely empty comment must never carry it or a clean run pinned to PARTIAL forever.
         assert seen['blank'] == ['', '', '']
-        assert seen['fail_value'] == ('none', '', '模型未判定')
+        # A row the model answered but this parser could not read is 未判定, never 'none': the
+        # latter is a clean VERDICT, and writing it for an unmeasured row put it into the
+        # study's non-violent count. The sentinel still differs from blank (''), so a row that
+        # really landed is never re-stamped at the end of a finished run.
+        assert seen['fail_value'] == (aggression_module.UNJUDGED, '', '模型未判定')
 
     def test_a_genuinely_empty_row_is_answered_like_the_lexicon_not_left_unprocessed(self):
         """An empty comment has nothing to judge, so it is not a row the model failed to reach:
@@ -728,14 +732,14 @@ class TestAggressionLlmMode:
         assert result.loc[0, 'aggression'] == 'severe'
 
     def test_an_unparseable_answer_is_not_turned_into_a_verdict(self):
-        """Unlike emotion, where a bad answer becomes ``Neutral``, a violence level invented from
-        prose would put a row into the study's abusive-speech count that nobody judged."""
+        """A violence level invented from prose would put a row into the study's count that
+        nobody judged; the level stays 未判定 and the model's own words are kept beside it."""
         result = AggressionAnalyzer(mode='llm').analyze_dataframe(
             pd.DataFrame({'正文': ['这评论我觉得不太合适']}),
             '正文',
             ctx={'client': ScriptedClient(default='这条评论语气不太友好，建议理性发言')},
         )
-        assert result.loc[0, 'aggression'] == 'none'
+        assert result.loc[0, 'aggression'] == aggression_module.UNJUDGED
         assert str(result.loc[0, 'aggression_hits']), 'the model is answered with its own words kept'
 
     def test_a_clean_verdict_is_not_relabelled_as_never_judged(self):
