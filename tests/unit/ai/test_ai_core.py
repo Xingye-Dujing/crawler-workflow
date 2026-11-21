@@ -881,6 +881,32 @@ def test_python_tools_are_refused_on_a_cloud_host(monkeypatch):
     assert refusal.value.key == 'ai.pythonCloud'
 
 
+def test_an_ordinary_account_may_not_author_or_run_inline_python(monkeypatch):
+    """The script library and inline execution are machine-level, like the HTTP routes."""
+    from ai import environment, tools
+    from ai.errors import AIError
+    from runtime import account_context
+    from runtime.account_context import Account
+
+    monkeypatch.setattr(tools, 'get_setting', lambda key: True)
+    monkeypatch.setattr(
+        environment,
+        'capabilities',
+        lambda: {'code_plugins': True, 'local_source': False, 'user_files': False},
+    )
+    monkeypatch.setattr('services.accounts.service.accounts_mode', lambda: True)
+    reader = Account('u_aaaaaaaaaaaa', 'reader', 'user')
+    with account_context.use(reader):
+        for name, args in (
+            ('python_save_script', {'name': 'x', 'code': 'print(1)'}),
+            ('python_write', {'path': 'x.py', 'content': 'print(1)'}),
+            ('python_run', {'code': 'print(1)'}),
+        ):
+            with pytest.raises(AIError) as refusal:
+                tools.execute(name, args, {}, allowed={name})
+            assert refusal.value.key == 'accounts.adminRequired', name
+
+
 def test_store_uses_max_seq_and_round_trips_blocks():
     from ai import store
 

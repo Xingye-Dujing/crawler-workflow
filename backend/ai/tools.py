@@ -21,7 +21,7 @@ import re
 from pathlib import Path
 
 from core.config import Config
-from runtime import account_context
+from runtime import account_context, policy
 from runtime.settings import get_setting
 
 from ai import scopes
@@ -1761,6 +1761,14 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
             raise AIError('ai.pythonCloud', kind='capability')
         if not (get_setting('ai_allow_python') and environment.capabilities()['code_plugins']):
             raise AIError('ai.pythonDisabled', kind='capability')
+        if not policy.may_administer_machine():
+            # The script library and its workspace are ONE system-level tree, and inline code runs
+            # as the server's OS user. On an accounts host only the administrator may author a
+            # script, write its files, read the shared workspace or run inline code — the same line
+            # the HTTP routes draw. Running a STORED script by id stays available to everyone.
+            inline = name == 'python_run' and bool(str((args or {}).get('code') or '').strip())
+            if inline or tool.permission == 'write:python' or name in ('python_read', 'python_files'):
+                raise AIError(policy.machine_refusal_key(), kind='capability')
     if tool.permission in ('read:files', 'write:files', 'exec:cmd'):
         from ai import environment
 
