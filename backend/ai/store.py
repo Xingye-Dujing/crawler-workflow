@@ -13,7 +13,7 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 
 from runtime import paths
 
@@ -259,7 +259,6 @@ def _row(row) -> dict | None:
 
 
 def now() -> str:
-    from datetime import datetime
 
     return datetime.now(UTC).isoformat()
 
@@ -910,7 +909,6 @@ def mark_interrupted(conversation_id: str = '') -> int:
     streaming" forever. ``updated_at`` is the worker's heartbeat (buffered writes still touch it
     every few hundred ms): a trace row stale for over a minute is orphaned and gets swept.
     """
-    from datetime import datetime, timedelta
 
     stamp = now()
     stale_before = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
@@ -932,7 +930,6 @@ def mark_interrupted(conversation_id: str = '') -> int:
 def purge_older_than(days: int) -> int:
     if days <= 0:
         return 0
-    from datetime import datetime, timedelta
 
     cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
     with connect() as conn:
