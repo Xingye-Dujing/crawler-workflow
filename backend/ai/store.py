@@ -903,15 +903,24 @@ def mark_interrupted(conversation_id: str = '') -> int:
     A row that is still ``streaming`` cannot still be streaming; with ``conversation_id`` the sweep
     is limited to the turn whose connection just closed, so a concurrent answer elsewhere is safe.
 
-    Node-trace rows are exempt: they are streamed by a background run worker, not by an SSE reader
-    this sweep owns, and are settled by that worker when the model call ends. Interrupting them here
-    (the boot sweep runs on every page load) cut a demo's live trace in half.
+    A live node-trace row is exempt: it is streamed by a background run worker, not by an SSE reader
+    this sweep owns, and is settled by that worker when the model call ends. Interrupting it here
+    (the boot sweep runs on every page load) cut a demo's live trace in half. But the exemption must
+    not be permanent — if the worker was killed, nothing ever settles the row and it shows "still
+    streaming" forever. ``updated_at`` is the worker's heartbeat (buffered writes still touch it
+    every few hundred ms): a trace row stale for over a minute is orphaned and gets swept.
     """
+    from datetime import datetime, timedelta
+
+    stamp = now()
+    stale_before = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
     sql = (
         "UPDATE messages SET status = 'interrupted', updated_at = ? "
-        "WHERE status = 'streaming' AND meta_json NOT LIKE '%node_trace_stream%'"
+        "WHERE status = 'streaming' AND ("
+        "meta_json NOT LIKE '%node_trace_stream%' OR updated_at < ?"
+        ')'
     )
-    params: tuple = (now(),)
+    params: tuple = (stamp, stale_before)
     if conversation_id:
         sql += ' AND conversation_id = ?'
         params += (conversation_id,)

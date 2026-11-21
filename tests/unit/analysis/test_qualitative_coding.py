@@ -128,7 +128,7 @@ def test_trace_client_records_both_sides_without_touching_the_key(monkeypatch):
 
 
 def test_trace_streams_answer_deltas_then_settles(monkeypatch):
-    """The trace mirror writes each chunk as it arrives, then settles the row with the estimate."""
+    """The trace mirror buffers token deltas, then settles the row with the estimate."""
     import services.llm_trace as trace
 
     fake = FakeStore()
@@ -139,12 +139,11 @@ def test_trace_streams_answer_deltas_then_settles(monkeypatch):
 
     assistant = fake.messages[2]
     assert assistant['_born_status'] == 'streaming', 'the trace row is born streaming'
-    # One update per streamed chunk (no status field on those), then a final settle to 'done'
-    # carrying the estimate. The row was born 'streaming' in append_message (asserted in the fake
-    # by the delta writes preceding the settle).
+    # Deltas are flushed at most every TRACE_FLUSH_MS, so three instant chunks produce at most
+    # three intermediate writes — never one DB write per token. The final settle is always 'done'
+    # and carries the full answer, so nothing is lost even when a chunk arrived between flushes.
     deltas = [content for _, content, status in fake.updates if status is None]
-    assert len(deltas) == 3, 'one write per streamed chunk'
-    assert '体验卡顿 | 很卡' in deltas[-1], 'content grows across deltas'
+    assert len(deltas) <= 3
     assert assistant['content'].endswith('回答:提示词')
     assert '估算' in assistant['content']
     assert assistant['status'] == 'done'

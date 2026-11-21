@@ -10,7 +10,9 @@ the row client does not expose provider usage; the message meta says `estimated:
 mistakes them for billed units.
 """
 
+import logging
 import threading
+import time
 
 from ai import store
 from ai.types import text_block
@@ -18,8 +20,14 @@ from runtime.state import add_log
 
 from i18n import t
 
+logger = logging.getLogger(__name__)
+
 _COUNTER = threading.Lock()
 _SEQ = 0
+#: Persist at most one delta write per this interval per call. Each write opens a SQLite connection
+#: and rewrites the whole (growing) transcript, so one write per token was O(n^2) bytes and risked
+#: lock contention on API runs with several workers. 200 ms still looks live to the polling viewer.
+_TRACE_FLUSH_MS = 200
 
 
 def _next_suffix() -> int:
@@ -44,6 +52,16 @@ def start_node_trace(run_id: str, node_id: str, op: str, client, provider: str =
     run = str(run_id or '').strip()
     if not run:
         return client, ''
+    try:
+        return _start_trace(run, node_id, op, client, provider, model)
+    except Exception as exc:
+        # Tracing is a side effect of a paid node. A full/locked ai.db must never stop the model
+        # call — log the reason and hand the ORIGINAL client back so the analyzer runs unchanged.
+        logger.warning(t('trace.unavailable', err=exc))
+        return client, ''
+
+
+def _start_trace(run: str, node_id: str, op: str, client, provider: str, model: str):
     provider = str(provider or getattr(client, 'provider', '') or '') if client is not None else provider
     model = str(model or getattr(client, 'model', '') or '') if client is not None else model
     conversation = store.create_conversation(provider=provider, model=model, skill='node_trace')
@@ -90,6 +108,18 @@ class TraceClient:
     def __getattr__(self, name):
         return getattr(self._client, name)
 
+    def _write(self, message_id: str, body: str, status: str | None = None, meta: dict | None = None) -> None:
+        """One durable update; a DB failure is logged and ignored, never raised into the model call."""
+        fields = {'content': body, 'blocks': [text_block(body)]}
+        if status is not None:
+            fields['status'] = status
+        if meta is not None:
+            fields['meta'] = meta
+        try:
+            store.update_message(message_id, **fields)
+        except Exception as exc:
+            logger.warning(t('trace.writeFailed', err=exc))
+
     def chat(self, prompt: str, max_retries: int = 2) -> str:
         meta = {
             'kind': 'trace_call',
@@ -101,55 +131,70 @@ class TraceClient:
         }
         provider = str(getattr(self._client, 'provider', '') or '')
         model = str(getattr(self._client, 'model', '') or '')
-        store.append_message(
-            self.conversation_id, 'user', content=str(prompt), meta=meta, provider=provider, model=model
-        )
+        try:
+            store.append_message(
+                self.conversation_id, 'user', content=str(prompt), meta=meta, provider=provider, model=model
+            )
+        except Exception as exc:
+            logger.warning(t('trace.writeFailed', err=exc))
 
         # Mirror the answer as it is GENERATED, not after it finished. The assistant row is born
-        # 'streaming'; each token appends to its content and the final settle writes the token
-        # estimate + answer_chars. A poll of this conversation (the demo deep link) then sees the
-        # text grow token by token. The row runner still gets the FULL string back to parse.
-        # A marker the boot/reader-disconnect sweep respects: those sweeps interrupt every
-        # 'streaming' row, but a node-trace row is written by a background worker with no SSE
-        # reader, so it must be spared until this worker settles it itself.
+        # 'streaming'; deltas are buffered and written at most every _TRACE_FLUSH_MS, and the final
+        # settle writes the token estimate + answer_chars. The row runner still gets the FULL string
+        # back to parse.
+        # The 'node_trace_stream' marker makes the boot/reader-disconnect sweep spare this row: it
+        # is written by a background worker with no SSE reader and settled by that worker itself.
         stream_meta = dict(meta)
         stream_meta['node_trace_stream'] = True
-        streamed = store.append_message(
-            self.conversation_id,
-            'assistant',
-            content='',
-            status='streaming',
-            meta=stream_meta,
-            provider=provider,
-            model=model,
-        )
+        streamed = None
+        try:
+            streamed = store.append_message(
+                self.conversation_id,
+                'assistant',
+                content='',
+                status='streaming',
+                meta=stream_meta,
+                provider=provider,
+                model=model,
+            )
+        except Exception as exc:
+            logger.warning(t('trace.writeFailed', err=exc))
         prompt_chars = int(meta['prompt_chars'])
-        # The prompt-side estimate is known up front; prefix it during streaming so the text the
-        # camera sees grow is the same text that finally settles (no note jumping in at the end).
-        prefix = f'（本次调用估算：提示 {prompt_chars} 字 ≈ {prompt_chars // 2} token，回答生成中… 非账单数字）\n'
+        prefix = t(
+            'trace.streamingPrefix',
+            prompt=prompt_chars,
+            ptokens=prompt_chars // 2,
+        )
         chunks: list[str] = []
+        last_flush = [0.0]
 
         def on_delta(text: str) -> None:
             chunks.append(str(text))
-            body = prefix + ''.join(chunks)
-            store.update_message(streamed['id'], content=body, blocks=[text_block(body)])
+            now = time.monotonic()
+            if streamed is not None and (now - last_flush[0]) * 1000 >= _TRACE_FLUSH_MS:
+                last_flush[0] = now
+                self._write(streamed['id'], prefix + ''.join(chunks))
 
         try:
             answer = self._client.chat(prompt, max_retries=max_retries, on_delta=on_delta)
         except Exception:
             # A failed generation must not leave a half-written row looking live forever. Keep the
             # tokens that did arrive, mark it interrupted, then let the caller's error propagate.
-            partial = prefix + ''.join(chunks)
-            store.update_message(streamed['id'], content=partial, blocks=[text_block(partial)], status='interrupted')
+            if streamed is not None:
+                self._write(streamed['id'], prefix + ''.join(chunks), status='interrupted')
             raise
         answer_chars = len(str(answer))
         meta['answer_chars'] = answer_chars
-        note = (
-            f'（本次调用估算：提示 {prompt_chars} 字 ≈ {prompt_chars // 2} token，'
-            f'回答 {answer_chars} 字 ≈ {answer_chars // 2} token；非账单数字）\n'
+        note = t(
+            'trace.usageNote',
+            prompt=prompt_chars,
+            ptokens=prompt_chars // 2,
+            answer=answer_chars,
+            atokens=answer_chars // 2,
         )
         final = note + str(answer)
-        store.update_message(streamed['id'], content=final, blocks=[text_block(final)], status='done', meta=meta)
+        if streamed is not None:
+            self._write(streamed['id'], final, status='done', meta=meta)
         return answer
 
 
@@ -185,7 +230,9 @@ def _in_out_sample(input_rows: list, output_rows: list) -> str:
             lines.append('| ' + ' | '.join(_md_cell(row.get(c, '')) for c in columns) + ' |')
         return '\n'.join(lines)
 
-    blocks = [b for b in (render('输入样本', input_rows), render('输出样本', output_rows)) if b]
+    blocks = [
+        b for b in (render(t('trace.sampleInput'), input_rows), render(t('trace.sampleOutput'), output_rows)) if b
+    ]
     text = '\n\n'.join(blocks)
     return text[:_SAMPLE_TOTAL]
 
@@ -200,6 +247,15 @@ def finish_node_trace(run_id: str, node_id: str, summary: dict) -> None:
     run = str(run_id or '').strip()
     if not run:
         return
+    try:
+        _finish_trace(run, node_id, summary)
+    except Exception as exc:
+        # A trace is a side effect. A failing ai.db must not fail a node whose rows are already
+        # persisted — that would turn a completed, paid run into a red one.
+        logger.warning(t('trace.finishFailed', err=exc))
+
+
+def _finish_trace(run: str, node_id: str, summary: dict) -> None:
     for conversation in traces_for_run(run):
         title = str(conversation.get('title') or '')
         if f'| {node_id} |' not in title:
@@ -217,11 +273,12 @@ def finish_node_trace(run_id: str, node_id: str, summary: dict) -> None:
                 blocks=[text_block(sample)],
                 meta={'kind': 'trace_sample', 'run_id': run, 'node_id': node_id, 'estimated': False},
             )
+        closing = str(summary.get('text') or t('trace.resultDefault'))
         store.append_message(
             conversation['id'],
             'assistant',
-            content=str(summary.get('text') or '节点已完成；如不满意，请继续在对话里修改，再确认重跑。'),
-            blocks=[text_block(str(summary.get('text') or '节点已完成；如不满意，请继续在对话里修改，再确认重跑。'))],
+            content=closing,
+            blocks=[text_block(closing)],
             meta={
                 'kind': 'trace_result',
                 'run_id': run,

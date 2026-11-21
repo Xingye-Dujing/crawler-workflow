@@ -13,6 +13,16 @@ ZH = {
     ),
     'trace.opened': '已为节点 {node} 打开可见追踪对话：{id}',
     'trace.finished': '节点 {node} 已完成（{rows} 行）。如不满意，可在本对话里继续调整，再确认重跑。',
+    'trace.streamingPrefix': '（本次调用估算：提示 {prompt} 字 ≈ {ptokens} token，回答生成中… 非账单数字）\n',
+    'trace.usageNote': (
+        '（本次调用估算：提示 {prompt} 字 ≈ {ptokens} token，回答 {answer} 字 ≈ {atokens} token；非账单数字）\n'
+    ),
+    'trace.sampleInput': '输入样本',
+    'trace.sampleOutput': '输出样本',
+    'trace.resultDefault': '节点已完成；如不满意，请继续在对话里修改，再确认重跑。',
+    'trace.unavailable': '追踪对话不可用，节点照常执行：{err}',
+    'trace.writeFailed': '写入追踪对话失败，节点照常执行：{err}',
+    'trace.finishFailed': '收尾追踪对话失败，节点结果不受影响：{err}',
     'ai.provider.deepseek': 'DeepSeek 直连',
     'ai.provider.opencode_go': 'OpenCode Go',
     'ai.provider.openrouter': 'OpenRouter',
@@ -243,6 +253,16 @@ EN = {
     'trace.finished': (
         'Node {node} finished ({rows} rows). If you want changes, keep talking here, then confirm and rerun.'
     ),
+    'trace.streamingPrefix': '(Estimated: prompt {prompt} chars ~ {ptokens} tokens, answering... not billed)\n',
+    'trace.usageNote': (
+        '(Estimated: prompt {prompt} chars ~ {ptokens} tokens, answer {answer} chars ~ {atokens} tokens; not billed)\n'
+    ),
+    'trace.sampleInput': 'Input sample',
+    'trace.sampleOutput': 'Output sample',
+    'trace.resultDefault': 'Node finished; keep talking here to adjust it, then confirm and rerun.',
+    'trace.unavailable': 'Trace conversation unavailable; the node runs as usual: {err}',
+    'trace.writeFailed': 'Writing the trace failed; the node runs as usual: {err}',
+    'trace.finishFailed': 'Closing the trace failed; the node result is unaffected: {err}',
     'ai.provider.deepseek': 'DeepSeek API',
     'ai.provider.opencode_go': 'OpenCode Go',
     'ai.provider.openrouter': 'OpenRouter',
