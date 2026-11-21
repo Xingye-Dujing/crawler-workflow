@@ -149,8 +149,9 @@ def walk(session, url: str, limit: int) -> tuple:
         candidates = [read] if read else []
         return page, (candidates[0] if candidates else None)
 
+    tokens = list(innertube.pager_tokens(watch))
     chosen = ''
-    for token in innertube.pager_tokens(watch):
+    for token in tokens:
         candidates = [token]
         attempt = fetch(token)
         if attempt is None:
@@ -160,10 +161,16 @@ def walk(session, url: str, limit: int) -> tuple:
             chosen = token
             break
     if not chosen:
-        # Nothing paged the comments: the author turned them off, or the video
-        # has none. Either way that is an answer, and it has to read as
-        # 无评论 rather than as a failed crawl.
-        session.log(t('comment.commentsClosed', url=url))
+        if tokens:
+            # The watch answer OFFERED a pager and none of the candidate continuations returned a
+            # comment list. That is our walk failing to page, not the site saying 无评论 — and an
+            # ``OK`` here advanced the cursor past a link nobody proved, so 继续 never replayed it.
+            session.log(t('comment.youtubeNoPager', url=url))
+            session.mark_unproven(url)
+        else:
+            # No pager at all: the author turned the comments off, or the video has none. That IS
+            # an answer and has to read as 无评论 rather than as a failed crawl.
+            session.log(t('comment.commentsClosed', url=url))
         return [], OK
 
     def keep(row):

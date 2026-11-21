@@ -76,6 +76,16 @@ def account_word(account: str) -> str:
     return t(label_key, **label_args) if label_key else str(account or '').strip()
 
 
+def is_rotatable(reason: str) -> bool:
+    """Whether a cooling reason condemns the LOGIN (so a rotation can help).
+
+    Exported because the comment executor decides whether to spend the next account; a caller
+    answering ``observe`` without the ``rotatable`` field (an older/third-party pool) must still
+    get the pool's own rule instead of a silent ``False``.
+    """
+    return health.is_rotatable(reason)
+
+
 def reason_word(reason: str) -> str:
     """The user-facing word for one cooling reason (the values are catalogue keys)."""
     key = {

@@ -213,7 +213,7 @@ class TestMarker:
 class TestFactoryPolicy:
     def test_the_first_run_imports_the_saved_cookie_file(self, profiles_on, fake_crawler):
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
-        assert fake_crawler()['cookie_path'] == '/tmp/cookies/weibo_cookies.json'
+        assert Path(fake_crawler()['cookie_path']) == Path('/tmp/cookies/weibo_cookies.json')
         assert fake_crawler()['profile_dir'] == profiles.profile_dir_for('weibo')
 
     def test_a_second_run_plants_nothing(self, profiles_on, fake_crawler):
@@ -227,7 +227,7 @@ class TestFactoryPolicy:
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies')
         assert fake_crawler()['profile_dir'] is None
-        assert fake_crawler()['cookie_path'] == '/tmp/cookies/weibo_cookies.json'
+        assert Path(fake_crawler()['cookie_path']) == Path('/tmp/cookies/weibo_cookies.json')
 
     def test_the_login_browser_gets_the_same_profile_as_the_crawl(self, profiles_on, fake_crawler):
         """Two different directories would mean the user logs into one device and the
@@ -392,7 +392,7 @@ class TestAccounts:
 
     def test_the_factory_routes_the_account_to_its_file_and_device(self, profiles_on, fake_crawler, tmp_path):
         crawlers_pkg.get_crawler('weibo', cookie_dir=str(tmp_path), account='work')
-        assert fake_crawler()['cookie_path'] == f'{tmp_path}/weibo@work_cookies.json'
+        assert Path(fake_crawler()['cookie_path']) == Path(f'{tmp_path}/weibo@work_cookies.json')
         assert fake_crawler()['profile_dir'] == profiles.platform_dir('weibo', 'work')
 
     def test_one_accounts_use_does_not_stop_another_importing(self, profiles_on, fake_crawler):
@@ -400,7 +400,7 @@ class TestAccounts:
         having a session."""
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='a')
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='b')
-        assert fake_crawler()['cookie_path'] == '/tmp/cookies/weibo@b_cookies.json'
+        assert Path(fake_crawler()['cookie_path']) == Path('/tmp/cookies/weibo@b_cookies.json')
         crawlers_pkg.get_crawler('weibo', cookie_dir='/tmp/cookies', account='b')
         assert fake_crawler()['cookie_path'] is None, 'the same account plants only once'
 

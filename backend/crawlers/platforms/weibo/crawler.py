@@ -561,9 +561,11 @@ class WeiboCrawler(Crawler):
                     # so this window is not behind the cursor yet.
                     cut_short = True
                     break
-                self.mark_position(page_index=page_num, card_index=0)
                 found, cards = self._harvest(target)
                 scraped.extend(found)
+                # AFTER the harvest: a cursor records what this walk PROVED. Written first, a kill
+                # between the navigation and the read left a position claiming page N was walked.
+                self.mark_position(page_index=page_num, card_index=0)
                 if not cards:
                     # The page rendered no list at all — the site's own end. A page that was full of
                     # cards this crawl had already paid for is NOT that: it says so below (新增 0) and

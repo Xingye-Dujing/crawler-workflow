@@ -744,7 +744,10 @@ class Crawler(ABC):
                 logger.warning(t('crawl.cookies_failed', platform=host, err='navigation did not commit'))
                 continue
             applied, rejected = self._plant(outstanding)
-            self.cookies_loaded = max(self.cookies_loaded, applied)
+            # SUM, not max: the hosts partition the jar (a host-only cookie is refused by the
+            # first host and accepted by the second — the weibo case this loop exists for), so
+            # max() reported 5 for a jar of 5+3 and the panel's “已更新 N 条” undercounted.
+            self.cookies_loaded += applied
             logger.info(t('crawl.cookiesSeeded', host=host, n=applied, total=len(cookies)))
             outstanding = rejected
 

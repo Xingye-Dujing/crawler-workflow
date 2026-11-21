@@ -15,6 +15,7 @@ ZH = {
     'pool.catbusUnsupported': '账号池只适用于本机浏览器采集；CatBus 节点请用它自己的账号',
     'pool.noCandidates': '账号池（{platform}）现在没有可用账号：请检查登录、冷却时间或停用状态',
     'pool.rotating': '[账号池] {platform} · {account} 不可用（{reason}），改用 {next}',
+    'pool.notRotatable': '[账号池] {platform} 本次受阻属于{reason}，不消耗账号轮换',
     'pool.nextAttempt': '下一个候选账号',
     'pool.attempt': '[账号池] {platform} 第 {n} 次尝试：{account}{exit}',
     'pool.exit.unavailable': '出口池（{platform}）没有可用出口，已按设置拒绝直连',
@@ -47,6 +48,7 @@ EN = {
         'the cooldown times or the disabled flags'
     ),
     'pool.rotating': '[pool] {platform} · {account} is unusable ({reason}); switching to {next}',
+    'pool.notRotatable': '[pool] {platform} was blocked by {reason}; no account rotation is spent on it',
     'pool.nextAttempt': 'the next candidate',
     'pool.attempt': '[pool] {platform} attempt {n}: {account}{exit}',
     'pool.exit.unavailable': 'No usable exit for {platform}; direct connection refused by the setting',

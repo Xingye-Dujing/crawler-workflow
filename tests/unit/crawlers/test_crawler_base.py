@@ -161,6 +161,7 @@ class TestCookiePlanting:
         assert driver.visited[0] == 'https://www.douyin.com'
         assert 'https://www.iesdouyin.com' in driver.visited
         assert sorted(driver.planted) == ['bound', 'sid']
+        assert crawler.cookies_loaded == 2, 'the hosts partition the jar; max() reported one host'
 
     def test_a_nameless_entry_is_dropped_without_a_visit_of_its_own(self, write_cookies):
         driver = PlantDriver()

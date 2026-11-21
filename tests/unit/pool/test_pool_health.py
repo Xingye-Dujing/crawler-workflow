@@ -33,6 +33,26 @@ def test_an_empty_fact_set_does_not_clear_a_cooldown():
     assert store.get_health('exit', 'weibo', 'e1')['state'] == 'ok'
 
 
+def test_a_blank_account_is_the_default_login_for_its_sticky_exit(monkeypatch):
+    """``''`` and ``default`` are one subject; the raw comparison never bound the blank spelling."""
+    reads = []
+    binds = []
+
+    def binding(platform, account):
+        reads.append((platform, account))
+        return ''
+
+    monkeypatch.setattr(store, 'binding_exit_id', binding)
+    monkeypatch.setattr(store, 'bind', lambda platform, account, exit_id: binds.append((platform, account, exit_id)))
+    monkeypatch.setattr(store, 'exit_secret', lambda exit_id: {'id': exit_id, 'name': exit_id, 'enabled': True})
+    monkeypatch.setattr(egress, 'exits_for', lambda platform: [{'id': 'e1'}])
+    monkeypatch.setattr(egress, 'healthy_exit', lambda platform, exclude=(): {'id': 'e1'})
+    spec = egress.proxy_for('weibo', '')
+    assert spec['id'] == 'e1'
+    assert reads == [('weibo', 'default')], 'the blank spelling skipped the binding lookup'
+    assert binds == [('weibo', 'default', 'e1')], 'the blank spelling never wrote a binding'
+
+
 def test_a_cooling_bound_exit_is_replaced_for_an_automatic_browser(monkeypatch):
     """Only a manually-verified window may look from where the login lives."""
     now = time.time()

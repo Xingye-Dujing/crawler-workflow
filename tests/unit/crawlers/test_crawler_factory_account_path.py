@@ -50,7 +50,7 @@ def test_the_default_login_is_one_file_under_either_spelling(stub_factory, accou
     used to splice ``weibo@default_cookies.json`` for the named spelling — a path no writer
     produces, which read as "no cookie" and silently crawled anonymous."""
     made = crawlers.get_crawler('weibo', cookie_dir='C:/jar', account=account)
-    assert made.cookie_path == 'C:/jar/weibo_cookies.json', made.cookie_path
+    assert made.cookie_path.replace('\\', '/') == 'C:/jar/weibo_cookies.json', made.cookie_path
 
 
 def test_a_named_account_keeps_its_own_file_and_the_factory_agrees_with_the_manager(stub_factory):
@@ -67,7 +67,16 @@ def test_the_platform_that_holds_no_session_still_builds_no_cookie_file(stub_fac
     the manager's validating path builder would refuse a crawl that has never wanted a cookie.
     The fold must not turn "no session" into an exception."""
     made = crawlers.get_crawler('wechat', cookie_dir='C:/jar', account='default')
-    assert made.cookie_path == 'C:/jar/wechat_cookies.json'
+    assert made.cookie_path.replace('\\', '/') == 'C:/jar/wechat_cookies.json'
+
+
+@pytest.mark.parametrize('account', ['work.home', 'x/../../y', 'has space', '桌号'])
+def test_a_malformed_account_label_is_refused_by_name(stub_factory, account):
+    """The factory spliced its own filename, so a bad label either walked out of the cookie dir
+    or read a path no writer produces (anonymous crawl, no line saying the login was never used)."""
+    with pytest.raises(ValueError) as caught:
+        crawlers.get_crawler('weibo', cookie_dir='C:/jar', account=account)
+    assert account in str(caught.value), str(caught.value)
 
 
 def test_a_cookie_that_was_never_saved_is_not_recorded_as_imported(monkeypatch, tmp_path):

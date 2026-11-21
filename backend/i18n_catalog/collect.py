@@ -61,6 +61,9 @@ ZH = {
     'comment.biliBadAnswer': '哔哩哔哩评论接口未返回数据（code={code}）：{url}',
     'comment.biliShort': '[B站评论] 游标收到 {rows} 条，站点标注 {declared} 条（匿名深翻页被限流）：{url}',
     'comment.commentsClosed': '该内容未开放评论区（或未产生评论）：{url}',
+    'comment.youtubeNoPager': (
+        'YouTube 给出了评论区入口，但没有任何续页返回评论列表，这条链接未得到证明（继续运行会重试）：{url}'
+    ),
     'comment.done': (
         '评论采集完成：{urls} 个链接（正常 {ok}、拦截 {blocked}、失效 {dead}），共 {rows} 条评论，输出 {files} 个文件'
     ),
@@ -296,6 +299,10 @@ EN = {
     'comment.biliBadAnswer': 'bilibili comment endpoint returned no data (code={code}): {url}',
     'comment.biliShort': '[bilibili] cursor got {rows} of {declared} per the site (deep-page throttling): {url}',
     'comment.commentsClosed': 'this content has no open comment section (or none yet): {url}',
+    'comment.youtubeNoPager': (
+        'YouTube offered a comment entry point but no continuation returned a comment list; this link is unproven '
+        '(继续 will retry it): {url}'
+    ),
     'comment.done': (
         'comment crawl finished: {urls} links (ok {ok}, blocked {blocked}, '
         'dead {dead}), {rows} comments, {files} file(s)'

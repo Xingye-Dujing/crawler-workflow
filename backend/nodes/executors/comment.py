@@ -315,6 +315,22 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             run_id=str((ctx or {}).get('run_id') or ''),
             node_id=nid,
         )
+        if verdict.get('rotatable') is None:
+            # An observer that answers only ``reason`` (an older pool, a test double) still gets
+            # the pool's rule: only login_wall/risk condemn the login.
+            verdict['rotatable'] = pool.is_rotatable(verdict.get('reason'))
+        if not verdict.get('rotatable'):
+            # A network fault (or an unknown failure) is not evidence against the LOGIN. Rotating
+            # here spent one account per link and re-attempted a page the site never served; the
+            # pool's own rule is that only a login wall / risk response condemns the account.
+            add_log(
+                t(
+                    'pool.notRotatable',
+                    platform=kind,
+                    reason=pool.reason_word(verdict['reason']),
+                )
+            )
+            return False
         add_log(
             t(
                 'pool.rotating',
@@ -569,7 +585,9 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # saw. Log once at the end on the full table, not once per batch.
             kept = filter_comments_by_time(fresh, params, node_label(node, str(nid)), log=False)
             writer.add(kept)
-            rows_out.extend(fresh)
+            # Only what the writer actually holds: the returned table, the denominator and the
+            # console count all read this list, and they used to include time-filtered rows.
+            rows_out.extend(kept)
             add_log(t('comment.article', url=url, n=len(kept), status=t(f'comment.status.{status}')))
             if cursor_sink is not None and not unproven:
                 # Recorded AFTER the row sink committed, and only while the run of completed
@@ -600,6 +618,11 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             pool.release(_candidate)
 
     files = _publish_parts()
+    # ONE filter, before any count: the part files already hold the filtered rows, so the
+    # ``comment.done`` line, the U1 shortfall gate and the returned table must agree with them.
+    # Applied last, a time-filtered run printed more rows than it wrote and could pass the
+    # "采得不足" gate on rows the user will never see.
+    rows_out = filter_comments_by_time(rows_out, params, node_label(node, str(nid)))
     if stop_requested():
         # The article loop above stops taking URLs once the run is not wanted, and then it
         # *returns* — so without this check a comment node cut short by 停止 settled DONE
@@ -704,7 +727,6 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             else ''
         )
         raise ValueError(t('run.underTargetShort', platform=kind, have=len(rows_out), want=want, walk=walk))
-    rows_out = filter_comments_by_time(rows_out, params, node_label(node, str(nid)))
     return rows_out
 
 

@@ -466,6 +466,9 @@ class _YtWalkSession:
     def mark_blocked(self):
         self.blocked.append(True)
 
+    def mark_unproven(self, url):
+        self.unproven = getattr(self, 'unproven', []) + [url]
+
     def nap(self, seconds):
         pass
 
@@ -514,3 +517,30 @@ class TestYouTubeWalkMarksMidWalkRefusal:
         assert status == BLOCKED, status
         assert [row['评论ID'] for row in rows] == ['c1', 'c2'], 'rows read before the refusal survive'
         assert session.blocked == [True], 'a mid-walk refusal must mark the session blocked'
+
+    def test_a_pager_that_never_answers_does_not_claim_the_thread_is_empty(self, monkeypatch):
+        """An offered pager that pages no comment list is OUR walk failing, not 无评论."""
+        from crawlers.commenting.protocol import OK
+        from crawlers.platforms.youtube import comments as yt_comments
+        from crawlers.platforms.youtube import crawler as yt_crawler
+        from crawlers.platforms.youtube import innertube
+
+        def fake_call(driver, method, key, context, params):
+            if 'videoId' in params:
+                return {'watch': True}
+            return {}
+
+        monkeypatch.setattr(innertube, 'call', fake_call)
+        monkeypatch.setattr(innertube, 'ready', lambda driver: ('key', {}))
+        monkeypatch.setattr(innertube, 'refused', lambda payload: False)
+        monkeypatch.setattr(innertube, 'pager_tokens', lambda watch: ['TOKEN'])
+        monkeypatch.setattr(innertube, 'pager_of', lambda payload, marker: '')
+        monkeypatch.setattr(yt_crawler, 'video_id_of', lambda url: 'abc')
+        monkeypatch.setattr(yt_comments, 'collect', lambda payload, key: [])
+
+        session = _YtWalkSession()
+        rows, status = yt_comments.walk(session, 'https://www.youtube.com/watch?v=abc', 0)
+        assert rows == []
+        assert status == OK, 'an unproven walk is not a refusal by the site'
+        assert getattr(session, 'unproven', []) == ['https://www.youtube.com/watch?v=abc']
+        assert session.logged, 'the console must say the link was not proven'

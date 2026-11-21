@@ -152,6 +152,8 @@ def test_the_time_filter_applies_to_the_export_file_too(pool_calls, monkeypatch)
     from services.ingest import parts
 
     added = []
+    messages = []
+    monkeypatch.setattr(comment_exec, 'add_log', lambda message, **k: messages.append(message))
 
     class FakeWriter:
         def __init__(self, *args, **kwargs):
@@ -178,6 +180,7 @@ def test_the_time_filter_applies_to_the_export_file_too(pool_calls, monkeypatch)
     rows = comment_exec.execute_comment_node(node, headless=True, ctx=None)
     assert [row['评论ID'] for row in rows] == ['c1']
     assert [row['评论ID'] for row in added] == ['c1'], 'the exported file held an out-of-range comment'
+    assert any('共 1 条评论' in message for message in messages), messages
 
 
 @pytest.mark.usefixtures('clean_globals')
@@ -200,10 +203,15 @@ def test_a_network_fault_stays_a_network_fact_when_rotating(pool_calls, monkeypa
         ([], _protocol.BLOCKED),
         ([{'评论ID': 'c1', '评论内容': 'x'}], _protocol.OK),
     ]
-    comment_exec.execute_comment_node(_node(), headless=True, ctx=None)
+    with pytest.raises(ValueError):
+        # The link stays BLOCKED (the node fails so 继续 replays it); what must NOT happen is a
+        # second account being spent on a page the site never served.
+        comment_exec.execute_comment_node(_node(), headless=True, ctx=None)
     assert observed, 'rotation never recorded its fact'
     assert observed[0].get('unreachable') is True
     assert observed[0].get('risk_blocked') is False
+    assert len(pool_calls) == 1, 'a network fault spent an account rotation'
+    assert len(_ScriptedSession.instances) == 1, 'a second browser was opened for a dead link'
 
 
 @pytest.mark.usefixtures('clean_globals')

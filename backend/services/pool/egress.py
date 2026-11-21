@@ -14,6 +14,8 @@ The module deliberately knows nothing about crawlers or browsers: it answers wit
 description of a proxy, and ``crawlers.core.proxy`` turns that into Chrome arguments.
 """
 
+from sessions.cookies import CookieManager
+
 from services.pool import health as pool_health
 from services.pool import store
 
@@ -53,8 +55,12 @@ def proxy_for(platform: str, account: str, *, auto_bind: bool = True, even_if_co
     a person pressing 验证 or opening the login window is asking "what does this login see from
     where it lives", and moving that probe would answer a question nobody asked.
     """
-    account = str(account or '').strip()
-    bound = store.binding_exit_id(platform, account) if account else ''
+    # Blank IS the default login (默认账号), not a wildcard: fold it here so a canvas saved before
+    # multi-account support gets the same sticky exit as one that spells ``default``. The raw
+    # comparison skipped the binding lookup and never wrote one, so the probe and the crawl behind
+    # it could leave through two different addresses for one login.
+    account = CookieManager.key(account)
+    bound = store.binding_exit_id(platform, account)
     if bound:
         spec = store.exit_secret(bound)
         if spec and spec.get('enabled') and _serves(spec, platform):
@@ -70,7 +76,7 @@ def proxy_for(platform: str, account: str, *, auto_bind: bool = True, even_if_co
         # Every exit is cooling or disabled. Answering "direct" here would leak the host's
         # address; the caller reports that the exit pool has nothing usable instead.
         return {'unavailable': True, 'platform': platform}
-    if auto_bind and account:
+    if auto_bind:
         store.bind(platform, account, choice['id'])
     spec = store.exit_secret(choice['id'])
     return spec or {'unavailable': True, 'platform': platform}

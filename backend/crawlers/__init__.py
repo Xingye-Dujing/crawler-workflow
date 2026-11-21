@@ -144,16 +144,26 @@ def get_crawler(
     # instead — a person cannot scan a QR code nobody can see.
     headless = True if Config.CLOUD_MODE else headless
     profile = profiles.profile_dir_for(platform, enabled=use_profile, account=account)
-    # One account, ONE spelling of its file. ``default`` is that login's NAME and ``''`` is its
-    # historical spelling, and the file is the unsuffixed one for both — the fold lives in
-    # :meth:`CookieManager.path_segment`. Splicing ``f'{platform}@{account}'`` here instead wrote
-    # ``weibo@default_cookies.json``, a name ``path_for`` never produces and ``account_files``
-    # refuses even to list, so every default-account crawl looked at a file that cannot exist:
-    # ``file_stamp('')`` blanked the profile's cookie stamp, permanently killing the deferred
-    # re-plant, and with “本次不用 Profile” the crawl ran anonymous without saying so.
-    segment = CookieManager.path_segment(account)
-    stem = f'{platform}@{segment}' if segment else str(platform)
-    saved = f'{cookie_dir}/{stem}_cookies.json' if cookie_dir else ''
+    # One account, ONE spelling of its file, and one VALIDATOR. ``default`` is that login's NAME
+    # and ``''`` is its historical spelling, and the file is the unsuffixed one for both — the fold
+    # lives in :meth:`CookieManager.path_for`, which also refuses a malformed label. Splicing
+    # ``f'{platform}@{account}'`` here bypassed that refusal: ``work.home`` or ``x/../../y`` became
+    # a path outside the cookie dir (and with profiles off nothing else validated it), so the node
+    # either planted a stranger's jar or crawled anonymous without saying so.
+    if cookie_dir and CookieManager.is_supported(platform):
+        try:
+            saved = CookieManager(cookie_dir).path_for(platform, account)
+        except ValueError as exc:
+            raise ValueError(t('pool.badAccount', account=account)) from exc
+    elif cookie_dir:
+        # A platform that holds no session (wechat) is not in the manager's PLATFORMS, so the
+        # validating builder would refuse a crawl that never wanted a cookie. Keep its historical
+        # unsuffixed name: no file is ever written or planted for it.
+        segment = CookieManager.path_segment(account)
+        stem = f'{platform}@{segment}' if segment else str(platform)
+        saved = os.path.join(cookie_dir, f'{stem}_cookies.json')
+    else:
+        saved = ''
     # Import-once protects a *rotating* session from an older snapshot; it must not swallow a
     # newer one. When the panel saves a cookie whose profile is busy or mid-run, the plant is
     # deferred and this is where it still happens: `needs_refresh` compares the file's stamp
