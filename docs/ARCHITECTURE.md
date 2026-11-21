@@ -15,7 +15,7 @@
 |---|---|
 | `app.py` | 组合根：WSGI 对象、请求钩子（来源守卫、登录门、no-store、语言钉住）、Blueprint 注册、时钟接线、启动恢复、PEP-562 读缝，唯一路由 `/`。运行门在 `api/workflow.py`，编排在 `engine/run.py`，运行记录簇在 `api/runs.py`。 |
 | `core/` | `config.py`（路径/环境/常量）、`refs.py`（`as_bool`、`platform_for`、`sanitize_filename`）、`machine.py`（按 OS 的 Chrome/驱动/xelatex/Node 位置）、`procs.py`（`popen_kwargs()`、驱动进程树回收）。根上没有 `utils/`。 |
-| `runtime/` | `state.py`（运行态、`_RUN_QUEUE`、数据集缓存、控制台缓冲）、`stores.py`（store 注册表与惰性 getter，测试的接缝）、`settings.py`（`data/settings.json`）、`settings_schema.py`（每个设置键的唯一声明）、`gate.py`（同平台采集闸门）、`transport.py`（本机才有的传输在云模式的具名拒绝）、`paths.py`（账号树解析）。 |
+| `runtime/` | `state.py`（运行态、`_RUN_QUEUE`、数据集缓存、控制台缓冲）、`stores.py`（store 注册表与惰性 getter，测试的接缝）、`settings.py`（`data/settings.json`）、`settings_schema.py`（每个设置键的唯一声明）、`gate.py`（同平台采集闸门）、`transport.py`（本机才有的传输在云模式的具名拒绝）、`paths.py`（账号树解析）、`policy.py`（机器级入口的唯一权限判定：无账号=本机主人，有账号=仅管理员）。 |
 | `i18n.py` + `i18n_catalog/` | zh/en 机制（`t()`、线程本地 `set_lang`、`audit`、合并）；消息是数据，一域一模块（`crawl`/`collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`/`accounts`/`ai`/`pool`/`components`/`desktop`），按 `MODULES` 顺序合并，重复键在导入时被拒。 |
 | `capabilities/` | 唯一的采集矩阵，按归属拆分：`platforms/<id>.py`（一平台一文件，面板顺序由 `platforms/__init__` 钉住）、`fields.py`（字段原子与模式工厂）、`catbus.py`（第二引擎词汇）、`model.py`/`requirements.py`（数据类与机器门）、`registry.py`（校验、执行、面板共读的查询面）。 |
 | `scheduling/` | 定时任务域：`clock.py`（进程内线程，按 `Config.SCHEDULER_TICK_SECONDS` 触发，只从 `__main__` 启动）、`store.py`（`data/schedules.json`）、`cron.py`（五段 cron 与 IANA 时区）。 |
