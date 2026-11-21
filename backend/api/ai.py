@@ -426,7 +426,7 @@ def ai_trace_apply(conversation_id: str):
         return _bad_body()
     conversation = store.get_conversation(conversation_id)
     if conversation is None or conversation.get('skill') != 'node_trace':
-        return jsonify({'ok': False, 'error': 'not a node trace conversation'}), 404
+        return jsonify({'ok': False, 'error': t('ai.traceNotTrace')}), 404
     messages = store.list_messages(conversation_id, limit=400)
     provenance = next(
         (
@@ -439,7 +439,7 @@ def ai_trace_apply(conversation_id: str):
     run_id = str(provenance.get('run_id') or '')
     node_id = str(provenance.get('node_id') or '')
     if not run_id or not node_id:
-        return jsonify({'ok': False, 'error': 'this trace has no settled node result yet'}), 400
+        return jsonify({'ok': False, 'error': t('ai.traceNoResult')}), 400
     # The edited rows of a node are a list, not an object: accepting only a dict made the generic
     # apply path useless for every table-producing node, and dict([...]) raised a 500. Accept both
     # shapes and refuse anything else with the JSON envelope the panel parses.

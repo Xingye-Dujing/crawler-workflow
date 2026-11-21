@@ -100,6 +100,18 @@ class TestDraftValidation:
         assert second['name'] != first['name']
         assert os.path.isfile(first['path'])
 
+    def test_a_full_length_name_still_gets_a_free_suffix(self):
+        """The suffix was appended AFTER the 60-char cap, so it was cut off and the loop exited."""
+        from ai import workflow_draft
+
+        base = '长' * 60
+        first = workflow_draft.save(self._payload(), base)
+        second = workflow_draft.save(self._payload(), base)
+        assert first['name'] == base
+        assert second['name'] != first['name']
+        assert len(second['name']) <= 60
+        assert os.path.isfile(second['path'])
+
 
 class TestWorkingFolder:
     def test_a_relative_or_missing_folder_is_refused(self):

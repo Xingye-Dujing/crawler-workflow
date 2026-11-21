@@ -270,8 +270,22 @@ def test_a_stopped_turn_keeps_its_partial_answer_and_is_not_an_error():
     assert '已经写了一半' in row['content']
     assert not (row.get('meta') or {}).get('error')
     assert (row.get('meta') or {}).get('stop_reason') == 'cancelled'
-    history = agent._history(conversation['id'])
+    history, older = agent._history(conversation['id'])
+    assert older == 0
     assert any('已经写了一半' in str(message.get('content') or '') for message in history)
+
+
+def test_a_history_cut_is_reported_with_the_tail_that_was_read():
+    """The agent reads a bounded tail; the inspector must not call that the whole transcript."""
+    from ai import agent, store
+
+    conversation = store.create_conversation('long', 'm', 'auto')
+    for index in range(agent.HISTORY_MESSAGES + 5):
+        store.append_message(conversation['id'], 'user' if index % 2 == 0 else 'assistant', f'row {index}')
+    history, older = agent._history(conversation['id'])
+    assert older == 5
+    assert len(history) == agent.HISTORY_MESSAGES
+    assert history[-1]['content'] == f'row {agent.HISTORY_MESSAGES + 4}'
 
 
 def test_the_providers_stop_reason_is_what_the_stored_row_carries():
@@ -649,6 +663,24 @@ def test_context_off_returns_no_project_text():
     text, meta = build_context('anything', {'scope': 'off'})
     assert text == ''
     assert meta['scope'] == 'off'
+
+
+def test_a_long_canvas_reports_the_nodes_it_left_out(monkeypatch):
+    """The heading says 节点 45 while 40 rows follow; the inspector used to call that complete."""
+    from ai import context
+
+    monkeypatch.setattr(context, 'project_facts', lambda: '')
+    monkeypatch.setattr(context, '_memory_context', lambda: ('', {'total': 0, 'shown': 0, 'omitted': 0}))
+    monkeypatch.setattr(context, 'docs_search', lambda *args, **kwargs: [])
+    canvas = {
+        'nodes': [{'id': f'n{index}', 'type': 'upload', 'params': {}} for index in range(45)],
+        'connections': [],
+    }
+    _text, meta = context.build_context('anything', {'scope': 'summary', 'canvas': canvas})
+    item = next(row for row in meta['items'] if row['title'] == '画布')
+    assert item['shown'] == 40
+    assert item['total'] == 45
+    assert item['truncated'] is True
 
 
 def test_research_is_unavailable_on_a_provider_without_web_search():

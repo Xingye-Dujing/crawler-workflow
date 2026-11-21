@@ -55,6 +55,38 @@ def test_a_skill_pack_cannot_register_process_wide_ui_contributions():
     assert validate_manifest(payload).kind == 'skill-pack'
 
 
+@pytest.mark.parametrize('field, entry', [('ui', 'x'), ('tools', 'x'), ('providers', 'x'), ('skills', 'x')])
+def test_a_contribution_that_is_not_an_object_is_a_bad_manifest(field, entry):
+    """The installer walks each entry with ``.get``; a string used to be an AttributeError → 500."""
+    from extensions.manifest import validate_manifest
+
+    payload = {
+        'id': 'test.pack.shape',
+        'version': '1.0.0',
+        'kind': 'tool-pack',
+        'permissions': ['net:http'],
+        'tools': [{'name': 'ok', 'url': 'https://example.com', 'allowed_hosts': ['example.com']}],
+    }
+    payload[field] = [entry]
+    with pytest.raises(ValueError, match='must be an object'):
+        validate_manifest(payload)
+
+
+def test_a_ui_entry_needs_its_own_id():
+    from extensions.manifest import validate_manifest
+
+    payload = {
+        'id': 'test.pack.ui',
+        'version': '1.0.0',
+        'kind': 'tool-pack',
+        'permissions': ['net:http'],
+        'tools': [{'name': 'ok', 'url': 'https://example.com', 'allowed_hosts': ['example.com']}],
+        'ui': [{'label': 'no id'}],
+    }
+    with pytest.raises(ValueError, match='needs an id'):
+        validate_manifest(payload)
+
+
 def test_a_redirect_to_a_disallowed_host_is_refused_and_never_fetched(monkeypatch):
     from ai.errors import AIError
 

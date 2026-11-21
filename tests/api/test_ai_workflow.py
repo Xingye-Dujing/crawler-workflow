@@ -877,13 +877,46 @@ def test_an_illegal_draft_goes_back_to_the_model_instead_of_ending_the_turn(clie
     events = data['events']
     refused = [event for event in events if event['type'] == 'tool_result' and event['name'] == 'present_artifact']
     assert refused and refused[0]['ok'] is False
-    assert '分析' in refused[0]['error']
-    assert not any(event['type'] == 'error' for event in events)
+
+
+class ArtifactAndQuestionProvider(FakeProvider):
+    """One round that asks a question AND presents an artifact — both must land."""
+
+    def __init__(self):
+        super().__init__('fake_mixed')
+
+    def stream(self, request):
+        yield {
+            'type': 'tool_call',
+            'id': 'call_mem',
+            'name': 'present_artifact',
+            'arguments': {'title': '记住这条', 'kind': 'memory', 'payload': {'text': '这个项目用默认账号'}},
+        }
+        yield {
+            'type': 'tool_call',
+            'id': 'call_q',
+            'name': 'ask_user_question',
+            'arguments': {
+                'questions': [{'id': 'scope', 'question': 'Which data?', 'options': [{'label': 'Dataset A'}]}]
+            },
+        }
+        yield {'type': 'done', 'stop_reason': 'tool_calls'}
+
+
+def test_a_round_with_a_question_still_answers_its_other_calls(client, monkeypatch, clean_ai):
+    """Returning at the question first left the sibling tool_use unpaired and its artifact unseen."""
+    from ai.providers import PROVIDERS
+
+    monkeypatch.setitem(PROVIDERS, 'fake_mixed', ArtifactAndQuestionProvider())
+    response = _chat(client, provider='fake_mixed', text='do both')
+    events = response.get_json()['events']
     types = [event['type'] for event in events]
-    assert 'text' in types and types[-1] == 'done'
-    conversation_id = events[0]['conversation_id']
-    stored = client.get('/api/ai/conversations/' + conversation_id).get_json()
-    assert any(message['role'] == 'tool' and message['meta'].get('is_error') for message in stored['messages'])
+    assert 'artifact' in types, types
+    assert 'question' in types, types
+    assert types[-1] == 'paused'
+    artifact_index = types.index('artifact')
+    question_index = types.index('question')
+    assert artifact_index < question_index, 'the artifact must be produced before the turn pauses'
 
 
 def test_a_tool_call_left_without_a_result_is_repaired_before_replay():

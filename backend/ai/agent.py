@@ -667,13 +667,20 @@ class AgentService:
                         if asked:
                             yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'token_budget'}
                             return
-                history = _history(conversation['id'])
+                history, older_messages = _history(conversation['id'])
                 # Every turn carries ITS own context on its own user row; `base.replay_context` is
                 # the one place that decides where it goes (and it never rewrites an old row, which
                 # is what lets the provider's prefix cache hit across turns).
                 history = replay_context(history)
                 # A window smaller than the history would be cut by the PROVIDER, from the front.
                 history, history_meta = _fit_history(history, provider, model, system, tool_schemas, max_tokens)
+                history_meta = dict(history_meta or {})
+                if older_messages:
+                    # The repository cut is an omission like the window cut, and it goes into the
+                    # same counter the inspector prints; ``kept`` is what the model really received.
+                    history_meta['dropped'] = int(history_meta.get('dropped') or 0) + older_messages
+                    history_meta['kept'] = len(history)
+                    history_meta['older_messages'] = older_messages
                 request = {
                     'provider': provider.spec.id,
                     'model': model,
@@ -717,11 +724,7 @@ class AgentService:
                     return
                 rounds += 1
                 paused_for_approval = False
-                if any(call['name'] == 'ask_user_question' for call in calls):
-                    waiting = self._ask_user(conversation, state, calls, run_id)
-                    yield waiting['event']
-                    yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'awaiting_user'}
-                    return
+                questions = [call for call in calls if call['name'] == 'ask_user_question']
                 for call in calls:
                     if call['name'] == 'ask_user_question':
                         continue
@@ -746,6 +749,15 @@ class AgentService:
                     yield from self._tool_event(
                         conversation, state, call, turn_id, api_key, provider.spec.id, model, offered
                     )
+                if questions:
+                    # The question card comes LAST, after every sibling call in the round has its
+                    # result. Returning first (the old order) left the other tool_use blocks
+                    # unanswered: a `present_artifact` in the same round never surfaced, and the
+                    # next replay had to synthesize "never completed" for work that was asked for.
+                    waiting = self._ask_user(conversation, state, questions, run_id)
+                    yield waiting['event']
+                    yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'awaiting_user'}
+                    return
                 if paused_for_approval:
                     yield {'type': 'paused', 'message_id': state['message']['id'], 'reason': 'awaiting_approval'}
                     return
@@ -1520,8 +1532,22 @@ def _turn_seeded(conversation_id: str, turn_id: str) -> bool:
     return False
 
 
-def _history(conversation_id: str) -> list:
-    messages = store.list_messages(conversation_id, limit=200)
+#: Messages the agent reads per turn. A conversation can outgrow it; the cut is REPORTED (see
+#: ``_history`` and ``context_meta.history``), never silently presented as the whole transcript.
+HISTORY_MESSAGES = 200
+
+
+def _history(conversation_id: str) -> tuple[list, int]:
+    """``(replayable messages, older_messages_not_read)`` for one turn.
+
+    Only the newest ``HISTORY_MESSAGES`` rows are read, because a long tool chain makes a full
+    transcript both slow and pointless to send. The number left behind travels with the result: the
+    context inspector used to say ``kept 200 / dropped 0`` about a conversation whose first half the
+    model never saw.
+    """
+    total = store.count_messages(conversation_id)
+    messages = store.list_messages(conversation_id, limit=HISTORY_MESSAGES)
+    older = max(0, total - len(messages))
     out = []
     for message in messages:
         if message['status'] in ('error', 'interrupted'):
@@ -1547,7 +1573,7 @@ def _history(conversation_id: str) -> list:
                     'meta': message.get('meta') or {},
                 }
             )
-    return _repair_tool_pairs(out)
+    return _repair_tool_pairs(out), older
 
 
 def _repair_tool_pairs(messages: list) -> list:

@@ -10,6 +10,8 @@ that exist. A draft that fails is REFUSED BY NAME with the offending node — ne
 
 from __future__ import annotations
 
+import os
+
 from engine.workflow import NODE_TYPES
 
 #: A workflow artifact carries its graph under one of these keys.
@@ -99,13 +101,18 @@ def save(payload: dict, name: str = '') -> dict:
     from runtime.stores import get_workflow_manager
 
     manager = get_workflow_manager()
-    base = str(name or '').strip() or 'AI 工作流'
-    taken = {str(item).lower() for item in manager.list_workflows()}
+    base = manager.clean_name(str(name or '').strip() or 'AI 工作流')
+    taken = {str(item).casefold() for item in manager.list_workflows()}
     candidate = base
-    index = 2
-    while candidate.lower() in taken:
-        candidate = f'{base} ({index})'
-        index += 1
-    clean = manager.clean_name(candidate)
-    path = manager.save(clean, payload)
-    return {'name': clean, 'path': path}
+    suffix = 2
+    # The TAIL is reserved before the length cap, exactly like ``manager.duplicate`` and the
+    # project-bundle importer do it: comparing an UNCLEANED ``base (2)`` against cleaned names
+    # never matched a 60-character stem, the loop exited, ``clean_name`` cut the tail off, and the
+    # save then overwrote the user's own canvas under the name it was supposed to avoid.
+    while candidate.casefold() in taken or os.path.exists(manager.path_for(candidate)):
+        tail = f' ({suffix})'
+        room = max(1, manager.MAX_NAME_LENGTH - len(tail))
+        candidate = manager.clean_name(f'{base[:room]}{tail}')
+        suffix += 1
+    path = manager.save(candidate, payload)
+    return {'name': candidate, 'path': path}

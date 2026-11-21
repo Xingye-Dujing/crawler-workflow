@@ -435,6 +435,20 @@ def list_messages(conversation_id: str, limit: int = 400) -> list:
     return [_row(row) for row in reversed(rows)]
 
 
+def count_messages(conversation_id: str) -> int:
+    """How many rows this conversation holds, regardless of the page a reader asks for.
+
+    The agent reads a bounded tail; the inspector must be able to say how much of the start that
+    tail left out instead of reporting ``dropped: 0`` over a silently forgotten first half.
+    """
+    with connect() as conn:
+        row = conn.execute(
+            'SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?',
+            (conversation_id,),
+        ).fetchone()
+    return int(row['n']) if row is not None else 0
+
+
 def create_question(conversation_id: str, message_id: str, tool_use_id: str, questions: list) -> dict:
     question_id = new_id('q')
     stamp = now()

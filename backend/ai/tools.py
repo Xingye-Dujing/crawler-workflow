@@ -1766,8 +1766,11 @@ def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
 
         if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
             raise AIError('ai.workspaceCloud', kind='capability')
-        # The user's own safety switch: with it off, touching the machine is a request, not an act.
-        # The grant is per exact call (``ai.approvals``), never per tool name.
-        if tool.permission in ('write:files', 'exec:cmd'):
-            require_approval(name, args or {}, ctx or {})
+    if name in APPROVAL_TOOLS:
+        # ONE door for every act that changes the user's machine or their run records, whatever
+        # the tool's permission happens to be called. Checking only ``write:files``/``exec:cmd``
+        # left ``apply_node_result``/``apply_codebook``/``rerun_node`` (``write:project``) with no
+        # approval at all: with ``ai_auto_approve`` off the model over-wrote a stored node result
+        # while the user never saw a card.
+        require_approval(name, args or {}, ctx or {})
     return tool.handler(args or {}, ctx or {})

@@ -115,6 +115,24 @@ class TestTheToolGate:
         with pytest.raises(AIError):
             tools.require_approval('rerun_node', {'node_id': 'n2'}, {'conversation_id': 'c1'})
 
+    def test_executing_an_apply_tool_asks_before_touching_the_records(self, monkeypatch):
+        """``apply_node_result`` is ``write:project``; the old gate only checked write:files/exec:cmd."""
+        from ai.types import ToolSpec
+
+        asked = []
+        monkeypatch.setattr(tools, 'APPROVAL_TOOLS', ('demo_apply',))
+        monkeypatch.setattr(tools, 'require_approval', lambda name, args, ctx: asked.append(name))
+        spec = ToolSpec(
+            name='demo_apply',
+            description='demo',
+            parameters={},
+            permission='write:project',
+            handler=lambda args, ctx: {'ok': True},
+        )
+        monkeypatch.setitem(tools.TOOLS, 'demo_apply', spec)
+        assert tools.execute('demo_apply', {'node_id': 'n1'}, {}) == {'ok': True}
+        assert asked == ['demo_apply']
+
     def test_a_setting_tool_is_not_blocked_by_the_approval_switch(self, monkeypatch):
         """``workspace_set`` is a panel setting, not a per-call act: an approval grant is keyed to
         exact args and can never cover a folder choice, so requiring one made the tool unusable

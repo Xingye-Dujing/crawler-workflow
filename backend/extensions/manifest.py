@@ -96,6 +96,19 @@ def validate_manifest(payload) -> Manifest:
         # lets a non-admin add one. ``ui`` contributions go into the PROCESS-WIDE host registry,
         # so allowing them here would turn that exemption into an authorization bypass.
         raise ValueError('a skill pack may not register process-wide ui contributions')
+    # Every contribution list is walked with ``.get`` by the installer, so an entry that is not an
+    # object used to be an AttributeError deep inside install — an HTML 500 the panel cannot parse —
+    # instead of the named bad-manifest the route already turns into a 400. A ui entry also needs
+    # its own id: that id is half of the process-wide registration name.
+    for list_name in ('skills', 'providers', 'tools', 'ui'):
+        entries = payload.get(list_name) or ()
+        if not isinstance(entries, (list, tuple)):
+            raise ValueError(f'{list_name} must be a list')
+        for index, item in enumerate(entries, 1):
+            if not isinstance(item, dict):
+                raise ValueError(f'{list_name} entry {index} must be an object')
+            if list_name == 'ui' and not str(item.get('id') or '').strip():
+                raise ValueError(f'ui entry {index} needs an id')
     return Manifest(
         id=plugin_id,
         name=name,

@@ -186,24 +186,33 @@ def docs_search(query: str, limit: int = 3) -> list[dict]:
     return [{'title': title, 'text': _clip(body, 2400)} for _score, title, body in scored[:limit]]
 
 
-def _canvas_context(canvas: dict) -> str:
+def _canvas_context(canvas: dict) -> tuple[str, dict]:
+    """The canvas summary, plus how many nodes a long canvas left out of the list.
+
+    The heading always named the true node count while only 40 rows followed, and the inspector
+    reported the section as complete (its ``truncated`` is about the character budget). A model
+    reading “节点 80” and seeing 40 ids had no way to know which half it had.
+    """
     nodes = canvas.get('nodes') or []
     connections = canvas.get('connections') or canvas.get('edges') or []
     if not isinstance(nodes, list) or not isinstance(connections, list):
-        return ''
+        return '', {}
     lines = [
         f'## 当前画布（{"未保存草稿" if canvas.get("unsaved") else "画布"}）',
         f'节点 {len(nodes)}，连线 {len(connections)}',
     ]
     selected = canvas.get('selectedNode') or canvas.get('selected_node')
+    shown = 0
     for node in nodes[:40]:
         if not isinstance(node, dict):
             continue
+        shown += 1
         params = node.get('params') or {}
         keys = ', '.join(sorted(params)[:12]) if isinstance(params, dict) else ''
         mark = '*' if selected and node.get('id') == selected else '-'
         lines.append(f'{mark} {node.get("type") or "?"} #{node.get("id") or "?"} {node.get("title") or ""} [{keys}]')
-    return '\n'.join(lines)
+    cut = {'shown': shown, 'total': len(nodes)} if shown < len(nodes) else {}
+    return '\n'.join(lines), cut
 
 
 def _dataset_context(dataset_id: str, scope: str) -> str:
@@ -233,9 +242,9 @@ def _dataset_context(dataset_id: str, scope: str) -> str:
     return '\n'.join(lines)
 
 
-def _run_context(run_id: str, scope: str) -> str:
+def _run_context(run_id: str, scope: str) -> tuple[str, dict]:
     if not run_id:
-        return ''
+        return '', {}
     try:
         from runtime.stores import get_run_store
 
@@ -244,27 +253,29 @@ def _run_context(run_id: str, scope: str) -> str:
         statuses = run_store.node_statuses(run_id)
         log = run_store.read_log(run_id, limit=50 if scope == 'summary' else 150)
     except Exception:
-        return ''
+        return '', {}
     if not run:
-        return ''
+        return '', {}
     lines = [
         f'## 运行 {run_id}',
         f'状态：{run.get("status")}；工作流：{run.get("workflow_name") or ""}；'
         f'模型：{run.get("llm_provider")}/{run.get("llm_model")}',
         '节点：',
     ]
-    for node_id, node in list(statuses.items())[:40]:
+    listed = list(statuses.items())[:40]
+    for node_id, node in listed:
         lines.append(
             f'- {node_id}: {node.get("status")}，{node.get("row_count") or 0} 行'
             + (f'，错误：{_clip(node.get("error") or "", 300)}' if node.get('error') else '')
         )
+    cut = {'shown': len(listed), 'total': len(statuses)} if len(listed) < len(statuses) else {}
     rows = log.get('rows') or []
     if rows:
         lines.append('控制台尾部：')
         lines.extend(
             f'{row.get("ts") or ""} {row.get("level") or ""} {_clip(row.get("line") or "", 240)}' for row in rows
         )
-    return '\n'.join(lines)
+    return '\n'.join(lines), cut
 
 
 #: How many confirmed memories one turn carries. The rest stay visible in the studio; the count is
@@ -305,6 +316,7 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
             'redacted': {},
         }
     parts: list[tuple[str, str]] = []
+    section_cuts: dict[str, dict] = {}
     memories_meta: dict = {'total': 0, 'shown': 0, 'omitted': 0}
     if scope in ('summary', 'full'):
         parts.append(('项目事实', project_facts()))
@@ -312,7 +324,8 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
         parts.append(('项目记忆', memory_text))
     canvas = payload.get('canvas') if isinstance(payload.get('canvas'), dict) else None
     if canvas:
-        parts.append(('画布', _canvas_context(canvas)))
+        canvas_text, section_cuts['画布'] = _canvas_context(canvas)
+        parts.append(('画布', canvas_text))
     try:
         from ai import workspace
 
@@ -324,7 +337,8 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
     if payload.get('dataset_id'):
         parts.append(('数据集', _dataset_context(str(payload['dataset_id']), scope)))
     if payload.get('run_id'):
-        parts.append(('运行', _run_context(str(payload['run_id']), scope)))
+        run_text, section_cuts['运行'] = _run_context(str(payload['run_id']), scope)
+        parts.append(('运行', run_text))
     if scope == 'full':
         for index, doc in enumerate(docs_search(query, limit=3), 1):
             parts.append((f'文档 {index}：{doc["title"]}', doc['text']))
@@ -344,7 +358,17 @@ def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
             continue
         clipped = text if len(text) <= remaining else text[:remaining] + '\n…'
         kept.append(f'## {title}\n{clipped}')
-        items.append({'title': title, 'chars': len(clipped), 'truncated': len(clipped) < len(text)})
+        cut = section_cuts.get(title) or {}
+        items.append(
+            {
+                'title': title,
+                'chars': len(clipped),
+                'truncated': len(clipped) < len(text) or bool(cut),
+                # A section that lists the first N of M items is a cut even when its TEXT fits the
+                # budget; the inspector shows these two numbers instead of calling it complete.
+                **({'shown': cut['shown'], 'total': cut['total']} if cut else {}),
+            }
+        )
         # Only count what actually reached the model: a part scrubbed but then dropped by the
         # budget was never sent, so reporting it would be a different (wrong) fact.
         if redacted_n:
