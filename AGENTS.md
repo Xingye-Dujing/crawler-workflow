@@ -1,7 +1,8 @@
 # AGENTS.md
 
 Rules loaded into **every** session. Each rule is bare; the **why/evidence** is in
-[`docs/agent_practices.md`](docs/agent_practices.md) — read it before doubting a rule. Grep by bolded title.
+[`docs/agent_practices.md`](docs/agent_practices.md) — read it before doubting a rule, and load the matching
+`.opencode/skills/<id>/` before editing a domain (`cai-xihui-context` is the map). Grep by section title.
 
 **采集端（crawler/platform）规则拆到 [`docs/crawler_rules.md`](docs/crawler_rules.md)**：改爬虫、其列或真站断言前，先读该
 文件，再读 `docs/crawler_notes.md` 对应小节。
@@ -10,6 +11,11 @@ Rules loaded into **every** session. Each rule is bare; the **why/evidence** is 
 
 采析绘 (crawler_workflow): Flask + zero-build vanilla-JS; crawls 9 social platforms + CNKI export (instagram
 cookie-capture only) via Selenium, cleans/analyzes text with local Ollama LLMs + scikit-learn, drag-drop workflow canvas.
+
+**Map**: `backend/app.py` is the composition root; run it from `backend/` (the `sys.path` root). Backend packages are
+`core`/`runtime`/`api`/`engine`/`nodes`/`analyzers`/`crawlers`/`capabilities`/`services`/`sessions`/`scheduling`/`ai`/
+`extensions`, plus `i18n_catalog/` for text; the no-build frontend is `backend/static/js/` in `index.html` order.
+`docs/ARCHITECTURE.md` is the full module map; `tests/` is unit/api/integration/frontend + real-site.
 
 ## Architecture: plugin seams — know the seam before editing
 
@@ -37,8 +43,9 @@ a defect, not a shortcut.
 - **AI extensions**: typed contributions through `extensions/` (`ExtensionRegistry`), providers in
   `ai/providers/registry.py`, skills/tools in `ai/skills.py`/`ai/tools.py`; manifests are data, local code plugins are
   local/admin only, cloud refuses them by name.
-- **Frontend panels**: a panel is a `static/js/panels/*.js` split registered in `tests/frontend/splits.json` and
-  `companions.mjs`; the no-build load order and the one-global rule are the seam. Never add a second list.
+- **Frontend panels**: a panel is a `static/js/panels/*.js` split with its `<script>` line in `index.html` (the one load
+  order) and an entry in `tests/frontend/splits.json`/`companions.mjs`; the one-global rule is the seam. Never add a
+  second list.
 - **Do not restructure a seam to fit one entry.** If the new entry does not fit the seam's vocabulary, add the missing
   generic capability to the shared layer (one field, one flag, one hook) and let each entry answer it — the shared
   layer stays ignorant of who answers what.
@@ -74,38 +81,42 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **Platform-independent tests are the proof**: no drive-letter data, no `.exe`-pinned refusal, no `sys.platform='win32'`
   patch faking a product gate (patch both sides or assert the refusal), no timezone literal for the "server local" zone.
 - **Byte limits are byte limits:** ext4 NAME_MAX 255 is UTF-8 **bytes**; a Windows path cap is characters.
-- **CI runs the fast and device tiers on all three systems** (`.github/workflows/ci.yml`: `windows-latest`, `ubuntu-latest`,
-  `macos-15`, including the real-Chrome `browser` job). A Linux/macOS-only failure is a real finding, not "unverified". CI
-  cannot prove a real cloud-server boot/crawl, `live_site`/Ollama, CatBus, or the packaged desktop GUI. Linux packages:
-  Chrome/Chromium + driver, `fonts-noto-cjk`, optional `texlive-xetex`/`texlive-lang-chinese`.
+- **CI runs the fast tier, ruff and both pylint tiers on all three systems** (`.github/workflows/ci.yml`:
+  `windows-latest`, `ubuntu-latest`, `macos-15`), plus the real-Chrome `browser` job and a `docker` job that builds and
+  boots the deployment image. A Linux/macOS-only failure is a real finding, not "unverified". CI cannot prove a real
+  cloud crawl, `live_site`/Ollama, CatBus, or the packaged desktop GUI. Linux packages: Chrome/Chromium + driver,
+  `fonts-noto-cjk`, optional `texlive-xetex`/`texlive-lang-chinese`.
 
 ## Commands
 
 **venv `.venv/` (Python 3.11) is mandatory — never system Python.** Windows `.venv/Scripts/python.exe`/`ruff.exe`/
-`pylint.exe`/`pip.exe`, POSIX `.venv/bin/python`/`ruff`.
+`pylint.exe`/`pip.exe`, POSIX `.venv/bin/python`/`ruff`. Run the server from `backend/`; run tests and lint from the
+repository root.
 
-- Run: `cd backend && python app.py` → localhost:5000 (`PORT`). **From `backend/`** (`sys.path` root, `from config import
-  Config`); never a `backend.` prefix.
-- Lint — **three standards, all clean**: `ruff check backend/ tests/` + `ruff format --check backend/ tests/`, plus pylint
-  with explicit `--rcfile`: `.pylintrc` (product: `backend` minus `test_*.py`, `desktop`, `tools`, `ml_train/scripts`),
-  `.pylintrc.tests` (`tests/`), `.pylintrc.probes` (`backend/test_*.py`). **Never `# pylint: disable`/`# noqa`/widen a
-  config**: fix the cause.
+- Run: `cd backend && python app.py` → 127.0.0.1:5000 (`PORT`, `HOST`, `FLASK_DEBUG=1`). **From `backend/`** (`sys.path`
+  root, `from config import Config`); never a `backend.` prefix. Cloud mode is `python app.py cloud` (or
+  `CRAWLER_CLOUD=1`) and refuses to boot without `CRAWLER_ADMIN_PASSWORD` + `SECRET_KEY`.
+- Lint — **three standards, all clean**:
+  - `ruff check backend/ tests/ desktop/ tools/` and `ruff format --check backend/ tests/ desktop/ tools/`.
+  - `python tools/ci_lint_tiers.py product` and `... tests` (each tier owns its `--rcfile`, passes explicit files, and
+    refuses an empty list). The local probe tier is `pylint --rcfile=.pylintrc.probes (Get-ChildItem backend -Filter
+    test_*.py)`; `backend/test_*.py` are gitignored probes, NOT pytest.
+  - Never `# pylint: disable`/`# noqa`/widen a config: fix the cause. The post-edit formatter (`.opencode/hooks/format.mjs`)
+    can fail on a restricted workspace (`os error 5`); run the commands by hand — CI is the unskippable gate.
 - Deps: *every directly-imported package* into `.venv/` **and** `requirements.txt` in the same change; new caches into
   `.gitignore`. torch/transformers for `sentiment`'s `bert` → `requirements-optional.txt`, never CI.
 - **Never SILENTLY answer with a model other than the one claimed**: a degradation PRINTS the method that ran (topic
   `method=auto`→embedding/LDA; sentiment/emotion/tendency bert→`snownlp`/`ml`); analyzers refuse an unrunnable `bert` by
   name; a multi-model BERT comparison never degrades.
-- CI (`.github/workflows/ci.yml`, three-runner matrix): fast tier + `ruff check`/`format --check` + both pylint tiers
-  (targets enumerated by `tools/ci_lint_tiers.py`) on Windows, Linux and macOS. The local post-edit `ruff format`
-  (OpenCode's `formatter` → `.opencode/hooks/format.mjs`) fails on a restricted workspace (`os error 5`) — format by hand;
-  CI is the unskippable gate. `backend/test_*.py` are probe scripts, NOT pytest.
 - `ml_train/` (gitignored) trains the sklearn+bert models `emotion`/`tendency`/`sentiment` load
   (`data/model_registry.json`); changing features/labels means retraining there (`ml_train/README.md`).
-- **Test tiers** (`pytest.ini` excludes real tiers; `tests/unit/gates/test_test_tiers.py`): Fast `python -m pytest -q`
-  (~8.2k). Device `-m "integration or live_ollama"` (real Chrome + Ollama; LLM mocked by default). Live
-  `-m live_quick`/`-m live_site`.
+- **Test tiers** (`pytest.ini` excludes the real tiers; `tests/unit/gates/test_test_tiers.py`):
+  - Fast: `python -m pytest -q` — currently ~10.6k collected. `--disable-socket` makes an unmocked HTTP call fail.
+    One case: `python -m pytest -q tests/unit/<path>::<Class>::<test>`; add `-rs` to print every skip.
+  - Device: `-m "integration or live_ollama"` (real Chrome + Ollama; LLM mocked by default).
+  - Live: `-m live_quick`/`-m live_site`, split by `live_cn`/`live_os`.
   - **Never run live unattended — it spends the user's accounts.** Own profile root; only `CIXI_LIVE_USE_USER_PROFILE=1`
-    (his consent) crawls as he does; weibo once per pass; split `live_cn`/`live_os` — **ask which network he is on**.
+    (his consent) crawls as he does; weibo once per pass; **ask which network he is on**.
   - **Unavailable browser/daemon SKIPS, so a tier can look green without running.** Set `CRAWLER_REQUIRE_BROWSER=1`/
     `CRAWLER_REQUIRE_OLLAMA=1` (fail not skip); `CRAWLER_REQUIRE_NODE=1` aborts the session for the ~43 JS modules that
     `skipif(node is None)`.
@@ -129,6 +140,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **JS is under test.** `tests/frontend/harness_*.mjs` load the REAL `canvas.js`/`workflow.js`/`app.js` into a node `vm`
   (`harness_dom.mjs`), driven by `tests/unit/frontend/test_frontend_*`; any result-affecting JS change syncs a scenario;
   `urlPlatform` is pinned against `core.refs.platform_for`.
+- **Chart Studio is generated from the `third_party/zenviz-core` submodule**: edit its `core/` (or a `profiles/`
+  overlay), then `python third_party/zenviz-core/build.py --product caixihui --root .`; never hand-edit
+  `backend/static/zenviz.html`, `backend/static/css/zenviz.css` or `backend/static/js/zenviz-*.js`
+  (`test_zenviz_core_sync.py` compares bytes). Initialize the submodule on a fresh checkout (`git submodule update --init`).
 - **A JS split registers in `tests/frontend/splits.json`, and the companion closure is TRANSITIVE** (also in
   `companions.mjs`/`frontend_catalogue.with_companions`, keyed by `panels/x.js`): a harness naming `workflow.js` gets every
   module split from its companions. Harnesses take files through `sourcesWithCompanions` (**one read per file**), never
@@ -237,9 +252,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   node settles DONE on. Its login gate is keyed apart (`bilibili@work#catbus`) and never cached as a cookie verdict.
   Why/evidence: `docs/crawler_rules.md` → “第二采集后端”; `docs/agent_practices.md` → "The second crawl backend (CatBus)".
 - **A node id is a storage key — never re-mint one on restore.** Records, cursors, LLM caches and `workflow_fingerprint`
-  key on it. `canvas.addNode(...,nodeId)` + `reserveId` keep `nextId` past it; both restore paths pass file ids through
-  (`harness_state.mjs`). It is also the box's **DOM** id, so never `getElementById(<node id>)` a workflow-supplied value:
-  use `canvas._nodeEl(id)`, and `test_frontend_state_js.py` fails any variable-argument `getElementById` in canvas.js.
+  key on it. `canvas.addNode(...,nodeId)` + `reserveId` keep `nextId` past it; both restore paths pass file ids through,
+  pinned by `harness_canvas_ix.mjs`. It is also the box's **DOM** id, so never `getElementById(<node id>)` a
+  workflow-supplied value: use `canvas._nodeEl(id)`, and `test_frontend_state_js.py` fails any variable-argument
+  `getElementById` in canvas.js.
 - **Recorded rows are addressed by workflow, never by bare node id:** `_durable_node_rows` returns nothing rather than
   guess. The browser sends `workflow_name` from `workflow.runName()` (name-node label, then file name).
 - **`' + '` is a composed lookup key, not a permission:** `_durable_node_rows` widens to pieces only on a miss (so `节奏`
@@ -284,8 +300,8 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **A recall device must not look like a classifier.** `aggression`'s word-list mode says a miss is unmeasurable, keeps the
   lists in code, does NOT count 辟谣 accusations as violent; a missing text column **raises** rather than returning blanks.
 - **The analysis node's one non-deterministic step borrows the process node's client:** `topic_label` calls the model once
-  per row; `run_pipeline(df, steps, llm=, cancel=)` hands it to `LLM_OPS` only, never via `params`. No model → refused
-  before paying; a Stop leaves `未处理` → the node settles PARTIAL, not DONE.
+  per row; `run_pipeline(df, steps, llm=, cancel=, store=)` hands it to `LLM_OPS` only, never via `params`. No model →
+  refused before paying; a Stop leaves `未处理` → the node settles PARTIAL, not DONE.
 
 ## AI workspace
 
@@ -295,8 +311,11 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **Keys stay in the browser**; the server holds one for a request only. `ai.db` and logs must never contain an API key. A
   turn's assistant row is `streaming` until settled; a crash leaves `interrupted`.
 - **A turn is several assistant rows**: every `tool_use` has an immediate tool result, grouped in the UI by `turn_id`.
-  `ask_user_question` pauses the turn; its answer is a tool result, not a new user message. Read-only tools only; writes
-  are artifacts the user applies.
+  `ask_user_question` pauses the turn; its answer is a tool result, not a new user message. Most tools read; a
+  workflow/analysis/chart/report proposal is an artifact the user applies. Explicit mutating tools (`apply_workflow`,
+  `apply_node_result`, `rerun_node`, `workspace_import`, `run_cmd`, …) act only when called and are permission-gated;
+  host-bound ones exist only on desktop/local web and are refused by name on cloud. A mutating call may require
+  `request_approval` when auto-consent is off.
 - **Context is generated, budgeted and redacted**: project facts come from the existing registries, live data is re-read
   per account, and an omission is reported in `context_meta`/the inspector.
 - **Plugins are data first**: declarative skill/provider/tool packs are portable; local code plugins are local/admin only
@@ -316,9 +335,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 
 ## 定时任务 (scheduler)
 
-- **The clock is one thread inside the server process, started only from `__main__`** (under the reloader, only the real
-  serving child), and **a fire takes the same start path as a manual Run** — `scheduling.clock` →
-  `engine.run_schedule.start_scheduled_run` → `begin_run`, so a busy server **queues** the fire.
+- **The clock is one thread inside the server process, started only from `start_background_services()`** (called by
+  `__main__`'s serving child and by the frozen launcher; under the reloader, only the real child), and **a fire takes the
+  same start path as a manual Run** — `scheduling.clock` → `engine.run_schedule.start_scheduled_run` → `begin_run`, so a
+  busy server **queues** the fire.
 - **A scheduled canvas may not need a model, and the rule is one rule asked twice**
   (`engine.run_schedule.scheduled_canvas`, shared by the panel's verdict, save and fire): refused **by name**, never by a
   server-side key. **A moment missed while the server was down is recorded (`missed.count`), never replayed** — one event
@@ -331,10 +351,10 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 
 ## Console, messages and i18n
 
-- UI text zh/en via `backend/i18n.py`, merging `backend/i18n_catalog/<domain>.py` (one module per domain: `crawl`/
-  `collect`/`cookie`/`sched`/`run`/`analysis`/`biblio`/`charts`/`api`/`settings`/`accounts`): every new user-facing string
-  goes to **its own domain, in both languages**, and to the browser catalogue (`backend/static/js/i18n/<domain>.js`, merged
-  by `app.js`). A key declared in two domains is refused; a domain file missing from `MODULES` is a failed test.
+- UI text zh/en via `backend/i18n.py`, merging one module per domain listed in `i18n_catalog/MODULES`: every new
+  user-facing string goes to **its own domain, in both languages**, and to the browser catalogue
+  (`backend/static/js/i18n/<domain>.js`, merged by `app.js`). A key declared in two domains is refused; a domain file
+  missing from `MODULES` (or its browser twin) is a failed test.
 - **A missing `t()` keyword is a printed bug, not a crash:** `t()` returns the raw template (a forgotten `{reads}` prints
   `阅读={reads}`) and parity checks are blind to it — `test_i18n.py::TestCallSitePlaceholders` walks every `t('literal', …)`
   with `ast` and refuses the mismatch.
@@ -346,16 +366,16 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 - **One failure, one line:** `LogBufferHandler` forwards `logger.*` into the buffer, so `logger.exception(...)` **and** a
   matching `add_log` double-print. Keep the logger for the file's traceback; let `wf.node_failed` be the single attributed
   line; a helper adds a fact, never repeats the reason.
-- **`_QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision:** no Executing/completed line, but counters still
+- **`QUIET_NODE_TYPES` (`name`, `upload`) is a console-noise decision:** no Executing/completed line, but counters still
   count them and every fact prints (with `node_label`).
 - **Every thread that logs must pin its own language** (`set_lang` is thread-local; a daemon starts fresh): `run()`, the
   parallel pool wrapper and both cookie workers. Assert console text on the reason, not a sentence.
 
 ### The run console
 
-- **The console keeps its own history per view, because the server ships only the last 200 lines.** `consoleViews` holds
-  `{seen, lines}` per view (`'all'` + each workflow id), every view is fed on every poll, and `switchWfTab` repaints without
-  moving the cursor.
+- **The console keeps its own history per view, because a normal poll ships only the last 200 lines** (a refreshed page
+  reattaches with `tail=5000`). `consoleViews` holds `{seen, lines}` per view (`'all'` + each workflow id), every view is
+  fed on every poll, and `switchWfTab` repaints without moving the cursor.
 - **The console is ALSO persisted per run (`run_store.run_log`), as a pure side effect that may never move the live
   console.** `_push_log` → `engine.run_logs.RunLogWriter` via `set_log_sink`, armed only inside a run. The durable viewer
   (`/api/runs/<id>/log(.txt)`, `runLogViewer`) reads ONLY that table. **The reattach
@@ -365,13 +385,16 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 
 ### Sessions, cookies and run gating
 
-- Run-gating lives in `workflow.js execute()` → `_cookieGateBeforeRun`: `cookie_preflight_before_run` probes each canvas
-  platform **whose mode needs a session** (`Mode.needs_session`; weibo 热搜 is anonymous, wechat has no session to want); a
-  login wall **refuses** (no "run anyway"), “无法核对” (timeout/captcha/busy) **never blocks**. Off/resume/crawl-free canvas
-  asks nothing; a cookie write drops the cached verdict. **`execute()` asks no cookie question of its own.**
-- One account = one `data/cookies/<platform>@<account>.json` **and** one `chrome_profile/<platform>/<account>`.
-  `_account_session_errors` refuses when `has_session_to_test` finds neither — **blank IS an account (默认账号), not a
-  wildcard.**
+- Run-gating lives in `workflow.js execute()` → `_cookieGateBeforeRun`: browser sessions are probed only when
+  `cookie_preflight_before_run` is on, **CatBus sessions always** (its login lives in the adapter, not our cookie), and only
+  for a mode **whose session is actually needed** (`Mode.needs_session`; weibo 热搜 is anonymous, wechat has no session to
+  want). A login wall **refuses** (no "run anyway"); “无法核对” (timeout/captcha/busy) **never blocks**. A resume or a
+  crawl-free canvas asks nothing; a cookie write drops the cached verdict. **`execute()` asks no cookie question of its
+  own.**
+- One account = one cookie file **and** one Chrome profile in the active tree: `cookies/<platform>_cookies.json` (the
+  default login keeps the unsuffixed name; a named account is `<platform>@<account>_cookies.json`) and
+  `chrome_profile/<platform>` (default) or `chrome_profile/<platform>/<account>`. `_account_session_errors` refuses when
+  `has_session_to_test` finds neither — **blank IS an account (默认账号), not a wildcard.**
 - The default account is `default` (never a blank in the box), folded at `CookieManager.key`/`path_segment` (`''` ⇄
   `default`, lowercase always); `sessions.profiles`/preflight/JS box route through that fold; the candidate list and a new
   node's preselection are both `CookieManager.accounts_in_order`.
@@ -420,9 +443,11 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
 ## 开发助手技能 / Development skills
 
 `.opencode/skills/` holds the OpenCode skills for working *on this repo*; the AI workspace's own skills are
-`backend/ai/skills.py` `SkillSpec`s. Do not confuse them. The dev suite covers one domain each: `cai-xihui-context` (map),
+`backend/ai/skills.py` `SkillSpec`s. Do not confuse them. The suite covers one domain each: `cai-xihui-context` (map),
 `crawler-platform`, `workflow-runtime`, `analysis-charts`, `frontend-omni`, `data-pipeline`, `accounts-security`,
 `ai-workspace-dev`, `plugin-authoring`, `python-extension`, `testing-lanes`, `release-desktop`, `smoke-verify`.
+Repo-local helpers: the read-only `code-auditor` subagent for a pre-commit audit, the `live-builder` subagent for one
+live-test slice, and `/smoke-verify` (loads the same-named skill).
 
 ## Style and commits
 
@@ -445,8 +470,8 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   `ruff check`/`format --check` on touched files. **Full fast suite + both pylint tiers once at the end of a ~4-knife batch.**
 - **Lane C — real behavior changes (run orchestration, resume/checkpoint, `runs.db`, UI, crawling, LLM boundary)**: full fast
   always; device tier when UI/engine/LLM/crawling is touched; pylint at batch end.
-- **GitHub Actions on every push is the backstop** (fast + ruff + product/tests pylint; probes local-only), so a local batch
-  run decides whether to push.
+- **GitHub Actions on every push is the backstop** (fast + ruff + product/tests pylint on three systems, plus the browser
+  and docker jobs; probes local-only), so a local batch run decides whether to push.
 - **The closure gate is NOT a lane**: any "it is done" claim = one full run of every tier, nothing deselected/skipped, no file
   needing a change. Any edit restarts the loop.
 - **Edit**: OpenCode's `formatter` → `.opencode/hooks/format.mjs` auto-runs `ruff format` + `ruff check --fix` on touched
@@ -456,8 +481,7 @@ Windows fact — drive letter, `\` joining, `.exe`, `%APPDATA%`/`PROGRAMFILES`, 
   pinned an old bug). An unfixed product bug gets `@pytest.mark.xfail(strict=False, reason='product bug <file:line> — …')`.
 - **Docs stay true**: `README.md` on any user-visible change; measurements → `docs/crawler_notes.md`; a new crawl rule →
   `docs/crawler_rules.md`; a new rule's *why* → `docs/agent_practices.md`. A stale README is a failed change.
-- **New packages**: install into `.venv/` AND declare in `requirements.txt` in the same change, caches in `.gitignore`.
 - **Device paths**: crawling, LLM transports, checkpoint/resume or UI touched → also `-m "integration or live_ollama"` and
   `-m live_quick` (check port 5000 free first), then `/smoke-verify`. **Use this machine's Chrome + matching chromedriver**
   (`CIXI_DRIVER_PATH`/the settings panel); never let Selenium Manager download a driver.
-- **Commit last**, with a Chinese type prefix.
+- **Commit last**, after the closure gate; the type prefix is in Style.
