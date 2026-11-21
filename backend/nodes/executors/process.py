@@ -390,16 +390,9 @@ def execute_process_node(node: dict, current_input: list, run_ctx: dict = None):
         if mode == 'dual':
             coded, reliability = dual_code(df, text_column, book, ctx=run_ctx)
             add_log(t('quant.reliability', kappa=reliability['kappa'], agreement=reliability['agreement']))
-            codebooks.save_codebook(
-                {
-                    'id': codebook_id,
-                    'name': book.get('name', ''),
-                    'phase': 'quantitative',
-                    'codes': book.get('codes', []),
-                    'source': dict(book.get('source') or {}, reliability=reliability),
-                },
-                codebook_id=codebook_id,
-            )
+            # Reliability belongs to this RUN, not to a new revision of the categories. Writing it
+            # through save_codebook bumped the version on every recoding even when nothing changed.
+            codebooks.save_reliability(codebook_id, reliability)
             return coded.to_dict('records')
         if mode != 'code':
             raise ValueError(t('quant.bad_mode', mode=mode))

@@ -10,8 +10,10 @@ A "tier" is what a node uses to do its work, from cheapest to most expensive:
 The user picks a threshold in Settings → AI workspace (``ai_trace_tier``). A node opens a visible
 AI-workspace conversation when its tier is AT OR ABOVE that threshold — so "traditional" traces
 everything, "llm" traces LLMs and APIs, "api" traces only cloud calls, and "off" traces nothing.
-Both the backend gate (here) and the browser's live-confirm gate read the same setting and the same
-ordering, so they cannot disagree about which node should show a conversation.
+The backend gate (here) decides WHICH nodes open a conversation; the browser reads the same setting
+only to decide whether to reveal the dock after a run (it checks ``off`` vs non-``off`` and follows
+the run's own trace endpoint). The browser does not re-derive node tiers — doing that would be a
+second opinion about this registry.
 
 This module owns the ordering and the node→tier decision so no caller re-derives it from an op's
 select shape (the mistake that once made qualitative coding invisible to the trace seam).

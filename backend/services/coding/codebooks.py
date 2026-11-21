@@ -99,6 +99,26 @@ def save_codebook(payload: dict, *, codebook_id: str = '') -> dict:
     return data
 
 
+def save_reliability(codebook_id: str, reliability: dict) -> dict | None:
+    """Attach dual-coder reliability to a codebook WITHOUT minting a new version.
+
+    A coding run's kappa is an observation about the run, not a revision of the categories the
+    researcher approved. Writing it through ``save_codebook`` bumped ``version`` on every run, so a
+    codebook edited once could show version 12 after a dozen recodings with identical codes.
+    """
+    try:
+        data = load_codebook(codebook_id)
+    except CodebookError:
+        return None
+    data.setdefault('source', {})['reliability'] = dict(reliability)
+    path = _path(codebook_id)
+    temporary = f'{path}.tmp'
+    with open(temporary, 'w', encoding='utf-8') as handle:
+        json.dump(data, handle, ensure_ascii=False, indent=2)
+    atomic_replace(temporary, path)
+    return data
+
+
 def delete_codebook(codebook_id: str) -> bool:
     path = _path(codebook_id)
     if not os.path.isfile(path):

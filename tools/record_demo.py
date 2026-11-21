@@ -35,17 +35,30 @@ VIDEOS = REPO / 'samples' / 'workflows' / 'videos'
 BROWSER_NAMES = {'chrome', 'msedge', 'firefox', 'chromium'}
 
 
-def _browser_pids() -> set[int]:
-    return {
-        process.pid
-        for process in psutil.process_iter(['name'])
-        if (process.info.get('name') or '').split('.')[0].lower() in BROWSER_NAMES
-    }
+def _browser_pids(profile_marker: str = '') -> set[int]:
+    """Browser pids; with a marker, only those launched with the recorder's own profile."""
+    pids = set()
+    for process in psutil.process_iter(['name']):
+        if (process.info.get('name') or '').split('.')[0].lower() not in BROWSER_NAMES:
+            continue
+        if profile_marker:
+            try:
+                if profile_marker not in ' '.join(process.cmdline()):
+                    continue
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                continue
+        pids.add(process.pid)
+    return pids
 
 
 def _close_browsers_started_after(snapshot: set[int]) -> None:
-    """Only close browser processes THIS script opened; never a browser the user had already open."""
-    for pid in _browser_pids() - snapshot:
+    """Only close browser processes THIS script opened; never a browser the user had already open.
+
+    A pid delta alone also caught a browser the user happened to start DURING a recording, killing
+    their tabs. Match the recorder's unique user-data-dir too, so only our own processes are closed.
+    """
+    profile_marker = str(_absolute('scratchpad/demo_browser_profile'))
+    for pid in _browser_pids(profile_marker) - snapshot:
         try:
             process = psutil.Process(pid)
             process.terminate()
@@ -218,7 +231,9 @@ def _wait_for_run(url: str, timeout: float, start_timeout: float = 90) -> dict:
         if status_value and status_value != 'running':
             return {'run_id': run_id, 'status': status_value}
         time.sleep(0.5)
-    return {'run_id': run_id, 'status': 'running'}
+    # A timeout here used to be returned as a settled status, so a hung demo produced a video and
+    # was reported as successful. Fail loudly instead.
+    raise TimeoutError(f'run {run_id} did not settle within {timeout:.0f}s')
 
 
 def _focus_browser(title: str, timeout: float = 20, settle_seconds: float = 5.0) -> str:
@@ -326,11 +341,21 @@ def _sample_frames(video: Path, demo_id: str, count: int = 3) -> dict:
             check=True,
         )
         if frame.exists():
-            stddev = ImageStat.Stat(Image.open(frame).convert('L')).stddev[0]
+            with Image.open(frame) as image:
+                stddev = ImageStat.Stat(image.convert('L')).stddev[0]
             stddevs.append(stddev)
             frames.append({'path': str(frame.relative_to(REPO)), 'at': round(at, 1), 'stddev': round(stddev, 1)})
     minimum = min(stddevs) if stddevs else 0.0
-    return {'frames': frames, 'min_stddev': round(minimum, 1), 'ok': minimum > 3.0}
+    # A fixed grayscale-stddev floor is a HEURISTIC for "not a blank capture", not a site-derived
+    # threshold: report the measured number and the floor so a human can judge instead of trusting
+    # a bare ok flag.
+    floor = float(os.environ.get('CIXI_FRAME_STDDEV_FLOOR') or 3.0)
+    return {
+        'frames': frames,
+        'min_stddev': round(minimum, 1),
+        'floor': floor,
+        'ok': minimum > floor,
+    }
 
 
 def run_group(group: dict, args, manifest_path: Path) -> list[dict]:

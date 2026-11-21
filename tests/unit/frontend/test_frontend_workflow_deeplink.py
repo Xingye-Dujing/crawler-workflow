@@ -78,6 +78,11 @@ def test_recorder_clears_history_and_draws_no_cursor():
     assert 'DELETE FROM llm_cache' in recorder, 'cached LLM answers must be cleared so nodes really run'
     assert "'-draw_mouse', '0'" in capture, 'the cursor must not flicker in the recording'
     assert 'keybd_event(0x12' not in capture, 'no synthetic ALT press — it flickers the UI'
+    # The recorder must never kill a browser the user opened while a take was running; matching the
+    # unique profile marker is the only safe way to identify its own processes.
+    assert 'profile_marker' in recorder, 'browser cleanup must match the recorder profile'
+    assert 'raise TimeoutError' in recorder, 'a hung demo run must not be reported as settled'
+    assert 'CIXI_FRAME_STDDEV_FLOOR' in recorder, 'the blank-frame heuristic must report its floor'
     # No timed re-select that repaints the whole transcript (reads as a flicker on video).
     trace_src = (JS / 'workflow.js').read_text(encoding='utf-8')
     # A one-shot re-select at reveal time is fine; a TIMED re-select inside the reveal helper is the

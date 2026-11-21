@@ -54,6 +54,14 @@ def test_codebook_saves_versions_and_lists(tmp_path, monkeypatch):
     assert codebooks.delete_codebook(first['id']) is True
 
 
+def test_dual_reliability_does_not_bump_the_codebook_version(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, 'DATA_DIR', str(tmp_path))
+    book = codebooks.save_codebook({'name': '码本', 'phase': 'quantitative', 'codes': [{'code': 'A'}]})
+    updated = codebooks.save_reliability(book['id'], {'kappa': 0.7, 'agreement': 0.8})
+    assert updated['version'] == book['version'], 'reliability is an observation, not a new revision'
+    assert codebooks.load_codebook(book['id'])['source']['reliability']['kappa'] == 0.7
+
+
 class FakeClient:
     provider = 'ollama'
     model = 'qwen3.5:2b'
