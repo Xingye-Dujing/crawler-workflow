@@ -101,6 +101,9 @@ class ToolSpec:
     permission: str = 'read:project'
     handler: object = None
     control: bool = False
+    #: False for a tool contributed by an installed plugin. The coverage gate counts the product's
+    #: own capabilities, not a user's pack; a plugin tool is reachable through its own manifest.
+    builtin: bool = True
 
     def schema(self) -> dict:
         return {'name': self.name, 'description': self.description, 'input_schema': self.parameters}

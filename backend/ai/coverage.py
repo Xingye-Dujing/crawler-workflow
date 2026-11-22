@@ -67,7 +67,7 @@ def audit() -> dict:
     reachable = set(UNIVERSAL_TOOLS) | set(FILE_TOOLS)
     for skill in skills.all_skills().values():
         reachable.update(skill.tools)
-    tool_names = {name for name, spec in TOOLS.items() if not spec.control}
+    tool_names = {name for name, spec in TOOLS.items() if spec.builtin and not spec.control}
     families['tools'] = _family('skill tools + universal', tool_names, reachable)
 
     missing = {name: family['missing'] for name, family in families.items() if family['missing']}

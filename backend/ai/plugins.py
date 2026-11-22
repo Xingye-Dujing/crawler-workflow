@@ -173,7 +173,7 @@ def _http_tool(spec: dict, plugin_id: str):
         text = response.text[:20000]
         return {'status': response.status_code, 'body': text, 'truncated': len(response.text) > 20000}
 
-    tool = ToolSpec(name, description, parameters, permission='net:http', handler=handler)
+    tool = ToolSpec(name, description, parameters, permission='net:http', handler=handler, builtin=False)
     # The duplicate check is the REGISTRY's, and it runs BEFORE the product table is touched.
     # ``tools.execute`` resolves a call from ``tools.TOOLS``, never from the registry, so
     # assigning first meant a manifest the install route then REFUSED (400) had already
