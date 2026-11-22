@@ -683,9 +683,8 @@ def test_upload_accepts_a_provider_without_a_files_api_and_extracts_text(client,
     assert attachment['file_id'] == ''
     # Eager extraction ran at upload; a later turn reads the cache.
     from ai import file_text
-    from ai import store as ai_store
 
-    extracted = file_text.extract_attachment(ai_store.get_attachment(attachment['id']))
+    extracted = file_text.extract_attachment(store.get_attachment(attachment['id']))
     assert '本地模型也能读的正文' in extracted['text']
 
 
