@@ -65,6 +65,7 @@ for package in (
     'analyzers',
     'core',
     'capabilities',
+    'capabilities_kernel',
     'engine',
     'nodes',
     'sessions',

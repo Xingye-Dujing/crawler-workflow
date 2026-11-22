@@ -29,6 +29,7 @@ _PROJECT_DIRS = (
     'extensions',
     'analyzers',
     'capabilities',
+    'capabilities_kernel',
     'core',
     'crawlers',
     'desktop',

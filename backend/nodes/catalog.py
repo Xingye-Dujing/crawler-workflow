@@ -13,18 +13,22 @@ catalogue by a contract test, so a new type cannot be half-registered. The brows
 server's answer too (:func:`api.node_types.node_types` → ``static/js/node-types.js``) rather than
 keeping a second list that can only be edited in parallel.
 
+**A migrated type is declared in ``capabilities_kernel/nodes/<id>/manifest.py``, not in the literal
+below.** This table is now the adapter for the types that have not moved yet: the kernel entries are
+merged into it at the declared slot, so the served order and every downstream reader stay the same.
+Adding a type to the kernel needs no edit here; adding one to the literal is the old way.
+
 Each plugin's **behaviour** lives beside its declaration: one module per type under
-``backend/nodes/executors/``, behind the same ``(node, call)`` signature the registry calls.
+``backend/nodes/executors/``, behind the same ``(node, call)`` signature the registry calls. The
+manifest names that module, so ``nodes.registry.load_builtin_executors`` can register a migrated
+type without the catalogue growing another table.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-#: Row shapes a node can carry downstream. ``table`` is the normal case; ``pdf`` is a LaTeX/PDF
-#: artifact (``visualize`` emits a chart spec whose LaTeX a save node can compile, ``compile`` emits
-#: the PDF itself); ``none`` is metadata only (``name``).
-ROW_SHAPES = ('table', 'pdf', 'none')
+from capabilities_kernel import registry as capabilities
 
 
 @dataclass(frozen=True)
@@ -45,7 +49,9 @@ class NodePlugin:
     quiet: bool = False
 
 
-PLUGINS: dict[str, NodePlugin] = {
+#: Types still declared the old way. ``tokenize`` moved to
+#: ``capabilities_kernel/nodes/tokenize/manifest.py`` as the pilot; the rest follow in P2.
+_DECLARED: dict[str, NodePlugin] = {
     'name': NodePlugin('name', 'nodeType.name', 'meta', rows='none', quiet=True),
     'source': NodePlugin('source', 'nodeType.source', 'data'),
     'upload': NodePlugin('upload', 'nodeType.upload', 'data', quiet=True),
@@ -56,7 +62,6 @@ PLUGINS: dict[str, NodePlugin] = {
     # python_scripts library, so the workflow references it by id/name rather than inlining code.
     'python': NodePlugin('python', 'nodeType.python', 'process'),
     'analysis': NodePlugin('analysis', 'nodeType.analysis', 'analysis'),
-    'tokenize': NodePlugin('tokenize', 'nodeType.tokenize', 'process'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
     # 采集校验 reads two tables (a list and a crawl result) and answers a report table; it
     # owns no session and no login, so it groups with the processing nodes.
@@ -67,6 +72,33 @@ PLUGINS: dict[str, NodePlugin] = {
     'compile': NodePlugin('compile', 'nodeType.compile', 'visualize', rows='pdf'),
     'output': NodePlugin('output', 'nodeType.output', 'output'),
 }
+
+
+def _with_kernel_nodes(declared: dict[str, NodePlugin]) -> dict[str, NodePlugin]:
+    """Merge the migrated manifests at the slots they declare.
+
+    A duplicate is a hard error, not "the manifest wins": the literal and the manifest would be two
+    answers to the same question, and whichever reader imported first would silently decide.
+    """
+    items = list(declared.items())
+    for entry in capabilities.node_entries():
+        if entry['type'] in declared:
+            raise RuntimeError(
+                f'node type {entry["type"]} is declared both in nodes/catalog.py and in '
+                f'capabilities_kernel/nodes/{entry["type"]}/manifest.py',
+            )
+        plugin = NodePlugin(
+            entry['type'],
+            entry['label_key'],
+            entry['category'],
+            rows=entry['rows'],
+            quiet=entry['quiet'],
+        )
+        items.insert(min(int(entry['order']), len(items)), (plugin.type, plugin))
+    return dict(items)
+
+
+PLUGINS: dict[str, NodePlugin] = _with_kernel_nodes(_DECLARED)
 
 #: Every type the engine can execute. A hand-edited canvas can name a node anything; a type outside
 #: this set has no executor, so validation refuses it by name instead of falling through to an empty

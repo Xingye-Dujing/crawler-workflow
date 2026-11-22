@@ -113,6 +113,7 @@ _LOCAL_PACKAGES = {
     'api',
     'app',
     'capabilities',
+    'capabilities_kernel',
     'config',
     'core',
     'crawlers',

@@ -32,6 +32,13 @@ a defect, not a shortcut.
   may accept a generic parameter; the platform file passes its own answer (`comment_mode(..., replies=True)`).
 - **Crawl backends**: `crawlers/backends/` + the adapter's own `capabilities` manifest; never copy cells, columns or
   identity keys into a Python table. Ledger, cursor and login are keyed per backend.
+- **Capabilities are manifests.** A capability's declaration lives in
+  `backend/capabilities_kernel/<kind>/<id>/manifest.py` (or `<id>.py` on the way there); `capabilities_kernel.registry`
+  discovers it, refuses duplicate id / `api_version` drift / an id that is not its directory **by name**, and projects
+  it into `nodes/catalog.py`, `nodes/defaults.py`, `services/validation/engine.py` and the lineage hooks. A migrated
+  type's facts go in its manifest — never back into the shared tables. A manifest imports only the standard library
+  and the kernel: `nodes.catalog` reads manifests while parsing a DAG, so pandas/Selenium here cost every start.
+  Pilot: `capabilities_kernel/nodes/tokenize/manifest.py` (see `docs/architecture/capabilities-kernel.md`).
 - **Node types**: one `NodePlugin` in `backend/nodes/catalog.py` + one `nodes/executors/<type>.py` registered in
   `nodes/registry.py`; the browser reads the server's `node-types.js`, never a second list.
 - **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same

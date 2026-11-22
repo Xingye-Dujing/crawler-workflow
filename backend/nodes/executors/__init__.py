@@ -5,7 +5,8 @@ registry loader (``nodes.registry.load_builtin_executors``) imports it once, fro
 ``engine.workflow``, which must stay light enough to parse a DAG without pandas and the analyzers.
 
 Adding a built-in node type: a module here with ``NODE_TYPE`` and ``run``, one line in this package,
-one catalogue entry in ``nodes/catalog.py``. ``tests/unit/analysis/test_node_plugins.py`` pins the three
+and either a catalogue entry in ``nodes/catalog.py`` or a manifest in
+``capabilities_kernel/nodes/<id>/``. ``tests/unit/analysis/test_node_plugins.py`` pins the three
 against each other.
 """
 

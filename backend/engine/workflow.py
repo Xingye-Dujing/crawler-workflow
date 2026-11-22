@@ -4,6 +4,7 @@ import logging
 from collections import defaultdict, deque
 
 import capabilities.registry as capabilities
+from capabilities_kernel.registry import manifest_for_node
 from core.refs import as_bool, platform_for, split_urls
 from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
@@ -17,6 +18,7 @@ from services.biblio.fuse import collect_errors as fuse_param_errors
 from services.biblio.schema import collect_errors as biblio_param_errors
 from services.charts.contracts import NO_X_TYPES
 from services.pool import selector
+from services.validation.engine import static_problems
 
 logger = logging.getLogger(__name__)
 
@@ -647,8 +649,20 @@ class WorkflowEngine:
                     add(nid, 'fuse.no_input', t('fuse.no_input', nid=label))
                 for message in fuse_param_errors(params, label):
                     add(nid, 'engine.fuse', message)
-            if ntype == 'tokenize' and not params.get('text_column'):
-                add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
+            # A migrated node declares its pre-run refusals in its manifest; this loop is the one
+            # evaluator, so the console, the canvas badge and the AI tools cannot disagree about
+            # what a node needs. Warnings are collected for the UI later; nothing downgrades an
+            # error today.
+            manifest = manifest_for_node(ntype)
+            if manifest is not None:
+                for problem in static_problems(manifest, node, has_input=nid in data_inputs):
+                    if problem['severity'] != 'error':
+                        continue
+                    add(
+                        nid,
+                        problem['code'],
+                        t(problem['message_key'], nid=label, **problem['context']),
+                    )
             # 分词 is also a 处理 operation now. It keeps the same named refusal at the
             # validation boundary, not only when the executor finally reads the column.
             if ntype == 'process' and operation == 'tokenize' and not params.get('text_column'):

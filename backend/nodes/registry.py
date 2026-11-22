@@ -5,9 +5,12 @@ pinned against each other by ``tests/unit/analysis/test_node_plugins.py``, so a 
 no executor, and an executor cannot be registered for a type nobody declared.
 
 Every node type is a plugin here: ``nodes/executors/<type>.py`` declares ``NODE_TYPE`` and
-``run(node, call)``, and importing that package registers all of them. A plugin depends only on its
-arguments and the shared service modules — never on ``app``, which would import Flask into the
-worker and cycle back to this table (``tests/unit/analysis/test_node_plugins.py`` scans for that import).
+``run(node, call)``, and importing that package registers all of them. A migrated type keeps its
+behavior module but is declared by ``capabilities_kernel/nodes/<id>/manifest.py``; this module asks
+the kernel registry for those handlers after the legacy package has registered its own, so one
+registry serves both halves of the tree. A plugin depends only on its arguments and the shared
+service modules — never on ``app``, which would import Flask into the worker and cycle back to this
+table (``tests/unit/analysis/test_node_plugins.py`` scans for that import).
 
 ``load_builtin_executors`` is explicit rather than automatic because importing ``nodes`` from the
 engine (``engine/workflow``) would otherwise drag pandas, the analyzers and the biblio services into
@@ -58,6 +61,11 @@ def load_builtin_executors() -> None:
     if _BUILTINS_LOADED:
         return
     importlib.import_module('nodes.executors')
+    # Migrated types keep their declaration and handler in capabilities_kernel/; the kernel resolves
+    # the manifest's module:function reference and registers it in this same table.
+    from capabilities_kernel import registry as capabilities
+
+    capabilities.register_node_executors()
     _BUILTINS_LOADED = True
 
 

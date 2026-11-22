@@ -30,6 +30,26 @@
 | `1c52910` | H11-H16 收口基线（10646/14:06、device 213/5:54、lint、冒烟） |
 | `dad5d55` | H17/H18：`#ai-chat` 拆成 `#ai-transcript` + `#ai-panel`；转录按 `turn_id`/消息 id 复用；流式气泡跨重绘与 A→B→A 复用；`harness_dom.appendChild` 改为浏览器语义（移动而非复制） |
 
+## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
+
+- `backend/capabilities_kernel/`：九段 `Manifest`（identity/params/ports/execution/rules/ui/ai/tests/docs）、
+  结构校验 `problems()`、SHA-256 `digest()`；`ROW_SHAPES` 等词汇在这里，`nodes/catalog.py` 不再保留第二份。
+- `registry`：`<kind>/<id>.py` 或 `<id>/manifest.py` 两种家，目录名即 id；重复 id、未知 kind、api_version 不符、
+  kind/id 不一致、不完整清单都在读取时**按名拒绝**；`node_entries()` / `node_defaults()` 是目录投影，
+  `register_node_executors()` 把 handler 注册进 `nodes.registry`（所以 `registered_types() == NODE_TYPES` 仍成立）。
+- 旧表面改读：`nodes/catalog.py` 按 `identity.order` 插回原槽位（tokenize 仍在 index 8）；`nodes/defaults.py`
+  取 `ParamSpec.default`；`engine/workflow.py` 的 tokenize if 分支换成 `services/validation/engine.py`
+  的声明式规则；血缘钩子由 `ports.emit_columns/read_columns` 解析到 executor 自己的函数。
+- pilot：`backend/capabilities_kernel/nodes/tokenize/manifest.py`；`tests/unit/capabilities/test_tokenize_manifest.py`
+  逐项钉住“旧家不再有答案”（catalogue/defaults/validate/hooks）。
+- 门禁：`tests/unit/gates/test_capability_completeness.py`（结构/执行器/端口/文档/契约测试/双语词/清单轻导入）；
+  `test_doc_paths` 与 `test_requirements_pinned` 的包清单已加 `capabilities_kernel`。
+- 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`。
+- 本片验证：相关模块 `2048 passed`（analysis/gates/runs/executors/capabilities + node-types/workflow API）；
+  ruff 全绿；product pylint 10.00/10、tests pylint（本片文件）10.00/10；`test_boot_import_budget` 9 passed。
+- 未做（P1 后续切片）：`tools/gen_capabilities.py`、`tools/doctor.py`、生成物 freshness、`runtime/fsm.py`、
+  `runtime/events.py`、`runtime/flags.py`、Asset 骨架。前端表单与 `canvas.js`/`runs.js` 的 if 链按计划在 P2。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
@@ -51,7 +71,8 @@
 
 ## 下一步（按顺序）
 
-1. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
+1. **P1 续**：`tools/gen_capabilities.py` 五类产物 + `tools/doctor.py` + 生成物 freshness gate；然后
+   `runtime/fsm.py` / `runtime/events.py` / `runtime/flags.py` / Asset 骨架。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P2-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

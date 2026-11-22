@@ -35,6 +35,11 @@
 - **节点类型曾经活在三个地方**：`engine/workflow.py` 的集合、`app.py` 的执行器 if 链、`canvas.js` 的
   `_VALID_NODE_TYPES`。加一个类型要三处都改，漏一处只会在运行时掉进“没有执行器”的空表。现在 `nodes/catalog.py`
   的 `NodePlugin` 是唯一声明，`nodes/registry.py` 与前端 `node-types.js` 都从它派生。
+- **能力清单是声明缝，不是第四份节点表。** `capabilities_kernel/<kind>/<id>/manifest.py` 的九段
+  （身份/参数/端口/执行/验证/UI/AI/测试/文档）是迁移后类型的唯一声明；`nodes/catalog.py`、`nodes/defaults.py`、
+  `services/validation/engine.py` 和血缘钩子都读它。清单在解析 DAG 时被导入，所以只许导入标准库和内核：
+  pandas/Selenium 属于 executor。registry 对重复 id、`api_version` 漂移、目录名与 id 不一致按名拒绝——否则
+  “先导入的那个”会静默获胜。旧表面继续服务未迁移类型，直到 P2 批量搬完；迁移过的事实不许写回旧表。
 - **图表类型曾经是一条 700 行的 `if chart_type == …` 链**：类型出现在 `CHART_TYPES` 里却没人接，就悄悄画成通用
   bar/line。现在一个 builder 注册进 `BUILDERS`，契约测试拒绝“有类型没 builder / 有 builder 没类型 / 重复注册”。
 - **AI 扩展的注册表拒绝同名顶替**（`extensions/registry.py` 带 owner），清单是数据、权限在 manifest 校验；本地代码

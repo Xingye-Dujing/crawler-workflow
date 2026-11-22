@@ -4,13 +4,18 @@ One table for the whole product: the canvas seeds a new node from it, ``GET /api
 serves it, and ``tests/unit/analysis/test_node_plugins`` pins it against the catalogue. ``source`` has no
 entry on purpose — its defaults depend on the crawl matrix the browser has just fetched (platform,
 engine, mode), so the canvas derives them from that matrix instead of freezing one shape here.
+
+A migrated node type's seeds live in its manifest's ``params`` section and are merged in below; the
+literal is the adapter for the types that have not moved yet.
 """
+
+from capabilities_kernel import registry as capabilities
 
 from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 
 #: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
-NODE_DEFAULTS: dict[str, dict] = {
+_DECLARED: dict[str, dict] = {
     'name': {'workflow_name': '', 'layout_order': ''},
     'upload': {'dataset_id': '', 'dataset_name': '', 'row_count': ''},
     'accumulate': {'lineage_name': '', 'identity': 'row', 'key_columns': ''},
@@ -68,7 +73,6 @@ NODE_DEFAULTS: dict[str, dict] = {
         'keep_undated': True,
         'export_files': False,
     },
-    'tokenize': {'text_column': '', 'top_n': '', 'output_mode': 'word_freq'},
     'resume': {'resume_run_id': '', 'resume_node_id': '', 'resume_limit': 0},
     'comment': {
         'urls': '',
@@ -82,6 +86,21 @@ NODE_DEFAULTS: dict[str, dict] = {
     'compile': {},
     'output': {'operation': 'save', 'format': 'csv', 'filename': 'export.csv'},
 }
+
+
+def _with_kernel_defaults(declared: dict[str, dict]) -> dict[str, dict]:
+    """Merge the migrated manifests' param defaults; a duplicate is a hard error, never a winner."""
+    merged = dict(declared)
+    for node_type, seeds in capabilities.node_defaults().items():
+        if node_type in merged:
+            raise RuntimeError(
+                f'node type {node_type} seeds the same parameters in nodes/defaults.py and in its manifest',
+            )
+        merged[node_type] = seeds
+    return merged
+
+
+NODE_DEFAULTS: dict[str, dict] = _with_kernel_defaults(_DECLARED)
 
 #: Types whose defaults are derived where the facts live, not frozen here. The API says so in
 #: ``defaultsFrom`` so the client knows to ask its own source of truth.
