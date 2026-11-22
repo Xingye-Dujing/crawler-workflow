@@ -5,17 +5,13 @@ from collections import defaultdict, deque
 
 import capabilities.registry as capabilities
 from capabilities_kernel.registry import manifest_for_node
-from core.refs import as_bool, platform_for, split_urls
+from core.refs import as_bool, platform_for
 from nodes.catalog import NODE_TYPES
 from nodes.labels import node_label
-from runtime import paths
 from sessions import preflight
-from sessions.cookies import CookieManager
 
 from i18n import t
-from services import pool
 from services.biblio.schema import collect_errors as biblio_param_errors
-from services.pool import selector
 from services.validation.engine import ValidationContext, validation_problems
 
 logger = logging.getLogger(__name__)
@@ -107,60 +103,6 @@ def effective_workflow(workflow: dict) -> dict:
 #
 # ``TABLE_NODE_TYPES``/``PDF_SOURCE_NODE_TYPES`` are no longer imported here: the checks that needed
 # them moved into the capabilities' own validators in P2 (accumulate, compile, output).
-
-
-def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
-    """Refuse a node whose account holds no login — named, never guessed around.
-
-    The 账号 field is not a choice from a fixed list, so :func:`
-    capabilities.unoffered_selections` cannot judge it: it names a *session*, and the
-    question is whether this machine can produce that session right now. Answered by
-    :func:`preflight.has_session_to_test`, the same question the pre-run probe
-    asks, because two definitions of "is a login here" is how a valid session gets
-    called missing on one side and a dead one accepted on the other.
-
-    A blank means the **default account** — an account with a real file of its own, not
-    a wildcard. Falling back to "whichever login exists" would hand this node somebody
-    else's session (and their rate limit, and their risk profile), while crawling on
-    with no login at all returns a wall read as an empty table: the run looks done and
-    collected nothing. Both are refused by name instead.
-
-    ``platforms`` is every platform the node will visit, because a comment node crawls
-    several feeds with the single account on its form.
-
-    A node that crawls through CatBus is not asked this question at all. Its ``account`` field names a
-    Selenium session the crawl will never read, and refusing it for having no cookie file would block
-    a run whose login lives in CatBus' own account directory — which this app neither reads nor
-    writes. The gate that does answer for it is the preflight's ``backend`` branch
-    (:func:`preflight._probe_catbus`), asked of the adapter that can actually reply.
-    """
-    if capabilities.is_catbus(params):
-        return []
-    account = str(params.get('account') or '').strip()
-    manager = CookieManager(paths.active().cookie_dir)
-    out = []
-    for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
-        if selector.is_pool_value(account):
-            # The pool is asked a different question, and it must be asked before "does this
-            # account have a file": ``@pool`` is not a login, so looking it up would refuse
-            # every pool node for a cookie nobody named. Two refusals, because they want two
-            # different actions: save a login at all, versus wait for (or unfreeze) one.
-            snapshot = pool.snapshot(platform)
-            if not snapshot['total']:
-                out.append(t('engine.source_pool_empty', nid=label, platform=platform))
-            elif not snapshot['usable']:
-                out.append(t('engine.source_pool_cooling', nid=label, platform=platform))
-            continue
-        if not preflight.has_session_to_test(platform, account=account):
-            out.append(
-                t(
-                    'engine.source_no_cookie_account',
-                    nid=label,
-                    platform=platform,
-                    account=manager.label_of(account),
-                )
-            )
-    return out
 
 
 class WorkflowEngine:
@@ -414,7 +356,7 @@ class WorkflowEngine:
         # ``needs_session=False`` and are not asked — refusing them would be the same bug
         # that once stopped WeChat crawling entirely.
         if mode.needs_session:
-            errors.extend(_account_session_errors([platform], params, label))
+            errors.extend(preflight.session_errors([platform], params, label))
         for field in capabilities.link_fields(mode):
             if field.key in fed:
                 # The fed column's content is the parent's — unknown at design time, so
@@ -503,17 +445,6 @@ class WorkflowEngine:
                         add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
                     if as_bool(params.get('recrawl')):
                         add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
-            if ntype == 'comment' and not str(params.get('urls') or '').strip():
-                add(nid, 'engine.comment_no_urls', t('engine.comment_no_urls', nid=label))
-            elif ntype == 'comment':
-                # A comment crawl is always a logged-in one (its rate limit is per ACCOUNT,
-                # which is the reason accounts exist), and one node walks several feeds with
-                # the single account on its form — so every platform those links name has to
-                # be able to answer for it. Unknown until the links are read, so this is the
-                # node's own text only: nothing is inferred about an upstream table.
-                links = split_urls(str(params.get('urls') or ''))
-                for msg in _account_session_errors([platform_for(u) for u in links], params, label):
-                    add(nid, 'engine.source', msg)
             if ntype == 'biblio':
                 # Count EVERY incoming wire, including a name node: the executor
                 # receives the whole upstream list, so filtering names here let a

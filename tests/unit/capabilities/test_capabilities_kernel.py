@@ -37,6 +37,7 @@ class TestDiscovery:
             'name',
             'upload',
             'resume',
+            'comment',
             'process',
             'python',
             'analysis',

@@ -143,6 +143,49 @@
         },
         "additionalProperties": true
       },
+      "NodeParams.comment": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "type": "string",
+            "default": ""
+          },
+          "comment_limit": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "part_size": {
+            "type": "integer",
+            "default": 50,
+            "minimum": 0
+          },
+          "per_article_file": {
+            "type": "boolean",
+            "default": true
+          },
+          "keep_parts": {
+            "type": "boolean",
+            "default": false
+          },
+          "recrawl": {
+            "type": "boolean",
+            "default": false
+          },
+          "format": {
+            "type": "string",
+            "default": "csv",
+            "enum": [
+              "csv",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "urls"
+        ]
+      },
       "NodeParams.process": {
         "type": "object",
         "properties": {

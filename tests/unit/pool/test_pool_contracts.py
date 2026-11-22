@@ -75,13 +75,13 @@ def test_the_fingerprint_keeps_pool_mode_distinct_and_still_folds_blank(scope):
 
 
 def test_validation_asks_the_pool_not_for_a_file_named_pool(scope):
-    from engine.workflow import _account_session_errors
+    from sessions.preflight import session_errors
 
-    empty = _account_session_errors(['weibo'], {'account': '@pool'}, '源 #1')
+    empty = session_errors(['weibo'], {'account': '@pool'}, '源 #1')
     assert len(empty) == 1 and '源 #1' in empty[0]
 
     scope.save('weibo', [{'name': 'SUB', 'value': 'v', 'domain': '.weibo.com'}], 'work')
-    assert _account_session_errors(['weibo'], {'account': '@pool'}, '源 #1') == []
+    assert session_errors(['weibo'], {'account': '@pool'}, '源 #1') == []
 
 
 def test_the_pool_package_does_not_import_crawlers():

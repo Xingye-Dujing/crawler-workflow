@@ -177,6 +177,113 @@
       }
     },
     {
+      "type": "comment",
+      "labelKey": "nodeType.comment",
+      "category": "data",
+      "order": 4,
+      "params": [
+        {
+          "name": "urls",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "textarea",
+          "placeholder": ""
+        },
+        {
+          "name": "comment_limit",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "part_size",
+          "type": "integer",
+          "default": 50,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "per_article_file",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "keep_parts",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "recrawl",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "default": "csv",
+          "required": false,
+          "enum": [
+            "csv",
+            "json"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        }
+      ],
+      "rules": [
+        {
+          "kind": "required_param",
+          "code": "engine.comment_no_urls",
+          "messageKey": "engine.comment_no_urls",
+          "param": "urls",
+          "severity": "error"
+        }
+      ],
+      "ports": {
+        "rows": "table",
+        "inputs": 0,
+        "emitColumns": "",
+        "readColumns": ""
+      },
+      "ui": {
+        "form": "custom",
+        "customRenderer": "comment"
+      }
+    },
+    {
       "type": "process",
       "labelKey": "nodeType.process",
       "category": "process",

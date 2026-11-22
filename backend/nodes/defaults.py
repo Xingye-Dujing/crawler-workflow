@@ -17,15 +17,6 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
 _DECLARED: dict[str, dict] = {
     'biblio': dict(BIBLIO_DEFAULTS),
-    'comment': {
-        'urls': '',
-        'comment_limit': 0,
-        'part_size': 50,
-        'per_article_file': True,
-        'keep_parts': False,
-        'recrawl': False,
-        'format': 'csv',
-    },
 }
 
 

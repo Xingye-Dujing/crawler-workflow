@@ -10,6 +10,7 @@
 | name | `nodeType.name` | meta | [docs/capabilities/nodes/name.md](../capabilities/nodes/name.md) | `tests/unit/capabilities/test_name_manifest.py` | `a49f2dba36b8` |
 | upload | `nodeType.upload` | data | [docs/capabilities/nodes/upload.md](../capabilities/nodes/upload.md) | `tests/unit/capabilities/test_upload_manifest.py` | `b0f35e5019d2` |
 | resume | `nodeType.resume` | data | [docs/capabilities/nodes/resume.md](../capabilities/nodes/resume.md) | `tests/unit/capabilities/test_resume_manifest.py` | `42a8da19e26d` |
+| comment | `nodeType.comment` | data | [docs/capabilities/nodes/comment.md](../capabilities/nodes/comment.md) | `tests/unit/capabilities/test_comment_manifest.py` | `9809052949b1` |
 | process | `nodeType.process` | process | [docs/capabilities/nodes/process.md](../capabilities/nodes/process.md) | `tests/unit/capabilities/test_process_manifest.py` | `5387e43d9deb` |
 | python | `nodeType.python` | process | [docs/capabilities/nodes/python.md](../capabilities/nodes/python.md) | `tests/unit/capabilities/test_python_manifest.py` | `e00f4653a793` |
 | analysis | `nodeType.analysis` | analysis | [docs/capabilities/nodes/analysis.md](../capabilities/nodes/analysis.md) | `tests/unit/capabilities/test_analysis_manifest.py` | `e783e71dfb61` |

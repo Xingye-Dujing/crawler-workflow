@@ -53,7 +53,6 @@ class NodePlugin:
 #: ``capabilities_kernel/nodes/tokenize/manifest.py`` as the pilot; the rest follow in P2.
 _DECLARED: dict[str, NodePlugin] = {
     'source': NodePlugin('source', 'nodeType.source', 'data'),
-    'comment': NodePlugin('comment', 'nodeType.comment', 'data'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
 }
 

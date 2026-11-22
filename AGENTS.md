@@ -406,8 +406,8 @@ repository root.
   own.**
 - One account = one cookie file **and** one Chrome profile in the active tree: `cookies/<platform>_cookies.json` (the
   default login keeps the unsuffixed name; a named account is `<platform>@<account>_cookies.json`) and
-  `chrome_profile/<platform>` (default) or `chrome_profile/<platform>/<account>`. `_account_session_errors` refuses when
-  `has_session_to_test` finds neither — **blank IS an account (默认账号), not a wildcard.**
+  `chrome_profile/<platform>` (default) or `chrome_profile/<platform>/<account>`. `sessions.preflight.session_problems`
+  refuses when `has_session_to_test` finds neither — **blank IS an account (默认账号), not a wildcard.**
 - The default account is `default` (never a blank in the box), folded at `CookieManager.key`/`path_segment` (`''` ⇄
   `default`, lowercase always); `sessions.profiles`/preflight/JS box route through that fold; the candidate list and a new
   node's preselection are both `CookieManager.accounts_in_order`.

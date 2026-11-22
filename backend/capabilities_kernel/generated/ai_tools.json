@@ -138,6 +138,81 @@
       "read_columns": ""
     },
     {
+      "capability": "node:comment",
+      "tool": "",
+      "summary": "评论采集 walks the comments of the article links on one form, batch by batch, and emits the same comment table a 数据源 in comments mode produces (评论内容/评论时间/点赞数/文章URL …). The cursor records only the leading links it PROVED complete, so 继续 replays from the first hole.",
+      "steps": [
+        "Paste article links (one per line); a 红果 title is accepted where the matrix declares names.",
+        "Pick the login account — the comment wall is a per-account rate limit, which is why accounts exist.",
+        "Set comment_limit (0 = every comment), part_size and whether parts are kept."
+      ],
+      "examples": [
+        {
+          "type": "comment",
+          "params": {
+            "urls": "https://www.zhihu.com/question/1/answer/2",
+            "comment_limit": 0,
+            "part_size": 50,
+            "per_article_file": true,
+            "keep_parts": false,
+            "recrawl": false,
+            "format": "csv"
+          }
+        }
+      ],
+      "failures": [
+        "No links: engine.comment_no_urls.",
+        "The account holds no login for a platform a link names: engine.source_no_cookie_account.",
+        "A @pool account with no saved login / all cooling: engine.source_pool_empty / _cooling.",
+        "A walled or short link settles PARTIAL and keeps its cursor hole, so 继续 re-walks it."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "urls": {
+            "type": "string",
+            "default": ""
+          },
+          "comment_limit": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "part_size": {
+            "type": "integer",
+            "default": 50,
+            "minimum": 0
+          },
+          "per_article_file": {
+            "type": "boolean",
+            "default": true
+          },
+          "keep_parts": {
+            "type": "boolean",
+            "default": false
+          },
+          "recrawl": {
+            "type": "boolean",
+            "default": false
+          },
+          "format": {
+            "type": "string",
+            "default": "csv",
+            "enum": [
+              "csv",
+              "json"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "urls"
+        ]
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
       "capability": "node:process",
       "tool": "",
       "summary": "处理 runs one operation over the upstream text column: cleaning, tokenize, word frequency, TF-IDF/TextRank, sentiment/emotion/tendency, NER, clustering, correlation and the qualitative coding operations. The operation selects both the result columns and the required inputs.",

@@ -124,13 +124,25 @@
 - 本片验证：`196 passed`（capabilities + node plugins/schema + executors）、`1293 passed`
   （charts/biblio + workflow API + runs + capabilities）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
 
-### P2 剩余 3 个节点的已知风险
+## P2 第五批：comment（2026-11-22）
+
+- 账号会话检查从 `engine/workflow.py::_account_session_errors` 移到 `sessions/preflight.py`：
+  `session_problems()` 返回 `{code, message_key, context}`，`session_errors()` 是给 source 节点（尚未迁移）
+  用的已本地化句子版本。source 的 `_source_errors` 改调后者，engine 里不再有这段逻辑。
+- `comment` 清单：`urls` 必填规则 + `validate_node`（对链接涉及的每个平台问一次账号会话，@pool 问池，
+  CatBus 不问 Cookie）。表单声明为 `ui.form='custom'` / `custom_renderer='comment'`，因为它的账号/楼中楼/
+  时间过滤表单本来就是自定义面板。
+- `engine/workflow.py` 删除 comment 的 if 分支；`nodes/catalog.py` / `nodes/defaults.py` 只剩
+  `source`/`biblio` 两个未迁移类型。
+- 本片验证：`229 passed`（capabilities + pool + node plugins/schema）、`850 passed`
+  （node-types/workflow API + runs/workflows/sessions + 前端 node-types + completeness）、
+  `1334 passed, 4 skipped`（crawlers + executors + node matrix）；ruff 全绿；生成物 --check 通过。
+
+### P2 剩余 2 个节点的已知风险
 
 - **`biblio`**：56 个参数默认值/校验都在 `services/biblio/schema.py`，错误是已本地化句子。迁移前要决定：
   清单直接声明 56 个 `ParamSpec`，还是给 manifest 增加一个 `params_from` 引用（会破坏“清单只导入标准库”的轻规则，
-  需要显式例外）；同时把 `collect_errors` 改成 code/message_key 数据。
-- **`comment`**：`urls` 必填是普通规则；账号会话检查目前在 `engine/workflow.py::_account_session_errors`，
-  同时被 source 使用。先把它移到 `sessions/preflight.py`，再让 comment 的 validator 调用，避免 executor 反向导入 engine。
+  需要显式例外）；同时把 `collect_errors` 改成 code/message_key 数据（fuse 已有 `collect_problems` 的先例）。
 - **`source`**：`_source_errors` 约 100 行，依赖平台矩阵、必填字段、会话和链接归属；最后迁移，先保持现状。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
@@ -154,9 +166,8 @@
 
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移剩余 3 个节点：`biblio`（把 56 个参数默认值/错误从 services.biblio.schema 搬到清单或生成）、
-   `comment`（链接 + 账号会话检查）、`source`（平台矩阵）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js`
-   的第二套规则。
+1. **P2 续**：迁移剩余 2 个节点：`biblio`（把 56 个参数默认值/错误从 services.biblio.schema 搬到清单或生成）、
+   `source`（平台矩阵）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

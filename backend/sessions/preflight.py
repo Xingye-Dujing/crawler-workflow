@@ -261,6 +261,69 @@ def has_session_to_test(platform: str, use_profile: bool = None, account: str = 
     return _has_session(platform, account, use_profile)
 
 
+def session_problems(platforms, params: dict) -> list[dict]:
+    """Every platform this node will visit that its account cannot log into, as data.
+
+    Moved here from ``engine.workflow`` in P2 so a capability's validator can ask the question
+    without importing the DAG parser: it is a fact about a session, and this module is where
+    session facts live. ``platforms`` is every platform the node will visit, because a comment
+    node crawls several feeds with the single account on its form.
+
+    A blank account means the **default account** — an account with a real file of its own, not a
+    wildcard. Falling back to "whichever login exists" would hand this node somebody else's
+    session (and their rate limit, and their risk profile), while crawling on with no login at
+    all returns a wall read as an empty table: the run looks done and collected nothing. Both are
+    refused by name instead.
+
+    ``@pool`` is a request to rotate, not a login: asking ``has_session_to_test`` about it would
+    refuse every pool node for a file nobody named, so the pool is asked its own two questions
+    (empty vs cooling) because the user's next action differs.
+
+    A node that crawls through CatBus is not asked this question at all. Its ``account`` field
+    names a Selenium session the crawl will never read, and the gate that answers for it is
+    ``_probe_catbus`` above, asked of the adapter that can actually reply.
+    """
+    if capabilities.is_catbus(params):
+        return []
+    account = str(params.get('account') or '').strip()
+    manager = CookieManager(paths.active().cookie_dir)
+    found: list[dict] = []
+    for platform in dict.fromkeys(str(p or '').strip() for p in platforms if str(p or '').strip()):
+        if pool_selector.is_pool_value(account):
+            snapshot = pool.snapshot(platform)
+            if not snapshot['total']:
+                found.append(
+                    {
+                        'code': 'engine.source_pool_empty',
+                        'message_key': 'engine.source_pool_empty',
+                        'context': {'platform': platform},
+                    }
+                )
+            elif not snapshot['usable']:
+                found.append(
+                    {
+                        'code': 'engine.source_pool_cooling',
+                        'message_key': 'engine.source_pool_cooling',
+                        'context': {'platform': platform},
+                    }
+                )
+            continue
+        if not has_session_to_test(platform, account=account):
+            found.append(
+                {
+                    'code': 'engine.source_no_cookie_account',
+                    'message_key': 'engine.source_no_cookie_account',
+                    'context': {'platform': platform, 'account': manager.label_of(account)},
+                }
+            )
+    return found
+
+
+def session_errors(platforms, params: dict, label: str) -> list[str]:
+    """The same problems worded for the console; used by the source node until it migrates."""
+    return [t(item['message_key'], nid=label, **item['context']) for item in session_problems(platforms, params)]
+
+
 def knows(platform: str) -> bool:
     """Whether this process has any opinion at all about *platform*.
 

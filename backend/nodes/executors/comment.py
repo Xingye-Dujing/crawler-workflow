@@ -21,6 +21,7 @@ from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from runtime import gate, paths, phases
 from runtime.state import add_log, ambient, execution_state, stop_requested
 from selenium.common.exceptions import WebDriverException
+from sessions import preflight
 
 from crawlers import crawler_class, get_crawler
 from crawlers.backends.catbus import CatbusCrawler
@@ -38,6 +39,19 @@ from services.pool import selector as pool_selector
 from services.runs.files import record_file
 
 NODE_TYPE = 'comment'
+
+
+def validate_node(node: dict, _context) -> list[dict]:
+    """Every platform these links name must be able to log in as the node's account.
+
+    The links are the node's own text, so this is a static answer: nothing is inferred about an
+    upstream table. A comment crawl is always a logged-in one, and one node walks several feeds
+    with the single account on its form. CatBus is answered by its own adapter, not here.
+    """
+    params = node.get('params') or {}
+    links = split_urls(str(params.get('urls') or ''))
+    return preflight.session_problems([platform_for(link) for link in links], params)
+
 
 #: The comment router's supported platforms, as raw keys. They go into a ``{platforms}`` slot
 #: that localizes *and joins* them, so they must arrive as a sequence — a value pre-joined with
