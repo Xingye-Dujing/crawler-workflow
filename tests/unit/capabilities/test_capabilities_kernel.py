@@ -42,6 +42,7 @@ class TestDiscovery:
             'python',
             'analysis',
             'tokenize',
+            'biblio',
             'verify',
             'fuse',
             'accumulate',

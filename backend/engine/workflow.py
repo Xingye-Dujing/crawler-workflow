@@ -11,7 +11,6 @@ from nodes.labels import node_label
 from sessions import preflight
 
 from i18n import t
-from services.biblio.schema import collect_errors as biblio_param_errors
 from services.validation.engine import ValidationContext, validation_problems
 
 logger = logging.getLogger(__name__)
@@ -445,22 +444,6 @@ class WorkflowEngine:
                         add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
                     if as_bool(params.get('recrawl')):
                         add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
-            if ntype == 'biblio':
-                # Count EVERY incoming wire, including a name node: the executor
-                # receives the whole upstream list, so filtering names here let a
-                # name→biblio + upload→biblio canvas pass validation and then read
-                # the name node's empty rows as its primary input.
-                parents = [str(conn.get('from')) for conn in self.connections if str(conn.get('to')) == str(nid)]
-                if nid not in data_inputs:
-                    add(nid, 'engine.biblio_no_input', t('engine.biblio_no_input', nid=label))
-                elif len(parents) > 1:
-                    add(
-                        nid,
-                        'engine.biblio_multi_input',
-                        t('engine.biblio_multi_input', nid=label, n=len(parents)),
-                    )
-                for message in biblio_param_errors(params, label):
-                    add(nid, 'engine.biblio', message)
             # A migrated node declares its pre-run refusals in its manifest; this loop is the one
             # evaluator, so the console, the canvas badge and the AI tools cannot disagree about
             # what a node needs. Warnings are collected for the UI later; nothing downgrades an

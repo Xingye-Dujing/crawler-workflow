@@ -18,10 +18,29 @@ from i18n import t
 from nodes.context import NodeCall, node_params
 from services.biblio import metrics
 from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
+from services.biblio.schema import collect_problems as biblio_param_problems
 from services.biblio.schema import output_columns as biblio_output_columns
 from services.biblio.schema import read_columns as biblio_read_columns
 
 NODE_TYPE = 'biblio'
+
+
+def validate_node(node: dict, context) -> list[dict]:
+    """One table parent plus every parameter the network refuses before a run is paid for."""
+    problems: list[dict] = []
+    parents = context.parent_ids()
+    if not context.has_data_input():
+        problems.append({'code': 'engine.biblio_no_input', 'message_key': 'engine.biblio_no_input'})
+    elif len(parents) > 1:
+        problems.append(
+            {
+                'code': 'engine.biblio_multi_input',
+                'message_key': 'engine.biblio_multi_input',
+                'context': {'n': len(parents)},
+            },
+        )
+    problems += biblio_param_problems(node.get('params') or {})
+    return problems
 
 
 def emit_columns(node: dict, merged: list[str] | None) -> list[str]:

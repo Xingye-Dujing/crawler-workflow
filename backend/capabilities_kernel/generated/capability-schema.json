@@ -592,6 +592,700 @@
       }
     },
     {
+      "type": "biblio",
+      "labelKey": "nodeType.biblio",
+      "category": "biblio",
+      "order": 9,
+      "params": [
+        {
+          "name": "entity_type",
+          "type": "string",
+          "default": "keyword",
+          "required": false,
+          "enum": [
+            "keyword",
+            "author",
+            "institution",
+            "country",
+            "term",
+            "category",
+            "journal",
+            "source",
+            "funder",
+            "grant",
+            "document_cocitation",
+            "author_cocitation",
+            "journal_cocitation",
+            "article",
+            "document",
+            "bibliographic_coupling"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "entity_column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "year_column",
+          "type": "string",
+          "default": "年份",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "title_column",
+          "type": "string",
+          "default": "题名",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "abstract_column",
+          "type": "string",
+          "default": "摘要",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "reference_column",
+          "type": "string",
+          "default": "参考文献",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "tc_column",
+          "type": "string",
+          "default": "引用次数",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "usage_column",
+          "type": "string",
+          "default": "使用次数",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "sentiment_column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "topic_column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "time_start",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "time_end",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "slice_years",
+          "type": "integer",
+          "default": 1,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "look_back_years",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "selection",
+          "type": "string",
+          "default": "top_n",
+          "required": false,
+          "enum": [
+            "top_n",
+            "top_pct",
+            "g_index",
+            "threshold"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "top_n",
+          "type": "integer",
+          "default": 50,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "top_pct",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "g_index",
+          "type": "integer",
+          "default": 25,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "min_count",
+          "type": "integer",
+          "default": 2,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "threshold_c",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "threshold_cc",
+          "type": "integer",
+          "default": 1,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "threshold_ccv",
+          "type": "number",
+          "default": 0.0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "min_tc",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "min_usage",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "largest_component",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "link_measure",
+          "type": "string",
+          "default": "cosine",
+          "required": false,
+          "enum": [
+            "cosine",
+            "dice",
+            "jaccard",
+            "association"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "counting",
+          "type": "string",
+          "default": "full",
+          "required": false,
+          "enum": [
+            "full",
+            "fractional"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "citation_expansion",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "max_links_per_node",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "lrf",
+          "type": "number",
+          "default": 2.5,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "pruning",
+          "type": "string",
+          "default": "none",
+          "required": false,
+          "enum": [
+            "none",
+            "mst",
+            "pathfinder"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "pruning_scope",
+          "type": "string",
+          "default": "slices",
+          "required": false,
+          "enum": [
+            "slices",
+            "merged"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "pathfinder_r",
+          "type": "string",
+          "default": "inf",
+          "required": false,
+          "enum": [
+            "1",
+            "2",
+            "inf"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "pathfinder_lmax",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "pathfinder_dmax",
+          "type": "number",
+          "default": 1.0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "cluster",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "cluster_count",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "label_method",
+          "type": "string",
+          "default": "llr",
+          "required": false,
+          "enum": [
+            "llr",
+            "lsi",
+            "mi",
+            "tfidf"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "label_source",
+          "type": "string",
+          "default": "all",
+          "required": false,
+          "enum": [
+            "all",
+            "title",
+            "abstract",
+            "keywords",
+            "author"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "top_terms",
+          "type": "integer",
+          "default": 5,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "burst",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "burst_gamma",
+          "type": "number",
+          "default": 1.0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "burst_min_duration",
+          "type": "integer",
+          "default": 2,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "burst_weight",
+          "type": "number",
+          "default": 2.0,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "burst_top",
+          "type": "integer",
+          "default": 20,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "variation",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "variation_min",
+          "type": "number",
+          "default": 0.05,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "aliases",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "exclude_values",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "cluster_labels",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "basemap_dataset_id",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "dataset",
+          "placeholder": ""
+        },
+        {
+          "name": "watch_project",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "watch_baseline",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "watch_label",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "output_shape",
+          "type": "string",
+          "default": "nodes",
+          "required": false,
+          "enum": [
+            "nodes",
+            "edges",
+            "clusters",
+            "bursts",
+            "variation",
+            "dual_map"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "export_files",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 1,
+        "emitColumns": "nodes.executors.biblio:emit_columns",
+        "readColumns": "nodes.executors.biblio:read_columns"
+      },
+      "ui": {
+        "form": "custom",
+        "customRenderer": "biblio"
+      }
+    },
+    {
       "type": "verify",
       "labelKey": "nodeType.verify",
       "category": "process",

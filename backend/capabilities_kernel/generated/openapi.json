@@ -301,6 +301,305 @@
           "text_column"
         ]
       },
+      "NodeParams.biblio": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "default": "keyword",
+            "enum": [
+              "keyword",
+              "author",
+              "institution",
+              "country",
+              "term",
+              "category",
+              "journal",
+              "source",
+              "funder",
+              "grant",
+              "document_cocitation",
+              "author_cocitation",
+              "journal_cocitation",
+              "article",
+              "document",
+              "bibliographic_coupling"
+            ]
+          },
+          "entity_column": {
+            "type": "string",
+            "default": ""
+          },
+          "year_column": {
+            "type": "string",
+            "default": "年份"
+          },
+          "title_column": {
+            "type": "string",
+            "default": "题名"
+          },
+          "abstract_column": {
+            "type": "string",
+            "default": "摘要"
+          },
+          "reference_column": {
+            "type": "string",
+            "default": "参考文献"
+          },
+          "tc_column": {
+            "type": "string",
+            "default": "引用次数"
+          },
+          "usage_column": {
+            "type": "string",
+            "default": "使用次数"
+          },
+          "sentiment_column": {
+            "type": "string",
+            "default": ""
+          },
+          "topic_column": {
+            "type": "string",
+            "default": ""
+          },
+          "time_start": {
+            "type": "string",
+            "default": ""
+          },
+          "time_end": {
+            "type": "string",
+            "default": ""
+          },
+          "slice_years": {
+            "type": "integer",
+            "default": 1
+          },
+          "look_back_years": {
+            "type": "integer",
+            "default": 0
+          },
+          "selection": {
+            "type": "string",
+            "default": "top_n",
+            "enum": [
+              "top_n",
+              "top_pct",
+              "g_index",
+              "threshold"
+            ]
+          },
+          "top_n": {
+            "type": "integer",
+            "default": 50
+          },
+          "top_pct": {
+            "type": "integer",
+            "default": 10
+          },
+          "g_index": {
+            "type": "integer",
+            "default": 25
+          },
+          "min_count": {
+            "type": "integer",
+            "default": 2
+          },
+          "threshold_c": {
+            "type": "integer",
+            "default": 0
+          },
+          "threshold_cc": {
+            "type": "integer",
+            "default": 1
+          },
+          "threshold_ccv": {
+            "type": "number",
+            "default": 0.0
+          },
+          "min_tc": {
+            "type": "string",
+            "default": ""
+          },
+          "min_usage": {
+            "type": "string",
+            "default": ""
+          },
+          "largest_component": {
+            "type": "boolean",
+            "default": false
+          },
+          "link_measure": {
+            "type": "string",
+            "default": "cosine",
+            "enum": [
+              "cosine",
+              "dice",
+              "jaccard",
+              "association"
+            ]
+          },
+          "counting": {
+            "type": "string",
+            "default": "full",
+            "enum": [
+              "full",
+              "fractional"
+            ]
+          },
+          "citation_expansion": {
+            "type": "integer",
+            "default": 0
+          },
+          "max_links_per_node": {
+            "type": "integer",
+            "default": 10
+          },
+          "lrf": {
+            "type": "number",
+            "default": 2.5
+          },
+          "pruning": {
+            "type": "string",
+            "default": "none",
+            "enum": [
+              "none",
+              "mst",
+              "pathfinder"
+            ]
+          },
+          "pruning_scope": {
+            "type": "string",
+            "default": "slices",
+            "enum": [
+              "slices",
+              "merged"
+            ]
+          },
+          "pathfinder_r": {
+            "type": "string",
+            "default": "inf",
+            "enum": [
+              "1",
+              "2",
+              "inf"
+            ]
+          },
+          "pathfinder_lmax": {
+            "type": "integer",
+            "default": 0
+          },
+          "pathfinder_dmax": {
+            "type": "number",
+            "default": 1.0
+          },
+          "cluster": {
+            "type": "boolean",
+            "default": true
+          },
+          "cluster_count": {
+            "type": "string",
+            "default": ""
+          },
+          "label_method": {
+            "type": "string",
+            "default": "llr",
+            "enum": [
+              "llr",
+              "lsi",
+              "mi",
+              "tfidf"
+            ]
+          },
+          "label_source": {
+            "type": "string",
+            "default": "all",
+            "enum": [
+              "all",
+              "title",
+              "abstract",
+              "keywords",
+              "author"
+            ]
+          },
+          "top_terms": {
+            "type": "integer",
+            "default": 5
+          },
+          "burst": {
+            "type": "boolean",
+            "default": true
+          },
+          "burst_gamma": {
+            "type": "number",
+            "default": 1.0
+          },
+          "burst_min_duration": {
+            "type": "integer",
+            "default": 2
+          },
+          "burst_weight": {
+            "type": "number",
+            "default": 2.0
+          },
+          "burst_top": {
+            "type": "integer",
+            "default": 20
+          },
+          "variation": {
+            "type": "boolean",
+            "default": false
+          },
+          "variation_min": {
+            "type": "number",
+            "default": 0.05
+          },
+          "aliases": {
+            "type": "string",
+            "default": ""
+          },
+          "exclude_values": {
+            "type": "string",
+            "default": ""
+          },
+          "cluster_labels": {
+            "type": "string",
+            "default": ""
+          },
+          "basemap_dataset_id": {
+            "type": "string",
+            "default": ""
+          },
+          "watch_project": {
+            "type": "string",
+            "default": ""
+          },
+          "watch_baseline": {
+            "type": "string",
+            "default": ""
+          },
+          "watch_label": {
+            "type": "string",
+            "default": ""
+          },
+          "output_shape": {
+            "type": "string",
+            "default": "nodes",
+            "enum": [
+              "nodes",
+              "edges",
+              "clusters",
+              "bursts",
+              "variation",
+              "dual_map"
+            ]
+          },
+          "export_files": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": true
+      },
       "NodeParams.verify": {
         "type": "object",
         "properties": {

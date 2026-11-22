@@ -10,16 +10,11 @@ from nodes.context import NodeCall
 NODE_TYPE = 'name'
 
 
-def execute_name_node(_node: dict) -> list:
-    """``_node`` is read by nothing here: every executor is called with it, and this one has no
-    parameter to honour. The empty list is the answer, not a failure."""
-    return []
-
-
 def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
     """The lineage view's answer: this node contributes no columns to anything downstream."""
     return []
 
 
-def run(node: dict, _call: NodeCall) -> list:
-    return execute_name_node(node)
+def run(_node: dict, _call: NodeCall) -> list:
+    """No parameter to honour and no rows to produce: the empty list is the answer, not a failure."""
+    return []

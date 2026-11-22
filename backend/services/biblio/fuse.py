@@ -117,11 +117,6 @@ def collect_problems(params: dict) -> list[dict]:
     return []
 
 
-def collect_errors(params: dict, nid: str = '') -> list[str]:
-    """A fusion node with no entity role has nothing to build a graph from."""
-    return [t(problem['message_key'], nid=nid or '(fuse)') for problem in collect_problems(params)]
-
-
 def _candidates(columns, wanted: list[str]) -> str:
     """The first declared candidate this table really has, matched case- and space-insensitively."""
     lookup = {str(column).strip().lower(): column for column in columns}

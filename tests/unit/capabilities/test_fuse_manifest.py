@@ -65,6 +65,5 @@ class TestValidation:
     def test_the_default_entity_role_is_enough(self):
         assert _codes({}) == []
 
-    def test_the_service_still_answers_a_sentence_for_direct_callers(self):
-        assert service.collect_errors({'entity_columns': ''}, '融合 #f')
+    def test_the_service_answers_the_same_check_as_data(self):
         assert service.collect_problems({'entity_columns': ''})[0]['code'] == 'fuse.needs_entity'

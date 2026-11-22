@@ -5,19 +5,16 @@ serves it, and ``tests/unit/analysis/test_node_plugins`` pins it against the cat
 entry on purpose — its defaults depend on the crawl matrix the browser has just fetched (platform,
 engine, mode), so the canvas derives them from that matrix instead of freezing one shape here.
 
-A migrated node type's seeds live in its manifest's ``params`` section and are merged in below; the
-literal is the adapter for the types that have not moved yet.
+Every other type declares its seeds in its manifest's ``params`` section; this module is now the
+empty adapter plus the merge, and the literal must stay empty.
 """
 
 from capabilities_kernel import registry as capabilities
 
-from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
-
 #: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
-_DECLARED: dict[str, dict] = {
-    'biblio': dict(BIBLIO_DEFAULTS),
-}
+#: Every other type now declares its seeds in its manifest, so this literal is empty.
+_DECLARED: dict[str, dict] = {}
 
 
 def _with_kernel_defaults(declared: dict[str, dict]) -> dict[str, dict]:

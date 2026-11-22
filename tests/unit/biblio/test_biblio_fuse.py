@@ -133,8 +133,8 @@ class TestRefusals:
             _fuse([('node-9', [{'话题': '  '}])])
 
     def test_an_entity_role_with_no_candidates_is_refused_before_running(self):
-        errors = fuse.collect_errors({'entity_columns': '  '}, 'fuse')
-        assert errors and 'fuse' in errors[0]
+        problems = fuse.collect_problems({'entity_columns': '  '})
+        assert [problem['code'] for problem in problems] == ['fuse.needs_entity']
 
 
 class TestContract:

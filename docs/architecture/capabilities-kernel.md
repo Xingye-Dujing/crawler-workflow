@@ -72,9 +72,11 @@ backend/capabilities_kernel/
 
 ## 已迁移 / 还没迁移
 
-已迁移（P2 前五批）：`name`、`upload`、`resume`、`comment`、`process`、`python`、`analysis`、`tokenize`、
-`verify`、`fuse`、`accumulate`、`visualize`、`compile`、`output`。
-还没迁移：`source`、`biblio`；前端表单与 `canvas.js`/`runs.js` 的第二套规则也在 P2 后续切片删除。
+已迁移（P2 前六批）：除 `source` 外的全部节点类型——`name`、`upload`、`resume`、`comment`、`process`、
+`python`、`analysis`、`tokenize`、`biblio`、`verify`、`fuse`、`accumulate`、`visualize`、`compile`、`output`。
+`biblio` 的 56 个参数与选项表就声明在它的清单里，`services/biblio/schema.py` 的 `DEFAULTS`/选项元组由清单派生
+（不再保留第二份）。
+还没迁移：`source`；前端表单与 `canvas.js`/`runs.js` 的第二套规则也在 P2 后续切片删除。
 
 ## 已迁移的例子
 

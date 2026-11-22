@@ -49,11 +49,11 @@ class NodePlugin:
     quiet: bool = False
 
 
-#: Types still declared the old way. ``tokenize`` moved to
-#: ``capabilities_kernel/nodes/tokenize/manifest.py`` as the pilot; the rest follow in P2.
+#: Types still declared the old way. ``source`` is the last one: its form comes from the crawl
+#: matrix (platform → engine → mode → fields), which is the most entangled capability and moves
+#: after every other node type has a manifest.
 _DECLARED: dict[str, NodePlugin] = {
     'source': NodePlugin('source', 'nodeType.source', 'data'),
-    'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
 }
 
 

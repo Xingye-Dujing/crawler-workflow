@@ -15,6 +15,7 @@
 | python | `nodeType.python` | process | [docs/capabilities/nodes/python.md](../capabilities/nodes/python.md) | `tests/unit/capabilities/test_python_manifest.py` | `e00f4653a793` |
 | analysis | `nodeType.analysis` | analysis | [docs/capabilities/nodes/analysis.md](../capabilities/nodes/analysis.md) | `tests/unit/capabilities/test_analysis_manifest.py` | `e783e71dfb61` |
 | tokenize | `nodeType.tokenize` | process | [docs/capabilities/nodes/tokenize.md](../capabilities/nodes/tokenize.md) | `tests/unit/capabilities/test_tokenize_manifest.py` | `726441e50265` |
+| biblio | `nodeType.biblio` | biblio | [docs/capabilities/nodes/biblio.md](../capabilities/nodes/biblio.md) | `tests/unit/capabilities/test_biblio_manifest.py` | `111a5ebc5493` |
 | verify | `nodeType.verify` | process | [docs/capabilities/nodes/verify.md](../capabilities/nodes/verify.md) | `tests/unit/capabilities/test_verify_manifest.py` | `748a46a15674` |
 | fuse | `nodeType.fuse` | biblio | [docs/capabilities/nodes/fuse.md](../capabilities/nodes/fuse.md) | `tests/unit/capabilities/test_fuse_manifest.py` | `ef076e4aba01` |
 | accumulate | `nodeType.accumulate` | data | [docs/capabilities/nodes/accumulate.md](../capabilities/nodes/accumulate.md) | `tests/unit/capabilities/test_accumulate_manifest.py` | `5a48e441bac3` |
