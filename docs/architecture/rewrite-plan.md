@@ -79,7 +79,7 @@
 
 ## P2 节点内核全量（2-3 周）
 
-- [ ] 15 个节点逐个迁移
+- [x] 16 个节点逐个迁移（`tokenize` pilot + 其余 15 个，含 `source` 的矩阵校验）
 - [ ] schema 表单渲染器 + custom renderer 注册表
 - [ ] 删除 `canvas.js` 的节点默认参数/类型表/表单分派
 - [ ] 删除前端验证 if 链；接 `/api/workflow/validate`

@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`6ce014e 修改：删除无调用代码与迁移残骸，消除第二份类型声明`
+- 最后提交：`cd6cdc2 功能更新：迁移 source 节点清单，矩阵校验搬入 executor`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -41,6 +41,7 @@
 | `45dd0be` | P2 第五批：comment 迁移；账号会话检查从 engine 移到 `sessions/preflight.py` |
 | `14938f8` | P2 第六批：biblio 迁移；56 参数与 10 组选项表由清单派生，`schema.py` 不再保留第二份 |
 | `6ce014e` | 第二轮死代码清理：移除 15 个 executor 的 `NODE_TYPE`、无调用函数/方法/常量/helper（AST 扫描逐项确认） |
+| `cd6cdc2` | P2 第七批：source 迁移；`_source_errors`/watermark 检查搬入 executor，`session_errors` 删除 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
