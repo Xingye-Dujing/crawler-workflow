@@ -35,6 +35,7 @@ class TestDiscovery:
     def test_the_pilot_is_discovered_without_a_second_list(self):
         assert [manifest.identity.id for manifest in registry.manifests('node')] == [
             'name',
+            'source',
             'upload',
             'resume',
             'comment',

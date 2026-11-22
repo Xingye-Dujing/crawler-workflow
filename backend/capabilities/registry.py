@@ -583,7 +583,7 @@ def unoffered_selections(mode: Mode, params: dict, with_files: bool = True) -> l
     valid choice" has a stronger and completely different answer: it is not a member of
     a declared list but a session this machine either has or does not. That question is
     asked once, against the cookie file and the profile together, in
-    ``engine.workflow._source_errors`` — and this function must not answer it as well, or
+    ``nodes.executors.source.validate_node`` — and this function must not answer it as well, or
     one missing login prints two console lines about one failure.
 
     A blank is not a mistake but "never chose", which the declared default answers —

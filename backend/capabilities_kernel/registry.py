@@ -157,14 +157,21 @@ def node_entries() -> tuple[dict, ...]:
             'rows': manifest.ports.rows,
             'quiet': manifest.execution.quiet,
             'order': manifest.identity.order,
+            'defaults_from': manifest.ui.defaults_from,
         }
         for manifest in manifests('node')
     )
 
 
 def node_defaults() -> dict[str, dict]:
-    """Seed parameters for every migrated node type."""
-    return {manifest.identity.id: manifest.defaults() for manifest in manifests('node')}
+    """Seed parameters for every migrated node type whose defaults are its own.
+
+    A type that declares ``ui.defaults_from`` derives them where its facts live (the source node's
+    form is the platform matrix), so it has no entry here and the API answers ``defaultsFrom``.
+    """
+    return {
+        manifest.identity.id: manifest.defaults() for manifest in manifests('node') if not manifest.ui.defaults_from
+    }
 
 
 def register_node_executors() -> None:

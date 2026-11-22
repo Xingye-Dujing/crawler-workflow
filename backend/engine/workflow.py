@@ -3,12 +3,10 @@
 import logging
 from collections import defaultdict, deque
 
-import capabilities.registry as capabilities
 from capabilities_kernel.registry import manifest_for_node
-from core.refs import as_bool, platform_for
+from core.refs import as_bool
 from nodes.catalog import NODE_TYPES
 from nodes.labels import node_label
-from sessions import preflight
 
 from i18n import t
 from services.validation.engine import ValidationContext, validation_problems
@@ -285,96 +283,6 @@ class WorkflowEngine:
         }
         return WorkflowEngine(sub_workflow, self.executor)
 
-    @staticmethod
-    def _source_errors(node: dict, params: dict, platform, label: str, has_data_input: bool = False) -> list[str]:
-        """Refuse a data source whose declared mode cannot run — using the matrix.
-
-        This used to be a hand-written copy of "which platform wants what", with
-        ``if platform == 'wechat'`` here and the same branches again in the
-        executor. Two descriptions of one rule is how a node passed validation
-        and then crawled something else, so there is now exactly one place that
-        knows: :mod:`crawlers.capabilities`.
-
-        ``has_data_input`` is the feed's other half: the matrix says WHICH forms
-        can read an upstream column, the graph says whether a table actually
-        arrives, and every mismatch between the two is refused by name — because
-        "wired but unfed" would silently re-crawl the pasted list the user thinks
-        they replaced, and "fed but unwired" would read a table that is not there.
-        """
-        if not platform:
-            return [t('engine.source_no_platform', nid=label)]
-        backend = capabilities.backend_of(params)
-        mode = capabilities.mode_of_node(node)
-        if mode is None:
-            if capabilities.is_catbus(params):
-                # The adapter may simply be missing (or the manifest unreadable). That is an engine
-                # answer, not an unknown platform: name the reason the engine gave instead of sending
-                # the user to look for a platform typo that is not there.
-                details = capabilities.catbus_run_errors(platform, capabilities.requested_mode_key(node))
-                if details:
-                    return [t('engine.source_catbus', nid=label, detail=detail) for detail in details]
-            return [t('engine.source_unknown_platform', nid=label, platform=platform)]
-        wanted = capabilities.requested_mode_key(node)
-        offered = capabilities.mode_keys_for(platform, backend)
-        if wanted and len(offered) > 1 and wanted not in offered:
-            # More than one mode on this engine means the fallback would have run
-            # a different kind of crawl than the node asked for. Named by what it
-            # asked for, not by the field the substituted mode happens to require.
-            return [t('engine.source_unknown_mode', nid=label, platform=platform)]
-        errors = []
-        if backend not in capabilities.BACKENDS:
-            errors.append(t('engine.source_bad_backend', nid=label, backend=backend))
-        blocked = capabilities.mode_blocker(mode)
-        if blocked:
-            # This machine can never run the mode, and that is known NOW — the node's own executor refuses
-            # too, but a refusal after the run has claimed the slot, opened a browser and paid any LLM
-            # steps upstream is a refusal that cost the user the run.
-            return [t('engine.source_needs_machine', nid=label, reason=t(blocked))]
-        if capabilities.is_catbus(params):
-            # The adapter's own availability for THIS cell, before the run is paid for. Validation and
-            # the executor ask the same bridge; the refusal is the adapter's reason, never a generic
-            # "CatBus cannot crawl" invented here.
-            for detail in capabilities.catbus_run_errors(platform, mode.key):
-                errors.append(t('engine.source_catbus', nid=label, detail=detail))
-        feed = capabilities.feed_of(mode)
-        fed = capabilities.fed_keys(mode, has_data_input)
-        if has_data_input and not feed:
-            errors.append(t('engine.source_feed_no_mode', nid=label))
-        elif has_data_input:
-            for field, col in feed:
-                if not str(params.get(col) or '').strip():
-                    errors.append(t('engine.source_feed_no_column', nid=label, field=t(field.name_key)))
-        elif feed and any(str(params.get(col) or '').strip() for _field, col in feed):
-            errors.append(t('engine.source_feed_no_input', nid=label))
-        for field in capabilities.required_missing(mode, params, fed):
-            errors.append(t('engine.source_missing', nid=label, field=t(field.name_key)))
-        for field, value in capabilities.unoffered_selections(mode, params):
-            errors.append(t('engine.source_bad_option', nid=label, field=t(field.name_key), value=value))
-        # A session crawl is refused here when the account its node names holds no login.
-        # Anonymous modes (weibo's 热搜 board, a WeChat article body) declare
-        # ``needs_session=False`` and are not asked — refusing them would be the same bug
-        # that once stopped WeChat crawling entirely.
-        if mode.needs_session:
-            errors.extend(preflight.session_errors([platform], params, label))
-        for field in capabilities.link_fields(mode):
-            if field.key in fed:
-                # The fed column's content is the parent's — unknown at design time, so
-                # ownership cannot be decided here. The comment engine filters and names
-                # foreign links at execution time; that is the net, not this check.
-                continue
-            urls = field.value_from(params)
-            # A field that declares it also takes NAMES (红果: the walk runs inside the
-            # client, whose own boards answer to a title) is not told a title is a broken
-            # link; a line that DOES look like a link still has to belong to the platform.
-            bad = sum(
-                1
-                for u in urls
-                if not (field.accepts_names and not capabilities.is_url_cell(u)) and platform_for(u) != field.links_of
-            )
-            if bad:
-                errors.append(t('engine.source_link_mismatch', nid=label, n=bad, platform=field.links_of))
-        return errors
-
     def validate(self) -> list[str]:
         """The console-facing view of validation: the same messages, in the same order,
         as ``validate_detailed``. The run path and the parity tests read this; the
@@ -422,10 +330,6 @@ class WorkflowEngine:
             )
         for nid, node in self.nodes.items():
             ntype = node.get('type')
-            # Read through the one shape-safe helper: a hand-edited/AI-written node whose params
-            # are a sentence (not an object) used to raise AttributeError here, outside the run
-            # path's sanitising, and turn a diagnostics call into an HTML 500.
-            params = node_params(node)
             # Console references lead with the node's (possibly renamed) title
             # so "node-7" never has to be decoded against the canvas.
             label = node_label(node, nid)
@@ -434,16 +338,6 @@ class WorkflowEngine:
                 # rather than falling through to an empty result the record would stamp 完成.
                 add(nid, 'engine.unknown_node_type', t('engine.unknown_node_type', nid=label, type=str(ntype)))
                 continue
-            if ntype == 'source':
-                platform = node.get('platform') or params.get('platform')
-                for msg in self._source_errors(node, params, platform, label, has_data_input=nid in data_inputs):
-                    add(nid, 'engine.source', msg)
-                if as_bool(params.get('watermark')):
-                    mode = capabilities.mode_of_node(node)
-                    if platform != 'bilibili' or mode is None or mode.handler != 'author':
-                        add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
-                    if as_bool(params.get('recrawl')):
-                        add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
             # A migrated node declares its pre-run refusals in its manifest; this loop is the one
             # evaluator, so the console, the canvas badge and the AI tools cannot disagree about
             # what a node needs. Warnings are collected for the UI later; nothing downgrades an

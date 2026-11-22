@@ -83,11 +83,10 @@ def _source(platform, collect, **extra):
     return {'nodes': [{'id': 'node-0', 'type': 'source', 'platform': platform, 'params': params}], 'connections': []}
 
 
-def test_the_engine_refuses_watermark_where_no_stable_boundary_exists(monkeypatch):
+def test_the_engine_refuses_watermark_where_no_stable_boundary_exists():
     previous = get_lang()
     set_lang('en')
     try:
-        monkeypatch.setattr(WorkflowEngine, '_source_errors', lambda *args, **kwargs: [])
         errors = WorkflowEngine(_source('zhihu', 'posts', watermark=True)).validate()
         assert any('watermark' in error.lower() for error in errors), errors
 

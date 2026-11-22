@@ -105,12 +105,13 @@ def test_every_type_has_seed_parameters_except_the_one_derived_from_the_matrix()
     created with no settings at all. ``source`` is the documented exception — its platform,
     engine and mode come from the crawl matrix — and the payload marks that with
     ``defaultsFrom``, so it cannot be mistaken for "no parameters"."""
-    from nodes.defaults import DYNAMIC_DEFAULTS, NODE_DEFAULTS
+    from nodes.defaults import NODE_DEFAULTS
 
-    assert set(NODE_DEFAULTS) == set(catalog.NODE_TYPES) - set(DYNAMIC_DEFAULTS)
-    assert DYNAMIC_DEFAULTS == {'source': 'capabilities'}
+    dynamic = {plugin.type: plugin.defaults_from for plugin in catalog.PLUGINS.values() if plugin.defaults_from}
+    assert set(NODE_DEFAULTS) == set(catalog.NODE_TYPES) - set(dynamic)
+    assert dynamic == {'source': 'capabilities'}
     for plugin in catalog.PLUGINS.values():
-        assert (plugin.type in NODE_DEFAULTS) or (plugin.type in DYNAMIC_DEFAULTS), plugin.type
+        assert (plugin.type in NODE_DEFAULTS) or (plugin.type in dynamic), plugin.type
 
 
 def test_the_frontend_metadata_only_list_matches_the_catalogue():

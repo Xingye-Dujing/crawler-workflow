@@ -218,7 +218,11 @@ def _frontend_nodes() -> list[dict]:
                     'emitColumns': manifest.ports.emit_columns,
                     'readColumns': manifest.ports.read_columns,
                 },
-                'ui': {'form': manifest.ui.form, 'customRenderer': manifest.ui.custom_renderer},
+                'ui': {
+                    'form': manifest.ui.form,
+                    'customRenderer': manifest.ui.custom_renderer,
+                    'defaultsFrom': manifest.ui.defaults_from,
+                },
             },
         )
     return nodes

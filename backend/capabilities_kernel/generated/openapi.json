@@ -103,6 +103,11 @@
           "workflow_name"
         ]
       },
+      "NodeParams.source": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
       "NodeParams.upload": {
         "type": "object",
         "properties": {

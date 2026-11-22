@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "a49f2dba36b8da3f5fcb5a87902974188eebdf15e215b48bfae9b21e17e127ce",
+      "digest": "1929d03dc530e0e0afd45c4686f55d0184781b615efdcce687e78489481f403a",
       "manifest": {
         "identity": {
           "id": "name",
@@ -79,7 +79,8 @@
         "validators": [],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -119,8 +120,83 @@
     },
     {
       "kind": "node",
+      "id": "source",
+      "digest": "4c2ac48b0e501f4ce7134b20193d54940959c444dcaa132b753a332fc5e64a83",
+      "manifest": {
+        "identity": {
+          "id": "source",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.source",
+          "category": "data",
+          "order": 1,
+          "description": "Crawl one platform in one mode and emit its rows.",
+          "when_to_use": "When the corpus is a platform search, a board, an author page or a link list."
+        },
+        "params": [],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "",
+          "read_columns": ""
+        },
+        "execution": {
+          "handler": "nodes.executors.source:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.source:validate_node"
+        ],
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "capabilities"
+        },
+        "ai": {
+          "tool": "",
+          "summary": "数据源 crawls one platform with one mode and emits that mode’s table (a search, a board, an author page, a note/article list, or one link list). The platform matrix decides the fields, the required values and whether the mode needs a saved login.",
+          "steps": [
+            "Pick a platform, then an engine (Selenium or CatBus) and a mode; the form shows that cell’s fields.",
+            "Fill the mode’s required fields (a keyword, a board, a link list or an author link).",
+            "Pick the login account when the mode needs a session; anonymous modes are not asked."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "weibo",
+                "mode": "search",
+                "keyword": "人工智能",
+                "target_count": 100,
+                "account": "default"
+              }
+            }
+          ],
+          "failures": [
+            "No platform: engine.source_no_platform.",
+            "A platform/mode this matrix does not offer: engine.source_unknown_platform / _unknown_mode.",
+            "A missing required field: engine.source_missing; a value off the offered list: engine.source_bad_option.",
+            "A session-required mode whose account holds no login: the preflight keys."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_source_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/source.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
       "id": "upload",
-      "digest": "b0f35e5019d2e1081681bf38eb44623cd08b4a6739c7476d60fea3f82b77217c",
+      "digest": "fcf5d5744e9e22dc6f3769434e2ac5e132b5360efbc2f4ec35de3236f3bda795",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -192,7 +268,8 @@
         "validators": [],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -233,7 +310,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "42a8da19e26d97ccac323a0f770535e95ae2d3c5cc743a602979396a7e7044d4",
+      "digest": "0921207083875fe9303ad165acb9aecc157edb90e6bb2a54c225055fe8a78ed6",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -297,7 +374,8 @@
         "validators": [],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -338,7 +416,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "9809052949b180e65f8ed186cb5ac64227542eda3d7b3af9516ea0e6dbef62fa",
+      "digest": "41d777f14f2903bc8f04251c914c9e7552edffd15f2f0e2d9f3d50162e101312",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -463,7 +541,8 @@
         ],
         "ui": {
           "form": "custom",
-          "custom_renderer": "comment"
+          "custom_renderer": "comment",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -510,7 +589,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "5387e43d9debf5841a074eb59bd6dd13b1e68ae1f024fb314b4202520913c361",
+      "digest": "fe9afec136e7ced085645dd1ef1ff65228602aa97ea1acc64eaec80c2ee3d956",
       "manifest": {
         "identity": {
           "id": "process",
@@ -600,7 +679,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -650,7 +730,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "e00f4653a79360ea230a81c8f186e3266af20fd7d2369cff1db49185a6d38b5c",
+      "digest": "3c4773ba340c93a36dfd319051b377edf7f3eda6ead844e0e87c4a4145636ab1",
       "manifest": {
         "identity": {
           "id": "python",
@@ -726,7 +806,8 @@
         "validators": [],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -769,7 +850,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "e783e71dfb612677b93d49918d2e74c26555d4b846fc9c0d66523060a9ce90b4",
+      "digest": "27ea8873e612fb9876d81843c457ed4738ee9b17a96010555f233668b554cc8a",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -895,7 +976,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -936,7 +1018,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "726441e502656a4053d2d6857d846e8e0aed2fd5ae2eb869ddec2853b73fd17c",
+      "digest": "b0f0e878a71276e14ab1ceb9a999d33621103fbb0b465996619a808508606b1e",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1012,7 +1094,8 @@
         "validators": [],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -1054,7 +1137,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "111a5ebc5493e35d7345e2e2788de4a17dddbbc3f917be1ae7aa72a4f993cbff",
+      "digest": "9a5ed0b44893052c87c859d201c0b7f0e58f33fb2bd4c0650a85658919e87b68",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -1815,7 +1898,8 @@
         ],
         "ui": {
           "form": "custom",
-          "custom_renderer": "biblio"
+          "custom_renderer": "biblio",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -1867,7 +1951,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "748a46a156740e93804cb04ff9c6c5d805cca0245f1f11c4263d7e9f021abe7d",
+      "digest": "2b5602068c4139dbd91c5b21b91a3441db6949cc1f561307c104303d43e1b76e",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -2008,7 +2092,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2051,7 +2136,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "ef076e4aba011a68b78d4c3e2a6eda431f88b6a44f40f1b78e7860b8d1d2ccf5",
+      "digest": "8f4a1da1f4a469677160a8e43984cb24ead07bec4164b19e309eb1f9963ab4b7",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2221,7 +2306,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2263,7 +2349,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "5a48e441bac355e080a5f84abef1117244b46718cf132073816d3d3760d73972",
+      "digest": "858c7c75b365aca4f30fbe11666aee1599d2956098839a5467bcf6195121fa95",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2332,7 +2418,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2374,7 +2461,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "f9140957f6f9fe7fcc6057793ac9a42d03e152e4af2af9e5c3076ab3ad26bd9c",
+      "digest": "662d4eb5dc66461f9e758f5d2a3becd60ad61d8d3f765b727e420570d4d3f631",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -2524,7 +2611,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2567,7 +2655,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "b64ab4cc9b63d7c6baa9f8a69c85867bbb59d38d895d7696c0abc14fe907994f",
+      "digest": "7238f30f926c0e2a5d70aa2b911400b2722cd8363722ae22fc944072f64f1657",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -2596,7 +2684,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2634,7 +2723,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "c1151286d0db67988439a90100294bc7f93da3e04334a4d5fbef3463c316bed2",
+      "digest": "9c38b88324d13e1e4ca5ca0ea54e78080c30cb7af396481d7b4ac3e9686a5a1e",
       "manifest": {
         "identity": {
           "id": "output",
@@ -2700,7 +2789,8 @@
         ],
         "ui": {
           "form": "schema",
-          "custom_renderer": ""
+          "custom_renderer": "",
+          "defaults_from": ""
         },
         "ai": {
           "tool": "",
@@ -2759,6 +2849,23 @@
         "tests/unit/capabilities/test_name_manifest.py"
       ],
       "docs": "docs/capabilities/nodes/name.md"
+    },
+    {
+      "kind": "node",
+      "id": "source",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_source_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/source.md"
     },
     {
       "kind": "node",

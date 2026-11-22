@@ -34,8 +34,7 @@ class TestTheGreenReport:
 
     def test_legacy_types_are_named_not_failed(self):
         legacy = doctor.legacy_node_types()
-        assert 'tokenize' not in legacy
-        assert 'source' in legacy, 'source is the last literal type; the doctor should say so'
+        assert legacy == [], 'every node type is declared by a manifest now; no literal entry should remain'
 
 
 class TestAFailureIsNamed:

@@ -8,7 +8,7 @@ cold-page fallback that ``tests/unit/analysis/test_node_plugins.py`` pins agains
 
 from flask import Blueprint, jsonify
 from nodes.catalog import PLUGINS
-from nodes.defaults import DYNAMIC_DEFAULTS, NODE_DEFAULTS
+from nodes.defaults import NODE_DEFAULTS
 from runtime.settings import get_setting
 
 bp = Blueprint('node_types', __name__)
@@ -51,7 +51,7 @@ def node_types():
                 'rows': plugin.rows,
                 'quiet': plugin.quiet,
                 'defaults': _defaults_for(plugin.type),
-                'defaultsFrom': DYNAMIC_DEFAULTS.get(plugin.type, ''),
+                'defaultsFrom': plugin.defaults_from,
             }
         )
     return jsonify({'ok': True, 'types': types})

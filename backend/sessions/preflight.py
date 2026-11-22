@@ -319,11 +319,6 @@ def session_problems(platforms, params: dict) -> list[dict]:
     return found
 
 
-def session_errors(platforms, params: dict, label: str) -> list[str]:
-    """The same problems worded for the console; used by the source node until it migrates."""
-    return [t(item['message_key'], nid=label, **item['context']) for item in session_problems(platforms, params)]
-
-
 def knows(platform: str) -> bool:
     """Whether this process has any opinion at all about *platform*.
 

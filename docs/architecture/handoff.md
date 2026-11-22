@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`14938f8 功能更新：迁移 biblio 节点清单，参数与选项由清单派生`
+- 最后提交：`6ce014e 修改：删除无调用代码与迁移残骸，消除第二份类型声明`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -40,6 +40,7 @@
 | `d59d65b` | P2 第四批：visualize/fuse 迁移；fuse 参数错误改为 code/message_key 数据 |
 | `45dd0be` | P2 第五批：comment 迁移；账号会话检查从 engine 移到 `sessions/preflight.py` |
 | `14938f8` | P2 第六批：biblio 迁移；56 参数与 10 组选项表由清单派生，`schema.py` 不再保留第二份 |
+| `6ce014e` | 第二轮死代码清理：移除 15 个 executor 的 `NODE_TYPE`、无调用函数/方法/常量/helper（AST 扫描逐项确认） |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -153,9 +154,16 @@
 - 本片验证：`704 passed`（capabilities + biblio + node plugins + frontend contract + biblio/node-types API）、
   `622 passed`（frontend js + 门禁 + runs）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check、doctor 全绿。
 
-### P2 剩余 1 个节点的已知风险
+### P2 最后一个节点：source
 
-- **`source`**：`_source_errors` 约 100 行，依赖平台矩阵、必填字段、会话和链接归属；最后迁移，先保持现状。
+- `source` 的清单不声明参数：字段是平台 × 后端 × 模式的矩阵答案，清单用 `ui.defaults_from='capabilities'`
+  让客户端问矩阵；`nodes/defaults.py` 的 `DYNAMIC_DEFAULTS` 字面表随之删除，改由 `NodePlugin.defaults_from` 传播。
+- `engine/workflow.py::_source_errors`（约 100 行）、watermark 分支整段删除；同一套判断搬进
+  `nodes/executors/source.py::validate_node`，返回 `code/message_key/context` 数据，`engine.workflow` 只保留
+  唯一的清单校验循环。
+- `sessions/preflight.session_errors()` 删除（迁移后无调用者），`tests/unit/pool/test_pool_contracts.py`
+  改问 `session_problems()` 的数据。
+- 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 
@@ -189,7 +197,7 @@
 `tool_use_block`/`tool_result_block`、`ProviderReply`、`context_section`。
 
 2026-11-22 第二轮死代码清理（AST 全仓库扫描，逐项人工确认）：
-- 迁移残骸：15 个已迁移 executor 的 `NODE_TYPE`（清单已声明类型，只有 `source` 还需要它）、
+- 迁移残骸：15 个已迁移 executor 的 `NODE_TYPE`（清单已声明类型；`source` 迁移后最后一个也删掉）、
   `nodes/catalog.py` 的 `plugin_for`/`types_in` 与 `nodes/__init__.py` 的再导出（无人按名字使用）、
   `nodes/defaults.py` 的空 `_DECLARED` 与合并函数（直接投影清单）。
 - 无调用取名字/兼容读：`core/machine.py` 的 `driver_executable_name`/`node_executable_name`/`_installer_export`
@@ -210,8 +218,7 @@
 
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移最后一个节点 `source`（平台矩阵、字段、会话、链接归属）；再做 schema 表单渲染器 +
-   删除 `canvas.js`/`runs.js` 的第二套规则。
+1. **P2 收尾**：schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套类型/默认参数/校验规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

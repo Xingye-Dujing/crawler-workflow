@@ -17,17 +17,18 @@ import time
 
 import capabilities.registry as capabilities
 from api.http import _safe_int
-from core.refs import as_bool, comment_platforms, split_urls
+from core.refs import as_bool, comment_platforms, platform_for, split_urls
 from runtime import gate, paths, phases
 from runtime.settings import get_setting
 from runtime.state import _wf_local, add_log, ambient, execution_state, stop_requested
+from sessions import preflight
 
 from crawlers import get_crawler, is_crawlable
 from crawlers.backends.catbus import CatbusCrawler
 from crawlers.core.crawler import UNDER_TARGET
 from crawlers.core.faults import CrawlerStopped, PageNotArrivedError, SessionBlockedError
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params
 from nodes.executors.comment import execute_comment_node
 from nodes.labels import node_label
 from services import pool
@@ -37,8 +38,6 @@ from services.ingest.runtime import item_scope, name_parts, source_stream
 from services.pool import selector as pool_selector
 from services.runs.files import record_file
 from services.runs.windows import note_window
-
-NODE_TYPE = 'source'
 
 #: The comment router's supported platforms, read as a sequence for the localized message.
 _COMMENT_PLATFORMS = tuple(comment_platforms())
@@ -225,6 +224,106 @@ def column_to_links(rows: list, column: str) -> tuple[list[str], int]:
                 seen.add(u)
                 links.append(u)
     return links, skipped
+
+
+def validate_node(node: dict, context) -> list[dict]:
+    """Refuse a data source whose declared mode cannot run — using the matrix.
+
+    This used to be a hand-written copy of "which platform wants what", with
+    ``if platform == 'wechat'`` here and the same branches again in the executor. Two
+    descriptions of one rule is how a node passed validation and then crawled something
+    else, so there is now exactly one place that knows: ``capabilities.registry``.
+
+    ``context.has_data_input()`` is the feed's other half: the matrix says WHICH forms can
+    read an upstream column, the graph says whether a table actually arrives, and every
+    mismatch between the two is refused by name — because "wired but unfed" would silently
+    re-crawl the pasted list the user thinks they replaced, and "fed but unwired" would read
+    a table that is not there.
+    """
+    params = node_params(node)
+    platform = node.get('platform') or params.get('platform')
+
+    def problem(key: str, **extra) -> dict:
+        return {'code': 'engine.source', 'message_key': key, 'context': extra}
+
+    if not platform:
+        return [problem('engine.source_no_platform')]
+    backend = capabilities.backend_of(params)
+    mode = capabilities.mode_of_node(node)
+    if mode is None:
+        if capabilities.is_catbus(params):
+            # The adapter may simply be missing (or the manifest unreadable). That is an engine
+            # answer, not an unknown platform: name the reason the engine gave instead of sending
+            # the user to look for a platform typo that is not there.
+            details = capabilities.catbus_run_errors(platform, capabilities.requested_mode_key(node))
+            if details:
+                return [problem('engine.source_catbus', detail=detail) for detail in details]
+        return [problem('engine.source_unknown_platform', platform=platform)]
+    wanted = capabilities.requested_mode_key(node)
+    offered = capabilities.mode_keys_for(platform, backend)
+    if wanted and len(offered) > 1 and wanted not in offered:
+        # More than one mode on this engine means the fallback would have run a different kind of
+        # crawl than the node asked for. Named by what it asked for, not by the field the
+        # substituted mode happens to require.
+        return [problem('engine.source_unknown_mode', platform=platform)]
+    problems: list[dict] = []
+    if backend not in capabilities.BACKENDS:
+        problems.append(problem('engine.source_bad_backend', backend=backend))
+    blocked = capabilities.mode_blocker(mode)
+    if blocked:
+        # This machine can never run the mode, and that is known NOW — the node's own executor
+        # refuses too, but a refusal after the run has claimed the slot, opened a browser and paid
+        # any LLM steps upstream is a refusal that cost the user the run.
+        return [problem('engine.source_needs_machine', reason=t(blocked))]
+    if capabilities.is_catbus(params):
+        # The adapter's own availability for THIS cell, before the run is paid for. Validation and
+        # the executor ask the same bridge; the refusal is the adapter's reason, never a generic
+        # "CatBus cannot crawl" invented here.
+        for detail in capabilities.catbus_run_errors(platform, mode.key):
+            problems.append(problem('engine.source_catbus', detail=detail))
+    feed = capabilities.feed_of(mode)
+    fed = capabilities.fed_keys(mode, context.has_data_input())
+    if context.has_data_input() and not feed:
+        problems.append(problem('engine.source_feed_no_mode'))
+    elif context.has_data_input():
+        for field, column in feed:
+            if not str(params.get(column) or '').strip():
+                problems.append(problem('engine.source_feed_no_column', field=t(field.name_key)))
+    elif feed and any(str(params.get(column) or '').strip() for _field, column in feed):
+        problems.append(problem('engine.source_feed_no_input'))
+    for field in capabilities.required_missing(mode, params, fed):
+        problems.append(problem('engine.source_missing', field=t(field.name_key)))
+    for field, value in capabilities.unoffered_selections(mode, params):
+        problems.append(problem('engine.source_bad_option', field=t(field.name_key), value=value))
+    # A session crawl is refused here when the account its node names holds no login.
+    # Anonymous modes (weibo's 热搜 board, a WeChat article body) declare
+    # ``needs_session=False`` and are not asked — refusing them would be the same bug that
+    # once stopped WeChat crawling entirely.
+    if mode.needs_session:
+        problems.extend(preflight.session_problems([platform], params))
+    for field in capabilities.link_fields(mode):
+        if field.key in fed:
+            # The fed column's content is the parent's — unknown at design time, so ownership
+            # cannot be decided here. The comment engine filters and names foreign links at
+            # execution time; that is the net, not this check.
+            continue
+        urls = field.value_from(params)
+        # A field that declares it also takes NAMES (红果: the walk runs inside the client, whose
+        # own boards answer to a title) is not told a title is a broken link; a line that DOES look
+        # like a link still has to belong to the platform.
+        bad = sum(
+            1
+            for url in urls
+            if not (field.accepts_names and not capabilities.is_url_cell(url)) and platform_for(url) != field.links_of
+        )
+        if bad:
+            problems.append(problem('engine.source_link_mismatch', n=bad, platform=field.links_of))
+    if as_bool(params.get('watermark')):
+        if platform != 'bilibili' or mode.handler != 'author':
+            problems.append({'code': 'engine.watermarkUnsupported', 'message_key': 'engine.watermarkUnsupported'})
+        if as_bool(params.get('recrawl')):
+            problems.append({'code': 'engine.watermarkRecrawl', 'message_key': 'engine.watermarkRecrawl'})
+    return problems
 
 
 def execute_source_node(

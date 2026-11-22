@@ -9,7 +9,7 @@ payload is what a running page uses; the canvas's cold-page fallback is pinned t
 import pandas as pd
 import pytest
 from nodes.catalog import NODE_TYPES, PLUGINS
-from nodes.defaults import DYNAMIC_DEFAULTS, NODE_DEFAULTS
+from nodes.defaults import NODE_DEFAULTS
 
 from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 
@@ -49,7 +49,8 @@ class TestTheNodeTypeCatalogue:
         ``source``, whose platform/engine/mode come from the crawl matrix, which the payload
         names instead of freezing a shape."""
         entries = {entry['type']: entry for entry in _payload(client)['types']}
-        assert set(NODE_DEFAULTS) == set(NODE_TYPES) - set(DYNAMIC_DEFAULTS)
+        dynamic = {plugin.type for plugin in PLUGINS.values() if plugin.defaults_from}
+        assert set(NODE_DEFAULTS) == set(NODE_TYPES) - dynamic
         for type_name, seeds in NODE_DEFAULTS.items():
             assert entries[type_name]['defaults'] == seeds, type_name
             assert entries[type_name]['defaultsFrom'] == '', type_name

@@ -46,6 +46,41 @@
       "read_columns": ""
     },
     {
+      "capability": "node:source",
+      "tool": "",
+      "summary": "数据源 crawls one platform with one mode and emits that mode’s table (a search, a board, an author page, a note/article list, or one link list). The platform matrix decides the fields, the required values and whether the mode needs a saved login.",
+      "steps": [
+        "Pick a platform, then an engine (Selenium or CatBus) and a mode; the form shows that cell’s fields.",
+        "Fill the mode’s required fields (a keyword, a board, a link list or an author link).",
+        "Pick the login account when the mode needs a session; anonymous modes are not asked."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "weibo",
+            "mode": "search",
+            "keyword": "人工智能",
+            "target_count": 100,
+            "account": "default"
+          }
+        }
+      ],
+      "failures": [
+        "No platform: engine.source_no_platform.",
+        "A platform/mode this matrix does not offer: engine.source_unknown_platform / _unknown_mode.",
+        "A missing required field: engine.source_missing; a value off the offered list: engine.source_bad_option.",
+        "A session-required mode whose account holds no login: the preflight keys."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
       "capability": "node:upload",
       "tool": "",
       "summary": "文件上传 turns one stored dataset into the same row table a crawl produces. Downstream nodes never know the difference; the dataset id is the binding.",

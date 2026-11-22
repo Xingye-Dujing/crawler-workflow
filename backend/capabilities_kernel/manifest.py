@@ -41,6 +41,7 @@ WIDGETS = ('text', 'textarea', 'number', 'select', 'switch', 'column', 'dataset'
 _RULE_KINDS = ('required_param', 'enum_param', 'upstream_required', 'no_input', 'requires_output')
 _SEVERITIES = ('error', 'warning')
 _UI_FORMS = ('schema', 'custom')
+_DEFAULT_SOURCES = ('', 'capabilities')
 
 _IDENTIFIER = re.compile(r'^[a-z][a-z0-9_]*$')
 _VERSION = re.compile(r'^\d+\.\d+\.\d+$')
@@ -136,6 +137,10 @@ class Ui:
 
     form: str = 'schema'
     custom_renderer: str = ''
+    #: Where a new node's parameter defaults come from, when they are not a frozen list. Empty means
+    #: the manifest's own ``params``; ``capabilities`` means the client asks the platform matrix
+    #: (the source node's fields depend on platform × engine × mode).
+    defaults_from: str = ''
 
 
 @dataclass(frozen=True)
@@ -282,6 +287,8 @@ class Manifest:
             found.append(f'ui.form: {self.ui.form!r} is not one of {", ".join(_UI_FORMS)}')
         if self.ui.form == 'custom' and not str(self.ui.custom_renderer or '').strip():
             found.append('ui.custom_renderer: a custom form needs a renderer id')
+        if self.ui.defaults_from not in _DEFAULT_SOURCES:
+            found.append(f'ui.defaults_from: {self.ui.defaults_from!r} is not one of {", ".join(_DEFAULT_SOURCES)}')
 
         for example in self.ai.examples:
             if not isinstance(example, dict):

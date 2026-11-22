@@ -62,9 +62,9 @@ backend/capabilities_kernel/
 
 ## 今天已经派生的表面
 
-- `nodes/catalog.py`：迁移类型从清单合并，按 `identity.order` 插回原槽位；字面表只剩未迁移类型。
-- `nodes/defaults.py`：迁移类型的种子参数来自 `ParamSpec.default`。
-- `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为 name/upload/tokenize/compile/output 写 if 分支。
+- `nodes/catalog.py`：全部类型从清单合并，按 `identity.order` 插回原槽位；字面表为空。
+- `nodes/defaults.py`：种子参数来自 `ParamSpec.default`；声明 `ui.defaults_from='capabilities'` 的类型（`source`）不冻结参数，由前端问平台矩阵。
+- `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为任何节点类型写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
 - 五个生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`docs/capabilities/index.md`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
@@ -72,11 +72,12 @@ backend/capabilities_kernel/
 
 ## 已迁移 / 还没迁移
 
-已迁移（P2 前六批）：除 `source` 外的全部节点类型——`name`、`upload`、`resume`、`comment`、`process`、
-`python`、`analysis`、`tokenize`、`biblio`、`verify`、`fuse`、`accumulate`、`visualize`、`compile`、`output`。
+已迁移（P2 全部 16 个节点类型）：`name`、`source`、`upload`、`resume`、`comment`、`process`、`python`、
+`analysis`、`tokenize`、`biblio`、`verify`、`fuse`、`accumulate`、`visualize`、`compile`、`output`。
 `biblio` 的 56 个参数与选项表就声明在它的清单里，`services/biblio/schema.py` 的 `DEFAULTS`/选项元组由清单派生
-（不再保留第二份）。
-还没迁移：`source`；前端表单与 `canvas.js`/`runs.js` 的第二套规则也在 P2 后续切片删除。
+（不再保留第二份）。`source` 的字段由平台矩阵决定，清单不声明参数，两类运行前检查（矩阵 + 增量水位）由
+`nodes.executors.source.validate_node` 回答。
+前端表单与 `canvas.js`/`runs.js` 的第二套规则在 P2 后续切片删除。
 
 ## 已迁移的例子
 

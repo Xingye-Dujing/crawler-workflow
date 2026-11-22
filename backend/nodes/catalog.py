@@ -47,14 +47,14 @@ class NodePlugin:
     #: A console-noise decision, not a filtering hook: progress counters still count these and every
     #: fact they print still appears.
     quiet: bool = False
+    #: Where a new node's defaults come from when they are not a frozen parameter list
+    #: (``capabilities`` = the platform matrix). Empty means the manifest's own params.
+    defaults_from: str = ''
 
 
-#: Types still declared the old way. ``source`` is the last one: its form comes from the crawl
-#: matrix (platform → engine → mode → fields), which is the most entangled capability and moves
-#: after every other node type has a manifest.
-_DECLARED: dict[str, NodePlugin] = {
-    'source': NodePlugin('source', 'nodeType.source', 'data'),
-}
+#: Types still declared the old way. Empty: every node type now has a manifest, and the merge below
+#: keeps the served order the one the manifests declare.
+_DECLARED: dict[str, NodePlugin] = {}
 
 
 def _with_kernel_nodes(declared: dict[str, NodePlugin]) -> dict[str, NodePlugin]:
@@ -76,6 +76,7 @@ def _with_kernel_nodes(declared: dict[str, NodePlugin]) -> dict[str, NodePlugin]
             entry['category'],
             rows=entry['rows'],
             quiet=entry['quiet'],
+            defaults_from=entry['defaults_from'],
         )
         items.insert(min(int(entry['order']), len(items)), (plugin.type, plugin))
     return dict(items)
