@@ -49,10 +49,14 @@
 - 生成物：`tools/gen_capabilities.py` 渲染 `catalog.json`（目录 + 测试矩阵）、`openapi.json`、
   `ai_tools.json`、`backend/static/js/capability-schema.generated.js`、`docs/capabilities/index.md`；
   `--check` 与门禁共用 `generate.check()`。`tools/doctor.py --all` 逐项打印 `[x]`，未知 `--capability` 也是失败行。
-- 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`。
+- `runtime/fsm.py`：`RUN`/`NODE`/`TURN`/`VIEW` 四张表 + `recipe_machine(steps)`；构造时拒绝不连贯表，
+  `require()` 对非法移动按名拒绝；`tests/unit/foundation/test_fsm.py` 穷举全部状态对。
+- `runtime/events.py`：四个运行事件的字段类型契约；`publish()` 校验后交给 `run_events` 总线；
+  `tests/unit/gates/test_event_contract.py` 用 AST 检查现有调用点与 `ai/monitors.py` 的订阅词汇。
+- 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`、ADR-003 的 P1 落点。
 - 本片验证：相关模块 `2048 passed`（analysis/gates/runs/executors/capabilities + node-types/workflow API）；
   ruff 全绿；product pylint 10.00/10、tests pylint（本片文件）10.00/10；`test_boot_import_budget` 9 passed。
-- 未做（P1 后续切片）：`runtime/fsm.py`、`runtime/events.py`、`runtime/flags.py`、Asset 骨架。
+- 未做（P1 后续切片）：`runtime/flags.py`、Asset 数据模型骨架。
   前端表单与 `canvas.js`/`runs.js` 的 if 链按计划在 P2。
 
 ## 测试基线（H11-H16 收口，2026-11-22）

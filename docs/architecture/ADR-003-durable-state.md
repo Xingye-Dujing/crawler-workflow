@@ -39,6 +39,17 @@
 - 新消息进入邮箱：默认“排队下一回合”，另提供“插入指引”在安全边界注入；不再静默取消待答问题。
 - 重启后 rehydrate pending interrupts；已过期/已取消的按名回答，不 404。
 
+### P1 落点（2026-11-22）
+
+- `backend/runtime/fsm.py`：`RUN`/`NODE`/`TURN`/`VIEW` 四张固定表 + `recipe_machine(steps)` 参数化表。
+  `machine()` 在构造时拒绝“初始即终态/终态有出口/非终态无出口/空状态名”，`require()` 对任何非法移动
+  按名拒绝（机器名 + 两端状态）。`tests/unit/foundation/test_fsm.py` 穷举每张表的所有合法与非法状态对。
+- `backend/runtime/events.py`：四个运行事件的字段类型契约；`publish()` 先校验再交给
+  `runtime/run_events.py` 的进程内总线。`tests/unit/gates/test_event_contract.py` 用 AST 检查现有
+  `run_events.publish` 调用点：事件名、字段名、必填字段都必须与契约一致；`ai/monitors.py` 的订阅词汇
+  必须等于声明集合。
+- 迁移顺序：P4 的 Run/Turn 持久化改用这些表；在那之前，旧引擎的 if 仍跑，但新增状态转换必须先改表。
+
 ### Recipe 的勾选
 
 - 每步有 `requires`、`tool`、`args_schema`、`produces`、`check`。
