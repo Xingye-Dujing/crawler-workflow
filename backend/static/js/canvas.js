@@ -1384,30 +1384,23 @@ const canvas = {
        back, so a node config travels between canvases, machines or a chat message. The snippet
        is exactly the in-canvas clipboard shape ({type,title,params}), so import reuses
        pasteClipboardAt — one paste path, no second implementation to drift. */
-    _VALID_NODE_TYPES: ['name', 'source', 'upload', 'process', 'python', 'analysis', 'biblio', 'fuse', 'accumulate', 'visualize', 'tokenize', 'output', 'compile', 'resume', 'comment', 'verify'],
-
-    /* The pinned list above is the cold-page fallback (the catalogue fetch is async and a
-       restored draft must still validate before it answers). ``tests/unit/test_node_plugins.py``
-       keeps it equal to the server's catalogue; once NodeTypes has answered, its list is read. */
+    /* The catalogue is the manifest projection served by `/api/node-types` (and the generated
+       cold-page copy in `node-types-fallback.js`). There is no hand-written type list here. */
     validNodeTypes() {
-        if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) return NodeTypes.types();
-        return this._VALID_NODE_TYPES;
+        if (typeof NodeTypes === 'undefined' || !NodeTypes.ready()) return [];
+        return NodeTypes.types();
     },
 
-    /* The types that carry no rows downstream (``rows: 'none'`` in ``nodes/catalog.py``) — a 工作流命名
-       node is metadata only. Asked of the server's catalogue once it has answered; the pinned list is
-       the cold-page fallback, kept equal to the catalogue by ``tests/unit/analysis/test_node_plugins.py``
-       (the same shape as ``_VALID_NODE_TYPES``). */
-    _META_ONLY_TYPES: ['name'],
-
     /* Does a wire OUT of this type carry anything at all? A "no" means the wire cannot change what
-       the target does, so the canvas has no consequence to explain. */
+       the target does, so the canvas has no consequence to explain. Asked of the catalogue's
+       ``rows``; a type the catalogue does not know is assumed to carry rows (the run will refuse
+       an unknown type by name anyway). */
     carriesRows(type) {
         if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) {
             const entry = NodeTypes.entry(type);
             if (entry && entry.rows) return String(entry.rows) !== 'none';
         }
-        return this._META_ONLY_TYPES.indexOf(type) < 0;
+        return true;
     },
 
     copyNodeAsJson(id) {
@@ -1485,26 +1478,9 @@ const canvas = {
         const usable = /^[\w.-]{1,64}$/.test(wanted) && !this.nodes[wanted];
         const id = usable ? wanted : 'node-' + this.nextId++;
         this.reserveId(id);
-        const labels = {
-            name: I18n.t('node.name'),
-            source: I18n.t('node.source'),
-            upload: I18n.t('node.upload'),
-            process: I18n.t('node.process'),
-            python: I18n.t('node.python'),
-            fuse: I18n.t('node.fuse'),
-            analysis: I18n.t('node.analysis'),
-            biblio: I18n.t('node.biblio'),
-            visualize: I18n.t('node.visualize'),
-            tokenize: I18n.t('node.tokenize'),
-            output: I18n.t('node.output'),
-            compile: I18n.t('node.compile'),
-            accumulate: I18n.t('node.accumulate'),
-            resume: I18n.t('node.resume'),
-            comment: I18n.t('node.comment'),
-            verify: I18n.t('node.verify'),
-            reusable: I18n.t('node.reusable'),
-        };
-        const title = labels[type] || 'Node';
+        /* The visible word is the established `node.<type>` key (the same one rename/restore use);
+           the catalogue decides WHICH types exist and what they carry, not what they are called. */
+        const title = I18n.t('node.' + type);
         const el = document.createElement('div');
         el.className = 'node node-type-' + type;
         /* The storage KEY and the DOM id are deliberately two strings.
@@ -1694,19 +1670,13 @@ const canvas = {
     },
 
     getDefaultParams(type) {
-        /* The server's catalogue owns the seeds (``nodes/defaults.py``); ``null`` means this
-           type is derived where its facts live — source builds its defaults from the crawl
-           matrix, and reusable carries a template snapshot — so those fall through to the
-           branches below. The literal table here is the cold-page fallback, pinned to the
-           server by tests/unit/test_node_plugins.py. */
+        /* The manifests own the seeds; the catalogue serves them (and the generated fallback has
+           the same values before the fetch answers). ``null`` means this type derives its defaults
+           where its facts live — source from the crawl matrix, reusable from a template snapshot. */
         if (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) {
             const served = NodeTypes.defaults(type);
             if (served) return served;
         }
-        /* The name node carries the workflow's label for the Execution History
-           panel and an optional 排布顺序 for auto-layout — both metadata, not data,
-           so its params never choose a crawl. layout_order blank = keep creation order. */
-        if (type === 'name') return { workflow_name: '', layout_order: '' };
         if (type === 'reusable') return {
             template_id: '',
             template_name: '',
@@ -1715,82 +1685,6 @@ const canvas = {
             collapsed: true,
         };
         if (type === 'source') return this._defaultSourceParams();
-        if (type === 'upload') return { dataset_id: '', dataset_name: '', row_count: '' };
-        if (type === 'accumulate') return { lineage_name: '', identity: 'row', key_columns: '' };
-        if (type === 'process') return { operation: 'clean', text_column: '正文', topic: '', live_export: false, format: 'csv' };
-        if (type === 'python') return { script_id: '', args: '{}', timeout: 120, max_rows: 200000 };
-        if (type === 'analysis') return { operation: 'drop_null', columns: '', column: '', value: '', op: 'eq', dtype: 'str', rename_from: '', rename_to: '' };
-        if (type === 'biblio') return {
-            entity_type: 'keyword',
-            entity_column: '', year_column: '年份', title_column: '题名', abstract_column: '摘要', reference_column: '参考文献',
-            tc_column: '引用次数', usage_column: '使用次数',
-            sentiment_column: '', topic_column: '',
-            time_start: '', time_end: '', slice_years: 1, look_back_years: 0,
-            selection: 'top_n', top_n: 50, top_pct: 10, g_index: 25, min_count: 2,
-            threshold_c: 0, threshold_cc: 1, threshold_ccv: 0, min_tc: '', min_usage: '', largest_component: false,
-            link_measure: 'cosine', counting: 'full', citation_expansion: 0, max_links_per_node: 10, lrf: 2.5, pruning: 'none', pruning_scope: 'slices',
-            pathfinder_r: 'inf', pathfinder_lmax: 0, pathfinder_dmax: 1.0,
-            cluster: true, cluster_count: '', label_method: 'llr', label_source: 'all', top_terms: 5,
-            burst: true, burst_gamma: 1.0, burst_min_duration: 2, burst_weight: 2.0, burst_top: 20,
-            variation: false, variation_min: 0.05,
-            aliases: '', exclude_values: '', cluster_labels: '', basemap_dataset_id: '',
-            watch_project: '', watch_baseline: '', watch_label: '',
-            output_shape: 'nodes',
-            export_files: true
-        };
-        if (type === 'visualize') return { chart_type: 'bar', x_field: '', y_field: '', value_field: '', agg: 'sum', engine: 'echarts', title: '', tokenize: false, emit_latex: true, emit_latex_table: true };
-        /* Candidate columns, tried in order per role: a fusion exists because the literature
-           calls it 关键词 and the posts call it 话题. `source_labels` names a parent that carries
-           no source column of its own. */
-        if (type === 'fuse') return {
-            entity_columns: '关键词,话题,主题,主题词,标签',
-            year_columns: '年份,发布时间,发表日期,日期',
-            title_columns: '题名,标题,内容,正文',
-            author_columns: '作者,用户名,昵称,发布者',
-            affiliation_columns: '作者单位,机构',
-            text_columns: '摘要,正文,内容',
-            reference_columns: '参考文献,引文',
-            source_columns: '平台,来源',
-            source_labels: '',
-            keep_undated: true,
-            export_files: false
-        };
-        if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' };
-        /* Empty run ids mean "auto": pick the newest interrupted run, and
-           inside it whichever node holds the most rows. */
-        if (type === 'resume') return { resume_run_id: '', resume_node_id: '', resume_limit: 0 };
-        if (type === 'comment') {
-            /* The cold-page fallback; once `/api/node-types` answers, that payload is
-               used instead and carries the same settings-derived values. */
-            var sv = (typeof AppSettings !== 'undefined' && AppSettings._values) || {};
-            return {
-                urls: '',
-                comment_limit: sv.default_comment_limit !== undefined ? sv.default_comment_limit : 0,
-                part_size: sv.default_comment_part_size !== undefined ? sv.default_comment_part_size : 50,
-                per_article_file: sv.default_per_article_file !== undefined ? !!sv.default_per_article_file : true,
-                keep_parts: sv.default_keep_parts !== undefined ? !!sv.default_keep_parts : false,
-                recrawl: false,
-                format: 'csv'
-            };
-        }
-        /* 采集校验: the defaults describe the comment-crawl pairing (a post table's 链接 +
-           评论数 against a comment table's 文章URL), because that is the workflow this node
-           exists for. Every name stays editable for other list/result pairs. */
-        if (type === 'verify') return {
-            input_key_column: '链接',
-            result_key_column: '文章URL',
-            expected_count_column: '评论数',
-            match_mode: 'url',
-            tolerance: 0,
-            per_link_limit: '',
-            output_mode: 'gaps',
-            swap_tables: false,
-            ignore_case: false
-        };
-        /* A compile node carries no fields of its own: it reads the LaTeX its upstream
-           visualize node produced. Its only setting is the MiKTeX path, which lives in 设置. */
-        if (type === 'compile') return {};
-        if (type === 'output') return { operation: 'save', format: 'csv', filename: 'export.csv' };
         return {};
     },
 

@@ -1,13 +1,14 @@
 """节点类型目录 Blueprint — one read-only endpoint that describes every node type.
 
-The canvas needs three facts per type: does a pasted/restored canvas know it, what label and
-group does the palette show, and which parameters does a new node start with. Serving them from
-the server keeps ``nodes/catalog.py`` the single declaration; the frontend's own tables remain a
-cold-page fallback that ``tests/unit/analysis/test_node_plugins.py`` pins against this payload.
+The canvas needs four facts per type: does a pasted/restored canvas know it, what label and group
+does the palette show, which parameters does a new node start with, and which schema/form does its
+settings panel render. Serving them from the server keeps the capability manifests the single
+declaration; ``static/js/node-types-fallback.js`` is the generated cold-page copy of the same
+payload (a page that has not finished the fetch still has a list), never a hand-written table.
 """
 
+from capabilities_kernel import registry as capabilities
 from flask import Blueprint, jsonify
-from nodes.catalog import PLUGINS
 from nodes.defaults import NODE_DEFAULTS
 from runtime.settings import get_setting
 
@@ -42,16 +43,8 @@ def _defaults_for(node_type: str) -> dict | None:
 @bp.route('/api/node-types', methods=['GET'])
 def node_types():
     types = []
-    for plugin in PLUGINS.values():
-        types.append(
-            {
-                'type': plugin.type,
-                'labelKey': plugin.label_key,
-                'category': plugin.category,
-                'rows': plugin.rows,
-                'quiet': plugin.quiet,
-                'defaults': _defaults_for(plugin.type),
-                'defaultsFrom': plugin.defaults_from,
-            }
-        )
+    for entry in capabilities.node_schema_entries():
+        served = dict(entry)
+        served['defaults'] = _defaults_for(entry['type'])
+        types.append(served)
     return jsonify({'ok': True, 'types': types})

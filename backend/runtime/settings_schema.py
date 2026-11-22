@@ -727,7 +727,7 @@ SETTINGS = (
         hint='set.defaultCommentLimitHint',
         minimum=0,
         maximum=100000,
-        consumer='browser',
+        consumer='server',
     ),
     Setting(
         'default_comment_part_size',
@@ -738,7 +738,7 @@ SETTINGS = (
         hint='set.defaultCommentPartSizeHint',
         minimum=0,
         maximum=100000,
-        consumer='browser',
+        consumer='server',
     ),
     Setting(
         'default_source_part_size',
@@ -758,7 +758,7 @@ SETTINGS = (
         'defaults',
         'set.defaultPerArticleFile',
         hint='set.defaultPerArticleFileHint',
-        consumer='browser',
+        consumer='server',
     ),
     Setting(
         'default_keep_parts',
@@ -767,7 +767,7 @@ SETTINGS = (
         'defaults',
         'set.defaultKeepParts',
         hint='set.defaultKeepPartsHint',
-        consumer='browser',
+        consumer='both',
     ),
     Setting(
         'default_live_export',

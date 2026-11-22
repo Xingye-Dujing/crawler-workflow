@@ -166,6 +166,22 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P2 前端第一片：目录单一来源（2026-11-23）
+
+- `/api/node-types` 与生成物 `backend/static/js/node-types-fallback.js` 现在读同一个投影
+  `capabilities_kernel.registry.node_schema_entries()`：每个节点带 `params`/`rules`/`ports`/`ui`，
+  前端不再有第二份类型表或默认值表。
+- `canvas.js` 删除 `_VALID_NODE_TYPES`、`_META_ONLY_TYPES`、`addNode` 的标签表和
+  `getDefaultParams` 的全部字面分支；只剩 `source`（矩阵）与 `reusable`（前端模板）两个真实例外。
+- `node-types.js` 从生成的 `window.NODE_TYPE_CATALOGUE` 冷启动（懒读，顺序无关），失败时保留它并报出原因；
+  `index.html` 在 `node-types.js` 之前加载该脚本。
+- `splits.json` 声明 `canvas.js → node-types.js → node-types-fallback.js`，所有 canvas harness 自动获得
+  与页面一致的目录。
+- 测试改钉生成物：`test_node_plugins.py` 解析 fallback 并对比 `NODE_TYPES`/rows/seeds；
+  `test_frontend_node_types_js.py` 驱动真实画布验证冷启动、失败保留与深拷贝。
+- 还没做：schema 表单渲染器（`panels/settings.js` 的 `openSettings` 分派）与删除 `workflow.js::sourceNodeErrors`
+  的验证 if 链。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。

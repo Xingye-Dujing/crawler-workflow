@@ -2,13 +2,14 @@
  *
  * Two sources of truth meet here, and the point is that they cannot drift:
  *   · the payload (``GET /api/node-types``) is what a running page reads;
- *   · the canvas's literal table is the cold-page fallback, and this harness returns it per
- *     type so ``test_frontend_node_types_js.py`` can compare it with ``nodes/defaults.py``.
+ *   · ``node-types-fallback.js`` is generated from the same manifests, so a cold page has the
+ *     same types, seeds and form schema before the fetch answers.
  *
- * Failure is part of the contract: a catalogue that could not be read leaves the fallback in
- * place and says why — it never presents an empty list as "this product has no node types".
+ * Failure is part of the contract: a catalogue that could not be read leaves the generated fallback
+ * in place and says why — it never presents an empty list as "this product has no node types".
  *
- * Usage: node harness_node_types.mjs <canvas.js> <node-types.js> <scenarios.json>
+ * Usage: node harness_node_types.mjs <canvas.js> <scenarios.json>
+ * The companion map supplies ``node-types.js`` and the generated ``node-types-fallback.js``.
  * scenarios.json = [ { "id", "fetch": {"status": 200, "body": {...}}, "types": ["process", ...] } ]
  */
 import fs from 'node:fs';
@@ -17,7 +18,7 @@ import vm from 'node:vm';
 import { baseSandbox, fixWindow } from './harness_dom.mjs';
 import { sourceOf } from './companions.mjs';
 
-const [canvasPath, nodeTypesPath, scPath] = process.argv.slice(2);
+const [canvasPath, scPath] = process.argv.slice(2);
 const scenarios = JSON.parse(fs.readFileSync(scPath, 'utf8'));
 
 const toasts = [];
@@ -46,9 +47,13 @@ function world(sc) {
     /* node-types.js announces its answer on the document; the DOM stub has no event bus. */
     sandbox.document.dispatchEvent = () => {};
     /* `sourceOf` follows the split map: the canvas object is several files since 2026-10-29, and
-       reading only `canvas.js` boots a canvas whose `init` calls a member that is not there. */
-    vm.runInContext(sourceOf(canvasPath) + '\n;globalThis.__canvas = canvas;', sandbox);
-    vm.runInContext(sourceOf(nodeTypesPath) + '\n;globalThis.__NodeTypes = NodeTypes;', sandbox);
+       reading only `canvas.js` boots a canvas whose `init` calls a member that is not there. The
+       map also supplies `node-types.js` and its generated fallback, so the cold-page path is the
+       one the page itself runs. */
+    vm.runInContext(
+        sourceOf(canvasPath) + '\n;globalThis.__canvas = canvas; globalThis.__NodeTypes = NodeTypes;',
+        sandbox,
+    );
     return sandbox;
 }
 
@@ -61,6 +66,11 @@ for (const sc of scenarios) {
 
     /* The fallback is read BEFORE the catalogue answers — exactly the cold-page path. */
     result.beforeValid = canvas.validNodeTypes();
+    result.before = {
+        ready: sandbox.__NodeTypes.ready(),
+        paramsProcess: sandbox.__NodeTypes.params('process'),
+        uiProcess: sandbox.__NodeTypes.ui('process'),
+    };
     for (const type of types) {
         if (type === 'source') continue; // derived from the crawl matrix, not a static table
         result.fallback[type] = canvas.getDefaultParams(type);

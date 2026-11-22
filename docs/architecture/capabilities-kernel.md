@@ -35,14 +35,15 @@ backend/capabilities_kernel/
 
 ## 生成物（freshness gate）
 
-`python tools/gen_capabilities.py` 从清单渲染五个产物；`--check` 只比较字节：
+`python tools/gen_capabilities.py` 从清单渲染六个产物；`--check` 只比较字节：
 
 | 产物 | 用途 |
 |---|---|
 | `backend/capabilities_kernel/generated/catalog.json` | 机器目录 + 能力 × 检查项测试矩阵（含每个清单的 digest） |
 | `backend/capabilities_kernel/generated/openapi.json` | `/api/node-types` 的 OpenAPI 3.1 描述与每个节点的参数 schema |
 | `backend/capabilities_kernel/generated/ai_tools.json` | AI 可读的摘要/步骤/示例/失败模式（P4/P6 生成技能与工具） |
-| `backend/capabilities_kernel/generated/capability-schema.json` | 浏览器 schema 表单目录（P2 渲染器读取；当前页面仍走 `/api/node-types`，所以它是数据而非已加载的 JS 模块） |
+| `backend/capabilities_kernel/generated/capability-schema.json` | 浏览器 schema 表单目录（数据形态，供 P2 渲染器/工具读取） |
+| `backend/static/js/node-types-fallback.js` | 同一目录的冷启动脚本：`index.html` 在 `node-types.js` 之前加载，画布不再手写类型/默认值表 |
 | `docs/capabilities/index.md` | 人类可读的能力索引 |
 
 `tests/unit/gates/test_capability_completeness.py` 调用同一个 `generate.check()`：改了清单却忘记重新生成，CI 直接红，并打印 `run python tools/gen_capabilities.py`。渲染是确定性的（registry 顺序、dataclass 字段顺序、跨平台 LF），所以 Windows 与 Linux 比较的是同一串字节。
@@ -67,7 +68,7 @@ backend/capabilities_kernel/
 - `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为任何节点类型写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
-- 五个生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`docs/capabilities/index.md`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- 六个生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
 - `tools/doctor.py`：同一组事实的逐项勾选（含 validator 可解析），`--capability node:<id>` 只看一个能力。
 
 ## 已迁移 / 还没迁移

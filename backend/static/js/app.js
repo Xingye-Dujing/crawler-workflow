@@ -622,8 +622,9 @@ document.addEventListener('DOMContentLoaded', () => {
     boot('appSettings', () => AppSettings.pull());
     boot('menu', () => TopMenu.init());
     /* The catalogue is what the canvas validates restored nodes against and seeds new ones
-       from; it answers asynchronously, so a boot failure here is named by node-types.js and the
-       canvas falls back to its pinned table rather than refusing every draft. */
+       from; it answers asynchronously, and `node-types-fallback.js` (generated from the same
+       manifests) already gives the page a usable list. A boot failure here is named by
+       node-types.js and the generated fallback stays in use. */
     boot('nodeTypes', () => NodeTypes.load());
     boot('canvas', () => canvas.init());
     // Restore which saved file this draft belongs to BEFORE anything reads runName()

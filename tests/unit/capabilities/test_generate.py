@@ -21,15 +21,16 @@ def _manifest():
 
 
 class TestTheRenderedSet:
-    def test_the_five_surfaces_exist(self):
+    def test_the_six_surfaces_exist(self):
         rendered = generate.render()
-        assert len(rendered) == 5
+        assert len(rendered) == 6
         names = {path.relative_to(generate.ROOT).as_posix() for path in rendered}
         assert names == {
             'backend/capabilities_kernel/generated/catalog.json',
             'backend/capabilities_kernel/generated/openapi.json',
             'backend/capabilities_kernel/generated/ai_tools.json',
             'backend/capabilities_kernel/generated/capability-schema.json',
+            'backend/static/js/node-types-fallback.js',
             'docs/capabilities/index.md',
         }
 
@@ -47,6 +48,7 @@ class TestTheRenderedSet:
             'openapi': generate._openapi_payload,
             'ai_tools': generate._ai_payload,
             'frontend_schema': generate._frontend_schema,
+            'frontend_catalogue': generate._frontend_catalogue_js,
             'docs_index': generate._docs_index,
         }
         assert set(generate.OUTPUTS.values()) == set(functions)
@@ -96,7 +98,12 @@ class TestTheFrontendCatalogue:
         assert node['params'][0]['widget'] == 'column'
         assert node['rules'][0]['code'] == 'engine.tokenize_no_column'
 
-    def test_it_is_data_not_a_page_module(self):
-        """No page loads it yet; a ``static/js`` module nobody loads is dead code the frontend gate refuses."""
-        paths = {path.as_posix() for path in generate.render()}
-        assert not any('/static/js/' in path for path in paths)
+    def test_the_cold_page_script_is_loaded_before_the_catalogue_module(self):
+        """The generated fallback is a page module now, and it must load before ``node-types.js``
+        reads it; a page that loads it later would run the first paint on no catalogue at all."""
+        html = (generate.ROOT / 'backend' / 'static' / 'index.html').read_text(encoding='utf-8')
+        fallback = html.index('js/node-types-fallback.js')
+        module = html.index('js/node-types.js')
+        assert fallback < module
+        paths = {path.relative_to(generate.ROOT).as_posix() for path in generate.render()}
+        assert 'backend/static/js/node-types-fallback.js' in paths

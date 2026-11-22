@@ -10,7 +10,11 @@
         "canvas-view.js",
         "canvas-snapshot.js",
         "canvas-visuals.js",
-        "canvas-auto-layout.js"
+        "canvas-auto-layout.js",
+        "node-types.js"
+    ],
+    "node-types.js": [
+        "node-types-fallback.js"
     ],
     "workflow.js": [
         "job-poll.js",

@@ -239,6 +239,8 @@ class TestThePageListsItsOwnModules:
             'canvas-snapshot.js',
             'canvas-visuals.js',
             'canvas-auto-layout.js',
+            'node-types.js',
+            'node-types-fallback.js',
         ], canvas
 
     def test_the_companion_map_names_files_the_page_really_ships(self):

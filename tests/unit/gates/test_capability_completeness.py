@@ -110,5 +110,6 @@ class TestTheGeneratedArtifactsAreCurrent:
             'openapi.json',
             'ai_tools.json',
             'capability-schema.json',
+            'node-types-fallback.js',
             'index.md',
         }

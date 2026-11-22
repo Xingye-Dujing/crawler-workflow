@@ -174,6 +174,65 @@ def node_defaults() -> dict[str, dict]:
     }
 
 
+def node_schema_entries() -> list[dict]:
+    """The browser form catalogue: one JSON-ready entry per node manifest.
+
+    ``/api/node-types`` and the generated cold-page script both read this, so the served answer and
+    the fallback cannot describe a parameter list differently.
+    """
+    entries = []
+    for manifest in manifests('node'):
+        ident = manifest.identity
+        entries.append(
+            {
+                'type': ident.id,
+                'labelKey': ident.title_key,
+                'category': ident.category,
+                'order': ident.order,
+                'rows': manifest.ports.rows,
+                'quiet': manifest.execution.quiet,
+                'defaults': None if manifest.ui.defaults_from else manifest.defaults(),
+                'defaultsFrom': manifest.ui.defaults_from,
+                'params': [
+                    {
+                        'name': spec.name,
+                        'type': spec.type,
+                        'default': spec.default,
+                        'required': spec.required,
+                        'enum': list(spec.enum),
+                        'minimum': spec.minimum,
+                        'maximum': spec.maximum,
+                        'widget': spec.widget,
+                        'placeholder': spec.placeholder,
+                    }
+                    for spec in manifest.params
+                ],
+                'rules': [
+                    {
+                        'kind': rule.kind,
+                        'code': rule.code,
+                        'messageKey': rule.message_key,
+                        'param': rule.param,
+                        'severity': rule.severity,
+                    }
+                    for rule in manifest.rules
+                ],
+                'ports': {
+                    'rows': manifest.ports.rows,
+                    'inputs': manifest.ports.inputs,
+                    'emitColumns': manifest.ports.emit_columns,
+                    'readColumns': manifest.ports.read_columns,
+                },
+                'ui': {
+                    'form': manifest.ui.form,
+                    'customRenderer': manifest.ui.custom_renderer,
+                    'defaultsFrom': manifest.ui.defaults_from,
+                },
+            },
+        )
+    return entries
+
+
 def register_node_executors() -> None:
     """Register every migrated node's ``run`` in ``nodes.registry``.
 

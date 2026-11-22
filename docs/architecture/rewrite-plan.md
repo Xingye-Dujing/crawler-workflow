@@ -83,7 +83,7 @@
 - [ ] schema 表单渲染器 + custom renderer 注册表
 - [ ] 删除 `canvas.js` 的节点默认参数/类型表/表单分派
 - [ ] 删除前端验证 if 链；接 `/api/workflow/validate`
-- [ ] `/api/node-types` 返回完整清单；`node-types.js` 只做冷启动 fallback
+- [x] `/api/node-types` 返回完整清单；`node-types.js` 只做冷启动 fallback
 - [ ] 每节点技能骨架 + 示例 + 工具生成
 - [ ] 每节点声明 `emit`/`read` 契约与 `schema_hash`
 - [ ] 每节点输出物化为 Asset

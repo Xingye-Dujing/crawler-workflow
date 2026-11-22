@@ -547,15 +547,14 @@ class TestBiblioPanelContract:
         assert missing == [], f'label sources with no zh/en word: {missing}'
 
     def test_a_new_biblio_parameter_is_seeded_on_a_new_node(self):
-        """``canvas.js`` seeds what a freshly dropped node holds; a parameter the server knows and
-        the seed does not is a box that renders its placeholder while the run uses the default —
-        the panel and the executor disagreeing about the same node."""
-        src = js_text('canvas.js')
-        block = src[src.index("if (type === 'biblio') return {") :]
-        block = block[: block.index('\n        };')]
-        seeded = set(re.findall(r'(\w+):', block))
-        missing = sorted(set(DEFAULTS) - seeded)
-        assert missing == [], f'biblio defaults the canvas never seeds: {missing}'
+        """The canvas seeds what a freshly dropped node holds from the catalogue, which is the
+        biblio manifest's own param list — so every ``DEFAULTS`` key is a ``ParamSpec``."""
+        from capabilities_kernel import registry
+
+        manifest = registry.manifest_for_node('biblio')
+        assert manifest is not None
+        assert set(DEFAULTS) == {spec.name for spec in manifest.params}
+        assert manifest.defaults() == DEFAULTS
 
     def test_bibliometric_labels_are_decluttered_before_render(self):
         # The resolver and its applyEchartsOption call site live in chart-preview.js since the
@@ -591,10 +590,13 @@ class TestPaletteContract:
         return re.findall(r'data-type="([\w]+)"', palette)
 
     def test_every_palette_node_has_params_and_a_label(self):
-        canvas_src = js_text('canvas.js')
+        """A palette type must be in the generated catalogue (which carries its params) and have
+        a zh+en label; the canvas keeps no per-type defaults table of its own."""
+        catalogue = json.loads(js_text('node-types-fallback.js').split('=', 1)[1].strip().rstrip(';'))
         types = self._palette_types()
+        known = {entry['type'] for entry in catalogue['types']}
         for ntype in types:
-            assert f"if (type === '{ntype}')" in canvas_src, f'getDefaultParams lacks {ntype}'
+            assert ntype in known, f'the generated catalogue lacks palette type {ntype}'
         missing = _words_missing('node.', types)
         assert missing == [], f'catalogue has no label for a palette node: {missing}'
 
@@ -614,8 +616,10 @@ class TestPaletteContract:
     def test_tokenize_is_a_process_operation_not_a_palette_item(self):
         """New canvases reach 分词 through 处理; the old TKN type stays for saved canvases."""
         assert 'tokenize' not in self._palette_types()
+        from nodes.defaults import NODE_DEFAULTS
+
+        assert NODE_DEFAULTS['tokenize'] == {'text_column': '', 'top_n': '', 'output_mode': 'word_freq'}
         canvas_src = js_text('canvas.js')
-        assert "if (type === 'tokenize') return { text_column: '', top_n: '', output_mode: 'word_freq' }" in canvas_src
         assert 'isTokenizeNode(node)' in canvas_src, 'the chart coupling no longer recognises 处理 → 分词'
         settings = js_text('panels/settings.js')
         ops = settings[settings.index('var PROCESS_OPS =') : settings.index(';', settings.index('var PROCESS_OPS ='))]

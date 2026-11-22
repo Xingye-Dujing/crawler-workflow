@@ -47,7 +47,11 @@ def _catalogue() -> dict:
 def _run(tmp_path: Path, scenarios: list) -> dict:
     file = tmp_path / 'scenarios.json'
     file.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
-    proc = run_node(str(HARNESS), str(JS_DIR / 'canvas.js'), str(JS_DIR / 'node-types.js'), str(file))
+    proc = run_node(
+        str(HARNESS),
+        str(JS_DIR / 'canvas.js'),
+        str(file),
+    )
     assert proc.returncode == 0, f'harness failed: {proc.stderr}'
     return json.loads(proc.stdout)
 
@@ -76,10 +80,22 @@ class TestTheServedCatalogue:
             tmp_path,
             [{'id': 'down', 'fetch': {'status': 500, 'body': {}}, 'types': ['process']}],
         )['down']
-        assert result['loaded']['ready'] is False
+        assert result['loaded']['ready'] is True, 'the generated fallback is still a usable catalogue'
         assert 'HTTP 500' in result['loaded']['failure'], result['loaded']['failure']
-        assert result['fallback']['process'] == NODE_DEFAULTS['process'], 'the cold-page table stays in use'
+        assert result['fallback']['process'] == NODE_DEFAULTS['process'], 'the generated fallback stays in use'
         assert result['validAfter'] == result['beforeValid'], 'a failed catalogue must not empty the type list'
+
+    def test_the_cold_page_fallback_carries_the_form_schema(self, tmp_path):
+        """The canvas asks the catalogue for params/ui before the fetch answers, so a cold page can
+        already render the generic form and knows which types are custom."""
+        result = _run(
+            tmp_path,
+            [{'id': 'cold', 'fetch': {'status': 500, 'body': {}}, 'types': ['process']}],
+        )['cold']
+        assert result['before']['ready'] is True
+        assert result['before']['uiProcess']['form'] == 'schema'
+        names = {spec['name'] for spec in result['before']['paramsProcess']}
+        assert 'operation' in names and 'text_column' in names
 
     def test_the_fallback_table_equals_the_python_defaults(self, tmp_path):
         """Every type the server seeds must start from the same parameters on a cold page.

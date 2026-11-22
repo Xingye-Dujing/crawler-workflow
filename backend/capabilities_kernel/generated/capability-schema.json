@@ -6,6 +6,13 @@
       "labelKey": "nodeType.name",
       "category": "meta",
       "order": 0,
+      "rows": "none",
+      "quiet": true,
+      "defaults": {
+        "workflow_name": "",
+        "layout_order": ""
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "workflow_name",
@@ -70,6 +77,10 @@
       "labelKey": "nodeType.source",
       "category": "data",
       "order": 1,
+      "rows": "table",
+      "quiet": false,
+      "defaults": null,
+      "defaultsFrom": "capabilities",
       "params": [],
       "rules": [],
       "ports": {
@@ -89,6 +100,14 @@
       "labelKey": "nodeType.upload",
       "category": "data",
       "order": 2,
+      "rows": "table",
+      "quiet": true,
+      "defaults": {
+        "dataset_id": "",
+        "dataset_name": "",
+        "row_count": ""
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "dataset_id",
@@ -150,6 +169,14 @@
       "labelKey": "nodeType.resume",
       "category": "data",
       "order": 3,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "resume_run_id": "",
+        "resume_node_id": "",
+        "resume_limit": 0
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "resume_run_id",
@@ -203,6 +230,18 @@
       "labelKey": "nodeType.comment",
       "category": "data",
       "order": 4,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "urls": "",
+        "comment_limit": 0,
+        "part_size": 50,
+        "per_article_file": true,
+        "keep_parts": false,
+        "recrawl": false,
+        "format": "csv"
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "urls",
@@ -311,6 +350,16 @@
       "labelKey": "nodeType.process",
       "category": "process",
       "order": 5,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "operation": "clean",
+        "text_column": "正文",
+        "topic": "",
+        "live_export": false,
+        "format": "csv"
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "operation",
@@ -386,6 +435,15 @@
       "labelKey": "nodeType.python",
       "category": "process",
       "order": 6,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "script_id": "",
+        "args": "{}",
+        "timeout": 120,
+        "max_rows": 200000
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "script_id",
@@ -450,6 +508,19 @@
       "labelKey": "nodeType.analysis",
       "category": "analysis",
       "order": 7,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "operation": "drop_null",
+        "columns": "",
+        "column": "",
+        "value": "",
+        "op": "eq",
+        "dtype": "str",
+        "rename_from": "",
+        "rename_to": ""
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "operation",
@@ -558,6 +629,14 @@
       "labelKey": "nodeType.tokenize",
       "category": "process",
       "order": 8,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "text_column": "",
+        "top_n": "",
+        "output_mode": "word_freq"
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "text_column",
@@ -623,6 +702,67 @@
       "labelKey": "nodeType.biblio",
       "category": "biblio",
       "order": 9,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "entity_type": "keyword",
+        "entity_column": "",
+        "year_column": "年份",
+        "title_column": "题名",
+        "abstract_column": "摘要",
+        "reference_column": "参考文献",
+        "tc_column": "引用次数",
+        "usage_column": "使用次数",
+        "sentiment_column": "",
+        "topic_column": "",
+        "time_start": "",
+        "time_end": "",
+        "slice_years": 1,
+        "look_back_years": 0,
+        "selection": "top_n",
+        "top_n": 50,
+        "top_pct": 10,
+        "g_index": 25,
+        "min_count": 2,
+        "threshold_c": 0,
+        "threshold_cc": 1,
+        "threshold_ccv": 0.0,
+        "min_tc": "",
+        "min_usage": "",
+        "largest_component": false,
+        "link_measure": "cosine",
+        "counting": "full",
+        "citation_expansion": 0,
+        "max_links_per_node": 10,
+        "lrf": 2.5,
+        "pruning": "none",
+        "pruning_scope": "slices",
+        "pathfinder_r": "inf",
+        "pathfinder_lmax": 0,
+        "pathfinder_dmax": 1.0,
+        "cluster": true,
+        "cluster_count": "",
+        "label_method": "llr",
+        "label_source": "all",
+        "top_terms": 5,
+        "burst": true,
+        "burst_gamma": 1.0,
+        "burst_min_duration": 2,
+        "burst_weight": 2.0,
+        "burst_top": 20,
+        "variation": false,
+        "variation_min": 0.05,
+        "aliases": "",
+        "exclude_values": "",
+        "cluster_labels": "",
+        "basemap_dataset_id": "",
+        "watch_project": "",
+        "watch_baseline": "",
+        "watch_label": "",
+        "output_shape": "nodes",
+        "export_files": true
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "entity_type",
@@ -1318,6 +1458,20 @@
       "labelKey": "nodeType.verify",
       "category": "process",
       "order": 10,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "input_key_column": "链接",
+        "result_key_column": "文章URL",
+        "expected_count_column": "评论数",
+        "match_mode": "url",
+        "tolerance": 0,
+        "per_link_limit": "",
+        "output_mode": "gaps",
+        "swap_tables": false,
+        "ignore_case": false
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "input_key_column",
@@ -1440,6 +1594,22 @@
       "labelKey": "nodeType.fuse",
       "category": "biblio",
       "order": 11,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "entity_columns": "关键词,话题,主题,主题词,标签",
+        "year_columns": "年份,发布时间,发表日期,日期",
+        "title_columns": "题名,标题,内容,正文",
+        "author_columns": "作者,用户名,昵称,发布者",
+        "affiliation_columns": "作者单位,机构",
+        "text_columns": "摘要,正文,内容",
+        "reference_columns": "参考文献,引文",
+        "source_columns": "平台,来源",
+        "source_labels": "",
+        "keep_undated": true,
+        "export_files": false
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "entity_columns",
@@ -1589,6 +1759,14 @@
       "labelKey": "nodeType.accumulate",
       "category": "data",
       "order": 12,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "lineage_name": "",
+        "identity": "row",
+        "key_columns": ""
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "lineage_name",
@@ -1645,6 +1823,21 @@
       "labelKey": "nodeType.visualize",
       "category": "visualize",
       "order": 13,
+      "rows": "pdf",
+      "quiet": false,
+      "defaults": {
+        "chart_type": "bar",
+        "x_field": "",
+        "y_field": "",
+        "value_field": "",
+        "agg": "sum",
+        "engine": "echarts",
+        "title": "",
+        "tokenize": false,
+        "emit_latex": true,
+        "emit_latex_table": true
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "chart_type",
@@ -1775,6 +1968,10 @@
       "labelKey": "nodeType.compile",
       "category": "visualize",
       "order": 14,
+      "rows": "pdf",
+      "quiet": false,
+      "defaults": {},
+      "defaultsFrom": "",
       "params": [],
       "rules": [],
       "ports": {
@@ -1794,6 +1991,14 @@
       "labelKey": "nodeType.output",
       "category": "output",
       "order": 15,
+      "rows": "table",
+      "quiet": false,
+      "defaults": {
+        "operation": "save",
+        "format": "csv",
+        "filename": "export.csv"
+      },
+      "defaultsFrom": "",
       "params": [
         {
           "name": "operation",

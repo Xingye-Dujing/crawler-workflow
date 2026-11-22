@@ -1,16 +1,26 @@
-/* The server's node-type catalogue — what types exist, how the palette words them, and the
-   parameters a new node starts with.
+/* The server's node-type catalogue — what types exist, how the palette words them, the parameters
+   a new node starts with, and the schema its settings panel renders.
 
-   ``nodes/catalog.py`` declares the types and ``nodes/defaults.py`` the seeds; this module only
-   carries the answer to the canvas. The canvas keeps a cold-page fallback (its own list and
-   seeds) which ``tests/unit/test_node_plugins.py`` pins against this payload, so the two cannot
-   drift; once this answer arrives, it is what the canvas reads.
+   The declarations are the capability manifests under ``backend/capabilities_kernel/nodes/``;
+   ``/api/node-types`` projects them and ``node-types-fallback.js`` is the generated cold-page copy
+   that loads before this module (one page already has a usable list while the fetch is in flight).
+   This module holds no type, label or default table of its own.
 
-   A failure is NAMED, never silently replaced by a guess: without this payload the canvas falls
-   back to its pinned table, and the toast says the server's catalogue could not be read. */
+   A failure is NAMED, never silently replaced by a guess: the generated fallback stays in use and
+   the toast says the server's catalogue could not be read. */
 const NodeTypes = {
     _types: null,
     _failure: '',
+
+    /* The generated fallback is a separate script; read it lazily so the load order of the two
+       modules never decides whether a cold page has a catalogue. */
+    _seed() {
+        if (!this._types && typeof NODE_TYPE_CATALOGUE !== 'undefined' && NODE_TYPE_CATALOGUE
+            && Array.isArray(NODE_TYPE_CATALOGUE.types)) {
+            this._types = NODE_TYPE_CATALOGUE.types.slice();
+        }
+        return this._types;
+    },
 
     load() {
         return fetch('/api/node-types')
@@ -23,21 +33,30 @@ const NodeTypes = {
                 if (!types.length) throw new Error('the catalogue answered with no types');
                 NodeTypes._types = types;
                 NodeTypes._failure = '';
-                document.dispatchEvent(new CustomEvent('node-types-loaded'));
+                NodeTypes._announce('node-types-loaded');
             })
             .catch(function (err) {
-                NodeTypes._types = null;
+                /* Keep the generated fallback: it is the same catalogue, and an empty list would
+                   read as "this product has no node types". */
                 NodeTypes._failure = String((err && err.message) || err);
                 console.error('node-type catalogue failed to load:', NodeTypes._failure);
                 if (typeof showToast === 'function' && typeof I18n !== 'undefined') {
                     showToast(I18n.t('toast.nodeTypesFailed', { err: NodeTypes._failure }), 8000);
                 }
-                document.dispatchEvent(new CustomEvent('node-types-failed'));
+                NodeTypes._announce('node-types-failed');
             });
     },
 
+    /* A page has an event bus; a node harness may not. The answer is still recorded. */
+    _announce(name) {
+        if (typeof document !== 'undefined' && typeof CustomEvent !== 'undefined') {
+            document.dispatchEvent(new CustomEvent(name));
+        }
+    },
+
     ready() {
-        return !!this._types;
+        const list = this._seed();
+        return !!(list && list.length);
     },
 
     failure() {
@@ -45,11 +64,12 @@ const NodeTypes = {
     },
 
     all() {
-        return this._types ? this._types.slice() : [];
+        const list = this._seed();
+        return list ? list.slice() : [];
     },
 
     entry(type) {
-        const list = this._types || [];
+        const list = this._seed() || [];
         for (let i = 0; i < list.length; i++) {
             if (list[i].type === type) return list[i];
         }
@@ -57,7 +77,7 @@ const NodeTypes = {
     },
 
     types() {
-        return (this._types || []).map(function (t) { return t.type; });
+        return (this._seed() || []).map(function (t) { return t.type; });
     },
 
     /* A deep copy: seeding a node must never share an object with the payload, or two nodes of
@@ -67,6 +87,18 @@ const NodeTypes = {
         const entry = this.entry(type);
         if (!entry || !entry.defaults) return null;
         return JSON.parse(JSON.stringify(entry.defaults));
+    },
+
+    /* The generic form renderer's input: parameter specs in manifest order (may be empty for a
+       custom-rendered type such as source). */
+    params(type) {
+        const entry = this.entry(type);
+        return entry && Array.isArray(entry.params) ? JSON.parse(JSON.stringify(entry.params)) : [];
+    },
+
+    ui(type) {
+        const entry = this.entry(type);
+        return entry && entry.ui ? JSON.parse(JSON.stringify(entry.ui)) : null;
     },
 
     labelKey(type) {
