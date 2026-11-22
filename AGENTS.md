@@ -489,6 +489,10 @@ live-test slice, and `/smoke-verify` (loads the same-named skill).
   needing a change. Any edit restarts the loop.
 - **Edit**: OpenCode's `formatter` → `.opencode/hooks/format.mjs` auto-runs `ruff format` + `ruff check --fix` on touched
   `.py`; committed files still pass `ruff check`/`format --check` by hand.
+- **Delete what the change replaced.** Migration or refactor finished = the old function, branch, forwarding alias, test
+  and module file are gone in the same change. No compatibility layer, no "kept for old callers", no second copy of a
+  default/option list/sentence. A module nobody imports and a function nobody calls are deleted, not documented. The
+  slice is not done until a grep for the replaced name finds only its new home.
 - **Tests ship with the change.** Any code file touched (backend or frontend JS) syncs the suite in the same change. A
   previously-green test failing because of your change means the bug is the change — fix the code, not the test (unless it
   pinned an old bug). An unfixed product bug gets `@pytest.mark.xfail(strict=False, reason='product bug <file:line> — …')`.

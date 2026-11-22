@@ -7,7 +7,7 @@ of them would eventually disagree with the other two. These helpers keep the sha
 
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 SKILL_ID_RE = re.compile(r'^[a-z][a-z0-9._-]{1,63}$')
 
@@ -170,18 +170,6 @@ def text_block(text: str) -> dict:
     return {'type': 'text', 'text': text}
 
 
-def thinking_block(text: str, signature: str = '') -> dict:
-    return {'type': 'thinking', 'thinking': text, 'signature': signature}
-
-
-def tool_use_block(call_id: str, name: str, arguments: dict) -> dict:
-    return {'type': 'tool_use', 'id': call_id, 'name': name, 'input': arguments}
-
-
-def tool_result_block(call_id: str, content, is_error: bool = False) -> dict:
-    return {'type': 'tool_result', 'tool_use_id': call_id, 'content': content, 'is_error': is_error}
-
-
 def block_text(blocks) -> str:
     return ''.join(str(block.get('text') or '') for block in blocks or () if block.get('type') == 'text')
 
@@ -210,16 +198,6 @@ def skill_from_manifest(payload: dict, *, account: str = '', builtin: bool = Fal
         name=str(payload.get('name') or ''),
         description=str(payload.get('description') or ''),
     )
-
-
-@dataclass
-class ProviderReply:
-    """Non-streaming answer shape, used by tests and by the JSON fallback."""
-
-    blocks: list = field(default_factory=list)
-    usage: dict = field(default_factory=dict)
-    title: str = ''
-    stop_reason: str = 'end_turn'
 
 
 def usage_totals(usage: dict) -> dict:

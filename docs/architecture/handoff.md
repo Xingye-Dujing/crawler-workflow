@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`45dd0be 功能更新：迁移 comment 节点清单，会话检查移入 preflight`
+- 最后提交：`14938f8 功能更新：迁移 biblio 节点清单，参数与选项由清单派生`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -39,6 +39,7 @@
 | `68b8f49` | P2 第三批：analysis/accumulate/verify 迁移；engine 不再导入行形状集合 |
 | `d59d65b` | P2 第四批：visualize/fuse 迁移；fuse 参数错误改为 code/message_key 数据 |
 | `45dd0be` | P2 第五批：comment 迁移；账号会话检查从 engine 移到 `sessions/preflight.py` |
+| `14938f8` | P2 第六批：biblio 迁移；56 参数与 10 组选项表由清单派生，`schema.py` 不再保留第二份 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -139,11 +140,21 @@
   （node-types/workflow API + runs/workflows/sessions + 前端 node-types + completeness）、
   `1334 passed, 4 skipped`（crawlers + executors + node matrix）；ruff 全绿；生成物 --check 通过。
 
-### P2 剩余 2 个节点的已知风险
+## P2 第六批：biblio（2026-11-22）
 
-- **`biblio`**：56 个参数默认值/校验都在 `services/biblio/schema.py`，错误是已本地化句子。迁移前要决定：
-  清单直接声明 56 个 `ParamSpec`，还是给 manifest 增加一个 `params_from` 引用（会破坏“清单只导入标准库”的轻规则，
-  需要显式例外）；同时把 `collect_errors` 改成 code/message_key 数据（fuse 已有 `collect_problems` 的先例）。
+- `biblio` 的 56 个参数、10 组选项表与默认值搬进 `capabilities_kernel/nodes/biblio/manifest.py`；
+  `services/biblio/schema.py` 的 `DEFAULTS`/`ENTITY_TYPES`/`OUTPUT_SHAPES`/… 全部由清单派生，不再有第二份。
+- 参数校验改成 `collect_problems()`（`{code, message_key, context}`）+ `collect_errors()`（同一份数据的句子版，
+  供 `normalize_params` 直接调用者）；数值范围集中在 `RANGE_CHECKS`，选项集中在 `OPTION_CHECKS`。
+  `biblio` 的“无上游/多上游”检查移到 executor 的 `validate_node`，`engine/workflow.py` 删除整段 biblio 分支与
+  `biblio_param_errors` 导入。
+- 清理随迁移失效的代码：`nodes.catalog`/`nodes.defaults` 只剩 `source`；`services.biblio.fuse.collect_errors`
+  与 `name.execute_name_node` 删除（前者由 `collect_problems` 取代，后者是只被 `run` 调用一行的转发）。
+- 本片验证：`704 passed`（capabilities + biblio + node plugins + frontend contract + biblio/node-types API）、
+  `622 passed`（frontend js + 门禁 + runs）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check、doctor 全绿。
+
+### P2 剩余 1 个节点的已知风险
+
 - **`source`**：`_source_errors` 约 100 行，依赖平台矩阵、必填字段、会话和链接归属；最后迁移，先保持现状。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
@@ -165,10 +176,25 @@
 - **不要为仪式感测试**：能用一条针对性用例证明的行为，不重复铺三层。
 - 本次 H17/H18 已做过一次全量（10651 passed / 7 skipped / 386 deselected / 13:56）；之后的 P1 切片先按需测试。
 
+## 硬性约束：不留残骸
+
+重构/迁移完成后旧实现必须删除，不留“兼容层”：一个事实只允许一处声明（默认值、选项表、验证分支、句子都是），
+迁移完成即删旧函数/旧分支/转发别名/只为旧路径存在的测试/没人 import 的模块。每片收口包含一次“本片是否新增了重复”
+的检查；发现历史死代码顺手删除。详见 `docs/architecture/rewrite-plan.md` 开头与 `docs/agent_practices.md`。
+
+2026-11-22 已删（随 P2 迁移失效）：`name.execute_name_node`、`fuse.collect_errors`、
+`registry.register_many`、`nodes/executors/__init__.py` 里 15 个迁移类型的第二条注册表（现在由清单注册，
+该文件只剩尚未迁移的 `source`）；AI 重写留下的无调用函数 `_current_thinking`、`_abandon_pending`、
+`ensure_dirs`、`attachments_payload`、`abandon_questions`、`list_steps`、`thinking_block`/
+`tool_use_block`/`tool_result_block`、`ProviderReply`、`context_section`。
+仍待按“各自切片”清理（有文档或装饰器/动态引用，需先确认）：`core/machine.py` 的三个无调用取名字、
+`crawlers/engine/pacing.py` 的三个 `*_scale` 兼容读、`services/biblio/formats/common.py` 的五个无人引用的
+helper、`services/charts/options/relations.py`（`@builder` 注册，实际在用，勿删）。
+
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移剩余 2 个节点：`biblio`（把 56 个参数默认值/错误从 services.biblio.schema 搬到清单或生成）、
-   `source`（平台矩阵）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
+1. **P2 续**：迁移最后一个节点 `source`（平台矩阵、字段、会话、链接归属）；再做 schema 表单渲染器 +
+   删除 `canvas.js`/`runs.js` 的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

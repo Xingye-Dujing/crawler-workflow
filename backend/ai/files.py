@@ -325,19 +325,3 @@ def fetch(api_key: str, url: str) -> dict:
     except ValueError as exc:
         raise AIProviderError('ai.badResponse', kind='bad_response', detail=response.text[:200]) from exc
     return {'title': str(payload.get('title') or ''), 'content': str(payload.get('content') or '')}
-
-
-def attachments_payload(attachments: list) -> list:
-    """The assistant-request shapes for stored attachments; the provider only sees file ids."""
-    out = []
-    for row in attachments or ():
-        file_id = str(row.get('file_id') or '')
-        if not file_id:
-            continue
-        kind = (
-            'image'
-            if str(row.get('purpose') or '') == 'user_data' and str(row.get('mime') or '').startswith('image/')
-            else 'document'
-        )
-        out.append({'file_id': file_id, 'kind': kind, 'name': row.get('name') or 'file'})
-    return out

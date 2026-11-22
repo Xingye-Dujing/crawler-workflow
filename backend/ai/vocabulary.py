@@ -222,8 +222,3 @@ def prompt_block() -> str:
         reads = '/'.join(row['required_columns'])
         lines.append(f'- 文献图 {row["chart_type"]}：必需列 {reads}')
     return '\n'.join(lines)
-
-
-def context_section() -> str:
-    """The same vocabulary for the context inspector, which is what the user may read."""
-    return prompt_block()

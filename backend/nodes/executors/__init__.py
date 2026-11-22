@@ -1,53 +1,19 @@
 """Built-in node plugins.
 
-Importing this package registers each module's ``run(node, call)`` in ``nodes.registry``. The
-registry loader (``nodes.registry.load_builtin_executors``) imports it once, from ``app`` — never from
-``engine.workflow``, which must stay light enough to parse a DAG without pandas and the analyzers.
+Only the types still declared in ``nodes/catalog.py`` register here. A migrated type is registered
+from its own manifest: ``nodes.registry.load_builtin_executors`` asks
+``capabilities_kernel.registry.register_node_executors`` after importing this package, so
+``capabilities_kernel/nodes/<id>/manifest.py`` is the one place that names the type AND its handler.
 
-Adding a built-in node type: a module here with ``NODE_TYPE`` and ``run``, one line in this package,
-and either a catalogue entry in ``nodes/catalog.py`` or a manifest in
-``capabilities_kernel/nodes/<id>/``. ``tests/unit/analysis/test_node_plugins.py`` pins the three
-against each other.
+The registry loader imports this package once, from ``app`` — never from ``engine.workflow``, which
+must stay light enough to parse a DAG without pandas and the analyzers.
 """
 
 from nodes import registry
-from nodes.executors import (
-    accumulate,
-    analysis,
-    biblio,
-    comment,
-    fuse,
-    name,
-    output,
-    process,
-    python_node,
-    resume,
-    source,
-    tokenize,
-    upload,
-    verify,
-    visualize,
-)
-from nodes.executors import compile as compile_plugin
+from nodes.executors import source
 
-_BUILTINS = (
-    name,
-    upload,
-    resume,
-    tokenize,
-    accumulate,
-    compile_plugin,
-    biblio,
-    fuse,
-    output,
-    visualize,
-    analysis,
-    process,
-    comment,
-    source,
-    verify,
-    python_node,
-)
+#: One line per type that has no manifest yet. Adding a migrated type does not touch this file.
+_BUILTINS = (source,)
 
 for _module in _BUILTINS:
     registry.register(_module.NODE_TYPE, _module.run)

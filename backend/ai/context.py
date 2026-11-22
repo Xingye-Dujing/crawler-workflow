@@ -18,7 +18,6 @@ import re
 from pathlib import Path
 
 from core.config import Config
-from runtime import paths
 from runtime.settings import get_setting
 
 from ai import store
@@ -412,10 +411,6 @@ def for_replay(text: str) -> tuple[str, dict]:
         return value, meta
     note = f'\n…[context cut at {limit} chars for replay; read the rest with a tool]'
     return value[:limit] + note, meta
-
-
-def ensure_dirs() -> None:
-    paths.active().ensure()
 
 
 def safe_filename(name: str) -> str:

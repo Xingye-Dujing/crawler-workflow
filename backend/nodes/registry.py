@@ -20,7 +20,6 @@ every DAG parse. The heavy modules load in ``app`` where they already do.
 from __future__ import annotations
 
 import importlib
-from collections.abc import Mapping
 
 from nodes.context import NodeExecutor
 
@@ -36,11 +35,6 @@ def register(node_type: str, executor: NodeExecutor) -> None:
     if key in _EXECUTORS and _EXECUTORS[key] is not executor:
         raise ValueError(f'node type {key} already has an executor')
     _EXECUTORS[key] = executor
-
-
-def register_many(executors: Mapping[str, NodeExecutor]) -> None:
-    for node_type, executor in executors.items():
-        register(node_type, executor)
 
 
 def executor_for(node_type: str) -> NodeExecutor | None:

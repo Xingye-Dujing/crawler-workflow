@@ -505,15 +505,6 @@ def answer_question(question_id: str, answer: dict) -> dict | None:
     return get_question(question_id)
 
 
-def abandon_questions(conversation_id: str) -> int:
-    with connect() as conn:
-        cur = conn.execute(
-            "UPDATE questions SET status = 'abandoned' WHERE conversation_id = ? AND status = 'pending'",
-            (conversation_id,),
-        )
-    return cur.rowcount
-
-
 def add_attachment(
     conversation_id: str,
     name: str,
@@ -658,12 +649,6 @@ def update_step(step_id: str, **fields) -> None:
     assignments = ', '.join(f'{key} = ?' for key in allowed)
     with connect() as conn:
         conn.execute(f'UPDATE agent_steps SET {assignments} WHERE id = ?', (*allowed.values(), step_id))
-
-
-def list_steps(run_id: str) -> list:
-    with connect() as conn:
-        rows = conn.execute('SELECT * FROM agent_steps WHERE run_id = ? ORDER BY seq', (run_id,)).fetchall()
-    return [_row(row) for row in rows]
 
 
 def save_usage(conversation_id: str, message_id: str, provider: str, model: str, usage: dict) -> None:

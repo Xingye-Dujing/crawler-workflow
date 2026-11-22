@@ -225,10 +225,6 @@ def _current_text(blocks: list) -> str:
     return ''.join(str(block.get('text') or '') for block in blocks if block.get('type') == 'text')
 
 
-def _current_thinking(blocks: list) -> str:
-    return ''.join(str(block.get('thinking') or '') for block in blocks if block.get('type') == 'thinking')
-
-
 def _last_text(blocks: list) -> dict | None:
     for block in reversed(blocks):
         if block.get('type') == 'text':
@@ -1869,44 +1865,3 @@ def _turn_user(conversation_id: str, turn_id: str) -> dict | None:
         if message['id'] == turn_id and message['role'] == 'user':
             return message
     return None
-
-
-def _abandon_pending(conversation_id: str) -> None:
-    """Cancel pending questions for an EXPLICIT cancel, never for an ordinary new message.
-
-    A new message used to call this and silently invalidate the card the user was still looking
-    at. The route now refuses a second message by name while a question is pending; this helper is
-    kept for a future "cancel question" action, where the cancellation is the user's choice.
-    """
-    approvals.revoke(conversation_id)
-    dataset_access.revoke(conversation_id)
-    pending = store.pending_questions(conversation_id)
-    if not pending:
-        return
-    for question in pending:
-        store.answer_question(question['id'], {'answers': [], 'cancelled': True})
-        assistant = store.get_message(question.get('message_id') or '')
-        if assistant is None:
-            continue
-        store.update_message(
-            assistant['id'], status='done', meta={**(assistant.get('meta') or {}), 'cancelled_question': question['id']}
-        )
-        store.append_message(
-            conversation_id,
-            'tool',
-            json.dumps(
-                {
-                    'cancelled': True,
-                    'tool': 'ask_user_question',
-                    'questions': question.get('questions') or [],
-                    'reason': t('ai.questionUnanswered'),
-                },
-                ensure_ascii=False,
-            ),
-            status='done',
-            meta={
-                'turn_id': (assistant.get('meta') or {}).get('turn_id') or assistant['id'],
-                'tool_call_id': question.get('tool_use_id') or '',
-                'is_error': True,
-            },
-        )

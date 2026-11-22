@@ -5,7 +5,7 @@
 
 ## 背景
 
-今天的 AI turn 由 HTTP/SSE 生成器驱动：浏览器断开，生成器就结束，服务端把行标成 `interrupted`；没有 reattach endpoint。待答问题虽然写进了 `questions` 表，但新消息会调用 `_abandon_pending()` 把它取消；恢复的卡片又因为前端 `messageId` 为空而 404 “找不到消息：”。运行侧已有断点续跑，但状态转换散落在 `engine/run.py` 的 if 里，没有一个可穷举的转换表。
+今天的 AI turn 由 HTTP/SSE 生成器驱动：浏览器断开，生成器就结束，服务端把行标成 `interrupted`；没有 reattach endpoint。待答问题虽然写进了 `questions` 表，但新消息曾经会取消它（H3a 已改为按名拒绝新消息、保留问题可答）；恢复的卡片又因为前端 `messageId` 为空而 404 “找不到消息：”。运行侧已有断点续跑，但状态转换散落在 `engine/run.py` 的 if 里，没有一个可穷举的转换表。
 
 用户要求：关闭面板、切换会话、刷新页面都不影响 AI 工作；待答问题在回答完之前一直存活；每个勾选/状态都有证据。
 
