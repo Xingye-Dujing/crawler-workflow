@@ -37,6 +37,26 @@
 - [ ] `python tools/ci_lint_tiers.py tests`
 - [ ] `/smoke-verify`（孤立 data root）
 
+## H11-H16 热修批次收口（2026-11-22）
+
+在 H11-H16（附件抽取、数据授权、工作流管理、覆盖矩阵、stack_pct 验证）以及 H1-H10 的回归修正之后重跑：
+
+```text
+10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (0:14:06)
+```
+
+- 快测：10646 passed / 7 skipped / 0 failed，14 分 06 秒（比旧基线 +68 条测试，时间 -24 秒）。
+- 设备层：`-m "integration or live_ollama"` → `213 passed, 5 skipped, 10820 deselected`，5 分 54 秒；
+  浏览器/Node 都真实跑了（H4/H5 的 pointer capture 回归就是这一层发现的）。
+- lint：`ruff check` / `ruff format --check` 全绿；`ci_lint_tiers.py product` 10.00/10；
+  `ci_lint_tiers.py tests` 10.00/10。
+- 冒烟：隔离 `CRAWLER_DATA_ROOT` 在 5057 启动，`/`、`/api/config`、`/api/settings`、`/api/workflow/list`、
+  `/api/data/datasets`、`/api/runs/list`、`/api/stats/summary`、`/api/capabilities`、`/api/cookies/flow`、
+  `/api/ai/bootstrap`、`/api/ai/conversations`、`/api/ai/references`、`/api/ai/memories`、
+  `/api/workflow/status` 全部 200；进程已停，5057 已释放。
+- **未跑**：`live_quick` / `live_site`（会花用户账号，需用户指定 `live_cn`/`live_os` 网络并明确同意）；
+  打包桌面 GUI、真实云端启动、真实登录爬取也不在本机冒烟范围内。
+
 ## 这条基线保护什么
 
 - 任何“重构让测试变少/变慢”的改动都要对照本文件解释。

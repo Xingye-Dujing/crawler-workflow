@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`b3dbfb3 修改：占比堆叠图在验证阶段命名缺失的 stack_fields`
+- 最后提交：`44dcb01 问题修复：指针捕获失败不再中断侧栏拖拽`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -23,13 +23,20 @@
 | `702705e` | 工作流/导出管理工具：list/read/update/rename/delete/export/run/stop + export_list/delete；删除强制审批+审计；停止与 HTTP 共用 `engine.run.stop_run` |
 | `a00e89b` | `ai.coverage` 能力→AI 入口矩阵（节点/平台模式/算子/图表/工具）+ `ai_coverage` 工具 + 门禁（可反向失败） |
 | `b3dbfb3` | `ChartSpec.required_params` 声明 `stack_fields`；`WorkflowEngine.validate_detailed` 在运行前按名报告，默认值先填充 |
+| `33b738a` | 覆盖矩阵只统计内置工具，插件工具不算产品能力 |
+| `0361be1` | 回归测试对齐：新消息在待答问题期间按名拒绝；stack_pct 在 validate 阶段拒绝 |
+| `b54c5a0` | 测试复用已导入的 `store`，修 pylint 重复导入 |
+| `44dcb01` | `setPointerCapture` 抛错不再中断侧栏拖拽；真实 Chrome 层验证 |
 
-## 测试基线
+## 测试基线（H11-H16 收口，2026-11-22）
 
-- 全量快测（热修批次开始前启动，运行中又有少量热修落盘）：
-  `10578 passed, 7 skipped, 384 deselected, 1 warning in 870.83s (14:30)`。
-- 每个提交都有针对性的测试；尚未做这一批的最终全量 closure gate。
-- 收口时必须重跑：`python -m pytest -q`、ruff、两档 pylint、`/smoke-verify`。
+- 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
+- 设备层：`-m "integration or live_ollama"` → `213 passed, 5 skipped, 10820 deselected`，5 分 54 秒；
+  H4/H5 的 pointer capture 回归就是这一层发现的，已修。
+- lint：`ruff check` / `format --check` 全绿；`ci_lint_tiers.py product` 10.00/10；
+  `ci_lint_tiers.py tests` 10.00/10。
+- 冒烟：隔离 data root 在 5057 启动，9 个基础 GET + 5 个 AI GET 全部 200；进程已停、端口已释放。
+- **未跑**：`live_quick`/`live_site`（花用户账号；需要用户指定网络并同意）。
 
 ## 下一步（按顺序）
 
@@ -42,6 +49,20 @@
 - `backend/ai/agent.py::_attachment_plan`：有 `files` + `file_id` → 原生；否则本地抽取；图片只问 `vision`，无 `file_id` 时要求 `inline_images`，否则 `ai.imageNeedsUpload`。
 - 新增设置 `ai_attachment_text_chars`（0=不限）；浏览器 `settings.js` 与后端 `settings_schema.py` 同步；`pypdf==6.1.1` 已进 `requirements.txt` 与 `desktop/requirements-runtime.txt`。
 - 本地/无 key 供应商上传：`files.save_attachment` + 服务端上传后立即抽取；`.doc/.ppt` 按名拒绝，提示转 `.docx/.pptx`/PDF。
+
+## H12-H16 的关键落点（避免重复调查）
+
+- **H12 授权**：`backend/ai/dataset_access.py`（进程内 grant，键 `(会话, 数据集)`，`max_rows=0` 表示不限）；
+  `request_dataset_access` 是 control 工具，走 `_dataset_access_event` → `_attach_question`；
+  `answer()` 里先 `approvals.settle` 再 `dataset_access.settle`；`tools._dataset_rows` 是唯一的行消费口。
+  API：`GET /api/ai/conversations/<id>` 带 `dataset_grants`；`DELETE …/dataset-grants/<dataset_id>`。
+- **H13 管理**：`workflow_list/read/update/rename/delete/export/run/stop` + `export_list/delete` 在 `ai/tools.py`；
+  `APPROVAL_TOOLS` 覆盖写操作，`ALWAYS_APPROVAL_TOOLS={'workflow_delete','export_delete'}` 绕过 auto-approve 强制审批；
+  `engine.run.stop_run` 是 HTTP 与工具共用的停止实现（旧的 route 主体已移走）。
+- **H14 覆盖**：`backend/ai/coverage.py`；入口集合是 `agent.UNIVERSAL_TOOLS` + `agent.FILE_TOOLS` + 技能 `tools`；
+  插件工具 `ToolSpec.builtin=False`，不计入；门禁 `tests/unit/gates/test_ai_coverage.py` 可反向失败。
+- **H16 图表**：`ChartSpec.required_params` 是唯一声明；`WorkflowEngine.validate_detailed` 的 visualize 分支读它，
+  先 `with_chart_defaults`；stack_pct 缺失时整张画布在运行前被 rejected，控制台按名给出 `stack_fields`。
 
 ## 压缩后必须保留的规则
 
@@ -56,4 +77,4 @@
 
 ## 给压缩后的第一句话
 
-> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `b3dbfb3`。先做 H17/H18。
+> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `44dcb01`。先做 H17/H18。
