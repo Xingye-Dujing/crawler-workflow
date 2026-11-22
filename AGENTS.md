@@ -55,6 +55,10 @@ a defect, not a shortcut.
 - **Frontend panels**: a panel is a `static/js/panels/*.js` split with its `<script>` line in `index.html` (the one load
   order) and an entry in `tests/frontend/splits.json`/`companions.mjs`; the one-global rule is the seam. Never add a
   second list.
+- **A migration switch expires.** Declare it in `runtime/flags.py` with an owner, a `remove_by` date and a reason;
+  `problems()` turns an expired or ownerless flag into a gate failure. Add one only when the second path exists, and
+  delete the flag with the old path when parity is green. `core.asset.DataAsset` is the shared identity of a node output
+  (owner/origin/sha256/uri/parents) — do not invent a second output record in a domain module.
 - **Do not restructure a seam to fit one entry.** If the new entry does not fit the seam's vocabulary, add the missing
   generic capability to the shared layer (one field, one flag, one hook) and let each entry answer it — the shared
   layer stays ignorant of who answers what.

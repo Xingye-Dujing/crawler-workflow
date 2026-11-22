@@ -54,11 +54,15 @@
   `require()` 对非法移动按名拒绝；`tests/unit/foundation/test_fsm.py` 穷举全部状态对。
 - `runtime/events.py`：四个运行事件的字段类型契约；`publish()` 校验后交给 `run_events` 总线；
   `tests/unit/gates/test_event_contract.py` 用 AST 检查现有调用点与 `ai/monitors.py` 的订阅词汇。
-- 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`、ADR-003 的 P1 落点。
+- `runtime/flags.py`：`Flag(name/owner/remove_by/description/default)`；`active()` 读 `CIXI_FLAG_*`（空值取默认，
+  非布尔按名拒绝），`problems()` 把过期/无 owner/非法日期变成门禁失败；`tests/unit/gates/test_flags.py` 用合成开关
+  证明门禁能红。当前 `FLAGS` 为空——P1 的两个 pilot 都是单路径切换。
+- `core/asset.py`：`DataAsset`（id/kind/owner/origin/sha256/size/uri/parents/meta/schema）与 `from_dict`/`to_dict`；
+  只导入标准库，供 P2 的运行库、节点、API、AI 共用。`services/components` 的 `Asset` 是可下载组件载荷，不是同一种。
+- 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`、ADR-001/ADR-003 的 P1 落点。
 - 本片验证：相关模块 `2048 passed`（analysis/gates/runs/executors/capabilities + node-types/workflow API）；
   ruff 全绿；product pylint 10.00/10、tests pylint（本片文件）10.00/10；`test_boot_import_budget` 9 passed。
-- 未做（P1 后续切片）：`runtime/flags.py`、Asset 数据模型骨架。
-  前端表单与 `canvas.js`/`runs.js` 的 if 链按计划在 P2。
+- P1 清单已全部落地；下一步进入 P2（15 个节点迁移 + schema 表单 + 删除前端第二套规则）。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 
@@ -81,9 +85,9 @@
 
 ## 下一步（按顺序）
 
-1. **P1 续**：`tools/gen_capabilities.py` 五类产物 + `tools/doctor.py` + 生成物 freshness gate；然后
-   `runtime/fsm.py` / `runtime/events.py` / `runtime/flags.py` / Asset 骨架。
-2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P2-P9；每个切片结束更新本文件。
+1. **P2 节点内核全量**：15 个节点逐个迁移到 `capabilities_kernel/nodes/<id>/manifest.py`；schema 表单渲染器与
+   custom renderer 注册表；删除 `canvas.js` 的类型/默认参数/表单分派与 `runs.js` 的验证 if 链。
+2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 

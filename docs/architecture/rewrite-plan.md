@@ -62,9 +62,9 @@
 - [x] `services/validation/engine.py` 骨架 + static 规则
 - [x] pilot：`tokenize` 节点全链路迁移（服务端；前端表单/if 链在 P2）
 - [x] 生成物 freshness gate
-- [ ] `runtime/flags.py` 迁移开关 + 到期门禁
+- [x] `runtime/flags.py` 迁移开关 + 到期门禁
 - [x] manifest `api_version`/`manifest_hash` + 兼容检查
-- [ ] Asset 数据模型骨架
+- [x] Asset 数据模型骨架
 - **DoD**：tokenize 只改一个清单目录即可工作；doctor 全绿；旧路径仍绿；无行为变化。
 
 ## P2 节点内核全量（2-3 周）

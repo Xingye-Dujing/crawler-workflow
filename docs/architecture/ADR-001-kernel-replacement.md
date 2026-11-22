@@ -31,6 +31,17 @@
 - 每个域迁移前必须先写“扩展剧本”和“完整性门禁”，否则迁移会变成第二次复制。
 - 旧路径的 bug 只在“数据丢失/安全”级别做热修；其余等新路径一次性解决，避免在将被删除的代码上重复投入。
 
+## P1 落点（2026-11-22）
+
+- `backend/runtime/flags.py`：`Flag(name/owner/remove_by/description/default)`；`active()` 读
+  `CIXI_FLAG_<NAME>`，空值取声明默认，非布尔拼写按名拒绝；`problems(today=)` 把过期/无 owner/无说明/
+  非法日期/重复名变成门禁失败；`tests/unit/gates/test_flags.py` 用合成开关证明门禁能红。
+  当前 `FLAGS` 为空：P1 的两个 pilot 都是单路径切换，没有需要并存的第二条路径。下一个迁移（P2 节点目录、
+  P4 AI 框架）在引入第二条路径的同一次改动里声明开关，parity 绿后删除。
+- `backend/core/asset.py`：节点输出物化为 `DataAsset` 的模型骨架（`services/components` 的 `Asset`
+  是可下载组件载荷，不是同一种东西）。身份 = id/kind/owner/origin/sha256/size/uri/parents/meta/schema；
+  只导入标准库，所以运行库、节点、API、AI 都能读同一个形状。P2 才接运行库与节点输出。
+
 ## 被否决的替代方案
 
 - **推倒重来**：风险与周期不可控；现有测试是资产，不是包袱。

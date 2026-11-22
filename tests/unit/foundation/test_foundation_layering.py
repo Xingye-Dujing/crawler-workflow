@@ -62,8 +62,10 @@ class TestTheFoundationImportsNoLayerAboveIt:
         # ``cache`` joined it because a library that downloads a weight reads HF_HOME when it is
         # imported, so the project-local cache decision has to be published by ``core.config`` before
         # any domain layer loads. It is standard-library only and writes nothing at import.
+        # ``asset`` joined it because every layer reads a run output's identity (run store, nodes,
+        # API, AI); the record is standard-library only, so it belongs below all of them.
         modules = {path.stem for path in CORE.glob('*.py')} - {'__init__'}
-        assert modules == {'config', 'cache', 'refs', 'machine', 'procs', 'atomic'}, (
+        assert modules == {'config', 'cache', 'refs', 'machine', 'procs', 'atomic', 'asset'}, (
             f'core/ holds {sorted(modules)}; a new module belongs here only if every layer may import it — '
             'say so in the package docstring and extend this contract deliberately'
         )
