@@ -7,31 +7,6 @@ Two layers, deliberately separate:
 - ``nodes.registry`` — type → ``run(node, call)``; built-in plugins self-register from
   ``nodes.executors``, and ``app`` registers the executors that still live there.
 
-The 2026-10 refactor defined the full target and the migration phases (its process ledger has since
-been removed from the repo).
+Modules here are imported by their explicit path (``from nodes import registry``); this package
+re-exports nothing, so there is no second name for anything a module already owns.
 """
-
-from nodes.catalog import (
-    NODE_TYPES,
-    PDF_SOURCE_NODE_TYPES,
-    PLUGINS,
-    QUIET_NODE_TYPES,
-    TABLE_NODE_TYPES,
-    NodePlugin,
-    plugin_for,
-    types_in,
-)
-from nodes.context import NodeCall, NodeExecutor
-
-__all__ = [
-    'NODE_TYPES',
-    'PDF_SOURCE_NODE_TYPES',
-    'PLUGINS',
-    'QUIET_NODE_TYPES',
-    'TABLE_NODE_TYPES',
-    'NodeCall',
-    'NodeExecutor',
-    'NodePlugin',
-    'plugin_for',
-    'types_in',
-]

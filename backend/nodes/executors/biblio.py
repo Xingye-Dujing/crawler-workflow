@@ -22,8 +22,6 @@ from services.biblio.schema import collect_problems as biblio_param_problems
 from services.biblio.schema import output_columns as biblio_output_columns
 from services.biblio.schema import read_columns as biblio_read_columns
 
-NODE_TYPE = 'biblio'
-
 
 def validate_node(node: dict, context) -> list[dict]:
     """One table parent plus every parameter the network refuses before a run is paid for."""

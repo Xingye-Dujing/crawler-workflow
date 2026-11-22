@@ -14,7 +14,6 @@ symmetric: both add and remove the contributions from the registry AND from thos
 """
 
 import importlib.util
-import json
 import os
 import re
 from urllib.parse import urljoin, urlparse
@@ -439,10 +438,3 @@ def register_stored_plugins() -> None:
             _release(plugin_id)
             continue
         _DYNAMIC[plugin_id] = {'kind': manifest.kind, 'skills': created}
-
-
-def manifest_json(plugin_id: str) -> str:
-    row = store.get_plugin(plugin_id)
-    if row is None:
-        raise AIError('ai.pluginNotFound', kind='not_found', plugin=plugin_id)
-    return json.dumps(row.get('manifest') or {}, ensure_ascii=False, indent=2)

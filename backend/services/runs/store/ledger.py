@@ -468,10 +468,6 @@ class FilesMixin:
         sql += ' ORDER BY name'
         return [dict(row) for row in self._query(sql, tuple(params))]
 
-    def forget_run_files(self, run_id: str) -> int:
-        """Drop a run's file map (used once its files are cleared from disk)."""
-        return self._execute('DELETE FROM run_files WHERE run_id = ?', (str(run_id),)).rowcount
-
     def forget_files(self, names) -> int:
         """Forget many deleted files in ONE transaction (the 清空 sweep's batch form).
 

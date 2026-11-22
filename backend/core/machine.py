@@ -106,18 +106,6 @@ def chrome_executable_name(system: str | None = None) -> str:
     return names[0] if names else 'Chrome'
 
 
-def driver_executable_name(system: str | None = None) -> str:
-    """The chromedriver file name for this OS (one table, not a ``.exe`` written in a probe)."""
-    names = DRIVER_FILE_NAMES.get(platform_name(system)) or ()
-    return names[0] if names else 'chromedriver'
-
-
-def node_executable_name(system: str | None = None) -> str:
-    """The Node file name for this OS, from the same table the Node probe uses."""
-    names = NODE_PATH_NAMES.get(platform_name(system)) or ()
-    return names[0] if names else 'node'
-
-
 def browser_version(binary: str, system: str | None = None) -> str:
     """A browser's version text, read WITHOUT starting the browser.
 
@@ -236,11 +224,6 @@ def inside_installer_components(path: str) -> bool:
     except (OSError, ValueError):
         return False
     return path_norm == root_norm or path_norm.startswith(root_norm + os.sep)
-
-
-def _installer_export(values) -> list[str]:
-    """Exported paths that are real executables inside the installer's component tree."""
-    return [path for path in values if path and _is_executable(path) and inside_installer_components(path)]
 
 
 def platform_name(system: str | None = None) -> str:
@@ -507,10 +490,6 @@ NODE_PATH_NAMES = {
     'darwin': ('node',),
     'win32': ('node.exe',),
 }
-
-#: Driver and Node file names a machine's own install uses. The installer/probe ask this table
-#: instead of spelling ``.exe`` outside the per-OS facts (see ``tests/unit/crawlers``).
-DRIVER_FILE_NAMES = {'linux': ('chromedriver',), 'darwin': ('chromedriver',), 'win32': ('chromedriver.exe',)}
 
 #: Where an installer component keeps its executable INSIDE its version folder. This is not the
 #: same question as ``chrome_executable_name``: that one is a name a user types on PATH, while this

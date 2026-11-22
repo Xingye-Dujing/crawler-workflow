@@ -36,8 +36,6 @@ from nodes.context import NodeCall, node_params
 from nodes.labels import node_label, parent_label
 from services.analysis.matching import COUNT_MODES, key_counts, value_key
 
-NODE_TYPE = 'verify'
-
 #: The report's appended columns. They are a data contract: a downstream chart, a filter or
 #: a re-crawl feed reads these names, so renaming one is a breaking change and is pinned by
 #: a test rather than left to whichever executor edited last.

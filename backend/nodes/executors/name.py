@@ -7,8 +7,6 @@ which is exactly why the node must connect to one.
 
 from nodes.context import NodeCall
 
-NODE_TYPE = 'name'
-
 
 def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
     """The lineage view's answer: this node contributes no columns to anything downstream."""

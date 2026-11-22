@@ -16,8 +16,6 @@ from i18n import t
 from nodes.catalog import TABLE_NODE_TYPES
 from nodes.context import NodeCall
 
-NODE_TYPE = 'accumulate'
-
 
 def validate_node(node: dict, context) -> list[dict]:
     """Name, identity mode, keys and exactly one table parent — the lineage append's contract."""

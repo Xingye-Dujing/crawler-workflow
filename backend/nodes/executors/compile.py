@@ -22,8 +22,6 @@ from i18n import t
 from nodes.context import NodeCall, node_params
 from services.charts import pdf
 
-NODE_TYPE = 'compile'
-
 
 def validate_node(_node: dict, context) -> list[dict]:
     """Every parent must be a visualize that will actually emit LaTeX; named before the run."""

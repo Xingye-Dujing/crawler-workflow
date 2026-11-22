@@ -36,8 +36,6 @@ from services.analysis.params import (
 from services.analysis.pipeline import LLM_OPS, STEP_PARAMS, DataAnalysisService, UnknownOperationError
 from services.analysis.step_checks import param_problems
 
-NODE_TYPE = 'analysis'
-
 
 def validate_node(node: dict, _context) -> list[dict]:
     """An analysis node with neither steps nor an operation would pass rows through doing nothing."""

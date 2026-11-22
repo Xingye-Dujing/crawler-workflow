@@ -133,19 +133,6 @@ class PlayerUI:
             ctypes.windll.user32.BringWindowToTop(hwnd)
             ctypes.windll.user32.SetForegroundWindow(hwnd)
 
-    def wait_window(self, seconds: float = 40.0):
-        """The window, once it EXISTS — a cold Wails launch needs a few seconds and
-        the first probe right after Popen found nothing (measured on the first live
-        run: ``open_drama`` raced the splash and refused in 3 s)."""
-        deadline = time.time() + seconds
-        while time.time() < deadline:
-            self._check_stopped()
-            win = self.window()
-            if win is not None:
-                return win
-            pacing.poll_tick(0.5)
-        return None
-
     def wait_content(self, seconds: float = 60.0):
         """The window, once its WEB CONTENT is walkable.
 

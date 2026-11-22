@@ -462,9 +462,6 @@ class XiaohongshuCrawler(Crawler):
         """'#tag' tokens of the note body, in order, without the leading #."""
         return list(dict.fromkeys(re.findall(r'#([^#\s\[\]]{1,40})', content or '')))
 
-    def _extract_count(self, selector: str) -> int:
-        return self._count_in(selector)
-
     #: A comment panel's cards, one entry per TOP-LEVEL comment (the measured wrapper), with a
     #: fallback for a layout that has no wrapper. ``.comment-item`` alone matched both the wrapper's
     #: inner card AND the wrapper, so every parent was read twice and half the preview budget went to

@@ -20,12 +20,6 @@ logger = logging.getLogger(__name__)
 #: a fourth spelling from a model would read as a real category with one row in it.
 LABELS = ('positive', 'negative', 'neutral')
 
-#: Every mode, and the only ones that answer the question “这条文本是正面的吗” with a
-#: probability the thresholds can be applied to. ``ml`` and ``llm`` answer with a label
-#: they were trained or prompted to choose, and re-deciding it from a number the reader
-#: cannot interpret would be a second opinion about the model's own answer.
-SCORE_MODES = ('snownlp', 'bert')
-
 #: Rows handed to the transformer in one forward pass. The old path called the pipeline
 #: once per row — a Python-level round trip for every comment — which on a real Weibo
 #: table (10^5 rows) is the difference between minutes and an hour. 32 keeps a 110M

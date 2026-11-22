@@ -9,9 +9,8 @@ import pandas as pd
 
 from services.biblio.formats.countries import countries_in
 from services.biblio.importer import _join_authors, _join_list, _row
-from services.biblio.refs import parse_reference, references_json, structured_references
+from services.biblio.refs import structured_references
 
-_CELL_SPLIT = re.compile(r'[;；]+')
 _YEAR = re.compile(r'(?:19|20)\d{2}')
 
 
@@ -44,10 +43,6 @@ def split_authors(value) -> str:
     return _join_authors(text(value))
 
 
-def split_affiliations(value) -> str:
-    return _join_list(text(value), _CELL_SPLIT)
-
-
 def pages(start, end='') -> str:
     first, last = text(start), text(end)
     if first and last and first != last:
@@ -73,12 +68,6 @@ def references_from_field(value) -> list[str]:
     if len(parts) == 1:
         parts = [part for part in raw.split(';') if part.strip()]
     return [part.strip() for part in parts if part.strip()]
-
-
-def refs_payload(raw_refs: list[str], structured: list[dict] | None = None) -> tuple[str, str]:
-    """The raw reference text and the canonical structured JSON."""
-    parsed = structured if structured is not None else structured_references(raw_refs)
-    return '\n'.join(raw_refs), references_json(parsed)
 
 
 def make_row(
@@ -220,20 +209,6 @@ def frame_cell(row, frame: pd.DataFrame, *names: str) -> str:
     return text(row.get(column)) if column else ''
 
 
-def has_columns(frame: pd.DataFrame, required: tuple[str, ...], any_of: tuple[str, ...] = ()) -> bool:
-    names = {_norm(column) for column in frame.columns}
-    if not all(_norm(name) in names for name in required):
-        return False
-    return not any_of or any(_norm(name) in names for name in any_of)
-
-
-def header_has(text_value: str, required: tuple[str, ...], any_of: tuple[str, ...] = ()) -> bool:
-    names = {_norm(name) for name in header_of(text_value)}
-    if not all(_norm(name) in names for name in required):
-        return False
-    return not any_of or any(_norm(name) in names for name in any_of)
-
-
 def countries(value: str) -> str:
     return ';'.join(countries_in(value))
 
@@ -255,7 +230,3 @@ def frame_has_groups(frame: pd.DataFrame, groups: tuple[tuple[str, ...], ...]) -
 
 def header_has_groups(text_value: str, groups: tuple[tuple[str, ...], ...]) -> bool:
     return _has_groups({_norm(name) for name in header_of(text_value)}, groups)
-
-
-def parse_ref(value: str) -> dict | None:
-    return parse_reference(value)

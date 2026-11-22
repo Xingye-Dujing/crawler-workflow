@@ -197,8 +197,3 @@ def read_manifest_file(path: str, *, base_dir: str = '') -> ModelManifest:
     with open(path, encoding='utf-8') as handle:
         data = json.load(handle)
     return from_manifest(data, base_dir=base_dir)
-
-
-def is_legacy_manifest(data: dict) -> bool:
-    """A bare four-string registry row, not a full model declaration."""
-    return isinstance(data, dict) and 'family' not in data

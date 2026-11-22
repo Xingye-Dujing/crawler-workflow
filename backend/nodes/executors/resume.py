@@ -15,8 +15,6 @@ from i18n import t
 from nodes.context import NodeCall
 from services.runs.store import RUN_RUNNING
 
-NODE_TYPE = 'resume'
-
 
 def execute_resume_node(node: dict, ctx: dict):
     store = ctx['store']

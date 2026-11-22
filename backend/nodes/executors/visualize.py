@@ -18,8 +18,6 @@ from services.charts.registry import spec_for, with_chart_defaults
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
 
-NODE_TYPE = 'visualize'
-
 
 def validate_node(node: dict, _context) -> list[dict]:
     """The chart type, its x field and the chart spec's own required parameters."""

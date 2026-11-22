@@ -96,13 +96,3 @@ PDF_SOURCE_NODE_TYPES = frozenset(plugin.type for plugin in PLUGINS.values() if 
 
 #: Types whose generic console pair is omitted.
 QUIET_NODE_TYPES = frozenset(plugin.type for plugin in PLUGINS.values() if plugin.quiet)
-
-
-def plugin_for(node_type: str) -> NodePlugin | None:
-    """The declaration for *node_type*, or ``None`` — the caller decides how to refuse."""
-    return PLUGINS.get(str(node_type or ''))
-
-
-def types_in(category: str) -> tuple[str, ...]:
-    """Types in one palette category, in catalogue order (for docs and a future palette)."""
-    return tuple(plugin.type for plugin in PLUGINS.values() if plugin.category == category)

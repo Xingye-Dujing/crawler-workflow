@@ -1,35 +1,16 @@
 """The parameters a freshly created node starts with, per node type.
 
-One table for the whole product: the canvas seeds a new node from it, ``GET /api/node-types``
-serves it, and ``tests/unit/analysis/test_node_plugins`` pins it against the catalogue. ``source`` has no
-entry on purpose — its defaults depend on the crawl matrix the browser has just fetched (platform,
-engine, mode), so the canvas derives them from that matrix instead of freezing one shape here.
-
-Every other type declares its seeds in its manifest's ``params`` section; this module is now the
-empty adapter plus the merge, and the literal must stay empty.
+`GET /api/node-types` seeds a new node from this table, and
+``tests/unit/analysis/test_node_plugins`` pins it against the catalogue. Every type declares its
+seeds in its manifest's ``params`` section, so this module is the projection, not a second table.
+``source`` has no entry on purpose — its defaults depend on the crawl matrix the browser has just
+fetched (platform, engine, mode), so the canvas derives them from that matrix instead of freezing
+one shape here; ``DYNAMIC_DEFAULTS`` tells the client which type that is.
 """
 
 from capabilities_kernel import registry as capabilities
 
-#: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
-#: the first is capability-shaped, the second carries a template snapshot chosen at creation.
-#: Every other type now declares its seeds in its manifest, so this literal is empty.
-_DECLARED: dict[str, dict] = {}
-
-
-def _with_kernel_defaults(declared: dict[str, dict]) -> dict[str, dict]:
-    """Merge the migrated manifests' param defaults; a duplicate is a hard error, never a winner."""
-    merged = dict(declared)
-    for node_type, seeds in capabilities.node_defaults().items():
-        if node_type in merged:
-            raise RuntimeError(
-                f'node type {node_type} seeds the same parameters in nodes/defaults.py and in its manifest',
-            )
-        merged[node_type] = seeds
-    return merged
-
-
-NODE_DEFAULTS: dict[str, dict] = _with_kernel_defaults(_DECLARED)
+NODE_DEFAULTS: dict[str, dict] = capabilities.node_defaults()
 
 #: Types whose defaults are derived where the facts live, not frozen here. The API says so in
 #: ``defaultsFrom`` so the client knows to ask its own source of truth.

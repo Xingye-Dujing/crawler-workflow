@@ -27,7 +27,6 @@ VIEW_API = 'https://api.bilibili.com/x/web-interface/view?bvid='
 #: list in one response (100 items), which is why it is walked as a single page.
 POPULAR_API = 'https://api.bilibili.com/x/web-interface/popular?ps=20&pn='
 RANKING_API = 'https://api.bilibili.com/x/web-interface/ranking/v2?rid=0&type=all'
-REPLY_API = 'https://api.bilibili.com/x/v2/reply/main'
 
 #: A withdrawn or private video answers ``-404 啥都木有``: that card is gone and
 #: the crawl moves past it. Any *other* non-zero code is the session or the risk

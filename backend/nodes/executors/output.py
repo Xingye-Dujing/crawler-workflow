@@ -25,8 +25,6 @@ from services.exports.writer import DataExporter, UnsupportedFormatError
 from services.runs.files import record_file
 from services.runs.windows import window_for_save
 
-NODE_TYPE = 'output'
-
 
 def validate_node(node: dict, context) -> list[dict]:
     """The two legitimate save shapes — merged rows and a PDF artifact — checked before a run."""

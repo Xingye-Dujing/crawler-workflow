@@ -1087,12 +1087,6 @@ DEFAULTS = {spec.key: spec.default for spec in SETTINGS}
 #: Machine-local values: never in a portable export, never visible to a non-admin.
 MACHINE_KEYS = tuple(spec.key for spec in SETTINGS if not spec.portable)
 
-#: Keys that need a process restart before the new value is used.
-RESTART_KEYS = tuple(spec.key for spec in SETTINGS if spec.restart)
-
-#: The settings that decide how the crawl *behaves*, not where its tools live.
-CRAWL_KEYS = tuple(spec.key for spec in SETTINGS if spec.group in ('pace', 'safety', 'limits', 'data', 'defaults'))
-
 
 # ─── Presets ────────────────────────────────────────────────────────────────
 #: Named bundles applied as concrete values. Three steps of the same idea:

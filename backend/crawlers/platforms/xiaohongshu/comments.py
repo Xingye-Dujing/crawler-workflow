@@ -22,7 +22,6 @@ two notes, one of them 359 comments), and every selector below is one of those f
 """
 
 import contextlib
-import re
 
 from selenium.webdriver.common.action_chains import ActionChains
 
@@ -137,10 +136,6 @@ return (function () {
   return 'closed';
 })();
 """
-
-#: The opener's own words, measured: ``展开 3 条回复`` / ``展开 10 条回复``. Matched on the sentence,
-#: never on a build hash, and the count is kept so the site's own number can be reported.
-OPENER_RE = re.compile(r'展开\s*(\d+)\s*条回复')
 
 #: How many consecutive screens may add nothing AND leave no thread that grew before the walk believes
 #: the panel is done. Patience, not a budget: the panel answers a scroll in ~2 s, and one quiet round is

@@ -170,20 +170,6 @@ def install_component(
         raise
 
 
-def verify_component(catalog: Catalog, component_id: str, root: str | Path, *, system: str | None = None) -> Path:
-    """Check an installed component's payload still exists; raise a named error when it does not."""
-    component = catalog.get(component_id)
-    asset = component.asset(system)
-    if asset is None:
-        raise InstallError(f'{component_id} has no asset for {platform_name(system)}')
-    manifest = Manifest(root).load()
-    path = manifest.path_of(component_id)
-    if path is None:
-        raise InstallError(f'{component_id} is not installed')
-    _verify_payload(path, asset.verify)
-    return path
-
-
 def remove_component(root: str | Path, component_id: str) -> bool:
     """Delete a component family and its manifest row. The application itself is not removable.
 

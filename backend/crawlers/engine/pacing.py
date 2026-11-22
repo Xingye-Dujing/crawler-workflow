@@ -38,10 +38,6 @@ import time
 
 from runtime.settings import get_setting
 
-#: Dimensions that are multipliers on a measured baseline. Patience is a count scale and
-#: is floored at 1 (never fewer rounds than the site measurement needed).
-_PAUSE_DIMENSIONS = ('pause', 'scroll', 'expand', 'click', 'wait', 'arrival', 'page')
-
 #: The dimensions the humanising jitter applies to. A page-arrival wait and the element
 #: wait are budgets, not beats: stretching them by chance buys no human rhythm, and it
 #: would make "how long may this page take" a lottery.
@@ -83,11 +79,6 @@ def _scale(dimension: str) -> float:
     return max(0.0, value)
 
 
-def pace_scale() -> float:
-    """How much to stretch a politeness pause (kept as the pause dimension's own name)."""
-    return _scale('pause')
-
-
 def scroll_scale() -> float:
     """How much to stretch how long a scroll's content may take to land (and its mount time)."""
     return _scale('scroll')
@@ -126,11 +117,6 @@ def wait_scale() -> float:
 def arrival_scale() -> float:
     """How much to stretch a page-arrival settle (never the arrival failure budget)."""
     return _scale('arrival')
-
-
-def page_scale() -> float:
-    """How much to stretch the pause between opening one page and the next."""
-    return _scale('page')
 
 
 def jitter() -> float:
@@ -323,8 +309,3 @@ def arrival(base: float) -> float:
 def rounds(base: int | float) -> int:
     """A loop/retry count scaled by the user's patience setting, never below one."""
     return max(1, int(round(float(base) * patience_scale())))
-
-
-def gentle_crawl_on() -> bool:
-    """Compatibility read: whether the user has stretched any pacing dimension beyond the baseline."""
-    return any(_scale(dimension) > 1.0 for dimension in _PAUSE_DIMENSIONS)

@@ -22,8 +22,6 @@ from nodes.context import NodeCall, node_params
 from nodes.labels import node_label
 from services import python_runtime, python_scripts
 
-NODE_TYPE = 'python'
-
 
 def _args(params: dict) -> dict:
     raw = params.get('args')

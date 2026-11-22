@@ -18,8 +18,6 @@ from i18n import t
 from nodes.context import NodeCall, node_params, split_panel_columns
 from services.biblio import fuse
 
-NODE_TYPE = 'fuse'
-
 
 def validate_node(node: dict, _context) -> list[dict]:
     """The fusion parameter check, in data form so the one validator engine can word it."""

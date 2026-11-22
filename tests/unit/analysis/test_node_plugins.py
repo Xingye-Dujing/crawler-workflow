@@ -100,17 +100,6 @@ def test_every_plugin_names_a_label_that_exists_in_both_catalogues():
     assert missing == [], f'node types with no zh+en label: {missing}'
 
 
-def test_an_unknown_type_has_no_plugin():
-    assert catalog.plugin_for('moonbase') is None
-    assert catalog.plugin_for('') is None
-
-
-def test_categories_group_the_types_for_a_future_palette():
-    assert {'source', 'upload', 'resume', 'comment'} <= set(catalog.types_in('data'))
-    assert catalog.types_in('meta') == ('name',)
-    assert set(catalog.types_in('visualize')) == {'visualize', 'compile'}
-
-
 def test_every_type_has_seed_parameters_except_the_one_derived_from_the_matrix():
     """``GET /api/node-types`` seeds a new node from this table; a type missing here would be
     created with no settings at all. ``source`` is the documented exception — its platform,

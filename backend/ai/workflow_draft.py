@@ -14,8 +14,6 @@ import os
 
 from engine.workflow import NODE_TYPES
 
-#: A workflow artifact carries its graph under one of these keys.
-GRAPH_KEYS = ('nodes',)
 WIRE_KEYS = ('connections', 'edges')
 
 

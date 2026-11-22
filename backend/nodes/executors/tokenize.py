@@ -13,8 +13,6 @@ from i18n import t
 from nodes.context import NodeCall, columns_from_params, node_params
 from services.charts.visualizer import VisualizationService
 
-NODE_TYPE = 'tokenize'
-
 #: What a tokenize node emits, per ``output_mode``. The table is the node's own contract: the
 #: ``emit_columns`` below is its only reader — the lineage view asks this plugin rather
 #: than keeping a second copy of the table.

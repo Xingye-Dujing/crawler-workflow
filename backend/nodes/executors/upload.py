@@ -16,8 +16,6 @@ from runtime.stores import _apply_dataset_meta, _load_dataset, get_dataset_store
 from i18n import t
 from nodes.context import NodeCall, node_params
 
-NODE_TYPE = 'upload'
-
 
 def emit_columns(node: dict, _merged: list[str] | None) -> list[str] | None:
     """The columns the referenced dataset really holds, read from its stored meta.

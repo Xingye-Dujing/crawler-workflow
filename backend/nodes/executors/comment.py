@@ -38,8 +38,6 @@ from services.ingest.runtime import item_scope, name_parts, source_stream
 from services.pool import selector as pool_selector
 from services.runs.files import record_file
 
-NODE_TYPE = 'comment'
-
 
 def validate_node(node: dict, _context) -> list[dict]:
     """Every platform these links name must be able to log in as the node's account.

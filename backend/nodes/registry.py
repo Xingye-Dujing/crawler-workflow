@@ -4,10 +4,11 @@ The catalogue (``nodes/catalog.py``) says which types exist; this table says how
 pinned against each other by ``tests/unit/analysis/test_node_plugins.py``, so a type cannot be declared with
 no executor, and an executor cannot be registered for a type nobody declared.
 
-Every node type is a plugin here: ``nodes/executors/<type>.py`` declares ``NODE_TYPE`` and
-``run(node, call)``, and importing that package registers all of them. A migrated type keeps its
-behavior module but is declared by ``capabilities_kernel/nodes/<id>/manifest.py``; this module asks
-the kernel registry for those handlers after the legacy package has registered its own, so one
+Every node type is a plugin here. The handler is ``run(node, call)`` in
+``nodes/executors/<type>.py``; a manifest names that function, so a migrated type never repeats the
+type name in two places. The one type still declared in ``nodes/catalog.py`` (``source``) also exports
+``NODE_TYPE``, which is how ``nodes/executors/__init__.py`` registers it. This module asks the kernel
+registry for the manifest-declared handlers after the legacy package has registered its own, so one
 registry serves both halves of the tree. A plugin depends only on its arguments and the shared
 service modules — never on ``app``, which would import Flask into the worker and cycle back to this
 table (``tests/unit/analysis/test_node_plugins.py`` scans for that import).

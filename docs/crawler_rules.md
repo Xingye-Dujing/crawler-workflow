@@ -18,7 +18,7 @@
   `crawlers/commenting/`、`capabilities/fields.py` 里不得出现按平台名分支的代码。共享工厂可以收一个通用参数，由
   平台文件传自己的答案（如 `comment_mode(..., replies=True)`）；平台专属逻辑出现在共享模块就是架构缺陷。
 - **没有平台自己的用户旋钮。** 站点基线（卡片等待、滚动预算、卡住轮数）可以放在平台旁边，但必须经
-  `crawlers/engine/pacing.py` 消费（`pace_scale`/`scroll_scale`/`scroll_interval`/`expand_scale`/`click_scale`/
+  `crawlers/engine/pacing.py` 消费（`nap`/`scroll_scale`/`scroll_interval`/`expand_scale`/`click_scale`/
   `wait_scale`/`arrival_scale`/`patience_scale` 与 `*_nap`/`*_wait`）。平台模块不得 `get_setting` 读采集行为，不得手写
   `time.sleep`；`tests/unit/gates/test_settings_schema.py` 两条都拒。用户选择只在 `runtime/settings_schema.py` 声明一次。
 - **一个间隔一个旋钮。** 每个停顿按动作命名：`scroll_*` 滚动、`expand_*` 展开/更多、`click_*` 其它点击、`arrival_*`

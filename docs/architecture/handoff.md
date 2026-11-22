@@ -187,9 +187,26 @@
 该文件只剩尚未迁移的 `source`）；AI 重写留下的无调用函数 `_current_thinking`、`_abandon_pending`、
 `ensure_dirs`、`attachments_payload`、`abandon_questions`、`list_steps`、`thinking_block`/
 `tool_use_block`/`tool_result_block`、`ProviderReply`、`context_section`。
-仍待按“各自切片”清理（有文档或装饰器/动态引用，需先确认）：`core/machine.py` 的三个无调用取名字、
-`crawlers/engine/pacing.py` 的三个 `*_scale` 兼容读、`services/biblio/formats/common.py` 的五个无人引用的
-helper、`services/charts/options/relations.py`（`@builder` 注册，实际在用，勿删）。
+
+2026-11-22 第二轮死代码清理（AST 全仓库扫描，逐项人工确认）：
+- 迁移残骸：15 个已迁移 executor 的 `NODE_TYPE`（清单已声明类型，只有 `source` 还需要它）、
+  `nodes/catalog.py` 的 `plugin_for`/`types_in` 与 `nodes/__init__.py` 的再导出（无人按名字使用）、
+  `nodes/defaults.py` 的空 `_DECLARED` 与合并函数（直接投影清单）。
+- 无调用取名字/兼容读：`core/machine.py` 的 `driver_executable_name`/`node_executable_name`/`_installer_export`
+  与 `DRIVER_FILE_NAMES`；`crawlers/engine/pacing.py` 的 `pace_scale`/`page_scale`/`gentle_crawl_on`
+  与 `_PAUSE_DIMENSIONS`（`page_nap` 仍读 `crawl_page_scale`，所以设置项保留；`crawler_rules.md` 已改指 `nap`）。
+- 无人引用的 helper：`services/biblio/formats/common.py` 的 `split_affiliations`/`refs_payload`/`has_columns`/
+  `header_has`/`parse_ref`；`services/components/install.py::verify_component`；
+  `services/models/manifest.py::is_legacy_manifest`；`ai/plugins.py::manifest_json`。
+- 无引用方法：`EmotionAnalyzer._train_ml`、`Crawler.scroll_to_bottom`、`PlayerUI.wait_window`、
+  `XiaohongshuCrawler._extract_count`、`FilesMixin.forget_run_files`。
+- 无引用常量：`GRAPH_KEYS`、`SCORE_MODES`、`doctor.CHECKS`、bilibili `REPLY_API`、cnki `ROW_PAUSE`、
+  xhs comments `OPENER_RE`、`RESTART_KEYS`/`CRAWL_KEYS`、`DIVERGING_CMAP`/`SEQUENTIAL_CMAP`、`STATE_CANCELLED`。
+- 保留（扫到但确认在用）：`services/charts/options/relations.py` 的 `_model_agreement`/`_sankey`（`@builder`
+  装饰器注册，名字不在调用点出现）；`services/biblio/formats/*` 与 `i18n_catalog/sched.py`（按注册表/列表加载）。
+- 本片验证：2324 passed（capabilities/analysis/biblio/crawlers/charts/update/ai/node-types API），
+  208 passed（node plugins + node-types API + capabilities），ruff 全绿。
+
 
 ## 下一步（按顺序）
 

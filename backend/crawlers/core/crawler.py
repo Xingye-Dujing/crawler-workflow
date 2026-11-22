@@ -1133,11 +1133,6 @@ class Crawler(ABC):
         except TimeoutException:
             return False
 
-    def scroll_to_bottom(self, times: int = 1, wait: float = 0.1):
-        for _ in range(times):
-            self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-            pacing.scroll_nap(wait)
-
     def scroll_down(self, steps: int = 3, wait: float = 0.12):
         """Walk the page down in viewport-sized steps, then land at the bottom.
 

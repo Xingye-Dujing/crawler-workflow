@@ -149,9 +149,6 @@ Analyze strictly and output only the required plain string."""
     def _ml_predict(self, texts: list[str]) -> list[tuple[str, float]]:
         return self._ml.predict(texts)
 
-    def _train_ml(self, texts: list[str], labels: list[str]):
-        self._ml.fit(texts, labels)
-
     # ── Main entry ──────────────────────────────────────────────
 
     def analyze_dataframe(

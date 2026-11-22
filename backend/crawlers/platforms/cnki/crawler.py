@@ -58,7 +58,6 @@ SELECTION_CAP = 500
 
 #: One search page renders ~20 rows. The pauses are anti-bot hygiene, not a row
 #: budget: the user's target decides how far the walk goes.
-ROW_PAUSE = 1.2
 PAGE_PAUSE = 1.5
 
 

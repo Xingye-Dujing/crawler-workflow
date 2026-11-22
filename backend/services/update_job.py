@@ -43,7 +43,6 @@ STATE_STAGED = 'staged'
 STATE_APPLYING = 'applying'
 STATE_APPLIED = 'applied'
 STATE_FAILED = 'failed'
-STATE_CANCELLED = 'cancelled'
 
 #: States a live worker owns the staging folder in.
 WORKER_STATES = (STATE_DOWNLOADING, STATE_STAGING)

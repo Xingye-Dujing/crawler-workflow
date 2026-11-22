@@ -18,9 +18,6 @@ from capabilities_kernel.manifest import KINDS
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: One row per dimension the doctor can answer live.
-CHECKS = ('structure', 'executor', 'port_hooks', 'validators', 'docs', 'contracts', 'artifacts')
-
 
 def _row(name: str, ok: bool, detail: str = '') -> dict:
     return {'name': name, 'ok': ok, 'detail': detail}

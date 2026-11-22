@@ -226,9 +226,6 @@ CATEGORY_COLORS = [
     '#7A4A55',
     '#4A5A73',
 ]
-DIVERGING_CMAP = ['#0571B0', '#92C5DE', '#F7F7F7', '#F4A582', '#CA0020']
-SEQUENTIAL_CMAP = ['#F7FCF0', '#E0F3DB', '#CCEBC5', '#A8DDB5', '#7BCCC4', '#4EB3D3', '#2B8CBE', '#0868AC', '#084081']
-
 #: A paper figure is set in a serif face (and 宋体 for Chinese labels), not in the UI's sans.
 PRINT_FONT = "'Times New Roman', 'SimSun', 'Songti SC', serif"
 _TEXT_STYLE = {'color': '#222', 'fontSize': 11, 'fontFamily': PRINT_FONT}

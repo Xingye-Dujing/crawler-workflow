@@ -57,8 +57,6 @@ from services.analysis.process import (
 )
 from services.coding import codebooks
 
-NODE_TYPE = 'process'
-
 
 def validate_node(node: dict, _context) -> list[dict]:
     """The operation and the tokenize column, named before any analyzer or model is paid for."""
