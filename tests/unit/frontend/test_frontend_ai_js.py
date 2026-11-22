@@ -447,6 +447,13 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['sessions'] <= 120, out
         assert out['side'] <= 160, out
 
+    def test_a_pointer_capture_failure_does_not_kill_the_column_drag(self):
+        """setPointerCapture throws when the pointer is already gone (or synthetic). The old code
+        aborted before binding pointermove, so a real drag could do nothing."""
+        drag = _run_workspace()['pointerCapture']
+        assert drag['after'] > drag['before'], drag
+        assert drag['saved'] == drag['after'], drag
+
     def test_a_streaming_repaint_keeps_a_scrolled_up_reader_in_place(self):
         """Replacing the flow's innerHTML briefly empties it; without restoring scrollTop the
         browser clamps the reader to the top on every delta."""

@@ -1617,6 +1617,39 @@ out.narrowDock = {
     side: narrowSide,
 };
 
+/* A browser can throw from setPointerCapture when the pointer is already gone (or when a test
+   dispatches a synthetic one). The drag must still work: the real-Chrome tier caught a handler
+   that aborted before it registered its move listener. The DOM stub carries no grips, so bind one
+   through the same `_bindColumns` door. */
+workspace._dom.root.getBoundingClientRect = () => ({ width: 900 });
+workspace._applyWidthClass(900);
+sandbox.AISettings.save({ sessionsWidth: 190, sideWidth: 260 });
+const captureGrip = sandbox.document.createElement('div');
+captureGrip.setAttribute('data-ai-resize', 'sessions');
+captureGrip.setPointerCapture = () => {
+    throw new Error('no active pointer');
+};
+const realGripQuery = workspace._dom.root.querySelectorAll.bind(workspace._dom.root);
+workspace._dom.root.querySelectorAll = (selector) =>
+    selector === '[data-ai-resize]' ? [captureGrip] : realGripQuery(selector);
+const docListeners = {};
+const realDocAdd = sandbox.document.addEventListener;
+sandbox.document.addEventListener = (type, fn) => {
+    (docListeners[type] = docListeners[type] || []).push(fn);
+};
+workspace._bindColumns();
+const captureBefore = parseInt(workspace._dom.root.style.getPropertyValue('--ai-sessions-w'), 10);
+dispatchOn(captureGrip, 'pointerdown', { clientX: 400, pointerId: 7 });
+for (const fn of docListeners.pointermove || []) fn({ clientX: 460, pointerId: 7 });
+for (const fn of docListeners.pointerup || []) fn({ clientX: 460, pointerId: 7 });
+sandbox.document.addEventListener = realDocAdd;
+workspace._dom.root.querySelectorAll = realGripQuery;
+out.pointerCapture = {
+    before: captureBefore,
+    after: parseInt(workspace._dom.root.style.getPropertyValue('--ai-sessions-w'), 10),
+    saved: sandbox.AISettings.load().sessionsWidth,
+};
+
 /* A streaming repaint must not throw the reader back to the top. Simulate a scrolled-up reader,
    add a block, and repaint. */
 workspace._messages = [];

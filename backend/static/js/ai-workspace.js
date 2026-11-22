@@ -310,7 +310,14 @@ const AIWorkspace = {
                     document.removeEventListener('pointerup', up);
                     document.removeEventListener('pointercancel', up);
                 };
-                if (grip.setPointerCapture) grip.setPointerCapture(event.pointerId);
+                if (grip.setPointerCapture) {
+                    try {
+                        grip.setPointerCapture(event.pointerId);
+                    } catch (error) {
+                        /* No active pointer (a synthetic event in the browser tier, or a pointer
+                           already released): capture is an enhancement, not a precondition. */
+                    }
+                }
                 document.addEventListener('pointermove', move);
                 document.addEventListener('pointerup', up);
                 document.addEventListener('pointercancel', up);
@@ -358,7 +365,11 @@ const AIWorkspace = {
                 /* Capture the pointer so a drag that leaves the 8px handle keeps resizing; without
                    it the browser can hand the move to the canvas and the dock appears stuck. */
                 if (this._dom.resizer.setPointerCapture) {
-                    this._dom.resizer.setPointerCapture(event.pointerId);
+                    try {
+                        this._dom.resizer.setPointerCapture(event.pointerId);
+                    } catch (error) {
+                        /* See the column grip: a synthetic/expired pointer must not abort the drag. */
+                    }
                 }
                 document.addEventListener('pointermove', move);
                 document.addEventListener('pointerup', up);
