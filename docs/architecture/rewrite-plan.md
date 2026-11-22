@@ -38,7 +38,7 @@
 - [x] H9 限制默认值（0=不限、输出 32k、表格单页 2k）
 - [x] H10 并发 workers（面板 1-8；API 并行；Ollama 串行）
 - [x] H11 附件文本抽取（pdf/docx/pptx/xlsx/csv/txt/html；files/vision/inline_images 拆分）
-- [ ] H12 数据读取授权
+- [x] H12 数据读取授权（会话/数据集/行数 grant；peek 免费；可撤销）
 - [ ] H13 工作流/产物工具
 - [ ] H14 工具覆盖审计
 - [ ] H15 重试 parity

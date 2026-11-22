@@ -103,6 +103,39 @@ class AskThenAnswerProvider(FakeProvider):
         yield {'type': 'done', 'stop_reason': 'end_turn'}
 
 
+class DatasetAccessProvider(FakeProvider):
+    """Ask for a row grant, then read one page, then answer — the whole pause/resume path."""
+
+    def __init__(self, dataset_id: str):
+        super().__init__('fake_dataset')
+        self.dataset_id = dataset_id
+        self.requests = []
+
+    def stream(self, request):
+        self.requests.append(request)
+        step = len(self.requests)
+        if step == 1:
+            yield {
+                'type': 'tool_call',
+                'id': 'call_access',
+                'name': 'request_dataset_access',
+                'arguments': {'dataset_id': self.dataset_id, 'rows': 10, 'reason': '需要看具体行'},
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        if step == 2:
+            yield {
+                'type': 'tool_call',
+                'id': 'call_page',
+                'name': 'dataset_sample',
+                'arguments': {'dataset_id': self.dataset_id, 'limit': 10},
+            }
+            yield {'type': 'done', 'stop_reason': 'tool_calls'}
+            return
+        yield {'type': 'text_delta', 'text': '读完了'}
+        yield {'type': 'done', 'stop_reason': 'end_turn'}
+
+
 class WindowedProvider(FakeProvider):
     """A provider that reports a model window, so the agent has something to fit the history into.
 
@@ -674,6 +707,72 @@ def test_upload_refuses_a_legacy_doc_at_upload_time(client, clean_ai):
     assert response.status_code == 400
     assert response.get_json()['key'] == 'ai.attachConvert'
     assert store.list_attachments(conversation['id']) == []
+
+
+def test_dataset_rows_need_a_grant_and_the_answer_creates_it(client, clean_ai, monkeypatch):
+    """A page read pauses for a row grant; only the human's answer lets the resumed turn read."""
+    import pandas as pd
+    from ai import dataset_access
+    from ai.providers import PROVIDERS
+    from runtime.stores import get_dataset_store
+
+    dataset_access.reset()
+    try:
+        info = get_dataset_store().put(pd.DataFrame({'a': list(range(30))}), name='demo')
+        provider = DatasetAccessProvider(info['dataset_id'])
+        monkeypatch.setitem(PROVIDERS, 'fake_dataset', provider)
+        data = _chat(
+            client,
+            provider='fake_dataset',
+            model='fake-model',
+            skill='analysis',
+            text='看看这些行',
+        ).get_json()
+        assert data['ok'], data
+        conversation_id = next(event['conversation_id'] for event in data['events'] if event.get('conversation_id'))
+        question_event = next(event for event in data['events'] if event['type'] == 'question')
+        question = question_event['questions'][0]
+        assert question['kind'] == 'dataset_access'
+        assert question['preview']['facts'][0] == {'key': 'name', 'value': 'demo'}
+        # The question itself grants nothing: the registry is still empty.
+        assert dataset_access.active(conversation_id) == []
+
+        label = question['options'][0]['label']
+        answer = client.post(
+            '/api/ai/answer?stream=0',
+            json={
+                'conversation_id': conversation_id,
+                'message_id': question_event['message_id'],
+                'question_id': question_event['question_id'],
+                'answers': [{'id': 'dataset_access', 'selected': [label]}],
+                'api_key': 'secret-key',
+            },
+        ).get_json()
+        assert answer['ok'], answer
+        grants = dataset_access.active(conversation_id)
+        assert grants and grants[0]['max_rows'] == 10, grants
+        # The resumed round read one page inside the grant; the provider saw the rows and the
+        # remaining budget, not a refusal.
+        tool_rows = [row for row in provider.requests[2]['messages'] if row.get('role') == 'tool']
+        page = json.loads(tool_rows[-1]['content'])
+        assert page['total'] == 30, page
+        assert page['grant'] == {'max_rows': 10, 'rows_read': 10, 'remaining': 0}, page
+        detail = client.get('/api/ai/conversations/' + conversation_id).get_json()
+        assert detail['dataset_grants'][0]['rows_read'] == 10, detail['dataset_grants']
+    finally:
+        dataset_access.reset()
+
+
+def test_dataset_grant_revoke_route(client, clean_ai):
+    from ai import dataset_access, store
+
+    conversation = store.create_conversation('fake_ai', 'fake-model', 'auto')
+    dataset_access.grant(conversation['id'], 'ds_demo', 50, 'demo')
+    detail = client.get('/api/ai/conversations/' + conversation['id']).get_json()
+    assert [row['dataset_id'] for row in detail['dataset_grants']] == ['ds_demo']
+    revoked = client.delete('/api/ai/conversations/' + conversation['id'] + '/dataset-grants/ds_demo').get_json()
+    assert revoked['ok'] is True and revoked['dataset_grants'] == []
+    dataset_access.reset()
 
 
 def test_skill_studio_crud_and_plugin_install(client, fake_ai, clean_ai):

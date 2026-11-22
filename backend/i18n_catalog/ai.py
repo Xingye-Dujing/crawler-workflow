@@ -252,6 +252,24 @@ ZH = {
     'ai.apiNoMessage': '找不到消息：{message}',
     'ai.apiAlreadyAnswered': '这个问题已经回答过了。',
     'ai.apiNoText': '消息不能为空。',
+    'ai.datasetAccessNeeded': (
+        '读取数据集 {dataset} 的多行内容需要先征得同意：调用 request_dataset_access 申请；'
+        'dataset_peek 仍可免费看 5 行预览。'
+    ),
+    'ai.datasetGrantExhausted': (
+        '本会话对数据集 {dataset} 的读取授权已用完（已读 {rows_read} / {max_rows} 行）；'
+        '需要更多请再次调用 request_dataset_access。'
+    ),
+    'ai.datasetGrantHeader': '数据集读取授权：{dataset}',
+    'ai.datasetGrantQuestion': '允许读取数据集“{dataset}”吗？共 {total} 行；本次最多读取 {rows} 行。',
+    'ai.datasetGrantQuestionAll': '允许读取数据集“{dataset}”吗？共 {total} 行。',
+    'ai.datasetGrantAllow': '允许读取 {rows} 行',
+    'ai.datasetGrantAllowAll': '允许读取全部 {total} 行',
+    'ai.datasetGrantDeny': '不允许',
+    'ai.datasetGrantAllowHint': '授权只对本次会话和这个数据集有效，可随时撤销。',
+    'ai.datasetGrantDenyHint': '不授权时仍可用 dataset_peek 看 5 行预览。',
+    'ai.datasetGrantReason': '原因：{reason}',
+    'ai.datasetEmpty': '这个数据集没有行可读。',
 }
 
 EN = {
@@ -554,4 +572,24 @@ EN = {
     'ai.apiNoMessage': 'Message not found: {message}',
     'ai.apiAlreadyAnswered': 'That question has already been answered.',
     'ai.apiNoText': 'The message cannot be empty.',
+    'ai.datasetAccessNeeded': (
+        'Reading more than a preview of dataset {dataset} needs the user’s permission: call '
+        'request_dataset_access first. dataset_peek still shows five rows for free.'
+    ),
+    'ai.datasetGrantExhausted': (
+        'This conversation’s grant for dataset {dataset} is used up ({rows_read} of {max_rows} rows); '
+        'call request_dataset_access again if more rows are needed.'
+    ),
+    'ai.datasetGrantHeader': 'Dataset access: {dataset}',
+    'ai.datasetGrantQuestion': (
+        'Allow reading dataset “{dataset}”? It has {total} rows; this grant allows up to {rows}.'
+    ),
+    'ai.datasetGrantQuestionAll': 'Allow reading dataset “{dataset}”? It has {total} rows.',
+    'ai.datasetGrantAllow': 'Allow {rows} rows',
+    'ai.datasetGrantAllowAll': 'Allow all {total} rows',
+    'ai.datasetGrantDeny': 'Do not allow',
+    'ai.datasetGrantAllowHint': 'The grant is for this conversation and this dataset only; you can revoke it.',
+    'ai.datasetGrantDenyHint': 'Without a grant, dataset_peek still shows a five-row preview.',
+    'ai.datasetGrantReason': 'Reason: {reason}',
+    'ai.datasetEmpty': 'This dataset has no rows to read.',
 }

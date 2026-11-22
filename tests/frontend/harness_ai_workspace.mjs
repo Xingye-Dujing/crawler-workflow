@@ -291,6 +291,35 @@ workspace._attachments = [];
 workspace._stream = realStreamForGate;
 workspace._toast = savedToast;
 
+/* Dataset grants: the side panel lists what the server allowed and a revoke button reaches the
+   DELETE route. The browser never invents a grant; it only renders the registry's answer. */
+workspace._conversationId = 'c1';
+workspace._grants = [{ dataset_id: 'ds1', name: 'demo', max_rows: 10, rows_read: 3, remaining: 7 }];
+workspace._renderSide();
+const grantHtml = workspace._dom.side.innerHTML;
+const grantButton = workspace._dom.side.querySelector('[data-ai-revoke-grant]');
+const grantCalls = [];
+const realRevokeGrant = workspace._revokeDatasetGrant;
+workspace._revokeDatasetGrant = async (id) => grantCalls.push(id);
+if (grantButton) dispatchOn(workspace._dom.root, 'click', { target: grantButton });
+workspace._revokeDatasetGrant = realRevokeGrant;
+const grantRequests = [];
+const realFetchForGrants = sandbox.fetch;
+sandbox.fetch = async (url, options) => {
+    grantRequests.push({ url: url, method: (options && options.method) || 'GET' });
+    return { json: async () => ({ ok: true, dataset_grants: [] }) };
+};
+await workspace._revokeDatasetGrant('ds1');
+sandbox.fetch = realFetchForGrants;
+out.datasetGrants = {
+    listed: grantHtml.includes('demo') && grantHtml.includes('3'),
+    button: !!grantButton,
+    click: grantCalls,
+    requests: grantRequests,
+    after: workspace._grants,
+};
+workspace._grants = [];
+
 /* The skill editor's two lists are the server's answer. */
 workspace._bootstrap.context_sources = ['project', 'run'];
 workspace._bootstrap.tools = [

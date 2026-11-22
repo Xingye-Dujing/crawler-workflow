@@ -199,6 +199,11 @@
 - **一个 provider 目录，因为一次运行不能谎报它的传输。** 目录拥有端点、模型表、能力清单与云端/本地拒绝；浏览器只渲染
   `/api/ai/providers` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
 - **能力是承诺。** 传输不支持 `thinking`/`web_search` 就得按名拒绝，不能发一个 provider 会静默忽略的字段。
+- **行读取要人授权，预览不用。** `dataset_peek` 的 5 行是用户已经在界面上看到的预览；`dataset_page`/
+  `dataset_sample`/筛选查询读的是用户爬来的内容，必须由一个**人**在当前会话里给出“最多读多少行”的授权。
+  `request_dataset_access` 复用 `ask_user_question` 的暂停/恢复通道（与 `request_approval` 同一机制），
+  grant 存在进程内并按 `(会话, 数据集)` 记已读行数：重启、删会话、撤销都会让它失效，绝不写进浏览器偏好。
+  模型不能靠自己的工具结果造出授权；授权用完时按名拒绝并告诉它再申请，而不是悄悄少给几行。
 - **附件不是 `file_id` 的同义词。** `files` 是供应商服务端解析文档，`vision` 是模型能看图，`inline_images` 是这个传输能把
   图片字节放进请求；三者互相独立。旧代码用一个 `files` 判断把它们绑在一起：本地模型连 `.txt` 都收不了，只有 `vision`
   的网关被以缺 `files` 为由拒绝。现在文档没有 `files` 就在服务端抽取成文本（按附件缓存，`ai_attachment_text_chars`

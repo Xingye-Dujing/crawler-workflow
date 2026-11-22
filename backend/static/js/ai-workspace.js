@@ -48,6 +48,9 @@ const AIWorkspace = {
     _plan: [],
     _usage: null,
     _contextMeta: null,
+    /* Row grants this conversation holds: the server's answer, never a browser preference. A
+       revoked grant is removed from this list before the request, then re-read from the answer. */
+    _grants: [],
     _attachments: [],
     /* Things named with `@` in this draft: datasets, export files, workflow files and files
        uploaded in an earlier conversation. Sent as ids; the server resolves them. */
@@ -1127,6 +1130,20 @@ const AIWorkspace = {
         const usage = this._usage ? AIRender.usage(this._usage) : '';
         const monitors = (this._bootstrap?.monitors || [])
             .filter((item) => item.status === 'armed' && (!item.conversation_id || item.conversation_id === this._conversationId));
+        /* A data grant is the server's memory of what this conversation was allowed to read. It is
+           listed with what was spent and a revoke button; the browser never decides it. */
+        const grantRows = (this._grants || []).map((row) => {
+            const max = Number(row.max_rows) || 0;
+            const used = Number(row.rows_read) || 0;
+            const usage = max > 0
+                ? I18n.t('ai.datasetGrantUsage', { used: used, max: max })
+                : I18n.t('ai.datasetGrantUnlimited', { used: used });
+            return '<li class="ai-monitor-row"><span class="ai-monitor-text">' +
+                AIRender.escape(row.name || row.dataset_id) +
+                ' <span class="ai-hint">' + AIRender.escape(usage) + '</span></span>' +
+                '<button type="button" class="ai-ghost" data-ai-revoke-grant="' + AIRender.escape(row.dataset_id) + '">' +
+                AIRender.escape(I18n.t('ai.datasetGrantRevoke')) + '</button></li>';
+        }).join('');
         const monitorRows = monitors.map((item) => {
             const spec = item.spec || {};
             const title = spec.note || (spec.events || []).join(', ') || I18n.t('ai.monitor.notice');
@@ -1144,6 +1161,8 @@ const AIWorkspace = {
             '<label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.runId')) + '</span><input class="ai-input" data-ai-manual="run_id" value="' + AIRender.escape(AIContext.manual.run_id || '') + '" /></label>' +
             '<button type="button" class="ai-ghost" data-ai-context-apply="1">' + AIRender.escape(I18n.t('ai.applyContext')) + '</button></div>' +
             '</section>' +
+            '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.datasetGrants')) + '</h3>' +
+            '<ul class="ai-monitor-list">' + (grantRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.datasetGrantEmpty')) + '</li>') + '</ul></section>' +
             '<section class="ai-side-block"><h3>' + AIRender.escape(I18n.t('ai.monitor.heading')) + '</h3>' +
             '<ul class="ai-monitor-list">' + (monitorRows || '<li class="ai-hint">' + AIRender.escape(I18n.t('ai.monitor.empty')) + '</li>') + '</ul>' +
             '<button type="button" class="ai-ghost" data-ai-monitor-new="1">' + AIRender.escape(I18n.t('ai.monitor.build.new')) + '</button></section>' +
@@ -1905,7 +1924,7 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-revoke-grant],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
         if (!target) return;
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
@@ -2071,6 +2090,10 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-disarm-monitor')) {
             this._disarmMonitor(target.getAttribute('data-ai-disarm-monitor'));
+            return;
+        }
+        if (target.hasAttribute('data-ai-revoke-grant')) {
+            this._revokeDatasetGrant(target.getAttribute('data-ai-revoke-grant'));
             return;
         }
         if (target.hasAttribute('data-ai-remove-attachment')) {
@@ -2303,12 +2326,14 @@ const AIWorkspace = {
                 if (response.status === 404) {
                     this._conversationId = '';
                     this._rememberConversation('');
+                    this._grants = [];
                     this._renderWelcome();
                     return;
                 }
                 throw new Error(data.error || 'not found');
             }
             this._messages = data.messages || [];
+            this._grants = data.dataset_grants || [];
             this._conversationId = data.conversation.id;
             this._rememberConversation(this._conversationId);
             const isTrace = String(data.conversation.skill || '') === 'node_trace';
@@ -2987,6 +3012,46 @@ const AIWorkspace = {
         this._renderSide();
     },
 
+    /* Re-read only the grant list: a full conversation reload would repaint the live transcript. */
+    async _loadDatasetGrants() {
+        if (!this._conversationId) return;
+        try {
+            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId));
+            const data = await response.json();
+            if (!data.ok) return;
+            this._grants = data.dataset_grants || [];
+            this._renderSide();
+        } catch (error) {
+            /* The side panel is informational; the next conversation load asks again. */
+        }
+    },
+
+    async _revokeDatasetGrant(datasetId) {
+        if (!this._conversationId) return;
+        const before = this._grants;
+        this._grants = (this._grants || []).filter((row) => row.dataset_id !== datasetId);
+        this._renderSide();
+        try {
+            const response = await fetch(
+                '/api/ai/conversations/' + encodeURIComponent(this._conversationId) +
+                '/dataset-grants/' + encodeURIComponent(datasetId),
+                { method: 'DELETE' }
+            );
+            const data = await response.json();
+            if (data.ok) {
+                this._grants = data.dataset_grants || [];
+            } else {
+                this._grants = before;
+                this._toast(data.error || I18n.t('ai.error'));
+            }
+        } catch (error) {
+            /* The server may have already dropped the grant; keeping the local removal is honest
+               for this page, and the next conversation load reads the registry again. */
+            this._toast(I18n.t('ai.error') + ': ' + error.message);
+        }
+        this._renderSide();
+    },
+
     async _stream(url, body) {
         this._abort = new AbortController();
         await AIStream.post(url, body, (event) => this._onEvent(event), this._abort.signal);
@@ -3216,6 +3281,9 @@ const AIWorkspace = {
             /* A finished turn changed the numbers the side panel shows (usage, and the balance).
                One read, after the turn, not a poller. */
             this._loadSpend();
+            /* An answered access card may have created a grant; the panel must show it without
+               waiting for the user to reopen the conversation. */
+            this._loadDatasetGrants();
             return;
         }
     },
@@ -3426,6 +3494,7 @@ const AIWorkspace = {
         this._plan = [];
         this._usage = null;
         this._contextMeta = null;
+        this._grants = [];
         this._attachments = [];
         this._mode = 'chat';
         this._renderWelcome();

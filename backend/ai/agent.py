@@ -22,6 +22,7 @@ from ai import (
     approval_preview,
     approvals,
     costs,
+    dataset_access,
     environment,
     file_text,
     references,
@@ -576,6 +577,9 @@ class AgentService:
         refs_text, _ref_files = references.resolve(refs or []) if refs else ('', [])
         redacted_refs = 0
         approvals.settle(conversation_id, str(question.get('tool_use_id') or ''), answers, custom=custom)
+        # The dataset-access card is the same pause/resume channel; its answer becomes a row grant
+        # (or nothing) before the turn reads another page.
+        dataset_access.settle(conversation_id, str(question.get('tool_use_id') or ''), answers, custom=custom)
         assistant = store.get_message(message_id)
         if assistant is None:
             raise AIError('ai.apiNoMessage', kind='bad_request', message=message_id)
@@ -694,6 +698,7 @@ class AgentService:
                 'apply_workflow',
                 'rerun_node',
                 'request_approval',
+                'request_dataset_access',
                 'workflow_schema',
                 'workflow_validate',
                 'app_errors',
@@ -828,6 +833,12 @@ class AgentService:
                         # The turn pauses on the question; the answer resumes it exactly like the tool
                         # budget's. Finishing the loop first keeps every other tool_use paired.
                         asked = yield from self._approval_event(conversation, state, call, run_id)
+                        paused_for_approval = paused_for_approval or asked
+                        continue
+                    if call['name'] == 'request_dataset_access':
+                        # Same pause/resume channel as an approval: a grant must come from the human,
+                        # never from the model's own tool result.
+                        asked = yield from self._dataset_access_event(conversation, state, call, run_id)
                         paused_for_approval = paused_for_approval or asked
                         continue
                     yield from self._tool_event(
@@ -1459,6 +1470,119 @@ class AgentService:
         yield waiting['event']
         return True
 
+    def _dataset_access_event(self, conversation: dict, state: dict, call: dict, run_id: str):
+        """Ask the user for a row grant on one dataset; the answer becomes the grant.
+
+        Rows are crawled content, and a page is unbounded in principle. The model may still read a
+        five-row preview for free; anything larger pauses here until the human names a budget.
+        """
+        args = call.get('arguments') if isinstance(call.get('arguments'), dict) else {}
+        meta = {'turn_id': state['message'].get('meta', {}).get('turn_id') or '', 'tool_call_id': call['id']}
+        dataset_id = str(args.get('dataset_id') or '').strip()
+        try:
+            if not dataset_id:
+                raise AIError(
+                    'ai.toolRefused',
+                    kind='bad_request',
+                    tool='request_dataset_access',
+                    reason='dataset_id is missing',
+                )
+            from runtime.stores import get_dataset_store
+
+            info = get_dataset_store().meta(dataset_id)
+            if not info:
+                raise AIError(
+                    'ai.toolRefused',
+                    kind='bad_request',
+                    tool='request_dataset_access',
+                    reason=f'no dataset {dataset_id}',
+                )
+        except AIError as exc:
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': exc.localized()}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'request_dataset_access'},
+            )
+            yield {
+                'type': 'tool_result',
+                'id': call['id'],
+                'name': 'request_dataset_access',
+                'ok': False,
+                'error': exc.localized(),
+            }
+            return False
+        total = int(info.get('row_count') or 0)
+        if total <= 0:
+            message = t('ai.toolRefused', tool='request_dataset_access', reason=t('ai.datasetEmpty'))
+            store.append_message(
+                conversation['id'],
+                'tool',
+                json.dumps({'ok': False, 'error': message}, ensure_ascii=False),
+                status='done',
+                meta={**meta, 'is_error': True, 'name': 'request_dataset_access'},
+            )
+            yield {
+                'type': 'tool_result',
+                'id': call['id'],
+                'name': 'request_dataset_access',
+                'ok': False,
+                'error': message,
+            }
+            return False
+        name = str(info.get('name') or dataset_id)
+        rows = max(0, int(args.get('rows') or 0))
+        if rows:
+            rows = min(rows, total)
+        reason = str(args.get('reason') or '').strip()
+        if rows:
+            question = t('ai.datasetGrantQuestion', dataset=name, total=total, rows=rows)
+            allow = t('ai.datasetGrantAllow', rows=rows)
+        else:
+            question = t('ai.datasetGrantQuestionAll', dataset=name, total=total)
+            allow = t('ai.datasetGrantAllowAll', total=total)
+        if reason:
+            question = f'{question} {t("ai.datasetGrantReason", reason=reason)}'
+        deny = t('ai.datasetGrantDeny')
+        ask = {
+            'id': new_id('call'),
+            'name': 'ask_user_question',
+            'arguments': {
+                'questions': [
+                    {
+                        'id': 'dataset_access',
+                        'kind': 'dataset_access',
+                        'header': t('ai.datasetGrantHeader', dataset=name),
+                        'question': question,
+                        'preview': {
+                            'kind': 'dataset_access',
+                            'facts': [
+                                {'key': 'name', 'value': name},
+                                {'key': 'rows', 'value': rows or total},
+                                {'key': 'total_rows', 'value': total},
+                            ],
+                        },
+                        'options': [
+                            {'label': allow, 'value': 'allow', 'description': t('ai.datasetGrantAllowHint')},
+                            {'label': deny, 'value': 'deny', 'description': t('ai.datasetGrantDenyHint')},
+                        ],
+                    }
+                ]
+            },
+        }
+        dataset_access.request(
+            conversation['id'],
+            dataset_id,
+            rows,
+            name,
+            ask['id'],
+            {'allow': allow, 'deny': deny},
+        )
+        waiting = self._attach_question(conversation, state, ask, run_id)
+        yield waiting['event']
+        return True
+
     def _tool_event(
         self,
         conversation: dict,
@@ -1732,6 +1856,7 @@ def _abandon_pending(conversation_id: str) -> None:
     kept for a future "cancel question" action, where the cancellation is the user's choice.
     """
     approvals.revoke(conversation_id)
+    dataset_access.revoke(conversation_id)
     pending = store.pending_questions(conversation_id)
     if not pending:
         return

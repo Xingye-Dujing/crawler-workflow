@@ -51,6 +51,17 @@ def _int_arg(value, default: int = 0, minimum: int | None = None, maximum: int |
     return number
 
 
+def _dataset_rows(dataset_id: str, wanted: int, ctx: dict) -> tuple[int, dict]:
+    """Rows this read may return: the free/internal path, or the conversation's grant.
+
+    Every larger row read (``dataset_page``, ``dataset_sample``, a filtered ``dataset_query``) goes
+    through here. ``dataset_peek`` does not: five rows are the preview the user already sees.
+    """
+    from ai import dataset_access
+
+    return dataset_access.consume(str((ctx or {}).get('conversation_id') or ''), dataset_id, wanted)
+
+
 def _dataset_frame(dataset_id: str):
     if not dataset_id:
         raise AIError('ai.toolRefused', kind='bad_request', tool='dataset', reason='dataset_id is missing')
@@ -199,15 +210,17 @@ def tool_dataset_peek(args: dict, _ctx: dict) -> dict:
 
 
 def tool_dataset_page(args: dict, _ctx: dict) -> dict:
-    frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
+    dataset_id = str(args.get('dataset_id') or _ctx.get('dataset_id') or '')
+    frame = _dataset_frame(dataset_id)
     offset = _int_arg(args.get('offset'), 0, 0)
     limit = _int_arg(args.get('limit'), 20, 1, int(get_setting('ai_dataset_page_rows') or 2000))
+    limit, grant = _dataset_rows(dataset_id, limit, _ctx)
     width = _int_arg(args.get('width'), 200, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     page = frame.iloc[offset : offset + limit]
     rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in page.to_dict('records')]
-    return {
-        'dataset_id': str(args.get('dataset_id') or _ctx.get('dataset_id') or ''),
+    result = {
+        'dataset_id': dataset_id,
         'offset': offset,
         'limit': limit,
         'total_rows': len(frame),
@@ -215,6 +228,9 @@ def tool_dataset_page(args: dict, _ctx: dict) -> dict:
         'has_more': offset + len(rows) < len(frame),
         'next_offset': offset + len(rows),
     }
+    if grant:
+        result['grant'] = grant
+    return result
 
 
 #: Bounded, read-only aggregations a model may ask for. A name outside this table is refused BY
@@ -386,6 +402,7 @@ def tool_dataset_query(args: dict, _ctx: dict) -> dict:
         return result
 
     if op == 'filter':
+        limit, grant = _dataset_rows(dataset_id, limit, _ctx)
         columns = wanted[:40]
         page = selected.iloc[:limit]
         rows = [{name: _bounded_cell(row.get(name), width) for name in columns} for row in page.to_dict('records')]
@@ -398,6 +415,8 @@ def tool_dataset_query(args: dict, _ctx: dict) -> dict:
                 'next': 'Use an aggregation op for counts and totals; page only when the rows themselves matter.',
             }
         )
+        if grant:
+            result['grant'] = grant
         return result
 
     rows = []
@@ -434,20 +453,25 @@ def tool_dataset_sample(args: dict, _ctx: dict) -> dict:
     It used to read ``frame.head(limit)`` and return whole posts, ignoring the schema's
     ``columns``/``offset`` — a third unbounded read path beside peek and page.
     """
-    frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
+    dataset_id = str(args.get('dataset_id') or _ctx.get('dataset_id') or '')
+    frame = _dataset_frame(dataset_id)
     offset = _int_arg(args.get('offset'), 0, 0)
     limit = _int_arg(args.get('limit'), 10, 1, int(get_setting('ai_dataset_page_rows') or 2000))
+    limit, grant = _dataset_rows(dataset_id, limit, _ctx)
     width = _int_arg(args.get('width'), 200, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     page = frame.iloc[offset : offset + limit]
     rows = [{name: _bounded_cell(row.get(name), width) for name in wanted} for row in page.to_dict('records')]
-    return {
+    result = {
         'rows': rows,
         'columns': wanted,
         'offset': offset,
         'total': len(frame),
         'has_more': offset + len(rows) < len(frame),
     }
+    if grant:
+        result['grant'] = grant
+    return result
 
 
 def tool_run_status(args: dict, _ctx: dict) -> dict:
@@ -1284,6 +1308,26 @@ TOOLS = {
                 },
             },
             handler=tool_dataset_page,
+        ),
+        ToolSpec(
+            'request_dataset_access',
+            'Ask the user to authorize reading rows of this dataset in this conversation. '
+            'dataset_page, dataset_sample and a filtered dataset_query need this grant; dataset_peek '
+            'stays free (five rows). rows=0 asks for all rows. The turn pauses until the user answers.',
+            {
+                'type': 'object',
+                'properties': {
+                    'dataset_id': {'type': 'string'},
+                    'rows': {
+                        'type': 'integer',
+                        'description': 'Maximum rows to read in this conversation; 0 = all rows.',
+                    },
+                    'reason': {'type': 'string', 'description': 'Why the rows are needed.'},
+                },
+                'required': ['dataset_id'],
+            },
+            permission='ask',
+            control=True,
         ),
         ToolSpec(
             'dataset_query',

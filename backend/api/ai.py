@@ -13,7 +13,19 @@ import os
 import time
 from urllib.parse import quote
 
-from ai import agent, context, environment, files, monitors, plugins, references, skills, store, tools
+from ai import (
+    agent,
+    context,
+    dataset_access,
+    environment,
+    files,
+    monitors,
+    plugins,
+    references,
+    skills,
+    store,
+    tools,
+)
 from ai.errors import AIError
 from ai.providers import get_provider, list_models, public_catalog
 from core.refs import as_bool
@@ -1148,6 +1160,7 @@ def ai_conversation(conversation_id: str):
             'messages': store.list_messages(conversation_id),
             'pending_questions': store.pending_questions(conversation_id),
             'attachments': [_public_attachment(row) for row in store.list_attachments(conversation_id)],
+            'dataset_grants': dataset_access.active(conversation_id),
         }
     )
 
@@ -1234,9 +1247,20 @@ def _conversation_markdown(conversation: dict, messages: list, truncated: bool =
     return '\n'.join(lines).rstrip() + '\n'
 
 
+@bp.route('/api/ai/conversations/<conversation_id>/dataset-grants/<dataset_id>', methods=['DELETE'])
+def ai_dataset_grant_revoke(conversation_id: str, dataset_id: str):
+    """Drop one conversation's row grant for one dataset; the next page asks again."""
+    if store.get_conversation(conversation_id) is None:
+        return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
+    dataset_access.revoke(conversation_id, dataset_id)
+    return jsonify({'ok': True, 'dataset_grants': dataset_access.active(conversation_id)})
+
+
 @bp.route('/api/ai/conversations/<conversation_id>', methods=['DELETE'])
 def ai_conversation_delete(conversation_id: str):
     deleted = store.delete_conversation(conversation_id)
+    # A deleted conversation's row grants must not outlive it; the registry is process memory.
+    dataset_access.revoke(conversation_id)
     # A deleted conversation takes its children with it: a command or script it started must not
     # keep running after the chat is gone.
     from runtime import processes

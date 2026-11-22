@@ -297,6 +297,16 @@ class TestWorkspaceRepaintAndDelegation:
         assert gate['imageSent'] is False, 'an image reached a model with no vision'
         assert gate['imageToast'] is True, 'the refusal did not name the missing vision capability'
 
+    def test_a_dataset_grant_is_listed_and_its_revoke_reaches_the_route(self):
+        gate = _run_workspace()['datasetGrants']
+        assert gate['listed'] is True, 'the side panel did not show the grant it was given'
+        assert gate['button'] is True, 'the grant row has no revoke button'
+        assert gate['click'] == ['ds1'], gate['click']
+        assert gate['requests'] == [{'url': '/api/ai/conversations/c1/dataset-grants/ds1', 'method': 'DELETE'}], gate[
+            'requests'
+        ]
+        assert gate['after'] == [], 'the revoked grant stayed in the panel'
+
     def test_opening_the_studio_from_outside_opens_the_panel(self):
         """The Python node's 管理脚本 lives outside the aside; opening the studio used to leave the
         panel hidden, so the button looked dead. `_mode` alone is not "open"."""
