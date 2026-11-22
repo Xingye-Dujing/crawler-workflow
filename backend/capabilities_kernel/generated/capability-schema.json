@@ -314,6 +314,113 @@
       }
     },
     {
+      "type": "analysis",
+      "labelKey": "nodeType.analysis",
+      "category": "analysis",
+      "order": 7,
+      "params": [
+        {
+          "name": "operation",
+          "type": "string",
+          "default": "drop_null",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "columns",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "op",
+          "type": "string",
+          "default": "eq",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "dtype",
+          "type": "string",
+          "default": "str",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "rename_from",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "rename_to",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 1,
+        "emitColumns": "nodes.executors.analysis:emit_columns",
+        "readColumns": "nodes.executors.analysis:read_columns"
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
       "type": "tokenize",
       "labelKey": "nodeType.tokenize",
       "category": "process",
@@ -371,6 +478,182 @@
         "inputs": 1,
         "emitColumns": "nodes.executors.tokenize:emit_columns",
         "readColumns": "nodes.executors.tokenize:read_columns"
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
+      "type": "verify",
+      "labelKey": "nodeType.verify",
+      "category": "process",
+      "order": 10,
+      "params": [
+        {
+          "name": "input_key_column",
+          "type": "string",
+          "default": "链接",
+          "required": true,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "result_key_column",
+          "type": "string",
+          "default": "文章URL",
+          "required": true,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "expected_count_column",
+          "type": "string",
+          "default": "评论数",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "match_mode",
+          "type": "string",
+          "default": "url",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "tolerance",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "per_link_limit",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "output_mode",
+          "type": "string",
+          "default": "gaps",
+          "required": false,
+          "enum": [
+            "gaps",
+            "all"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "swap_tables",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "ignore_case",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 2,
+        "emitColumns": "",
+        "readColumns": "nodes.executors.verify:read_columns"
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
+      "type": "accumulate",
+      "labelKey": "nodeType.accumulate",
+      "category": "data",
+      "order": 12,
+      "params": [
+        {
+          "name": "lineage_name",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "identity",
+          "type": "string",
+          "default": "row",
+          "required": false,
+          "enum": [
+            "row",
+            "columns"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "key_columns",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 1,
+        "emitColumns": "nodes.executors.accumulate:emit_columns",
+        "readColumns": ""
       },
       "ui": {
         "form": "schema",

@@ -16,17 +16,6 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 #: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
 _DECLARED: dict[str, dict] = {
-    'accumulate': {'lineage_name': '', 'identity': 'row', 'key_columns': ''},
-    'analysis': {
-        'operation': 'drop_null',
-        'columns': '',
-        'column': '',
-        'value': '',
-        'op': 'eq',
-        'dtype': 'str',
-        'rename_from': '',
-        'rename_to': '',
-    },
     'biblio': dict(BIBLIO_DEFAULTS),
     'visualize': {
         'chart_type': 'bar',
@@ -39,20 +28,6 @@ _DECLARED: dict[str, dict] = {
         'tokenize': False,
         'emit_latex': True,
         'emit_latex_table': True,
-    },
-    # 采集校验: the list is the post table a 数据源 produced (链接 + 评论数), the result is the
-    # comment table (文章URL). ``gaps`` is the default output because the actionable table is
-    # the one you re-crawl; ``all`` keeps the full audit.
-    'verify': {
-        'input_key_column': '链接',
-        'result_key_column': '文章URL',
-        'expected_count_column': '评论数',
-        'match_mode': 'url',
-        'tolerance': 0,
-        'per_link_limit': '',
-        'output_mode': 'gaps',
-        'swap_tables': False,
-        'ignore_case': False,
     },
     'fuse': {
         'entity_columns': '关键词,话题,主题,主题词,标签',

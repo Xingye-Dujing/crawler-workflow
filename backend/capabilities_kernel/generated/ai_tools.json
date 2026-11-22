@@ -252,6 +252,70 @@
       "read_columns": ""
     },
     {
+      "capability": "node:analysis",
+      "tool": "",
+      "summary": "数据分析 runs an ordered pipeline of operators over one table: filter/select/rename/join/group, statistics, text analysis (keyword/topic/LDA) and chart-ready aggregates. Each operator declares the columns it reads and the columns it emits.",
+      "steps": [
+        "Add steps in order; each step is {op, ...params}.",
+        "A step that reads a column refuses by name when the column is absent upstream.",
+        "The analysis node emits the columns of the last step plus passthrough columns."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "drop_null",
+            "steps": "[{\"op\": \"drop_null\", \"columns\": \"正文\"}]"
+          }
+        }
+      ],
+      "failures": [
+        "No steps and no operation: engine.analysis_no_op.",
+        "An unknown operator/parameter: data_analysis.validate_step names it with the allowed values.",
+        "A missing input column: the step refuses by name rather than guessing."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "drop_null"
+          },
+          "columns": {
+            "type": "string",
+            "default": ""
+          },
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "op": {
+            "type": "string",
+            "default": "eq"
+          },
+          "dtype": {
+            "type": "string",
+            "default": "str"
+          },
+          "rename_from": {
+            "type": "string",
+            "default": ""
+          },
+          "rename_to": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "nodes.executors.analysis:emit_columns",
+      "read_columns": "nodes.executors.analysis:read_columns"
+    },
+    {
       "capability": "node:tokenize",
       "tool": "",
       "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",
@@ -303,6 +367,137 @@
       },
       "emit_columns": "nodes.executors.tokenize:emit_columns",
       "read_columns": "nodes.executors.tokenize:read_columns"
+    },
+    {
+      "capability": "node:verify",
+      "tool": "",
+      "summary": "采集校验 reads two tables: the promised list and the crawled result. It matches keys, compares the expected count (评论数) with the actual rows, and emits 采集状态/期望条数/实际条数/缺失条数/完成度.",
+      "steps": [
+        "Wire the promised list in first and the crawl result in second (or set swap_tables).",
+        "Name the list key, the result key and the expected-count column.",
+        "Choose gaps for the re-crawl feed or all for the audit."
+      ],
+      "examples": [
+        {
+          "type": "verify",
+          "params": {
+            "input_key_column": "链接",
+            "result_key_column": "文章URL",
+            "expected_count_column": "评论数",
+            "output_mode": "gaps"
+          }
+        }
+      ],
+      "failures": [
+        "Not exactly two data parents: engine.verify_two_inputs.",
+        "Missing list/result key: engine.verify_need_list_col/result_col.",
+        "A key column absent from its table: the executor names the column."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "input_key_column": {
+            "type": "string",
+            "default": "链接"
+          },
+          "result_key_column": {
+            "type": "string",
+            "default": "文章URL"
+          },
+          "expected_count_column": {
+            "type": "string",
+            "default": "评论数"
+          },
+          "match_mode": {
+            "type": "string",
+            "default": "url"
+          },
+          "tolerance": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "per_link_limit": {
+            "type": "string",
+            "default": ""
+          },
+          "output_mode": {
+            "type": "string",
+            "default": "gaps",
+            "enum": [
+              "gaps",
+              "all"
+            ]
+          },
+          "swap_tables": {
+            "type": "boolean",
+            "default": false
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "input_key_column",
+          "result_key_column"
+        ]
+      },
+      "emit_columns": "",
+      "read_columns": "nodes.executors.verify:read_columns"
+    },
+    {
+      "capability": "node:accumulate",
+      "tool": "",
+      "summary": "数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every row; ``identity=columns`` appends only rows whose key columns are not already present.",
+      "steps": [
+        "Name the lineage (the same name across runs accumulates together).",
+        "Choose row identity or key columns; key columns are required for the column mode.",
+        "Wire exactly one table producer in."
+      ],
+      "examples": [
+        {
+          "type": "accumulate",
+          "params": {
+            "lineage_name": "知乎评论",
+            "identity": "row",
+            "key_columns": ""
+          }
+        }
+      ],
+      "failures": [
+        "Blank lineage name: engine.accumulate_no_name.",
+        "Unknown identity or column mode without keys: engine.accumulate_bad_identity/no_keys.",
+        "Not exactly one parent, or a non-table parent: engine.accumulate_one_parent/bad_parent."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "lineage_name": {
+            "type": "string",
+            "default": ""
+          },
+          "identity": {
+            "type": "string",
+            "default": "row",
+            "enum": [
+              "row",
+              "columns"
+            ]
+          },
+          "key_columns": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "lineage_name"
+        ]
+      },
+      "emit_columns": "nodes.executors.accumulate:emit_columns",
+      "read_columns": ""
     },
     {
       "capability": "node:compile",

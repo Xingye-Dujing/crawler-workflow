@@ -35,7 +35,7 @@ class TestTheGreenReport:
     def test_legacy_types_are_named_not_failed(self):
         legacy = doctor.legacy_node_types()
         assert 'tokenize' not in legacy
-        assert 'analysis' in legacy, 'P2 has not moved analysis yet; the doctor should say so'
+        assert 'biblio' in legacy, 'P2 has not moved biblio yet; the doctor should say so'
 
 
 class TestAFailureIsNamed:

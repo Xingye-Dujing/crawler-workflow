@@ -39,7 +39,10 @@ class TestDiscovery:
             'resume',
             'process',
             'python',
+            'analysis',
             'tokenize',
+            'verify',
+            'accumulate',
             'compile',
             'output',
         ]

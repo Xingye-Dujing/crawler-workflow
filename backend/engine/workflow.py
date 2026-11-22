@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 import capabilities.registry as capabilities
 from capabilities_kernel.registry import manifest_for_node
 from core.refs import as_bool, platform_for, split_urls
-from nodes.catalog import NODE_TYPES, TABLE_NODE_TYPES
+from nodes.catalog import NODE_TYPES
 from nodes.labels import node_label
 from runtime import paths
 from sessions import preflight
@@ -101,14 +101,14 @@ def effective_workflow(workflow: dict) -> dict:
     return {'nodes': kept, 'connections': connections, 'settings': settings}
 
 
-#: The node-type sets come from the node catalogue (``nodes/catalog.py``): one declaration per type,
+#: The node-type set comes from the node catalogue (``nodes/catalog.py``): one declaration per type,
 #: with its row shape and console quietness. The executor registry (``nodes/registry.py``) is pinned
 #: against the same catalogue by a contract test, so a type cannot be half-registered. The plugin
 #: architecture was designed by the 2026-10 refactor (its process ledger has since been removed; the
 #: tree it describes is what ``nodes/catalog.py`` declares today).
 #
-# ``TABLE_NODE_TYPES`` is re-exported from the import above (the module-level names are kept because
-# tests and the executor read them), and so are ``PDF_SOURCE_NODE_TYPES`` and ``NODE_TYPES``.
+# ``TABLE_NODE_TYPES``/``PDF_SOURCE_NODE_TYPES`` are no longer imported here: the checks that needed
+# them moved into the capabilities' own validators in P2 (accumulate, compile, output).
 
 
 def _account_session_errors(platforms, params: dict, label: str) -> list[str]:
@@ -505,34 +505,6 @@ class WorkflowEngine:
                         add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
                     if as_bool(params.get('recrawl')):
                         add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
-            if ntype == 'accumulate':
-                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
-                name = str(params.get('lineage_name') or '').strip()
-                identity = str(params.get('identity') or 'row').strip().lower()
-                keys = [
-                    part.strip()
-                    for part in str(params.get('key_columns') or '').replace('，', ',').split(',')
-                    if part.strip()
-                ]
-                if not name:
-                    add(nid, 'engine.accumulate_no_name', t('engine.accumulate_no_name', nid=label))
-                if identity not in ('row', 'columns'):
-                    add(
-                        nid,
-                        'engine.accumulate_bad_identity',
-                        t('engine.accumulate_bad_identity', nid=label, value=identity),
-                    )
-                elif identity == 'columns' and not keys:
-                    add(nid, 'engine.accumulate_no_keys', t('engine.accumulate_no_keys', nid=label))
-                if len(parents) != 1:
-                    add(nid, 'engine.accumulate_one_parent', t('engine.accumulate_one_parent', nid=label))
-                elif (self.nodes.get(parents[0]) or {}).get('type') not in TABLE_NODE_TYPES:
-                    up = self.nodes.get(parents[0]) or {}
-                    add(
-                        nid,
-                        'engine.accumulate_bad_parent',
-                        t('engine.accumulate_bad_parent', nid=label, up=node_label(up, parents[0])),
-                    )
             if ntype == 'comment' and not str(params.get('urls') or '').strip():
                 add(nid, 'engine.comment_no_urls', t('engine.comment_no_urls', nid=label))
             elif ntype == 'comment':
@@ -544,30 +516,6 @@ class WorkflowEngine:
                 links = split_urls(str(params.get('urls') or ''))
                 for msg in _account_session_errors([platform_for(u) for u in links], params, label):
                     add(nid, 'engine.source', msg)
-            # The canvas writes ``operation`` on the node *and* in its params, and
-            # every executor reads either. Validation has to accept the same pair,
-            # or a hand-edited file that would run perfectly is refused as
-            # misconfigured — the strictness has no counterpart in the runner.
-            operation = node.get('operation') or params.get('operation')
-            if ntype == 'analysis' and not (params.get('steps') or operation):
-                add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
-            if ntype == 'verify':
-                # 采集校验 compares exactly TWO data tables: the first wire is the list (what
-                # was promised), the second is the result (what was collected). A name node
-                # produces no rows and never occupies a role, so it is not counted — the same
-                # distinction ``data_inputs`` makes for every other node.
-                parents = [str(conn.get('from')) for conn in self.connections if str(conn.get('to')) == str(nid)]
-                data_parents = [pid for pid in parents if (self.nodes.get(pid) or {}).get('type') != 'name']
-                if len(data_parents) != 2:
-                    add(
-                        nid,
-                        'engine.verify_two_inputs',
-                        t('engine.verify_two_inputs', nid=label, n=len(data_parents)),
-                    )
-                if not str(params.get('input_key_column') or '').strip():
-                    add(nid, 'engine.verify_need_list_col', t('engine.verify_need_list_col', nid=label))
-                if not str(params.get('result_key_column') or '').strip():
-                    add(nid, 'engine.verify_need_result_col', t('engine.verify_need_result_col', nid=label))
             if ntype == 'biblio':
                 # Count EVERY incoming wire, including a name node: the executor
                 # receives the whole upstream list, so filtering names here let a

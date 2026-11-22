@@ -194,6 +194,44 @@
         },
         "additionalProperties": true
       },
+      "NodeParams.analysis": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "drop_null"
+          },
+          "columns": {
+            "type": "string",
+            "default": ""
+          },
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "op": {
+            "type": "string",
+            "default": "eq"
+          },
+          "dtype": {
+            "type": "string",
+            "default": "str"
+          },
+          "rename_from": {
+            "type": "string",
+            "default": ""
+          },
+          "rename_to": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
       "NodeParams.tokenize": {
         "type": "object",
         "properties": {
@@ -218,6 +256,82 @@
         "additionalProperties": true,
         "required": [
           "text_column"
+        ]
+      },
+      "NodeParams.verify": {
+        "type": "object",
+        "properties": {
+          "input_key_column": {
+            "type": "string",
+            "default": "链接"
+          },
+          "result_key_column": {
+            "type": "string",
+            "default": "文章URL"
+          },
+          "expected_count_column": {
+            "type": "string",
+            "default": "评论数"
+          },
+          "match_mode": {
+            "type": "string",
+            "default": "url"
+          },
+          "tolerance": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          },
+          "per_link_limit": {
+            "type": "string",
+            "default": ""
+          },
+          "output_mode": {
+            "type": "string",
+            "default": "gaps",
+            "enum": [
+              "gaps",
+              "all"
+            ]
+          },
+          "swap_tables": {
+            "type": "boolean",
+            "default": false
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "input_key_column",
+          "result_key_column"
+        ]
+      },
+      "NodeParams.accumulate": {
+        "type": "object",
+        "properties": {
+          "lineage_name": {
+            "type": "string",
+            "default": ""
+          },
+          "identity": {
+            "type": "string",
+            "default": "row",
+            "enum": [
+              "row",
+              "columns"
+            ]
+          },
+          "key_columns": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "lineage_name"
         ]
       },
       "NodeParams.compile": {

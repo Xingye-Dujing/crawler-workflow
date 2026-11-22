@@ -13,9 +13,48 @@ from runtime.state import add_log
 from runtime.stores import get_dataset_store
 
 from i18n import t
+from nodes.catalog import TABLE_NODE_TYPES
 from nodes.context import NodeCall
 
 NODE_TYPE = 'accumulate'
+
+
+def validate_node(node: dict, context) -> list[dict]:
+    """Name, identity mode, keys and exactly one table parent — the lineage append's contract."""
+    params = node.get('params') or {}
+    problems: list[dict] = []
+    name = str(params.get('lineage_name') or '').strip()
+    identity = str(params.get('identity') or 'row').strip().lower()
+    keys = [part.strip() for part in str(params.get('key_columns') or '').replace('，', ',').split(',') if part.strip()]
+    if not name:
+        problems.append({'code': 'engine.accumulate_no_name', 'message_key': 'engine.accumulate_no_name'})
+    if identity not in ('row', 'columns'):
+        problems.append(
+            {
+                'code': 'engine.accumulate_bad_identity',
+                'message_key': 'engine.accumulate_bad_identity',
+                'context': {'value': identity},
+            },
+        )
+    elif identity == 'columns' and not keys:
+        problems.append({'code': 'engine.accumulate_no_keys', 'message_key': 'engine.accumulate_no_keys'})
+    parents = context.parent_ids()
+    if len(parents) != 1:
+        problems.append(
+            {
+                'code': 'engine.accumulate_one_parent',
+                'message_key': 'engine.accumulate_one_parent',
+            },
+        )
+    elif context.node(parents[0]).get('type') not in TABLE_NODE_TYPES:
+        problems.append(
+            {
+                'code': 'engine.accumulate_bad_parent',
+                'message_key': 'engine.accumulate_bad_parent',
+                'context': {'up': context.label_of(parents[0])},
+            },
+        )
+    return problems
 
 
 def emit_columns(_node: dict, merged: list[str] | None) -> list[str] | None:

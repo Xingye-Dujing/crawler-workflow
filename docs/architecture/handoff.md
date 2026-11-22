@@ -102,6 +102,16 @@
 - 本片验证：`156 passed`（capabilities + node plugins/schema + executors）、`585 passed`
   （workflow/node-types API + runs + capabilities）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
 
+## P2 第三批：analysis / accumulate / verify（2026-11-22）
+
+- `analysis`：`steps` 或 operation 之一存在即可；`analysis_no_op` 移到 `validate_node`，emit/read 钩子继续由执行器回答。
+- `accumulate`：名字/identity/键列/恰好一个表父节点全部移进 validator；`emit_columns` 仍返回上游合并列。
+- `verify`：两个数据父节点（命名节点不计）与两个键列移进 validator；`read_columns` 继续回答血缘。
+- `engine/workflow.py` 删除这三段 if；`TABLE_NODE_TYPES` 从此不再被 engine 导入（行形状检查已随
+  accumulate/compile/output 的 validator 走），契约测试改为只钉 `NODE_TYPES`。
+- 本片验证：`181 passed`（capabilities + node plugins/schema + executors）、`1770 passed`
+  （analysis + workflow/node-types API + runs）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
@@ -123,8 +133,8 @@
 
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移其余 8 个节点（先 `analysis`/`biblio`/`fuse`/`accumulate`/`verify`，再
-   `source`/`comment`/`visualize`）；然后 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
+1. **P2 续**：迁移其余 5 个节点（`biblio`/`fuse` 需要把参数错误从“已本地化句子”改为 code/message_key；
+   然后 `source`/`comment`/`visualize`）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

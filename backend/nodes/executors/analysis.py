@@ -19,7 +19,7 @@ from runtime.state import add_log
 from runtime.stores import get_run_store
 
 from i18n import t
-from nodes.context import NodeCall, node_params, split_panel_columns
+from nodes.context import NodeCall, node_operation, node_params, split_panel_columns
 from nodes.labels import node_label, parent_label
 from services.analysis.llm import build_llm_run_ctx
 from services.analysis.matching import STEP_TWO_TABLE
@@ -37,6 +37,14 @@ from services.analysis.pipeline import LLM_OPS, STEP_PARAMS, DataAnalysisService
 from services.analysis.step_checks import param_problems
 
 NODE_TYPE = 'analysis'
+
+
+def validate_node(node: dict, _context) -> list[dict]:
+    """An analysis node with neither steps nor an operation would pass rows through doing nothing."""
+    params = node_params(node)
+    if params.get('steps') or node_operation(node):
+        return []
+    return [{'code': 'engine.analysis_no_op', 'message_key': 'engine.analysis_no_op'}]
 
 
 # ─── Column contract ─── the op tables are this node's own; the lineage view asks rather than

@@ -81,6 +81,26 @@ def read_columns(node: dict) -> list[str]:
     return [column for column in found if column]
 
 
+def validate_node(node: dict, context) -> list[dict]:
+    """Exactly two data tables and the key columns the audit compares."""
+    params = node_params(node)
+    problems: list[dict] = []
+    data_parents = [pid for pid in context.parent_ids() if context.node(pid).get('type') != 'name']
+    if len(data_parents) != 2:
+        problems.append(
+            {
+                'code': 'engine.verify_two_inputs',
+                'message_key': 'engine.verify_two_inputs',
+                'context': {'n': len(data_parents)},
+            },
+        )
+    if not str(params.get('input_key_column') or '').strip():
+        problems.append({'code': 'engine.verify_need_list_col', 'message_key': 'engine.verify_need_list_col'})
+    if not str(params.get('result_key_column') or '').strip():
+        problems.append({'code': 'engine.verify_need_result_col', 'message_key': 'engine.verify_need_result_col'})
+    return problems
+
+
 def _expected_number(value):
     """The site's promised count, or ``None`` when the cell states none.
 

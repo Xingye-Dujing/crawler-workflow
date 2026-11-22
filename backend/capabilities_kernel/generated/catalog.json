@@ -596,6 +596,173 @@
     },
     {
       "kind": "node",
+      "id": "analysis",
+      "digest": "e783e71dfb612677b93d49918d2e74c26555d4b846fc9c0d66523060a9ce90b4",
+      "manifest": {
+        "identity": {
+          "id": "analysis",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.analysis",
+          "category": "analysis",
+          "order": 7,
+          "description": "Run a pipeline of data-analysis steps (filter, join, group, statistics, LDA, …).",
+          "when_to_use": "When rows need a multi-step table transformation; a single text operation belongs on 处理."
+        },
+        "params": [
+          {
+            "name": "operation",
+            "type": "string",
+            "default": "drop_null",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "columns",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "column",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "value",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "op",
+            "type": "string",
+            "default": "eq",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "dtype",
+            "type": "string",
+            "default": "str",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "rename_from",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "rename_to",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "nodes.executors.analysis:emit_columns",
+          "read_columns": "nodes.executors.analysis:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.analysis:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.analysis:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "数据分析 runs an ordered pipeline of operators over one table: filter/select/rename/join/group, statistics, text analysis (keyword/topic/LDA) and chart-ready aggregates. Each operator declares the columns it reads and the columns it emits.",
+          "steps": [
+            "Add steps in order; each step is {op, ...params}.",
+            "A step that reads a column refuses by name when the column is absent upstream.",
+            "The analysis node emits the columns of the last step plus passthrough columns."
+          ],
+          "examples": [
+            {
+              "type": "analysis",
+              "params": {
+                "operation": "drop_null",
+                "steps": "[{\"op\": \"drop_null\", \"columns\": \"正文\"}]"
+              }
+            }
+          ],
+          "failures": [
+            "No steps and no operation: engine.analysis_no_op.",
+            "An unknown operator/parameter: data_analysis.validate_step names it with the allowed values.",
+            "A missing input column: the step refuses by name rather than guessing."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_analysis_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/analysis.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
       "id": "tokenize",
       "digest": "726441e502656a4053d2d6857d846e8e0aed2fd5ae2eb869ddec2853b73fd17c",
       "manifest": {
@@ -706,6 +873,301 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/tokenize.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
+      "id": "verify",
+      "digest": "748a46a156740e93804cb04ff9c6c5d805cca0245f1f11c4263d7e9f021abe7d",
+      "manifest": {
+        "identity": {
+          "id": "verify",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.verify",
+          "category": "process",
+          "order": 10,
+          "description": "Compare a promised list with a crawl result and report missing/short items.",
+          "when_to_use": "After a comment crawl, when the list says how many comments each post should have."
+        },
+        "params": [
+          {
+            "name": "input_key_column",
+            "type": "string",
+            "default": "链接",
+            "required": true,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "result_key_column",
+            "type": "string",
+            "default": "文章URL",
+            "required": true,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "expected_count_column",
+            "type": "string",
+            "default": "评论数",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "match_mode",
+            "type": "string",
+            "default": "url",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "tolerance",
+            "type": "integer",
+            "default": 0,
+            "required": false,
+            "enum": [],
+            "minimum": 0,
+            "maximum": null,
+            "widget": "number",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "per_link_limit",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "output_mode",
+            "type": "string",
+            "default": "gaps",
+            "required": false,
+            "enum": [
+              "gaps",
+              "all"
+            ],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "swap_tables",
+            "type": "boolean",
+            "default": false,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "ignore_case",
+            "type": "boolean",
+            "default": false,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 2,
+          "emit_columns": "",
+          "read_columns": "nodes.executors.verify:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.verify:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.verify:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "采集校验 reads two tables: the promised list and the crawled result. It matches keys, compares the expected count (评论数) with the actual rows, and emits 采集状态/期望条数/实际条数/缺失条数/完成度.",
+          "steps": [
+            "Wire the promised list in first and the crawl result in second (or set swap_tables).",
+            "Name the list key, the result key and the expected-count column.",
+            "Choose gaps for the re-crawl feed or all for the audit."
+          ],
+          "examples": [
+            {
+              "type": "verify",
+              "params": {
+                "input_key_column": "链接",
+                "result_key_column": "文章URL",
+                "expected_count_column": "评论数",
+                "output_mode": "gaps"
+              }
+            }
+          ],
+          "failures": [
+            "Not exactly two data parents: engine.verify_two_inputs.",
+            "Missing list/result key: engine.verify_need_list_col/result_col.",
+            "A key column absent from its table: the executor names the column."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_verify_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/verify.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
+      "id": "accumulate",
+      "digest": "5a48e441bac355e080a5f84abef1117244b46718cf132073816d3d3760d73972",
+      "manifest": {
+        "identity": {
+          "id": "accumulate",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.accumulate",
+          "category": "data",
+          "order": 12,
+          "description": "Append the upstream rows to a named lineage (by whole row or by key columns).",
+          "when_to_use": "When repeated runs should accumulate into one growing dataset instead of separate files."
+        },
+        "params": [
+          {
+            "name": "lineage_name",
+            "type": "string",
+            "default": "",
+            "required": true,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "identity",
+            "type": "string",
+            "default": "row",
+            "required": false,
+            "enum": [
+              "row",
+              "columns"
+            ],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "key_columns",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "nodes.executors.accumulate:emit_columns",
+          "read_columns": ""
+        },
+        "execution": {
+          "handler": "nodes.executors.accumulate:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.accumulate:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every row; ``identity=columns`` appends only rows whose key columns are not already present.",
+          "steps": [
+            "Name the lineage (the same name across runs accumulates together).",
+            "Choose row identity or key columns; key columns are required for the column mode.",
+            "Wire exactly one table producer in."
+          ],
+          "examples": [
+            {
+              "type": "accumulate",
+              "params": {
+                "lineage_name": "知乎评论",
+                "identity": "row",
+                "key_columns": ""
+              }
+            }
+          ],
+          "failures": [
+            "Blank lineage name: engine.accumulate_no_name.",
+            "Unknown identity or column mode without keys: engine.accumulate_bad_identity/no_keys.",
+            "Not exactly one parent, or a non-table parent: engine.accumulate_one_parent/bad_parent."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_accumulate_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/accumulate.md",
           "skill": "",
           "version_hash": ""
         },
@@ -978,6 +1440,23 @@
     },
     {
       "kind": "node",
+      "id": "analysis",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_analysis_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/analysis.md"
+    },
+    {
+      "kind": "node",
       "id": "tokenize",
       "checks": [
         "structure",
@@ -992,6 +1471,40 @@
         "tests/unit/capabilities/test_tokenize_manifest.py"
       ],
       "docs": "docs/capabilities/nodes/tokenize.md"
+    },
+    {
+      "kind": "node",
+      "id": "verify",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_verify_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/verify.md"
+    },
+    {
+      "kind": "node",
+      "id": "accumulate",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_accumulate_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/accumulate.md"
     },
     {
       "kind": "node",

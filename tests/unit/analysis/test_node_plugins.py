@@ -61,13 +61,12 @@ def test_the_row_shapes_partition_the_types():
     )
 
 
-def test_the_engine_reads_the_same_sets():
+def test_the_engine_reads_the_same_type_set():
     from engine import workflow
 
     assert workflow.NODE_TYPES == catalog.NODE_TYPES
-    assert workflow.TABLE_NODE_TYPES == catalog.TABLE_NODE_TYPES
-    # PDF_SOURCE_NODE_TYPES moved with the save/compile validation into the capabilities' own
-    # validators; the engine no longer branches on it, so pinning it here would be a stale promise.
+    # TABLE_NODE_TYPES/PDF_SOURCE_NODE_TYPES moved into the capabilities' own validators in P2;
+    # the engine no longer branches on a row shape, so pinning them here would be a stale promise.
 
 
 def test_the_frontend_paste_guard_lists_the_same_types():
