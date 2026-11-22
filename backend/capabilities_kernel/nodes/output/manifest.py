@@ -36,7 +36,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='table', inputs=-1),
     execution=Execution(handler='nodes.executors.output:run'),
     validators=('nodes.executors.output:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='output'),
     ai=Ai(
         summary=(
             '保存 merges every incoming table into one file, or saves a PDF from visualize/compile parents. '

@@ -46,7 +46,7 @@ MANIFEST = Manifest(
     ),
     execution=Execution(handler='nodes.executors.analysis:run'),
     validators=('nodes.executors.analysis:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='analysis'),
     ai=Ai(
         summary=(
             '数据分析 runs an ordered pipeline of operators over one table: filter/select/rename/join/group, '

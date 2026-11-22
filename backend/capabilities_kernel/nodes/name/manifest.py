@@ -29,8 +29,23 @@ MANIFEST = Manifest(
         when_to_use='At the head of a canvas whose runs should be grouped by a readable name.',
     ),
     params=(
-        ParamSpec(name='workflow_name', type='string', default='', required=True, widget='text'),
-        ParamSpec(name='layout_order', type='string', default='', widget='text'),
+        ParamSpec(
+            name='workflow_name',
+            type='string',
+            default='',
+            required=True,
+            widget='text',
+            placeholder_key='name.unnamed',
+            label_key='settings.workflowName',
+        ),
+        ParamSpec(
+            name='layout_order',
+            type='string',
+            default='',
+            widget='number',
+            description_key='settings.layoutOrderHint',
+            label_key='settings.layoutOrder',
+        ),
     ),
     ports=Ports(rows='none', inputs=0, emit_columns='nodes.executors.name:emit_columns'),
     execution=Execution(handler='nodes.executors.name:run', quiet=True),
@@ -44,7 +59,7 @@ MANIFEST = Manifest(
         Rule(kind='no_input', code='engine.name_not_head', message_key='engine.name_not_head'),
         Rule(kind='requires_output', code='engine.name_no_downstream', message_key='engine.name_no_downstream'),
     ),
-    ui=Ui(),
+    ui=Ui(hint_key='name.hint'),
     ai=Ai(
         summary='工作流命名 is pure metadata: it names the run and must feed a real node.',
         steps=(

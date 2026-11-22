@@ -75,8 +75,13 @@ class ParamSpec:
     minimum: float | None = None
     maximum: float | None = None
     widget: str = ''
+    #: A literal placeholder (a column name, a number); ``placeholder_key`` words the same slot.
     placeholder: str = ''
+    placeholder_key: str = ''
     description_key: str = ''
+    #: The i18n key the generic schema form words this parameter with. Required for a
+    #: capability whose form is ``schema``: a form that has to guess a label is not complete.
+    label_key: str = ''
 
     def schema(self) -> dict:
         """The JSON Schema projection (``required``/UI hints belong to the manifest, not here)."""
@@ -141,6 +146,8 @@ class Ui:
     #: the manifest's own ``params``; ``capabilities`` means the client asks the platform matrix
     #: (the source node's fields depend on platform × engine × mode).
     defaults_from: str = ''
+    #: A sentence above a schema form (an i18n key): what the form as a whole means.
+    hint_key: str = ''
 
 
 @dataclass(frozen=True)
@@ -287,6 +294,12 @@ class Manifest:
             found.append(f'ui.form: {self.ui.form!r} is not one of {", ".join(_UI_FORMS)}')
         if self.ui.form == 'custom' and not str(self.ui.custom_renderer or '').strip():
             found.append('ui.custom_renderer: a custom form needs a renderer id')
+        if self.ui.form == 'schema' and str(self.ui.custom_renderer or '').strip():
+            found.append(f'ui.custom_renderer: a schema form must not name {self.ui.custom_renderer!r}')
+        if self.ui.form == 'schema':
+            for spec in self.params:
+                if not str(spec.label_key or '').strip():
+                    found.append(f'params.{spec.name}.label_key: a schema form needs a label key')
         if self.ui.defaults_from not in _DEFAULT_SOURCES:
             found.append(f'ui.defaults_from: {self.ui.defaults_from!r} is not one of {", ".join(_DEFAULT_SOURCES)}')
 

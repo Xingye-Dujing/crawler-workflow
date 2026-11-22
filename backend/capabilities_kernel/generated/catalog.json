@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "1929d03dc530e0e0afd45c4686f55d0184781b615efdcce687e78489481f403a",
+      "digest": "c62b538c4d010bc33a83acd88bac71d308646d3fc7e6df4d05d34289692651d2",
       "manifest": {
         "identity": {
           "id": "name",
@@ -28,7 +28,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "name.unnamed",
+            "description_key": "",
+            "label_key": "settings.workflowName"
           },
           {
             "name": "layout_order",
@@ -38,9 +40,11 @@
             "enum": [],
             "minimum": null,
             "maximum": null,
-            "widget": "text",
+            "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "settings.layoutOrderHint",
+            "label_key": "settings.layoutOrder"
           }
         ],
         "ports": {
@@ -80,7 +84,8 @@
         "ui": {
           "form": "schema",
           "custom_renderer": "",
-          "defaults_from": ""
+          "defaults_from": "",
+          "hint_key": "name.hint"
         },
         "ai": {
           "tool": "",
@@ -121,7 +126,7 @@
     {
       "kind": "node",
       "id": "source",
-      "digest": "4c2ac48b0e501f4ce7134b20193d54940959c444dcaa132b753a332fc5e64a83",
+      "digest": "b54ec1cd24eb6ddb1229fa158ba0b1869d004cb851d711eec8e5d72cce752703",
       "manifest": {
         "identity": {
           "id": "source",
@@ -151,7 +156,8 @@
         "ui": {
           "form": "custom",
           "custom_renderer": "source",
-          "defaults_from": "capabilities"
+          "defaults_from": "capabilities",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -196,7 +202,7 @@
     {
       "kind": "node",
       "id": "upload",
-      "digest": "fcf5d5744e9e22dc6f3769434e2ac5e132b5360efbc2f4ec35de3236f3bda795",
+      "digest": "ebae21411a804ecaca17e8a80b668f61bc43720bb68eb3be83a66080c75da00e",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -219,7 +225,9 @@
             "maximum": null,
             "widget": "dataset",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "dataset_name",
@@ -231,7 +239,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "row_count",
@@ -243,7 +253,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -267,9 +279,10 @@
         ],
         "validators": [],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "upload",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -310,7 +323,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "0921207083875fe9303ad165acb9aecc157edb90e6bb2a54c225055fe8a78ed6",
+      "digest": "ce647a382d900b6275da60dce2961d9640403bb4c6bacd8a7d75fffedd067b5f",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -333,7 +346,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "resume_node_id",
@@ -345,7 +360,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "resume_limit",
@@ -357,7 +374,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -373,9 +392,10 @@
         "rules": [],
         "validators": [],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "resume",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -416,7 +436,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "41d777f14f2903bc8f04251c914c9e7552edffd15f2f0e2d9f3d50162e101312",
+      "digest": "690bda030c079c0a64c846a24a0c41cd6264416e0420be5bc616764495637775",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -439,7 +459,9 @@
             "maximum": null,
             "widget": "textarea",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "comment_limit",
@@ -451,7 +473,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "part_size",
@@ -463,7 +487,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "per_article_file",
@@ -475,7 +501,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "keep_parts",
@@ -487,7 +515,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "recrawl",
@@ -499,7 +529,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "format",
@@ -514,7 +546,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -542,7 +576,8 @@
         "ui": {
           "form": "custom",
           "custom_renderer": "comment",
-          "defaults_from": ""
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -589,7 +624,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "165fbb322a656bc2740b798e2be363568e52243ae0bd491cd2b60d8cb01f87c3",
+      "digest": "e96244fcfe41df8c4f26f1325f78afaee294509789d01b244ee9aada1824579c",
       "manifest": {
         "identity": {
           "id": "process",
@@ -629,7 +664,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "text_column",
@@ -641,7 +678,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "topic",
@@ -653,7 +692,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "live_export",
@@ -665,7 +706,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "format",
@@ -677,7 +720,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -695,9 +740,10 @@
           "nodes.executors.process:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "process",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -747,7 +793,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "3c4773ba340c93a36dfd319051b377edf7f3eda6ead844e0e87c4a4145636ab1",
+      "digest": "9e5d75835b548096982c855e76e23624085e52060539f982df85fe5e705e89d2",
       "manifest": {
         "identity": {
           "id": "python",
@@ -770,7 +816,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "args",
@@ -782,7 +830,9 @@
             "maximum": null,
             "widget": "json",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "timeout",
@@ -794,7 +844,9 @@
             "maximum": 3600,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "max_rows",
@@ -806,7 +858,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -822,9 +876,10 @@
         "rules": [],
         "validators": [],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "python",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -867,7 +922,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "27ea8873e612fb9876d81843c457ed4738ee9b17a96010555f233668b554cc8a",
+      "digest": "6c1d1cae32e29b7d8bde3d6e6daa7a88a086a7bee615e267f0e5e2f3d36c2d7d",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -890,7 +945,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "columns",
@@ -902,7 +959,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "column",
@@ -914,7 +973,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "value",
@@ -926,7 +987,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "op",
@@ -938,7 +1001,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "dtype",
@@ -950,7 +1015,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "rename_from",
@@ -962,7 +1029,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "rename_to",
@@ -974,7 +1043,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -992,9 +1063,10 @@
           "nodes.executors.analysis:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "analysis",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -1035,7 +1107,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "b0f0e878a71276e14ab1ceb9a999d33621103fbb0b465996619a808508606b1e",
+      "digest": "caebdb47df7bab633fa7850b228f4be7da637bb1e8817aac7bcd0585a6f58ca4",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1058,7 +1130,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "正文",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "top_n",
@@ -1070,7 +1144,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "120",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "output_mode",
@@ -1086,7 +1162,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -1110,9 +1188,10 @@
         ],
         "validators": [],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "tokenize",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -1154,7 +1233,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "9a5ed0b44893052c87c859d201c0b7f0e58f33fb2bd4c0650a85658919e87b68",
+      "digest": "4d2d86eed15e1bf1479f07dba730f27d13a8dcf6762aa63420cfcbc5107ab3f7",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -1194,7 +1273,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "entity_column",
@@ -1206,7 +1287,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "year_column",
@@ -1218,7 +1301,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "title_column",
@@ -1230,7 +1315,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "abstract_column",
@@ -1242,7 +1329,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "reference_column",
@@ -1254,7 +1343,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "tc_column",
@@ -1266,7 +1357,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "usage_column",
@@ -1278,7 +1371,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "sentiment_column",
@@ -1290,7 +1385,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "topic_column",
@@ -1302,7 +1399,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "time_start",
@@ -1314,7 +1413,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "time_end",
@@ -1326,7 +1427,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "slice_years",
@@ -1338,7 +1441,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "look_back_years",
@@ -1350,7 +1455,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "selection",
@@ -1367,7 +1474,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "top_n",
@@ -1379,7 +1488,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "top_pct",
@@ -1391,7 +1502,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "g_index",
@@ -1403,7 +1516,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "min_count",
@@ -1415,7 +1530,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "threshold_c",
@@ -1427,7 +1544,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "threshold_cc",
@@ -1439,7 +1558,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "threshold_ccv",
@@ -1451,7 +1572,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "min_tc",
@@ -1463,7 +1586,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "min_usage",
@@ -1475,7 +1600,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "largest_component",
@@ -1487,7 +1614,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "link_measure",
@@ -1504,7 +1633,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "counting",
@@ -1519,7 +1650,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "citation_expansion",
@@ -1531,7 +1664,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "max_links_per_node",
@@ -1543,7 +1678,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "lrf",
@@ -1555,7 +1692,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "pruning",
@@ -1571,7 +1710,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "pruning_scope",
@@ -1586,7 +1727,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "pathfinder_r",
@@ -1602,7 +1745,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "pathfinder_lmax",
@@ -1614,7 +1759,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "pathfinder_dmax",
@@ -1626,7 +1773,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "cluster",
@@ -1638,7 +1787,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "cluster_count",
@@ -1650,7 +1801,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "label_method",
@@ -1667,7 +1820,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "label_source",
@@ -1685,7 +1840,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "top_terms",
@@ -1697,7 +1854,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "burst",
@@ -1709,7 +1868,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "burst_gamma",
@@ -1721,7 +1882,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "burst_min_duration",
@@ -1733,7 +1896,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "burst_weight",
@@ -1745,7 +1910,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "burst_top",
@@ -1757,7 +1924,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "variation",
@@ -1769,7 +1938,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "variation_min",
@@ -1781,7 +1952,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "aliases",
@@ -1793,7 +1966,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "exclude_values",
@@ -1805,7 +1980,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "cluster_labels",
@@ -1817,7 +1994,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "basemap_dataset_id",
@@ -1829,7 +2008,9 @@
             "maximum": null,
             "widget": "dataset",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "watch_project",
@@ -1841,7 +2022,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "watch_baseline",
@@ -1853,7 +2036,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "watch_label",
@@ -1865,7 +2050,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "output_shape",
@@ -1884,7 +2071,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "export_files",
@@ -1896,7 +2085,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -1916,7 +2107,8 @@
         "ui": {
           "form": "custom",
           "custom_renderer": "biblio",
-          "defaults_from": ""
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -1968,7 +2160,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "2b5602068c4139dbd91c5b21b91a3441db6949cc1f561307c104303d43e1b76e",
+      "digest": "2506b0ff98d08b90ec83a7852abada0a23b71934e1e83e136b4c251c8c23579c",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -1991,7 +2183,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "result_key_column",
@@ -2003,7 +2197,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "expected_count_column",
@@ -2015,7 +2211,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "match_mode",
@@ -2027,7 +2225,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "tolerance",
@@ -2039,7 +2239,9 @@
             "maximum": null,
             "widget": "number",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "per_link_limit",
@@ -2051,7 +2253,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "output_mode",
@@ -2066,7 +2270,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "swap_tables",
@@ -2078,7 +2284,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "ignore_case",
@@ -2090,7 +2298,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -2108,9 +2318,10 @@
           "nodes.executors.verify:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "verify",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -2153,7 +2364,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "8f4a1da1f4a469677160a8e43984cb24ead07bec4164b19e309eb1f9963ab4b7",
+      "digest": "8be419349419a97c5b83b0fd1a3b64daffbd6d37958017e614068b61d1605c0c",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2176,7 +2387,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "year_columns",
@@ -2188,7 +2401,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "title_columns",
@@ -2200,7 +2415,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "author_columns",
@@ -2212,7 +2429,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "affiliation_columns",
@@ -2224,7 +2443,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "text_columns",
@@ -2236,7 +2457,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "reference_columns",
@@ -2248,7 +2471,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "source_columns",
@@ -2260,7 +2485,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "source_labels",
@@ -2272,7 +2499,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "keep_undated",
@@ -2284,7 +2513,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "export_files",
@@ -2296,7 +2527,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -2322,9 +2555,10 @@
           "nodes.executors.fuse:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "fuse",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -2366,7 +2600,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "858c7c75b365aca4f30fbe11666aee1599d2956098839a5467bcf6195121fa95",
+      "digest": "f38419276e5aa3dd41abdcc79a9aaea69b7657c743af91d3301b7b544f451361",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2389,7 +2623,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "identity",
@@ -2404,7 +2640,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "key_columns",
@@ -2416,7 +2654,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -2434,9 +2674,10 @@
           "nodes.executors.accumulate:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "accumulate",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -2478,7 +2719,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "662d4eb5dc66461f9e758f5d2a3becd60ad61d8d3f765b727e420570d4d3f631",
+      "digest": "8706084feae8fad064fac5e40cbf9cb1842d6b1061c1f24cea07dfffb21a1f13",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -2501,7 +2742,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "x_field",
@@ -2513,7 +2756,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "y_field",
@@ -2525,7 +2770,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "value_field",
@@ -2537,7 +2784,9 @@
             "maximum": null,
             "widget": "column",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "agg",
@@ -2549,7 +2798,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "engine",
@@ -2561,7 +2812,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "title",
@@ -2573,7 +2826,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "tokenize",
@@ -2585,7 +2840,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "emit_latex",
@@ -2597,7 +2854,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "emit_latex_table",
@@ -2609,7 +2868,9 @@
             "maximum": null,
             "widget": "switch",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -2627,9 +2888,10 @@
           "nodes.executors.visualize:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",
@@ -2672,7 +2934,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "7238f30f926c0e2a5d70aa2b911400b2722cd8363722ae22fc944072f64f1657",
+      "digest": "44f1a0605d4e1e156d80546f00ae2d6a151861477b42611a73bd28c5e5557478",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -2702,7 +2964,8 @@
         "ui": {
           "form": "schema",
           "custom_renderer": "",
-          "defaults_from": ""
+          "defaults_from": "",
+          "hint_key": "settings.compileHint"
         },
         "ai": {
           "tool": "",
@@ -2740,7 +3003,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "9c38b88324d13e1e4ca5ca0ea54e78080c30cb7af396481d7b4ac3e9686a5a1e",
+      "digest": "9bc4f88a2bef1ed57aec97be64e042dcaa93882253cce3d67687929540089ef2",
       "manifest": {
         "identity": {
           "id": "output",
@@ -2763,7 +3026,9 @@
             "maximum": null,
             "widget": "select",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "format",
@@ -2775,7 +3040,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           },
           {
             "name": "filename",
@@ -2787,7 +3054,9 @@
             "maximum": null,
             "widget": "text",
             "placeholder": "",
-            "description_key": ""
+            "placeholder_key": "",
+            "description_key": "",
+            "label_key": ""
           }
         ],
         "ports": {
@@ -2805,9 +3074,10 @@
           "nodes.executors.output:validate_node"
         ],
         "ui": {
-          "form": "schema",
-          "custom_renderer": "",
-          "defaults_from": ""
+          "form": "custom",
+          "custom_renderer": "output",
+          "defaults_from": "",
+          "hint_key": ""
         },
         "ai": {
           "tool": "",

@@ -65,3 +65,9 @@ function renderVerifySettings(nodeId, p) {
         I18n.t('btn.previewData') + '</button></div>';
     return html;
 }
+
+registerSettingsRenderer('verify', {
+    html: function (nodeId, node) {
+        return renderVerifySettings(nodeId, node.params);
+    },
+});

@@ -38,11 +38,15 @@ a defect, not a shortcut.
   it into `nodes/catalog.py`, `nodes/defaults.py`, `services/validation/engine.py` and the lineage hooks. A migrated
   type's facts go in its manifest — never back into the shared tables. A manifest imports only the standard library
   and the kernel: `nodes.catalog` reads manifests while parsing a DAG, so pandas/Selenium here cost every start.
-  Pilot: `capabilities_kernel/nodes/tokenize/manifest.py` (see `docs/architecture/capabilities-kernel.md`).
+  All node types are migrated; `capabilities_kernel/nodes/tokenize/manifest.py` was the pilot (see
+  `docs/architecture/capabilities-kernel.md`).
   `tools/gen_capabilities.py` renders the five artifacts and `tools/doctor.py` prints the same checks; a manifest change
   without a re-render is a red freshness gate, never a stale catalog.
-- **Node types**: one `NodePlugin` in `backend/nodes/catalog.py` + one `nodes/executors/<type>.py` registered in
-  `nodes/registry.py`; the browser reads the server's `node-types.js`, never a second list.
+- **Node types**: one capability manifest (`capabilities_kernel/nodes/<type>/manifest.py`, including its settings form)
+  + one `nodes/executors/<type>.py` registered through it; the browser reads `/api/node-types` → `node-types.js`, never a
+  second list. A form is `ui.form='schema'` (the generic renderer draws its params) or `ui.custom_renderer='<id>'` (the
+  owning module registers it with `registerSettingsRenderer`); `openSettings` has no per-type if chain, and an unknown
+  renderer is refused by name in the panel.
 - **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same
   change (`contracts.py`, `validate_step`, the gate tests).
 - **Chart types**: one builder in `services/charts/options/` registered in `BUILDERS`; there is no

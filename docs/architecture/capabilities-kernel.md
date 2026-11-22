@@ -22,16 +22,20 @@ backend/capabilities_kernel/
 | 段 | dataclass | 回答的问题 |
 |---|---|---|
 | 身份 | `Identity` | id/kind/version/标题键/分组/目录位置/何时使用 |
-| 参数 | `ParamSpec` | JSON Schema 子集（type/default/enum/min/max/required）+ 表单 widget |
+| 参数 | `ParamSpec` | JSON Schema 子集（type/default/enum/min/max/required）+ 表单 widget/label/placeholder/hint 键 |
 | 端口 | `Ports` | 行形状、输入数、`emit_columns`/`read_columns` 的 `module:function` |
 | 执行 | `Execution` | 懒加载的 `module:function`、控制台静默策略 |
 | 验证 | `Rule` | 运行前的声明式拒绝（`required_param`/`enum_param`/`upstream_required`/`no_input`/`requires_output`），以及 `validators` 指向的节点专属检查 |
-| UI | `Ui` | 默认 schema 表单，或 `custom_renderer` 逃生口 |
+| UI | `Ui` | 默认 schema 表单（可带 `hint_key`），或 `custom_renderer` 逃生口 |
 | AI | `Ai` | 工具名、摘要、步骤、可解析的模板 JSON、失败模式 |
 | 测试 | `Tests` | 证明该能力的契约测试路径 |
 | 文档 | `Docs` | 说明页路径、生成的技能路径、文档哈希 |
 
 `Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
+
+## 表单：清单选择渲染器，不选择分支
+
+`Ui.form='schema'` 的节点由前端通用渲染器按 `params` 逐个画控件；这类清单的每个参数必须声明 `label_key`（`problems()` 按名拒绝），可选 `placeholder_key`/`description_key`，`Ui.hint_key` 是表头说明。`Ui.form='custom'` 必须声明 `custom_renderer`，实现该表单的模块用 `registerSettingsRenderer('<id>', {html, mounted})` 注册；`openSettings()` 只做一次 `settingsRenderer(node.type)` 分派，不含节点类型 if 链。清单点名了没人注册的渲染器、目录未加载、或目录不认识该类型，面板都按名拒绝（`settings.noRenderer`/`noCatalogue`/`unknownType`），不画空表单。`reusable` 不是能力（表单来自模板快照），以自身类型名注册。
 
 ## 生成物（freshness gate）
 

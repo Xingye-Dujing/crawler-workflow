@@ -1381,8 +1381,9 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
     _set_viewport(driver, 1366, 768)
     _load_app(driver, app_url)
     _kill_animations(driver)
-    facts = driver.execute_script(
+    facts = driver.execute_async_script(
         """
+        const done = arguments[arguments.length - 1];
         document.body.dataset.lang = arguments[0];
         I18n.apply();
         // The boot restore paints whatever the shared Chrome profile saved last —
@@ -1435,23 +1436,31 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
                 wireDimmed: wires.filter((w) => w.classList.contains('conn-disabled')).length,
             };
         };
-        const onBefore = probe();
-        // Click the real power button — the same handler a drag-and-drop user reaches.
-        canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
-        canvas.updateConnections();
-        canvas.applyDisabledVisuals();
-        const offAfter = probe();
-        canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
-        canvas.updateConnections();
-        canvas.applyDisabledVisuals();
-        const onAgain = probe();
-        return {
-            onBefore,
-            offAfter,
-            onAgain,
-            disableWord: I18n.t('node.badgeDisabled'),
-            starveWord: I18n.t('node.badgeNoInput'),
-        };
+        (async () => {
+            // The edit-time verdict is the SERVER's since P2: wait for its answer before
+            // measuring, and again after each switch — a disabled node leaves the graph the
+            // server validates, so its red frame goes only after that round trip.
+            await Diagnostics.refresh();
+            const onBefore = probe();
+            // Click the real power button — the same handler a drag-and-drop user reaches.
+            canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
+            canvas.updateConnections();
+            canvas.applyDisabledVisuals();
+            await Diagnostics.refresh();
+            const offAfter = probe();
+            canvas._nodeEl(ids[0]).querySelector('.node-power-btn').click();
+            canvas.updateConnections();
+            canvas.applyDisabledVisuals();
+            await Diagnostics.refresh();
+            const onAgain = probe();
+            done({
+                onBefore,
+                offAfter,
+                onAgain,
+                disableWord: I18n.t('node.badgeDisabled'),
+                starveWord: I18n.t('node.badgeNoInput'),
+            });
+        })().catch((err) => done({ error: String((err && err.stack) || err) }));
         """,
         [lang],
     )

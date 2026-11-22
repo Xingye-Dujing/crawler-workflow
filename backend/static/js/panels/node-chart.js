@@ -242,3 +242,9 @@ function renderVisualizeSettings(nodeId, p) {
     return html;
 }
 
+registerSettingsRenderer('visualize', {
+    html: function (nodeId, node) {
+        return renderVisualizeSettings(nodeId, node.params);
+    },
+});
+

@@ -554,6 +554,45 @@ class TestBiblioPanelContract:
         assert set(DEFAULTS) == {spec.name for spec in manifest.params}
         assert manifest.defaults() == DEFAULTS
 
+
+class TestSettingsRenderers:
+    """The settings shell dispatches through the manifest: it holds no per-type form of its own."""
+
+    @staticmethod
+    def _registrations() -> list[str]:
+        found = []
+        for path in JS_DIR.rglob('*.js'):
+            if path.parent.name == 'i18n':
+                continue
+            text = path.read_text(encoding='utf-8')
+            found.extend(re.findall(r"registerSettingsRenderer\(\s*'([a-z_]+)'", text))
+        return found
+
+    def test_every_custom_form_has_exactly_one_registered_renderer(self):
+        """A manifest naming a renderer that no module registers paints a refusal, so the two
+        declarations are held equal here. ``reusable`` is canvas-owned, not a capability."""
+        from capabilities_kernel import registry
+
+        wanted = {
+            manifest.ui.custom_renderer for manifest in registry.manifests('node') if manifest.ui.form == 'custom'
+        }
+        registered = self._registrations()
+        assert len(registered) == len(set(registered)), f'a renderer id is registered twice: {registered}'
+        assert wanted <= set(registered), f'no module registers: {sorted(wanted - set(registered))}'
+        assert set(registered) - wanted == {'reusable'}, sorted(set(registered) - wanted)
+
+    def test_the_shell_dispatches_and_keeps_no_type_chain(self):
+        body = js_text('panels/settings.js')
+        shell = body[body.index('function openSettings(') : body.index('function renderSourceSettings(')]
+        assert 'var renderer = settingsRenderer(node.type);' in shell
+        assert 'renderer.mounted(nodeId, node)' in shell
+        assert 'node.type ===' not in shell, 'the settings shell grew a per-type branch again'
+
+    def test_the_generic_form_reads_the_catalogue(self):
+        body = js_text('panels/settings.js')
+        assert 'NodeTypes.params(node.type)' in body
+        assert 'spec.labelKey' in body and 'spec.widget' in body
+
     def test_bibliometric_labels_are_decluttered_before_render(self):
         # The resolver and its applyEchartsOption call site live in chart-preview.js since the
         # Stage 8 split; scanning workflow.js for them would pass on a file that no longer holds them.

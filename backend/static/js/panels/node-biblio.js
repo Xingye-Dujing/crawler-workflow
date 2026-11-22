@@ -222,3 +222,14 @@ function renderBiblioSettings(nodeId, p) {
     return html;
 }
 
+registerSettingsRenderer('biblio', {
+    html: function (nodeId, node) {
+        return renderBiblioSettings(nodeId, node.params);
+    },
+});
+registerSettingsRenderer('fuse', {
+    html: function (nodeId, node) {
+        return renderFuseSettings(nodeId, node.params);
+    },
+});
+

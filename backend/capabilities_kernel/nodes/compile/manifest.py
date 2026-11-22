@@ -29,7 +29,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='pdf', inputs=-1),
     execution=Execution(handler='nodes.executors.compile:run'),
     validators=('nodes.executors.compile:validate_node',),
-    ui=Ui(),
+    ui=Ui(hint_key='settings.compileHint'),
     ai=Ai(
         summary=(
             'PDF 编译 collects the LaTeX emitted by visualize parents and compiles one document. It reads '

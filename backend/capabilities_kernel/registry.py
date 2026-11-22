@@ -204,6 +204,9 @@ def node_schema_entries() -> list[dict]:
                         'maximum': spec.maximum,
                         'widget': spec.widget,
                         'placeholder': spec.placeholder,
+                        'placeholderKey': spec.placeholder_key,
+                        'descriptionKey': spec.description_key,
+                        'labelKey': spec.label_key,
                     }
                     for spec in manifest.params
                 ],
@@ -227,6 +230,7 @@ def node_schema_entries() -> list[dict]:
                     'form': manifest.ui.form,
                     'customRenderer': manifest.ui.custom_renderer,
                     'defaultsFrom': manifest.ui.defaults_from,
+                    'hintKey': manifest.ui.hint_key,
                 },
             },
         )

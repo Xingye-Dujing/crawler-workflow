@@ -24,7 +24,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "name.unnamed",
+          "descriptionKey": "",
+          "labelKey": "settings.workflowName"
         },
         {
           "name": "layout_order",
@@ -34,8 +37,11 @@ window.NODE_TYPE_CATALOGUE = {
           "enum": [],
           "minimum": null,
           "maximum": null,
-          "widget": "text",
-          "placeholder": ""
+          "widget": "number",
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "settings.layoutOrderHint",
+          "labelKey": "settings.layoutOrder"
         }
       ],
       "rules": [
@@ -70,7 +76,8 @@ window.NODE_TYPE_CATALOGUE = {
       "ui": {
         "form": "schema",
         "customRenderer": "",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": "name.hint"
       }
     },
     {
@@ -93,7 +100,8 @@ window.NODE_TYPE_CATALOGUE = {
       "ui": {
         "form": "custom",
         "customRenderer": "source",
-        "defaultsFrom": "capabilities"
+        "defaultsFrom": "capabilities",
+        "hintKey": ""
       }
     },
     {
@@ -119,7 +127,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "dataset",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "dataset_name",
@@ -130,7 +141,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "row_count",
@@ -141,7 +155,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -160,9 +177,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "upload",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -188,7 +206,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "resume_node_id",
@@ -199,7 +220,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "resume_limit",
@@ -210,7 +234,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -221,9 +248,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "resume",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -253,7 +281,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "textarea",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "comment_limit",
@@ -264,7 +295,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "part_size",
@@ -275,7 +309,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "per_article_file",
@@ -286,7 +323,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "keep_parts",
@@ -297,7 +337,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "recrawl",
@@ -308,7 +351,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -322,7 +368,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -343,7 +392,8 @@ window.NODE_TYPE_CATALOGUE = {
       "ui": {
         "form": "custom",
         "customRenderer": "comment",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -388,7 +438,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "text_column",
@@ -399,7 +452,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "topic",
@@ -410,7 +466,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "live_export",
@@ -421,7 +480,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -432,7 +494,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -443,9 +508,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.process:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "process",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -472,7 +538,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "args",
@@ -483,7 +552,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "json",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "timeout",
@@ -494,7 +566,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 1,
           "maximum": 3600,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "max_rows",
@@ -505,7 +580,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 1,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -516,9 +594,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "python",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -549,7 +628,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "columns",
@@ -560,7 +642,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "column",
@@ -571,7 +656,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "value",
@@ -582,7 +670,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "op",
@@ -593,7 +684,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "dtype",
@@ -604,7 +698,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "rename_from",
@@ -615,7 +712,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "rename_to",
@@ -626,7 +726,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -637,9 +740,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.analysis:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "analysis",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -665,7 +769,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": "正文"
+          "placeholder": "正文",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_n",
@@ -676,7 +783,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": "120"
+          "placeholder": "120",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_mode",
@@ -691,7 +801,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -710,9 +823,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.tokenize:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "tokenize",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -808,7 +922,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "entity_column",
@@ -819,7 +936,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "year_column",
@@ -830,7 +950,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title_column",
@@ -841,7 +964,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "abstract_column",
@@ -852,7 +978,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "reference_column",
@@ -863,7 +992,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tc_column",
@@ -874,7 +1006,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "usage_column",
@@ -885,7 +1020,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "sentiment_column",
@@ -896,7 +1034,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "topic_column",
@@ -907,7 +1048,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "time_start",
@@ -918,7 +1062,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "time_end",
@@ -929,7 +1076,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "slice_years",
@@ -940,7 +1090,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "look_back_years",
@@ -951,7 +1104,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "selection",
@@ -967,7 +1123,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_n",
@@ -978,7 +1137,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_pct",
@@ -989,7 +1151,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "g_index",
@@ -1000,7 +1165,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_count",
@@ -1011,7 +1179,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_c",
@@ -1022,7 +1193,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_cc",
@@ -1033,7 +1207,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_ccv",
@@ -1044,7 +1221,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_tc",
@@ -1055,7 +1235,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_usage",
@@ -1066,7 +1249,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "largest_component",
@@ -1077,7 +1263,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "link_measure",
@@ -1093,7 +1282,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "counting",
@@ -1107,7 +1299,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "citation_expansion",
@@ -1118,7 +1313,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "max_links_per_node",
@@ -1129,7 +1327,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "lrf",
@@ -1140,7 +1341,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pruning",
@@ -1155,7 +1359,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pruning_scope",
@@ -1169,7 +1376,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_r",
@@ -1184,7 +1394,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_lmax",
@@ -1195,7 +1408,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_dmax",
@@ -1206,7 +1422,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster",
@@ -1217,7 +1436,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster_count",
@@ -1228,7 +1450,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "label_method",
@@ -1244,7 +1469,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "label_source",
@@ -1261,7 +1489,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_terms",
@@ -1272,7 +1503,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst",
@@ -1283,7 +1517,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_gamma",
@@ -1294,7 +1531,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_min_duration",
@@ -1305,7 +1545,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_weight",
@@ -1316,7 +1559,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_top",
@@ -1327,7 +1573,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "variation",
@@ -1338,7 +1587,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "variation_min",
@@ -1349,7 +1601,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "aliases",
@@ -1360,7 +1615,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "exclude_values",
@@ -1371,7 +1629,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster_labels",
@@ -1382,7 +1643,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "basemap_dataset_id",
@@ -1393,7 +1657,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "dataset",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_project",
@@ -1404,7 +1671,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_baseline",
@@ -1415,7 +1685,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_label",
@@ -1426,7 +1699,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_shape",
@@ -1444,7 +1720,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "export_files",
@@ -1455,7 +1734,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1468,7 +1750,8 @@ window.NODE_TYPE_CATALOGUE = {
       "ui": {
         "form": "custom",
         "customRenderer": "biblio",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1500,7 +1783,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "result_key_column",
@@ -1511,7 +1797,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "expected_count_column",
@@ -1522,7 +1811,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "match_mode",
@@ -1533,7 +1825,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tolerance",
@@ -1544,7 +1839,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "per_link_limit",
@@ -1555,7 +1853,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_mode",
@@ -1569,7 +1870,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "swap_tables",
@@ -1580,7 +1884,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "ignore_case",
@@ -1591,7 +1898,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1602,9 +1912,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.verify:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "verify",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1638,7 +1949,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "year_columns",
@@ -1649,7 +1963,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title_columns",
@@ -1660,7 +1977,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "author_columns",
@@ -1671,7 +1991,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "affiliation_columns",
@@ -1682,7 +2005,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "text_columns",
@@ -1693,7 +2019,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "reference_columns",
@@ -1704,7 +2033,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "source_columns",
@@ -1715,7 +2047,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "source_labels",
@@ -1726,7 +2061,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "keep_undated",
@@ -1737,7 +2075,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "export_files",
@@ -1748,7 +2089,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -1767,9 +2111,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.fuse:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "fuse",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1795,7 +2140,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "identity",
@@ -1809,7 +2157,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "key_columns",
@@ -1820,7 +2171,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1831,9 +2185,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "accumulate",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1866,7 +2221,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "x_field",
@@ -1877,7 +2235,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "y_field",
@@ -1888,7 +2249,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "value_field",
@@ -1899,7 +2263,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "agg",
@@ -1910,7 +2277,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "engine",
@@ -1921,7 +2291,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title",
@@ -1932,7 +2305,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tokenize",
@@ -1943,7 +2319,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "emit_latex",
@@ -1954,7 +2333,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "emit_latex_table",
@@ -1965,7 +2347,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1976,9 +2361,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": "nodes.executors.visualize:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "visualize",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -2001,7 +2387,8 @@ window.NODE_TYPE_CATALOGUE = {
       "ui": {
         "form": "schema",
         "customRenderer": "",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": "settings.compileHint"
       }
     },
     {
@@ -2027,7 +2414,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -2038,7 +2428,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "filename",
@@ -2049,7 +2442,10 @@ window.NODE_TYPE_CATALOGUE = {
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -2060,9 +2456,10 @@ window.NODE_TYPE_CATALOGUE = {
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "output",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     }
   ]

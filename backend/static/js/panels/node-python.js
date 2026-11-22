@@ -46,6 +46,12 @@ function renderPythonSettings(nodeId, p) {
     return html;
 }
 
+registerSettingsRenderer('python', {
+    html: function (nodeId, node) {
+        return renderPythonSettings(nodeId, node.params);
+    },
+});
+
 /* Async fill: the option list and the interpreter verdict both come from the server, so the panel
    never keeps a second script table or guesses whether Python exists. */
 function loadPythonNodePanel(nodeId, current) {

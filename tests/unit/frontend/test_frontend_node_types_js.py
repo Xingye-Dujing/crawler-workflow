@@ -93,7 +93,8 @@ class TestTheServedCatalogue:
             [{'id': 'cold', 'fetch': {'status': 500, 'body': {}}, 'types': ['process']}],
         )['cold']
         assert result['before']['ready'] is True
-        assert result['before']['uiProcess']['form'] == 'schema'
+        assert result['before']['uiProcess']['form'] == 'custom'
+        assert result['before']['uiProcess']['customRenderer'] == 'process'
         names = {spec['name'] for spec in result['before']['paramsProcess']}
         assert 'operation' in names and 'text_column' in names
 

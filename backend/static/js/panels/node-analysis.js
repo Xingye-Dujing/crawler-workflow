@@ -447,3 +447,9 @@ function renderAnalysisSettings(nodeId, p) {
     return html;
 }
 
+registerSettingsRenderer('analysis', {
+    html: function (nodeId, node) {
+        return renderAnalysisSettings(nodeId, node.params);
+    },
+});
+

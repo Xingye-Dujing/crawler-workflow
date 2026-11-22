@@ -35,7 +35,7 @@ MANIFEST = Manifest(
     ),
     ports=Ports(rows='table', inputs=0),
     execution=Execution(handler='nodes.executors.resume:run'),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='resume'),
     ai=Ai(
         summary=(
             '断点续采 adopts rows an earlier run already stored. Blank ids mean “newest unfinished run of '

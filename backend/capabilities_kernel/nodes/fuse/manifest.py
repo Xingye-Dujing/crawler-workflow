@@ -50,7 +50,7 @@ MANIFEST = Manifest(
     execution=Execution(handler='nodes.executors.fuse:run'),
     rules=(Rule(kind='upstream_required', code='fuse.no_input', message_key='fuse.no_input'),),
     validators=('nodes.executors.fuse:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='fuse'),
     ai=Ai(
         summary=(
             '文献融合 merges several source tables into one canonical record table: each role (entity, year, '

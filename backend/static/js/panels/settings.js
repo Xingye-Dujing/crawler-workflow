@@ -502,6 +502,98 @@ function askAINode(nodeId) {
     AIWorkspace.askAbout({ prompt: I18n.t('ai.askNodePrompt', { title: title, id: nodeId }) });
 }
 
+/* ── Settings renderers: the manifest picks the form ──────────────────────────
+   A node's form is a fact of its capability, not of this shell. The manifest declares ``ui.form``
+   (``schema`` or ``custom``) and, for a custom form, ``ui.custom_renderer``; the module that owns
+   that form registers it here and ``openSettings`` dispatches. A new node type is a manifest plus
+   one registration — never an ``if`` in this function.
+   A manifest naming a renderer nobody registered, or a page whose catalogue did not load, is a
+   NAMED refusal in the panel: an empty form would read as "this node has no options". */
+var SETTINGS_RENDERERS = {};
+function registerSettingsRenderer(id, renderer) {
+    SETTINGS_RENDERERS[id] = renderer;
+}
+
+var SCHEMA_SETTINGS_RENDERER = { html: renderSchemaSettings };
+
+function settingsRenderer(type) {
+    /* `reusable` is a canvas-owned type, not a capability: its form comes from a template snapshot,
+       so it registers under its own type name instead of a manifest renderer id. */
+    if (type === 'reusable') return SETTINGS_RENDERERS.reusable || null;
+    var ui = (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) ? NodeTypes.ui(type) : null;
+    if (!ui) return null;
+    if (ui.form === 'schema') return SCHEMA_SETTINGS_RENDERER;
+    return SETTINGS_RENDERERS[ui.customRenderer] || null;
+}
+
+function settingsRendererRefusal(type) {
+    var ready = typeof NodeTypes !== 'undefined' && NodeTypes.ready();
+    var ui = ready ? NodeTypes.ui(type) : null;
+    var reason;
+    if (!ready) reason = I18n.t('settings.noCatalogue');
+    else if (!ui) reason = I18n.t('settings.unknownType', { type: type });
+    else reason = I18n.t('settings.noRenderer', { renderer: ui.customRenderer || type, type: type });
+    return '<div class="settings-group settings-renderer-refusal">' + escapeHtml(reason) + '</div>';
+}
+
+/* The generic form: one control per declared parameter, in manifest order. It renders what the
+   catalogue serves and nothing else — a parameter added to a manifest appears here with no JS edit.
+   A label the manifest did not declare falls back to the raw parameter name (never a guessed
+   sentence); the completeness gate refuses that for every schema-form capability. */
+function renderSchemaSettings(nodeId, node) {
+    var ready = typeof NodeTypes !== 'undefined' && NodeTypes.ready();
+    var specs = ready ? NodeTypes.params(node.type) : [];
+    var ui = ready ? NodeTypes.ui(node.type) : null;
+    var p = node.params || {};
+    var html = '';
+    if (ui && ui.hintKey) {
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            escapeHtml(I18n.t(ui.hintKey)) + '</div>';
+    }
+    for (var i = 0; i < specs.length; i += 1) {
+        html += renderSchemaParam(nodeId, p, specs[i]);
+    }
+    return html;
+}
+
+function renderSchemaParam(nodeId, p, spec) {
+    var value = p[spec.name] !== undefined ? p[spec.name] : spec.default;
+    var label = escapeHtml(I18n.t(spec.labelKey || spec.name));
+    var placeholder = spec.placeholderKey ? I18n.t(spec.placeholderKey) : spec.placeholder || '';
+    var widget = spec.widget || 'text';
+    var hint = spec.descriptionKey
+        ? '<div class="settings-hint">' + escapeHtml(I18n.t(spec.descriptionKey)) + '</div>'
+        : '';
+    if (widget === 'switch') {
+        return '<div class="settings-group"><label class="settings-label">' +
+            '<input type="checkbox" ' + (boolParam(value, spec.default === true) ? 'checked' : '') + ' ' +
+            'onchange="' + paramCall(nodeId, spec.name, 'this.checked') + '"> ' + label + '</label>' + hint +
+            '</div>';
+    }
+    var input;
+    if (widget === 'select') {
+        input = '<select class="settings-select" onchange="' + paramCall(nodeId, spec.name, 'this.value') + '">' +
+            selectOptionTags(
+                (spec.enum || []).map(function (option) {
+                    return { value: option, label: option };
+                }),
+                value,
+                spec.default
+            ) +
+            '</select>';
+    } else if (widget === 'textarea' || widget === 'json') {
+        input = '<textarea class="settings-input" rows="4" placeholder="' + escapeHtml(placeholder) + '" ' +
+            'onchange="' + paramCall(nodeId, spec.name, 'this.value') + '">' +
+            escapeHtml(value === null || value === undefined ? '' : value) + '</textarea>';
+    } else {
+        input = '<input class="settings-input" type="' + (widget === 'number' ? 'number' : 'text') + '" ' +
+            'value="' + escapeHtml(value === null || value === undefined ? '' : value) + '" ' +
+            'placeholder="' + escapeHtml(placeholder) + '" ' +
+            'onchange="' + paramCall(nodeId, spec.name, 'this.value') + '">';
+    }
+    return '<div class="settings-group"><label class="settings-label">' + label + '</label>' + input + hint + '</div>';
+}
+
 function openSettings(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node) {
@@ -536,8 +628,31 @@ function openSettings(nodeId) {
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. `outputColumnsHtml` is shared with the in-place repaint below. */
     html += outputColumnsHtml(nodeId);
-    if (node.type === 'source') {
-        /* The form is the matrix: which platforms exist, which of them want
+    var renderer = settingsRenderer(node.type);
+    if (renderer) html += renderer.html(nodeId, node);
+    else html += settingsRendererRefusal(node.type);
+    content.innerHTML = html;
+    if (!sameNode) {
+        /* Opening for a DIFFERENT node starts at the top. The panel is the scroll container, and
+           it used to keep the previous form's offset: open a long node, scroll to its bottom,
+           then open a short one and the panel shows blank space below the content until you
+           scroll up yourself. A rebuild of the SAME open panel (every parameter edit) keeps its
+           offset — the caret may be down there. */
+        panel.scrollTop = 0;
+        content.scrollTop = 0;
+        /* The resize grip is pinned by cancelling the panel's scroll; after a reset the cancelling
+           transform has to follow the new offset or the grip lands somewhere else for a frame. */
+        var grip = panel.querySelector('.resize-handle');
+        if (grip) grip.style.transform = 'translate(0px,0px)';
+    }
+    if (renderer && typeof renderer.mounted === 'function') renderer.mounted(nodeId, node);
+    canvas.updateSettingsButton();
+    if (!wasOpen) _focusFirstSetting();
+}
+
+function renderSourceSettings(nodeId, node) {
+    var html = '';
+    /* The form is the matrix: which platforms exist, which of them want
            links instead of a keyword, and every field in between come from
            /api/capabilities (see Capabilities above), so the panel and the
            executor cannot disagree about what a platform offers. */
@@ -556,8 +671,12 @@ function openSettings(nodeId) {
                 I18n.t('settings.watermark') + '</label>' +
                 '<div class="settings-hint">' + I18n.t('settings.watermarkHint') + '</div></div>';
         }
-    } else if (node.type === 'comment') {
-        /* Source-like crawler: article links go in, comment rows come out. The
+    return html;
+}
+
+function renderCommentSettings(nodeId, node) {
+    var html = '';
+    /* Source-like crawler: article links go in, comment rows come out. The
            panel mirrors the WeChat source block (a multi-line textarea) and the
            recrawl checkbox markup, because zhihu comment pages refuse headless
            sessions — so the hint has to warn that a visible window opens. */
@@ -614,8 +733,12 @@ function openSettings(nodeId) {
             'onchange="updateParam(\'' + nodeId + '\',\'recrawl\',this.checked)">' + I18n.t('settings.recrawl') + '</label>' +
             '<div class="settings-hint">' + I18n.t('settings.recrawlHint') + '</div></div>' +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.commentHint') + '</div>';
-    } else if (node.type === 'upload') {
-        /* The single place a file enters a workflow: pick a CSV / JSON / TXT
+    return html;
+}
+
+function renderUploadSettings(nodeId, node) {
+    var html = '';
+    /* The single place a file enters a workflow: pick a CSV / JSON / TXT
            and this node publishes its rows to whatever is connected below. */
         var p = node.params;
         /* Two buttons and a status word share one row; a narrow panel has to wrap them instead
@@ -671,8 +794,12 @@ function openSettings(nodeId) {
         }
         html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' +
             I18n.t('btn.previewData') + '</button></div>';
-    } else if (node.type === 'accumulate') {
-        /* The node appends this run's rows to a named, versioned table and passes the
+    return html;
+}
+
+function renderAccumulateSettings(nodeId, node) {
+    var html = '';
+    /* The node appends this run's rows to a named, versioned table and passes the
            full table downstream. Identity is an explicit choice: whole-row equality
            or named key columns; the backend refuses a missing key by name. */
         var p = node.params;
@@ -690,17 +817,12 @@ function openSettings(nodeId) {
                 I18n.t('datasetMgr.lineageReset') + '</button></div>';
         }
         html += '<div class="settings-hint">' + I18n.t('settings.accumulateHint') + '</div>';
-    } else if (node.type === 'reusable') {
-        /* The group's form is about its boundary: the template it carries, the ordered
-           input slots an outside wire lands in, its single output, and the two view
-           controls. The inside is read-only here — see ReusableNodes. */
-        if (typeof ReusableNodes !== 'undefined') html += ReusableNodes.settingsHtml(nodeId);
-    } else if (node.type === 'biblio') {
-        html += renderBiblioSettings(nodeId, node.params);
-    } else if (node.type === 'fuse') {
-        html += renderFuseSettings(nodeId, node.params);
-    } else if (node.type === 'process') {
-        var p = node.params;
+    return html;
+}
+
+function renderProcessSettings(nodeId, node) {
+    var html = '';
+    var p = node.params;
         var opSpec = null;
         var specs = (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) ? NodeTypes.params('process') : [];
         for (var i = 0; i < specs.length; i++) {
@@ -942,17 +1064,13 @@ function openSettings(nodeId) {
                 '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.liveExportHint') + '</div></div>';
         }
 
-        html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
-    } else if (node.type === 'analysis') {
-        html += renderAnalysisSettings(nodeId, node.params);
-    } else if (node.type === 'verify') {
-        html += renderVerifySettings(nodeId, node.params);
-    } else if (node.type === 'python') {
-        html += renderPythonSettings(nodeId, node.params);
-    } else if (node.type === 'visualize') {
-        html += renderVisualizeSettings(nodeId, node.params);
-    } else if (node.type === 'tokenize') {
-        /* A legacy 分词 node: new canvases create this as 处理 → 分词, but an old
+    html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
+    return html;
+}
+
+function renderTokenizeSettings(nodeId, node) {
+    var html = '';
+    /* A legacy 分词 node: new canvases create this as 处理 → 分词, but an old
            canvas keeps its own type and the same fields. */
         var p = node.params;
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.textColumn') + '</label>' +
@@ -960,38 +1078,24 @@ function openSettings(nodeId) {
             'onchange="updateParam(\'' + nodeId + '\',\'text_column\',this.value)"></div>' +
             renderTokenizeExtra(nodeId, node, p) +
             '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
-    } else if (node.type === 'name') {
-        /* The workflow's label for the Execution History panel. It is the one
-           node that must sit at the head of a workflow and wire into what
-           follows, so the panel says so and validates the same way. */
-        var p = node.params;
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('name.hint') + '</div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.workflowName') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.workflow_name || '') + '" placeholder="' + I18n.t('name.unnamed') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'workflow_name\',this.value)"></div>' +
-            /* 排布顺序 drives autoLayout's vertical stack. Store the RAW string (never
-               parseInt || 0): a cleared field must stay blank = "no preference", whereas
-               forcing 0 would silently pin this workflow above the other untouched ones. */
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.layoutOrder') + '</label>' +
-            '<input class="settings-input" type="number" value="' + escapeHtml(p.layout_order != null ? p.layout_order : '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'layout_order\',this.value)">' +
-            '<div style="font-size:11px;color:var(--text-dim);">' + I18n.t('settings.layoutOrderHint') + '</div></div>';
-    } else if (node.type === 'resume') {
-        /* Adopts rows a previous run already paid for. Both lists live on the
-           server, so the panel fills them asynchronously below. */
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.hint') + '</div>' +
+    return html;
+}
+
+function renderResumeSettingsPanel(nodeId, node) {
+    var html = '';
+    /* Adopts rows a previous run already paid for. Both lists live on the
+       server, so the panel fills them asynchronously below. */
+    html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('resume.hint') + '</div>' +
             '<div id="resume-pick" data-node="' + nodeId + '">' +
             '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">…</div></div>' +
             '<div class="settings-group"><button class="menu-btn" onclick="renderResumeSettings(\'' + nodeId + '\')">' +
             I18n.t('resume.refresh') + '</button></div>';
-    } else if (node.type === 'compile') {
-        /* The compile node has no fields of its own: it runs the LaTeX its upstream visualize node produced
-           through the local MiKTeX (the xelatex path is set under 设置) and hands a PDF downstream. The one
-           precondition worth stating is the one a run otherwise refuses. */
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.compileHint') + '</div>';
-    } else if (node.type === 'output') {
-        var p = node.params;
+    return html;
+}
+
+function renderOutputSettings(nodeId, node) {
+    var html = '';
+    var p = node.params;
         var pdfOnly = _outputIsPdfOnly(nodeId);
         /* An output fed only by a chart / compile has exactly one valid format; force it in the live
            model so the run sends pdf even if the select is never touched (the extension itself is
@@ -1033,34 +1137,9 @@ function openSettings(nodeId) {
         if (!pdfOnly) {
             html += '<div class="settings-group"><button class="menu-btn" onclick="dataNodes.previewData(\'' + nodeId + '\')">' + I18n.t('btn.previewData') + '</button></div>';
         }
-    }
-    content.innerHTML = html;
-    if (!sameNode) {
-        /* Opening for a DIFFERENT node starts at the top. The panel is the scroll container, and
-           it used to keep the previous form's offset: open a long node, scroll to its bottom,
-           then open a short one and the panel shows blank space below the content until you
-           scroll up yourself. A rebuild of the SAME open panel (every parameter edit) keeps its
-           offset — the caret may be down there. */
-        panel.scrollTop = 0;
-        content.scrollTop = 0;
-        /* The resize grip is pinned by cancelling the panel's scroll; after a reset the cancelling
-           transform has to follow the new offset or the grip lands somewhere else for a frame. */
-        var grip = panel.querySelector('.resize-handle');
-        if (grip) grip.style.transform = 'translate(0px,0px)';
-    }
-    if (node.type === 'resume') renderResumeSettings(nodeId);
-    if (node.type === 'upload') dataNodes.loadDatasetOptions(nodeId);
-    if (
-        node.type === 'process' &&
-        nodeNeedsLlm(node.params, node.operation) &&
-        typeof LLMSettings !== 'undefined' &&
-        LLMSettings.load().provider === 'ollama'
-    ) {
-        renderNodeModelSelect(nodeId);
-    }
-    canvas.updateSettingsButton();
-    if (!wasOpen) _focusFirstSetting();
+    return html;
 }
+
 
 /* Move the caret to the panel's first editable control when it is freshly opened, so a
    keyboard user who reaches a node lands inside its form rather than behind the canvas.
@@ -1303,4 +1382,40 @@ function renderParamCheckbox(nodeId, p, key, labelKey, defVal) {
         'onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.checked)"> ' +
         I18n.t(labelKey) + '</label></div>';
 }
+
+/* ── The panels this file owns ──
+   Each entry is the manifest's ``custom_renderer`` id. A companion module registers its own
+   (`panels/node-*.js`); a generic schema form never lands here. */
+registerSettingsRenderer('source', { html: renderSourceSettings });
+registerSettingsRenderer('comment', { html: renderCommentSettings });
+registerSettingsRenderer('accumulate', { html: renderAccumulateSettings });
+registerSettingsRenderer('tokenize', { html: renderTokenizeSettings });
+registerSettingsRenderer('output', { html: renderOutputSettings });
+registerSettingsRenderer('resume', {
+    html: renderResumeSettingsPanel,
+    /* Both lists live on the server: the form paints empty and this fills it once the answer lands. */
+    mounted: function (nodeId) {
+        renderResumeSettings(nodeId);
+    },
+});
+registerSettingsRenderer('upload', {
+    html: renderUploadSettings,
+    /* The dataset library is a fetch, not a declaration: the picker starts with the stored file. */
+    mounted: function (nodeId) {
+        dataNodes.loadDatasetOptions(nodeId);
+    },
+});
+registerSettingsRenderer('process', {
+    html: renderProcessSettings,
+    /* The per-node model box starts with the stored tag and is repopulated from the daemon's list. */
+    mounted: function (nodeId, node) {
+        if (
+            nodeNeedsLlm(node.params, node.operation) &&
+            typeof LLMSettings !== 'undefined' &&
+            LLMSettings.load().provider === 'ollama'
+        ) {
+            renderNodeModelSelect(nodeId);
+        }
+    },
+});
 

@@ -43,7 +43,7 @@ MANIFEST = Manifest(
             param='dataset_id',
         ),
     ),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='upload'),
     ai=Ai(
         summary=(
             '文件上传 turns one stored dataset into the same row table a crawl produces. Downstream nodes '

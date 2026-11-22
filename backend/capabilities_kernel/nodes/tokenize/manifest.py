@@ -72,7 +72,7 @@ MANIFEST = Manifest(
             param='text_column',
         ),
     ),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='tokenize'),
     ai=Ai(
         summary=(
             '分词 turns one text column into a word table: word/frequency pairs, bare words, or a single '

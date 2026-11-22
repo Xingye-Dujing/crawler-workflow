@@ -1027,3 +1027,11 @@ var ReusableNodes = {
         return messages;
     },
 };
+
+/* `reusable` is a canvas-owned type rather than a capability: its form registers under its type
+   name, which is what the settings shell looks up when the catalogue has no manifest for it. */
+registerSettingsRenderer('reusable', {
+    html: function (nodeId) {
+        return ReusableNodes.settingsHtml(nodeId);
+    },
+});

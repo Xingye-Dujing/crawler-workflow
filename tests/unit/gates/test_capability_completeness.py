@@ -66,6 +66,16 @@ class TestAManifestIsWhole:
         missing = [lang for lang in ('en', 'zh') if manifest.identity.title_key not in tables[lang]]
         assert missing == [], f'{manifest.identity.title_key} missing from {missing}'
 
+    def test_every_form_word_exists_in_both_languages(self, manifest):
+        """A schema form draws labels/hints from the manifest: an untranslated key would print
+        itself as the field label in one language."""
+        tables = catalog_keys()
+        keys = [manifest.ui.hint_key] if manifest.ui.hint_key else []
+        for spec in manifest.params:
+            keys.extend(key for key in (spec.label_key, spec.placeholder_key, spec.description_key) if key)
+        missing = [f'{key} missing from {lang}' for key in keys for lang in ('en', 'zh') if key not in tables[lang]]
+        assert missing == []
+
     def test_the_digest_is_a_sha256(self, manifest):
         digest = manifest.digest()
         assert len(digest) == 64 and set(digest) <= set('0123456789abcdef')

@@ -23,7 +23,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "name.unnamed",
+          "descriptionKey": "",
+          "labelKey": "settings.workflowName"
         },
         {
           "name": "layout_order",
@@ -33,8 +36,11 @@
           "enum": [],
           "minimum": null,
           "maximum": null,
-          "widget": "text",
-          "placeholder": ""
+          "widget": "number",
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "settings.layoutOrderHint",
+          "labelKey": "settings.layoutOrder"
         }
       ],
       "rules": [
@@ -69,7 +75,8 @@
       "ui": {
         "form": "schema",
         "customRenderer": "",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": "name.hint"
       }
     },
     {
@@ -92,7 +99,8 @@
       "ui": {
         "form": "custom",
         "customRenderer": "source",
-        "defaultsFrom": "capabilities"
+        "defaultsFrom": "capabilities",
+        "hintKey": ""
       }
     },
     {
@@ -118,7 +126,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "dataset",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "dataset_name",
@@ -129,7 +140,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "row_count",
@@ -140,7 +154,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -159,9 +176,10 @@
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "upload",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -187,7 +205,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "resume_node_id",
@@ -198,7 +219,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "resume_limit",
@@ -209,7 +233,10 @@
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -220,9 +247,10 @@
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "resume",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -252,7 +280,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "textarea",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "comment_limit",
@@ -263,7 +294,10 @@
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "part_size",
@@ -274,7 +308,10 @@
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "per_article_file",
@@ -285,7 +322,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "keep_parts",
@@ -296,7 +336,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "recrawl",
@@ -307,7 +350,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -321,7 +367,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -342,7 +391,8 @@
       "ui": {
         "form": "custom",
         "customRenderer": "comment",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -387,7 +437,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "text_column",
@@ -398,7 +451,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "topic",
@@ -409,7 +465,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "live_export",
@@ -420,7 +479,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -431,7 +493,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -442,9 +507,10 @@
         "readColumns": "nodes.executors.process:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "process",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -471,7 +537,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "args",
@@ -482,7 +551,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "json",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "timeout",
@@ -493,7 +565,10 @@
           "minimum": 1,
           "maximum": 3600,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "max_rows",
@@ -504,7 +579,10 @@
           "minimum": 1,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -515,9 +593,10 @@
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "python",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -548,7 +627,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "columns",
@@ -559,7 +641,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "column",
@@ -570,7 +655,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "value",
@@ -581,7 +669,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "op",
@@ -592,7 +683,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "dtype",
@@ -603,7 +697,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "rename_from",
@@ -614,7 +711,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "rename_to",
@@ -625,7 +725,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -636,9 +739,10 @@
         "readColumns": "nodes.executors.analysis:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "analysis",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -664,7 +768,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": "正文"
+          "placeholder": "正文",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_n",
@@ -675,7 +782,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": "120"
+          "placeholder": "120",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_mode",
@@ -690,7 +800,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -709,9 +822,10 @@
         "readColumns": "nodes.executors.tokenize:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "tokenize",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -807,7 +921,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "entity_column",
@@ -818,7 +935,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "year_column",
@@ -829,7 +949,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title_column",
@@ -840,7 +963,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "abstract_column",
@@ -851,7 +977,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "reference_column",
@@ -862,7 +991,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tc_column",
@@ -873,7 +1005,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "usage_column",
@@ -884,7 +1019,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "sentiment_column",
@@ -895,7 +1033,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "topic_column",
@@ -906,7 +1047,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "time_start",
@@ -917,7 +1061,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "time_end",
@@ -928,7 +1075,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "slice_years",
@@ -939,7 +1089,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "look_back_years",
@@ -950,7 +1103,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "selection",
@@ -966,7 +1122,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_n",
@@ -977,7 +1136,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_pct",
@@ -988,7 +1150,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "g_index",
@@ -999,7 +1164,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_count",
@@ -1010,7 +1178,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_c",
@@ -1021,7 +1192,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_cc",
@@ -1032,7 +1206,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "threshold_ccv",
@@ -1043,7 +1220,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_tc",
@@ -1054,7 +1234,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "min_usage",
@@ -1065,7 +1248,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "largest_component",
@@ -1076,7 +1262,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "link_measure",
@@ -1092,7 +1281,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "counting",
@@ -1106,7 +1298,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "citation_expansion",
@@ -1117,7 +1312,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "max_links_per_node",
@@ -1128,7 +1326,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "lrf",
@@ -1139,7 +1340,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pruning",
@@ -1154,7 +1358,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pruning_scope",
@@ -1168,7 +1375,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_r",
@@ -1183,7 +1393,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_lmax",
@@ -1194,7 +1407,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "pathfinder_dmax",
@@ -1205,7 +1421,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster",
@@ -1216,7 +1435,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster_count",
@@ -1227,7 +1449,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "label_method",
@@ -1243,7 +1468,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "label_source",
@@ -1260,7 +1488,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "top_terms",
@@ -1271,7 +1502,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst",
@@ -1282,7 +1516,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_gamma",
@@ -1293,7 +1530,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_min_duration",
@@ -1304,7 +1544,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_weight",
@@ -1315,7 +1558,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "burst_top",
@@ -1326,7 +1572,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "variation",
@@ -1337,7 +1586,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "variation_min",
@@ -1348,7 +1600,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "aliases",
@@ -1359,7 +1614,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "exclude_values",
@@ -1370,7 +1628,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "cluster_labels",
@@ -1381,7 +1642,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "basemap_dataset_id",
@@ -1392,7 +1656,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "dataset",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_project",
@@ -1403,7 +1670,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_baseline",
@@ -1414,7 +1684,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "watch_label",
@@ -1425,7 +1698,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_shape",
@@ -1443,7 +1719,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "export_files",
@@ -1454,7 +1733,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1467,7 +1749,8 @@
       "ui": {
         "form": "custom",
         "customRenderer": "biblio",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1499,7 +1782,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "result_key_column",
@@ -1510,7 +1796,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "expected_count_column",
@@ -1521,7 +1810,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "match_mode",
@@ -1532,7 +1824,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tolerance",
@@ -1543,7 +1838,10 @@
           "minimum": 0,
           "maximum": null,
           "widget": "number",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "per_link_limit",
@@ -1554,7 +1852,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "output_mode",
@@ -1568,7 +1869,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "swap_tables",
@@ -1579,7 +1883,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "ignore_case",
@@ -1590,7 +1897,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1601,9 +1911,10 @@
         "readColumns": "nodes.executors.verify:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "verify",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1637,7 +1948,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "year_columns",
@@ -1648,7 +1962,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title_columns",
@@ -1659,7 +1976,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "author_columns",
@@ -1670,7 +1990,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "affiliation_columns",
@@ -1681,7 +2004,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "text_columns",
@@ -1692,7 +2018,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "reference_columns",
@@ -1703,7 +2032,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "source_columns",
@@ -1714,7 +2046,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "source_labels",
@@ -1725,7 +2060,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "keep_undated",
@@ -1736,7 +2074,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "export_files",
@@ -1747,7 +2088,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [
@@ -1766,9 +2110,10 @@
         "readColumns": "nodes.executors.fuse:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "fuse",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1794,7 +2139,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "identity",
@@ -1808,7 +2156,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "key_columns",
@@ -1819,7 +2170,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1830,9 +2184,10 @@
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "accumulate",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -1865,7 +2220,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "x_field",
@@ -1876,7 +2234,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "y_field",
@@ -1887,7 +2248,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "value_field",
@@ -1898,7 +2262,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "column",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "agg",
@@ -1909,7 +2276,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "engine",
@@ -1920,7 +2290,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "title",
@@ -1931,7 +2304,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "tokenize",
@@ -1942,7 +2318,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "emit_latex",
@@ -1953,7 +2332,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "emit_latex_table",
@@ -1964,7 +2346,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "switch",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -1975,9 +2360,10 @@
         "readColumns": "nodes.executors.visualize:read_columns"
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "visualize",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     },
     {
@@ -2000,7 +2386,8 @@
       "ui": {
         "form": "schema",
         "customRenderer": "",
-        "defaultsFrom": ""
+        "defaultsFrom": "",
+        "hintKey": "settings.compileHint"
       }
     },
     {
@@ -2026,7 +2413,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "select",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "format",
@@ -2037,7 +2427,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         },
         {
           "name": "filename",
@@ -2048,7 +2441,10 @@
           "minimum": null,
           "maximum": null,
           "widget": "text",
-          "placeholder": ""
+          "placeholder": "",
+          "placeholderKey": "",
+          "descriptionKey": "",
+          "labelKey": ""
         }
       ],
       "rules": [],
@@ -2059,9 +2455,10 @@
         "readColumns": ""
       },
       "ui": {
-        "form": "schema",
-        "customRenderer": "",
-        "defaultsFrom": ""
+        "form": "custom",
+        "customRenderer": "output",
+        "defaultsFrom": "",
+        "hintKey": ""
       }
     }
   ]

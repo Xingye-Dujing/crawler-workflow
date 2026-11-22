@@ -42,7 +42,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='table', inputs=2, read_columns='nodes.executors.verify:read_columns'),
     execution=Execution(handler='nodes.executors.verify:run'),
     validators=('nodes.executors.verify:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='verify'),
     ai=Ai(
         summary=(
             '采集校验 reads two tables: the promised list and the crawled result. It matches keys, compares the '

@@ -169,6 +169,31 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P2 前端第四片：表单由清单选择（2026-11-23）
+
+- `Ui` 新增 `hint_key`；`ParamSpec` 新增 `label_key`/`placeholder_key`，并把 `description_key` 接到通用表单。
+  `form='schema'` 的清单必须为每个参数声明 `label_key`（`problems()` 按名拒绝），`ui.hint_key` 是表头说明。
+- 13 个有手写面板的节点在清单里声明 `ui.form='custom'` + `custom_renderer`：`source`/`comment`/`upload`/
+  `resume`/`process`/`analysis`/`tokenize`/`biblio`/`verify`/`fuse`/`accumulate`/`visualize`/`output`。
+  `name`/`compile` 留在 `schema`，由通用渲染器按清单画。
+- `panels/settings.js::openSettings` 删除整条 `node.type === …` 分支链，只做一次
+  `settingsRenderer(node.type)` 分派；各模块用 `registerSettingsRenderer('<id>', {html, mounted})` 注册自己的表单：
+  settings.js（source/comment/accumulate/tokenize/output/resume/upload/process）、
+  `panels/node-*.js`（analysis/biblio/fuse/visualize/verify/python）、`reusable.js`（reusable）。
+- `mounted` 收拢了原先三个按类型执行的挂载动作：resume 填运行列表、upload 拉数据集、process 拉 Ollama 标签。
+- 通用渲染器支持 `text`/`textarea`/`number`/`select`/`switch`/`column`/`dataset`/`json`；标签、占位、说明全部来自清单键，
+  选项表仍是清单 enum。
+- 失败按名：目录未加载 `settings.noCatalogue`、类型不在目录 `settings.unknownType`、清单点名了未注册渲染器
+  `settings.noRenderer`；面板不画空表单。`reusable` 不是能力，按类型名注册，保持原来的模板边界表单。
+- 测试：`TestSettingsPanel` 新增 `name`/`compile`/未知类型场景；`TestSettingsRenderers` 让每个 custom 清单 id 与注册项
+  一一对应，并断言 `openSettings` 不再有类型链；完整性门禁检查 `hint_key`/`label_key`/`placeholder_key`/
+  `description_key` 的双语词。
+- 设备层回归：`test_a_disabled_node_goes_grey_and_its_downstream_says_so` 原先直接调 `Diagnostics.recompute()`；P2 第二片后
+  编辑期判定来自 `/api/workflow/diagnostics`，用例改为 `await Diagnostics.refresh()` 后再测量（禁用/启用各等一次应答）。
+- 本片验证：全量快测 `11034 passed, 7 skipped, 386 deselected`；设备层 `215 passed, 5 skipped`；ruff 全绿；
+  product/tests pylint 10.00/10；`gen_capabilities.py --check`、`doctor.py --all` 全绿；隔离 data root 冒烟 10 个
+  GET 全 200、`POST /api/workflow/validate` 200。
+
 ## P2 前端第三片：选项表来自清单（2026-11-23）
 
 - `process` 清单的 `operation` 声明 16 个 enum 值；`panels/settings.js` 的 `PROCESS_OPS` 数组删除，
@@ -205,7 +230,7 @@
   与页面一致的目录。
 - 测试改钉生成物：`test_node_plugins.py` 解析 fallback 并对比 `NODE_TYPES`/rows/seeds；
   `test_frontend_node_types_js.py` 驱动真实画布验证冷启动、失败保留与深拷贝。
-- 还没做：schema 表单渲染器（`panels/settings.js` 的 `openSettings` 分派）。
+- 当时未做：schema 表单渲染器；已在“P2 前端第四片”完成（`openSettings` 只做一次 `ui` 分派）。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 
@@ -260,8 +285,9 @@
 
 ## 下一步（按顺序）
 
-1. **P2 收尾**：schema 表单渲染器 + custom renderer 注册表，替换 `panels/settings.js::openSettings` 的逐类型分支。
-2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
+1. **P2 收尾已完成**：schema 表单渲染器 + custom renderer 注册表已替换 `panels/settings.js::openSettings` 的逐类型分支
+   （见“P2 前端第四片”）。
+2. 下一步按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 

@@ -266,7 +266,11 @@ class TestContracts:
         workflow = WORKFLOW_JS.read_text(encoding='utf-8')
         assert 'ReusableNodes.errors()' in workflow
         assert 'canvas.toWorkflowJSON({ expandReusable: false })' in workflow
-        assert 'ReusableNodes.settingsHtml(nodeId)' in (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
+        reusable = (JS_DIR / 'reusable.js').read_text(encoding='utf-8')
+        assert "registerSettingsRenderer('reusable'" in reusable
+        assert 'ReusableNodes.settingsHtml(nodeId)' in reusable
+        settings = (JS_DIR / 'panels' / 'settings.js').read_text(encoding='utf-8')
+        assert 'var renderer = settingsRenderer(node.type);' in settings
 
     def test_every_new_word_has_both_catalogues(self):
         keys = _catalog_keys()

@@ -42,7 +42,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='pdf', inputs=-1, read_columns='nodes.executors.visualize:read_columns'),
     execution=Execution(handler='nodes.executors.visualize:run'),
     validators=('nodes.executors.visualize:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='visualize'),
     ai=Ai(
         summary=(
             '可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus '

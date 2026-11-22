@@ -67,7 +67,7 @@ MANIFEST = Manifest(
     ),
     execution=Execution(handler='nodes.executors.process:run'),
     validators=('nodes.executors.process:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='process'),
     ai=Ai(
         summary=(
             '处理 runs one operation over the upstream text column: cleaning, tokenize, word frequency, '

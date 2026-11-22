@@ -35,7 +35,7 @@ MANIFEST = Manifest(
     ),
     ports=Ports(rows='table', inputs=1),
     execution=Execution(handler='nodes.executors.python_node:run'),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='python'),
     ai=Ai(
         summary=(
             'Python 节点 runs one saved script from the account’s script library over the upstream rows. '

@@ -35,7 +35,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='table', inputs=1, emit_columns='nodes.executors.accumulate:emit_columns'),
     execution=Execution(handler='nodes.executors.accumulate:run'),
     validators=('nodes.executors.accumulate:validate_node',),
-    ui=Ui(),
+    ui=Ui(form='custom', custom_renderer='accumulate'),
     ai=Ai(
         summary=(
             '数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every '
