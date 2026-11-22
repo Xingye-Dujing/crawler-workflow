@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`a00e89b 修改：新增能力到 AI 入口的覆盖矩阵与门禁`
+- 最后提交：`b3dbfb3 修改：占比堆叠图在验证阶段命名缺失的 stack_fields`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -22,6 +22,7 @@
 | `438723e` | 数据集行读取授权：`request_dataset_access` 走暂停/恢复问题通道；会话+数据集+行数 grant；`dataset_page`/`sample`/筛选查询累计；`peek` 免费；侧栏列出/撤销 |
 | `702705e` | 工作流/导出管理工具：list/read/update/rename/delete/export/run/stop + export_list/delete；删除强制审批+审计；停止与 HTTP 共用 `engine.run.stop_run` |
 | `a00e89b` | `ai.coverage` 能力→AI 入口矩阵（节点/平台模式/算子/图表/工具）+ `ai_coverage` 工具 + 门禁（可反向失败） |
+| `b3dbfb3` | `ChartSpec.required_params` 声明 `stack_fields`；`WorkflowEngine.validate_detailed` 在运行前按名报告，默认值先填充 |
 
 ## 测试基线
 
@@ -32,9 +33,8 @@
 
 ## 下一步（按顺序）
 
-1. **H16 占比堆叠图验证**：`stack_fields` 在 validate 阶段命名；P3 迁移到 ChartSpec preflight。
-2. **H17/H18 视图单实例**：设置/工作室不覆盖 `#ai-chat`；切会话不重复消息区（可与 P5 框架 UI 合并）。
-3. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
+1. **H17/H18 视图单实例**：设置/工作室不覆盖 `#ai-chat`；切会话不重复消息区（可与 P5 框架 UI 合并）。
+2. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
 
 ## H11 的关键落点（避免重复调查）
 
@@ -56,4 +56,4 @@
 
 ## 给压缩后的第一句话
 
-> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `a00e89b`。先做 H16。
+> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `b3dbfb3`。先做 H17/H18。
