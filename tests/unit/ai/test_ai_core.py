@@ -469,6 +469,25 @@ def test_the_stored_context_is_clamped_once_and_said_so(monkeypatch):
     assert short == 'a context' and small['replay_truncated'] is False
 
 
+def test_zero_replay_limit_means_no_application_clamp(monkeypatch):
+    """0 = the model window is the only limit; the old floor of 1000 turned "unlimited" into 1k."""
+    from ai import context
+
+    monkeypatch.setattr(context, 'get_setting', lambda key: 0)
+    text, meta = context.for_replay('x' * 5000)
+    assert text == 'x' * 5000
+    assert meta['replay_limit'] == 0
+    assert meta['replay_truncated'] is False
+
+
+def test_the_output_budget_is_no_longer_hard_capped_at_8192():
+    """The 8192 constant cut a long workflow draft; the setting now owns it."""
+    from ai import agent
+
+    assert agent.MAX_OUTPUT_TOKENS >= 32768
+    assert agent.MAX_QUESTIONS == 10
+
+
 def test_a_tool_call_whose_arguments_never_arrived_is_refused_not_run(monkeypatch):
     """A stream cut by `max_tokens` leaves half a JSON document. Running it with {} made the TOOL
     refuse for the wrong reason; the turn must say the arguments were cut."""

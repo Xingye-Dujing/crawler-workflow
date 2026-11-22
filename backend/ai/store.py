@@ -23,8 +23,8 @@ from ai.types import new_id
 #: One memory is a fact the user confirmed, not a transcript: it goes into the context of every
 #: later turn, so it has to stay short. Both bounds refuse BY NAME — silently truncating or
 #: dropping the oldest row would decide on the user's behalf what the assistant may remember.
-MAX_MEMORY_CHARS = 2000
-MAX_MEMORIES = 200
+MAX_MEMORY_CHARS = 8000
+MAX_MEMORIES = 1000
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS conversations (

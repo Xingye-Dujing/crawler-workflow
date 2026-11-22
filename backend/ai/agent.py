@@ -46,12 +46,13 @@ ACTIVE_STREAMS: dict[str, tuple[threading.Event, str]] = {}
 
 #: How many questions one ``ask_user_question`` call may carry. More than this is refused by name —
 #: the old code kept the first five silently, so a sixth question (and its answer) never existed.
-MAX_QUESTIONS = 5
+MAX_QUESTIONS = 10
 _STREAM_LOCK = threading.RLock()
 
-#: The output budget of one provider round. A workflow draft is the longest thing a round emits;
-#: 8192 is what every transport here accepts as `max_tokens` (Ollama now maps it to `num_predict`).
-MAX_OUTPUT_TOKENS = 8192
+#: Fallback output budget when ``ai_max_output_tokens`` is unset. The setting is the authority; a
+#: fresh install gets 32768, which every transport here accepts as ``max_tokens`` (Ollama maps it to
+#: ``num_predict``) and which no longer cuts a long workflow draft at 8192.
+MAX_OUTPUT_TOKENS = 32768
 
 
 def _active(conversation_id: str, scope: str = '') -> threading.Event:
@@ -611,7 +612,7 @@ class AgentService:
         # user's levers (settings → AI), read at send time so a change needs no restart.
         reasoning_effort = str(get_setting('ai_reasoning_effort') or 'high')
         temperature = get_setting('ai_temperature')
-        max_tokens = MAX_OUTPUT_TOKENS
+        max_tokens = int(get_setting('ai_max_output_tokens') or 0) or MAX_OUTPUT_TOKENS
         allow_code = bool(get_setting('ai_allow_code_context'))
         allow_python = bool(get_setting('ai_allow_python')) and environment.capabilities()['code_plugins']
         allow_files = bool(environment.capabilities()['user_files'])
@@ -1436,11 +1437,11 @@ class AgentService:
             )
             text = json.dumps(result, ensure_ascii=False, default=str)
             # The tool result is what the provider is billed for. A dataset or script output can be
-            # enormous; the workspace's own tools are bounded, and this is the last backstop. The cap
-            # is a setting (default 12k) rather than a constant: a turn that truly needs more asks
-            # the user to raise it instead of being silently cut.
-            limit_chars = max(2000, int(get_setting('ai_max_tool_result_chars') or 12000))
-            if len(text) > limit_chars:
+            # enormous; the workspace's own tools are bounded, and this is the last backstop. 0 means
+            # "no application cap": the model window is the only limit, and every truncation is
+            # reported instead of silently shrinking. A positive value is still configurable.
+            limit_chars = int(get_setting('ai_max_tool_result_chars') or 0)
+            if limit_chars > 0 and len(text) > limit_chars:
                 text = (
                     text[:limit_chars]
                     + f'\n…[truncated at {limit_chars} chars by the workspace; use a narrower page, or ask the user'

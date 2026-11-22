@@ -41,7 +41,7 @@ def purpose_for(filename: str, mime: str = '') -> str:
 
 #: A table at least this large is registered as a DATASET and referenced with `@`, never sent as a
 #: document: the parsed text would be billed as input on every turn that names it, while the
-#: dataset tools read a bounded slice (names + five rows; ≤50 rows on a page).
+#: dataset tools read a bounded slice (names + five rows; a page capped by the account setting).
 TABULAR_DATASET_BYTES = 128 * 1024
 #: …and so is a table with more rows than this, however small its bytes (a 4,000-row CSV of two
 #: short columns is only ~50 KB but still tens of thousands of prompt tokens).
@@ -53,7 +53,7 @@ TABULAR_SUFFIXES = ('.csv', '.tsv', '.xlsx', '.xls')
 #: One attachment's ceiling. DeepSeek parses documents server-side, but the parsed text rides in
 #: every request that references it and an over-long context is refused with 400, never truncated —
 #: so an over-size upload is refused here, by name, with the way out.
-ATTACH_MAX_BYTES = 4 * 1024 * 1024
+ATTACH_MAX_BYTES = 64 * 1024 * 1024
 
 
 def _read_table(name: str, data: bytes):

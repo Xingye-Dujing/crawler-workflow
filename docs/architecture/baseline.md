@@ -24,13 +24,15 @@
 .venv/Scripts/python.exe -m pytest -q
 ```
 
-结果：**运行中，完成后回填**（`docs/architecture/baseline.md` 的这次编辑只记录起点，不伪造数字）。
+结果（2026-11-22，热修批次开始前启动，运行中又有少量热修落盘；只作起点，收口时重跑）：
 
-回填项：
+```text
+10578 passed, 7 skipped, 384 deselected, 1 warning in 870.83s (0:14:30)
+```
 
-- [ ] 收集/通过/跳过/失败数
-- [ ] 墙钟耗时
-- [ ] `ruff check` / `ruff format --check`
+- [x] 收集/通过/跳过/失败数：10578 / 7 / 384 deselected / 0 failed
+- [x] 墙钟耗时：14 分 30 秒
+- [ ] `ruff check` / `ruff format --check`（每个 commit 单独跑，收口再全量）
 - [ ] `python tools/ci_lint_tiers.py product`
 - [ ] `python tools/ci_lint_tiers.py tests`
 - [ ] `/smoke-verify`（孤立 data root）

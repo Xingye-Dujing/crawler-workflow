@@ -402,7 +402,11 @@ def for_replay(text: str) -> tuple[str, dict]:
     reported (``replay_truncated``) and still reachable through the read tools.
     """
     value = str(text or '')
-    limit = max(1000, int(get_setting('ai_context_replay_chars') or 16000))
+    limit = int(get_setting('ai_context_replay_chars') or 0)
+    if limit <= 0:
+        # 0 = no application clamp. The model window is the only limit; the block is still measured
+        # and reported so the inspector can show how much each turn carries.
+        return value, {'replay_limit': 0, 'replay_chars': len(value), 'replay_truncated': False}
     meta = {'replay_limit': limit, 'replay_chars': min(len(value), limit), 'replay_truncated': len(value) > limit}
     if not meta['replay_truncated']:
         return value, meta

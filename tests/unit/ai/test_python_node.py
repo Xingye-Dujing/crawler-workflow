@@ -280,6 +280,20 @@ def test_dataset_page_is_bounded_and_reports_more(monkeypatch):
     assert page['next_offset'] == 95
 
 
+def test_dataset_page_limit_comes_from_the_setting(monkeypatch):
+    """The old hard cap of 50 was the whole story; the page budget is now an account setting."""
+    import pandas as pd
+    from ai import tools
+
+    frame = pd.DataFrame([{'a': index} for index in range(5000)])
+    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr(tools, 'get_setting', lambda key: 3000)
+    page = tools.tool_dataset_page({'dataset_id': 'd1', 'limit': 2500}, {})
+    assert len(page['rows']) == 2500
+    capped = tools.tool_dataset_page({'dataset_id': 'd1', 'limit': 9999}, {})
+    assert len(capped['rows']) == 3000
+
+
 def test_dataset_sample_honours_columns_and_offset_and_caps_cells(monkeypatch):
     import pandas as pd
     from ai import tools

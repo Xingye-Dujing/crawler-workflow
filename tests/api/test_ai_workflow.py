@@ -1108,15 +1108,18 @@ def _turn_errors(data: dict) -> list[str]:
 
 
 def test_a_question_card_over_the_limit_is_refused_by_name(client, monkeypatch, clean_ai):
-    """The old code kept the first five SILENTLY, so a sixth question (and its answer) never existed."""
+    """The old code kept the first five SILENTLY, so a sixth question (and its answer) never existed.
+
+    The limit is now 10; an eleventh is still refused by name rather than dropped.
+    """
     from ai.providers import PROVIDERS
 
-    questions = [{'id': f'q{i}', 'question': f'question {i}', 'options': [{'label': 'yes'}]} for i in range(6)]
+    questions = [{'id': f'q{i}', 'question': f'question {i}', 'options': [{'label': 'yes'}]} for i in range(11)]
     monkeypatch.setitem(PROVIDERS, 'fake_many_q', ManyQuestionsProvider('fake_many_q', questions))
     data = _chat(client, provider='fake_many_q', model='fake-model', text='ask me').get_json()
     errors = _turn_errors(data)
     assert errors, data
-    assert '5' in errors[0], errors[0]
+    assert '10' in errors[0], errors[0]
 
 
 def test_two_questions_with_one_id_are_refused(client, monkeypatch, clean_ai):

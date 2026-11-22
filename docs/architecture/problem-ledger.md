@@ -14,6 +14,7 @@
 | H3a | 新消息会取消同会话待答问题 | D | 新消息在有待答问题时按名拒绝，不取消；问题仍可回答。邮箱/插话在 P4 | `ai/agent.py`、`tests/api/test_ai_workflow.py` |
 | H4/H5 | 侧栏缩到最小拉不大、流式滚动跳回开头 | D | 按实测宽度切换 `.narrow`；列宽随 dock 夹紧；12px grip + pointer capture；重绘前保存并恢复 `scrollTop` | `ai-workspace.js`、`ai.css`、`tests/unit/frontend/test_frontend_ai_js.py` |
 | H8 | Python 节点卡片空白、标题显示 Node | D | `getNodeSummary('python')` 显示脚本/参数；标题 map 补 `python`/`fuse` | `canvas.js`、`tests/unit/frontend/test_frontend_fuse_panel_js.py` |
+| H9 | AI 输出/工具结果/回合/表格读取限制过小 | D | 输出 32768 且可配；工具结果/重放 0=不限；回合默认 0；表格单页 2000；问题 10；引用/记忆放大 | `agent.py`、`settings_schema.py`、`context.py`、`tools.py`、`tests/unit/ai/` |
 
 ## 待办（热修列车，按优先级）
 

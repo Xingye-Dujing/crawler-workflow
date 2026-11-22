@@ -201,7 +201,7 @@ def tool_dataset_peek(args: dict, _ctx: dict) -> dict:
 def tool_dataset_page(args: dict, _ctx: dict) -> dict:
     frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
     offset = _int_arg(args.get('offset'), 0, 0)
-    limit = _int_arg(args.get('limit'), 20, 1, 50)
+    limit = _int_arg(args.get('limit'), 20, 1, int(get_setting('ai_dataset_page_rows') or 2000))
     width = _int_arg(args.get('width'), 200, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     page = frame.iloc[offset : offset + limit]
@@ -436,7 +436,7 @@ def tool_dataset_sample(args: dict, _ctx: dict) -> dict:
     """
     frame = _dataset_frame(str(args.get('dataset_id') or _ctx.get('dataset_id') or ''))
     offset = _int_arg(args.get('offset'), 0, 0)
-    limit = _int_arg(args.get('limit'), 10, 1, 50)
+    limit = _int_arg(args.get('limit'), 10, 1, int(get_setting('ai_dataset_page_rows') or 2000))
     width = _int_arg(args.get('width'), 200, 40, 400)
     wanted = _project_columns(frame, args.get('columns')) or [str(column) for column in frame.columns[:40]]
     page = frame.iloc[offset : offset + limit]
@@ -1242,7 +1242,8 @@ TOOLS = {
         ),
         ToolSpec(
             'dataset_sample',
-            'Read up to 50 rows from a dataset. Prefer dataset_peek unless you need a specific page.',
+            'Read a bounded page from a dataset. The account page budget is a setting; prefer '
+            'dataset_peek unless you need a specific page.',
             {
                 'type': 'object',
                 'properties': {
@@ -1271,7 +1272,7 @@ TOOLS = {
         ),
         ToolSpec(
             'dataset_page',
-            'Read a bounded page (max 50 rows) of a dataset when a peek is not enough. Says has_more.',
+            'Read a bounded page of a dataset when a peek is not enough. The page budget is a setting; says has_more.',
             {
                 'type': 'object',
                 'properties': {

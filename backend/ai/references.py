@@ -17,9 +17,9 @@ from ai import store
 #: Kinds the composer's picker offers, in the order it lists them.
 KINDS = ('dataset', 'export', 'workflow', 'run', 'file')
 #: A turn may name at most this many things; the text budget below is what actually binds.
-MAX_REFS = 8
-MAX_CHARS = 1200
-TOTAL_CHARS = 6000
+MAX_REFS = 20
+MAX_CHARS = 8000
+TOTAL_CHARS = 60000
 
 
 def _dataset_preview(dataset_id: str) -> dict:
