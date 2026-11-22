@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`a8420a1 功能更新：能力清单内核与 tokenize pilot`
+- 最后提交：`55329a7 功能更新：能力生成器与 doctor 门禁`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -30,6 +30,7 @@
 | `1c52910` | H11-H16 收口基线（10646/14:06、device 213/5:54、lint、冒烟） |
 | `dad5d55` | H17/H18：`#ai-chat` 拆成 `#ai-transcript` + `#ai-panel`；转录按 `turn_id`/消息 id 复用；流式气泡跨重绘与 A→B→A 复用；`harness_dom.appendChild` 改为浏览器语义（移动而非复制） |
 | `a8420a1` | P1 第一片：`capabilities_kernel` 九段清单 + registry 投影；`tokenize` pilot；声明式验证改由 `services/validation/engine.py` 求值 |
+| `55329a7` | P1 第二片：`tools/gen_capabilities.py` 五类产物、`tools/doctor.py`、生成物 freshness gate |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
