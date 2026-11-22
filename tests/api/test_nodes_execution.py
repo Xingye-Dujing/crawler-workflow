@@ -283,7 +283,9 @@ class TestVisualizeNode:
         assert len(spec['option']['series']) == 1
         assert spec['option']['yAxis']['max'] == 100
 
-    def test_a_share_node_that_lists_no_columns_refuses_by_name(self, client, app_module, paste):
+    def test_a_share_node_that_lists_no_columns_is_rejected_before_the_run(self, client, app_module, paste):
+        """The missing stack_fields is a definition mistake: the engine names it at validation and
+        refuses the run before the uploaded table is read, instead of failing the node afterwards."""
         ds = _upload(client, paste)
         workflow = _wf(
             [
@@ -294,9 +296,10 @@ class TestVisualizeNode:
         )
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'viz-nostack'})
         assert _wait(app_module)
-        spec = app_module.execution_state['results'].get('node-2')
-        assert isinstance(spec, dict) and 'error' in spec and 'stacked fields' in str(spec['error'])
-        assert 'node-2' not in client.get('/api/workflow/status').get_json()['chart_results']
+        status = client.get('/api/workflow/status').get_json()
+        assert status['outcome'] == 'rejected', status.get('outcome')
+        assert any('stack_fields' in str(line) for line in status['logs']), status['logs']
+        assert 'node-2' not in status['chart_results']
 
     def test_a_visualize_node_also_emits_latex_and_files_a_txt(self, client, app_module, paste):
         """Both add-ons default on, so a running chart node answers with the figure source AND

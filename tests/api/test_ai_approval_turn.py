@@ -182,16 +182,19 @@ def test_a_denial_grants_nothing(client, monkeypatch):
     assert approvals.consume(meta['conversation_id'], 'run_cmd', {'command': 'pytest -q'}) is False
 
 
-def test_a_new_message_cancels_the_pending_approval(client, monkeypatch):
+def test_a_new_message_is_refused_while_the_approval_is_pending(client, monkeypatch):
+    """A new message used to cancel the card silently. It now refuses by name, so the user can
+    still answer the question they are looking at (the full mailbox lands with the turn runner)."""
     _install(monkeypatch)
     events = _chat(client).get_json()['events']
     meta = next(event for event in events if event['type'] == 'meta')
     assert any(event['type'] == 'question' for event in events)
     again = _chat(client, text='never mind', conversation_id=meta['conversation_id'])
-    assert again.status_code == 200
-    # The abandoned question can no longer be answered, and the grant it might have made is gone.
+    assert again.status_code == 400
+    assert again.get_json()['key'] == 'ai.questionPending'
+    # The question is still answerable and no grant was created behind the user's back.
     detail = client.get('/api/ai/conversations/' + meta['conversation_id']).get_json()
-    assert detail['pending_questions'] == []
+    assert len(detail['pending_questions']) == 1
     assert approvals.consume(meta['conversation_id'], 'run_cmd', {'command': 'pytest -q'}) is False
 
 
