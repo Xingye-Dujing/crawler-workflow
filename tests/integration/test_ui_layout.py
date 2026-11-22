@@ -1406,7 +1406,7 @@ def test_a_disabled_node_goes_grey_and_its_downstream_says_so(app_url, driver, l
         canvas.updateNodeDisplay(ids[0]);
 
         const probe = () => {
-            // The real badge painter: the edit-time diagnostics merge the offline validation and
+            // The real badge painter: the edit-time diagnostics merge the server's validation and
             // write it onto the boxes. Asking it directly keeps this measurement off the debounce.
             Diagnostics.recompute();
             const box = (id) => {

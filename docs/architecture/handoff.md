@@ -1,8 +1,8 @@
 # 交接与压缩检查点
 
-- 日期：2026-11-22
+- 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`2f6e21cf 修改：面板选项表改读清单枚举，删除手写副本`
+- 最后提交：`64dede4e 修改：设置面板按清单选择表单，删除逐类型分支`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -45,6 +45,7 @@
 | `109cb3d` | P2 前端第一片：`/api/node-types` 与生成的 `node-types-fallback.js` 同源；canvas 删除类型/标签/默认值字面表 |
 | `d72b0a62` | P2 前端第二片：`/api/workflow/validate` 成为唯一运行门；删除 `runs.js` 校验 if 链与 `sourceNodeErrors` |
 | `2f6e21cf` | P2 前端第三片：process/biblio 选项表改读清单枚举；`node-types.js` 幂等加载 |
+| `64dede4e` | P2 前端第四片：清单 `ui` 选择表单；`openSettings` 删除逐类型分支；通用 schema 渲染器 + 注册表；设备层禁用节点用例等待服务端诊断 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -285,8 +286,8 @@
 
 ## 下一步（按顺序）
 
-1. **P2 收尾已完成**：schema 表单渲染器 + custom renderer 注册表已替换 `panels/settings.js::openSettings` 的逐类型分支
-   （见“P2 前端第四片”）。
+1. **P2 前端/表单收尾已完成**：schema 表单渲染器 + custom renderer 注册表已替换 `panels/settings.js::openSettings`
+   的逐类型分支（见“P2 前端第四片”）。P2 清单里剩下的技能骨架、`emit`/`read` 契约与 Asset 分别随 P6/P3/P4 推进。
 2. 下一步按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
