@@ -336,11 +336,14 @@
    (an absolutely positioned handle would need the column's pixel width in JS to stay on it). */
 .ai-col-grip {
   display: none;
-  width: 8px;
+  /* A 12px hit target with a 4px overlap onto each neighbour: the old 8px handle sat exactly on
+     the column edge, so at the minimum width the chat's clipping ate most of the pointer area. */
+  width: 12px;
   align-self: stretch;
   cursor: col-resize;
   position: relative;
-  z-index: 2;
+  z-index: 5;
+  touch-action: none;
 }
 .ai-col-grip:hover,
 .ai-col-grip:focus-visible {
@@ -350,13 +353,13 @@
   display: block;
   grid-column: 1;
   justify-self: end;
-  margin-right: -4px;
+  margin-right: -6px;
 }
 .ai-workspace.full.sessions-open .ai-col-grip[data-ai-resize='side'] {
   display: block;
   grid-column: 3;
   justify-self: start;
-  margin-left: -4px;
+  margin-left: -6px;
 }
 .ai-sessions {
   border-right: 1px solid var(--line);

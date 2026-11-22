@@ -418,6 +418,21 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['localDisabled'] is True, out
         assert out['paidDefault'] is True, out
 
+    def test_a_narrow_dock_uses_the_painted_width_and_clamps_columns(self):
+        """The layout class followed localStorage, not the viewport-capped dock; at 360px the
+        three-column grid squeezed the chat and the grip out of reach."""
+        out = _run_workspace()['narrowDock']
+        assert out['narrowAt360'] is True, out
+        assert out['wideAt900'] is False, out
+        assert out['sessions'] <= 120, out
+        assert out['side'] <= 160, out
+
+    def test_a_streaming_repaint_keeps_a_scrolled_up_reader_in_place(self):
+        """Replacing the flow's innerHTML briefly empties it; without restoring scrollTop the
+        browser clamps the reader to the top on every delta."""
+        out = _run_workspace()['scrollAnchor']
+        assert out['top'] == 120, out
+
     def test_a_markdown_link_is_escaped_exactly_once(self):
         """``&`` in a query string became ``&amp;amp;``: every link with two parameters opened wrong."""
         link = _run_workspace()['markdownLink']

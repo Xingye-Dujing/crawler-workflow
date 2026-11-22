@@ -1537,6 +1537,44 @@ out.monitorBuilder = {
     armed: builderArmed,
 };
 
+/* The dock's layout class follows the PAINTED width, not the configured one. A viewport cap can
+   shrink the dock below 480 while localStorage still says 900; the old code kept the three-column
+   grid and left the chat a few pixels. */
+workspace._dom.root.getBoundingClientRect = () => ({ width: 360 });
+sandbox.AISettings.save({ sessionsWidth: 360, sideWidth: 440 });
+workspace._bindColumns();
+workspace._applyWidthClass(900);
+const narrowAt360 = workspace._dom.root.classList.contains('narrow');
+const narrowSessions = parseInt(workspace._dom.root.style.getPropertyValue('--ai-sessions-w'), 10);
+const narrowSide = parseInt(workspace._dom.root.style.getPropertyValue('--ai-side-w'), 10);
+workspace._dom.root.getBoundingClientRect = () => ({ width: 900 });
+workspace._applyWidthClass(360);
+out.narrowDock = {
+    narrowAt360: narrowAt360,
+    wideAt900: workspace._dom.root.classList.contains('narrow'),
+    sessions: narrowSessions,
+    side: narrowSide,
+};
+
+/* A streaming repaint must not throw the reader back to the top. Simulate a scrolled-up reader,
+   add a block, and repaint. */
+workspace._messages = [];
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+try {
+    Object.defineProperty(workspace._dom.chat, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(workspace._dom.chat, 'clientHeight', { value: 400, configurable: true });
+} catch (error) {
+    /* the stub may expose them as plain values; the assignment below still exercises the path */
+}
+workspace._ensureAssistant();
+workspace._current.blocks = [{ type: 'text', text: 'first paragraph' }];
+workspace._paintAssistant();
+workspace._dom.chat.scrollTop = 120;
+workspace._current.blocks.push({ type: 'text', text: 'streamed paragraph' });
+workspace._paintAssistant();
+out.scrollAnchor = { top: workspace._dom.chat.scrollTop };
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

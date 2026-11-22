@@ -233,10 +233,23 @@ const AIWorkspace = {
         if (typeof AIWatch !== 'undefined') AIWatch.start();
     },
 
+    _measuredWidth() {
+        const root = this._dom.root;
+        if (!root) return 0;
+        const rect = typeof root.getBoundingClientRect === 'function' ? root.getBoundingClientRect() : null;
+        const measured = rect && rect.width ? rect.width : 0;
+        if (measured) return measured;
+        return parseInt(root.style.getPropertyValue('--ai-width'), 10) || 0;
+    },
+
     _applyWidthClass(width) {
         if (!this._dom.root) return;
-        this._dom.root.classList.toggle('narrow', !this._full && width < 480);
-        this._dom.root.classList.toggle('tiny', !this._full && width < 390);
+        /* The configured width and the painted width differ when the viewport caps the dock
+           (`max-width: calc(100vw - 24px)`). The layout class must follow what is on screen, or a
+           narrow dock keeps the three-column grid and squeezes the chat to a few pixels. */
+        const actual = this._measuredWidth() || width;
+        this._dom.root.classList.toggle('narrow', !this._full && actual < 480);
+        this._dom.root.classList.toggle('tiny', !this._full && actual < 390);
     },
 
     /* A demo deep link may widen the dock for one recording. The override is transient: it must NOT
@@ -257,8 +270,18 @@ const AIWorkspace = {
         const root = this._dom.root;
         if (!root) return;
         const saved = AISettings.load();
-        let sessions = Math.max(150, Math.min(360, Number(saved.sessionsWidth) || 190));
-        let side = Math.max(200, Math.min(440, Number(saved.sideWidth) || 260));
+        /* The two sidebars share the dock with the chat. Their clamps must know the dock width,
+           or 150 + 200 on a 360px dock leaves the chat a few pixels and the grip unreachable. */
+        const limits = () => {
+            const dock = this._measuredWidth() || 520;
+            return {
+                sessions: { min: 120, max: Math.max(120, Math.min(360, dock - 240)) },
+                side: { min: 160, max: Math.max(160, Math.min(440, dock - 220)) },
+            };
+        };
+        const clamp = (value, range) => Math.max(range.min, Math.min(range.max, value));
+        let sessions = clamp(Number(saved.sessionsWidth) || 190, limits().sessions);
+        let side = clamp(Number(saved.sideWidth) || 260, limits().side);
         const apply = () => {
             root.style.setProperty('--ai-sessions-w', sessions + 'px');
             root.style.setProperty('--ai-side-w', side + 'px');
@@ -272,9 +295,9 @@ const AIWorkspace = {
                 const start = kind === 'sessions' ? sessions : side;
                 const move = (moveEvent) => {
                     if (kind === 'sessions') {
-                        sessions = Math.max(150, Math.min(360, start + (moveEvent.clientX - startX)));
+                        sessions = clamp(start + (moveEvent.clientX - startX), limits().sessions);
                     } else {
-                        side = Math.max(200, Math.min(440, start + (startX - moveEvent.clientX)));
+                        side = clamp(start + (startX - moveEvent.clientX), limits().side);
                     }
                     apply();
                 };
@@ -282,9 +305,12 @@ const AIWorkspace = {
                     AISettings.save({ sessionsWidth: sessions, sideWidth: side });
                     document.removeEventListener('pointermove', move);
                     document.removeEventListener('pointerup', up);
+                    document.removeEventListener('pointercancel', up);
                 };
+                if (grip.setPointerCapture) grip.setPointerCapture(event.pointerId);
                 document.addEventListener('pointermove', move);
                 document.addEventListener('pointerup', up);
+                document.addEventListener('pointercancel', up);
             });
         });
     },
@@ -319,13 +345,21 @@ const AIWorkspace = {
                 this._applyWidthClass(value);
                 document.removeEventListener('pointermove', move);
                 document.removeEventListener('pointerup', up);
+                document.removeEventListener('pointercancel', up);
             };
             this._dom.resizer.addEventListener('pointerdown', (event) => {
+                event.preventDefault();
                 dragging = true;
                 startX = event.clientX;
                 startWidth = parseInt(root.style.getPropertyValue('--ai-width'), 10) || width;
+                /* Capture the pointer so a drag that leaves the 8px handle keeps resizing; without
+                   it the browser can hand the move to the canvas and the dock appears stuck. */
+                if (this._dom.resizer.setPointerCapture) {
+                    this._dom.resizer.setPointerCapture(event.pointerId);
+                }
                 document.addEventListener('pointermove', move);
                 document.addEventListener('pointerup', up);
+                document.addEventListener('pointercancel', up);
             });
             this._dom.resizer.addEventListener('keydown', (event) => {
                 if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
@@ -335,6 +369,12 @@ const AIWorkspace = {
                 applyWidth(next);
                 AISettings.save({ width: next });
             });
+        }
+        /* A viewport resize can cap the dock without a pointer event. Re-evaluate the layout class
+           from the measured width so `.narrow`/`.tiny` match what the user sees. */
+        if (typeof ResizeObserver !== 'undefined' && !this._widthObserver) {
+            this._widthObserver = new ResizeObserver(() => this._applyWidthClass());
+            this._widthObserver.observe(root);
         }
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && this._full) this.toggleFull();
@@ -1231,6 +1271,10 @@ const AIWorkspace = {
         if (!current || !current.flowEl) return;
         const chat = this._dom.chat;
         const atBottom = chat ? chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80 : true;
+        /* Replacing the flow's innerHTML briefly empties it; the browser clamps scrollTop to 0
+           before the new content is measured. Keep the reader's position and restore it after the
+           paint, unless they were at the bottom (then follow the new text). */
+        const keepScroll = chat ? chat.scrollTop : 0;
         const blocks = current.blocks || [];
         const html = AIRender.assistantFlow(blocks);
         /* Between steps the model says nothing and the stream is silent: after a tool card there is
@@ -1258,7 +1302,14 @@ const AIWorkspace = {
         this._collectOpenDetails(current.flowEl);
         current.flowEl.innerHTML = html;
         this._applyOpenDetails(current.flowEl);
-        if (atBottom && chat) chat.scrollTop = chat.scrollHeight;
+        if (chat) {
+            const behavior = chat.style.scrollBehavior;
+            /* `smooth` would animate a restore back to the reader's old line; the restore is not a
+               navigation, it is undoing the innerHTML's layout side effect. */
+            if (behavior) chat.style.scrollBehavior = 'auto';
+            chat.scrollTop = atBottom ? chat.scrollHeight : keepScroll;
+            if (behavior) chat.style.scrollBehavior = behavior;
+        }
         this._renderStatus();
     },
 
