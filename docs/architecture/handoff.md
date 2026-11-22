@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`44dcb01 问题修复：指针捕获失败不再中断侧栏拖拽`
+- 最后提交：`dad5d55 修改：对话区与设置/工作室分为两个面，转录按 turn_id 复用`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -27,6 +27,8 @@
 | `0361be1` | 回归测试对齐：新消息在待答问题期间按名拒绝；stack_pct 在 validate 阶段拒绝 |
 | `b54c5a0` | 测试复用已导入的 `store`，修 pylint 重复导入 |
 | `44dcb01` | `setPointerCapture` 抛错不再中断侧栏拖拽；真实 Chrome 层验证 |
+| `1c52910` | H11-H16 收口基线（10646/14:06、device 213/5:54、lint、冒烟） |
+| `dad5d55` | H17/H18：`#ai-chat` 拆成 `#ai-transcript` + `#ai-panel`；转录按 `turn_id`/消息 id 复用；流式气泡跨重绘与 A→B→A 复用；`harness_dom.appendChild` 改为浏览器语义（移动而非复制） |
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 
@@ -37,11 +39,20 @@
   `ci_lint_tiers.py tests` 10.00/10。
 - 冒烟：隔离 data root 在 5057 启动，9 个基础 GET + 5 个 AI GET 全部 200；进程已停、端口已释放。
 - **未跑**：`live_quick`/`live_site`（花用户账号；需要用户指定网络并同意）。
+- H17/H18 之后又全量跑过一次：`10651 passed, 7 skipped, 386 deselected, 1 warning in 836.93s (13:56)`；
+  两个新增的 device 用例（面板面 / 切会话单消息区）单跑通过。之后按用户要求改为按改动范围测试。
+
+## 测试策略（用户 2026-11-22 明确要求）
+
+- **小改动只跑改动到的地方**：相关模块的 pytest 用例 + 前端 harness + 受影响的 device 用例；不再每次都全量。
+- **攒一批或做大改动后才跑全量**：`python -m pytest -q`、全量 device、两档 pylint、冒烟。
+- **不要为仪式感测试**：能用一条针对性用例证明的行为，不重复铺三层。
+- 本次 H17/H18 已做过一次全量（10651 passed / 7 skipped / 386 deselected / 13:56）；之后的 P1 切片先按需测试。
 
 ## 下一步（按顺序）
 
-1. **H17/H18 视图单实例**：设置/工作室不覆盖 `#ai-chat`；切会话不重复消息区（可与 P5 框架 UI 合并）。
-2. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
+1. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
+2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P2-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 
@@ -64,6 +75,16 @@
 - **H16 图表**：`ChartSpec.required_params` 是唯一声明；`WorkflowEngine.validate_detailed` 的 visualize 分支读它，
   先 `with_chart_defaults`；stack_pct 缺失时整张画布在运行前被 rejected，控制台按名给出 `stack_fields`。
 
+## H17/H18 的关键落点（避免重复调查）
+
+- `index.html` 的 `#ai-chat` 下有两个同级面：`#ai-transcript`（对话）与 `#ai-panel`（设置/工作室），CSS 里两者 `grid-area: 1/1`。
+- `ai-workspace.js`：`_showPanel()` 只隐藏转录、`_showChat(refresh)` 拿回并可选重读会话；设置/工作室的所有 `innerHTML` 与
+  面板内查询都走 `_dom.panel`（grep 找不到 `_dom.chat` 的面板写入即正确）。
+- `_renderMessages` 协调 key：`message:<id>` / `turn:<turn_id>` / `row:<id>`；流式气泡在 `meta` 时打同一 key；
+  `_streamTurnId` + `_streamConversation` 让“回到仍在流式的会话”接管存储的轮次元素。
+- `_appendQuestion(question, turn)` 把卡片挂回提问那一轮，`blocks` 用该轮存储内容播种，回答后续写不会丢前文。
+- `tests/frontend/harness_dom.mjs::appendChild` 现在是浏览器语义（已在树内的节点移动、不复制）；改协调逻辑前先看它。
+
 ## 压缩后必须保留的规则
 
 1. **10 个已确认决策**（见 `docs/architecture/rewrite-plan.md#已确认的决策`）不得重新讨论，除非用户明确复议。
@@ -73,8 +94,8 @@
 5. **不要在全量重写上打转**：内核替换 + 逐域迁移；旧路径只在数据丢失/安全级别热修。
 6. **歧义必须问**，不要猜；用户语言是中文。
 7. **关键路径**：`docs/architecture/`、`backend/ai/`、`backend/static/js/ai-workspace.js`、`backend/static/js/canvas.js`、`backend/runtime/settings_schema.py`、`tests/api/test_ai_workflow.py`、`tests/unit/frontend/test_frontend_ai_js.py`。
-8. **收口命令**：见 `AGENTS.md`；最终必须 fast + ruff + 两档 pylint + device + smoke，无文件待改。
+8. **测试按改动范围跑（用户 2026-11-22 要求）**：小改动只跑相关用例；攒一批/大改动再全量 fast + device + 两档 pylint + 冒烟。
 
 ## 给压缩后的第一句话
 
-> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `44dcb01`。先做 H17/H18。
+> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `dad5d55`。先做 P1 内核骨架。
