@@ -56,6 +56,43 @@ _STREAM_LOCK = threading.RLock()
 #: ``num_predict``) and which no longer cuts a long workflow draft at 8192.
 MAX_OUTPUT_TOKENS = 32768
 
+#: Tools every tool-using skill gets, whatever its own list says. They answer "what can this app
+#: do" (schema/validate/capabilities/coverage), pause the turn (questions, plans, artifacts) and
+#: manage saved work. One constant so `ai.coverage` can prove each one is reachable, instead of
+#: parsing the loop's inline set.
+#: Tools that only exist where the server can reach the user's machine; cloud mode refuses them by
+#: name. Declared once so the coverage gate counts them as reachable without offering them on cloud.
+FILE_TOOLS = frozenset({'workspace_set', 'workspace_write', 'workspace_import', 'run_cmd'})
+
+UNIVERSAL_TOOLS = frozenset(
+    {
+        'ask_user_question',
+        'update_plan',
+        'present_artifact',
+        'apply_workflow',
+        'rerun_node',
+        'request_approval',
+        'request_dataset_access',
+        'workflow_schema',
+        'workflow_validate',
+        'workflow_list',
+        'workflow_read',
+        'workflow_update',
+        'workflow_rename',
+        'workflow_delete',
+        'workflow_export',
+        'workflow_run',
+        'workflow_stop',
+        'export_list',
+        'export_delete',
+        'app_errors',
+        'workspace_info',
+        'workspace_list',
+        'workspace_read',
+        'ai_coverage',
+    }
+)
+
 
 def _active(conversation_id: str, scope: str = '') -> threading.Event:
     with _STREAM_LOCK:
@@ -691,33 +728,9 @@ class AgentService:
         tool_schemas = tools.schemas(allow_code=allow_code, allow_python=allow_python, allow_files=allow_files)
         offered = set()
         if provider.supports('tools', model) and skill.tools:
-            offered = set(skill.tools) | {
-                'ask_user_question',
-                'update_plan',
-                'present_artifact',
-                'apply_workflow',
-                'rerun_node',
-                'request_approval',
-                'request_dataset_access',
-                'workflow_schema',
-                'workflow_validate',
-                'workflow_list',
-                'workflow_read',
-                'workflow_update',
-                'workflow_rename',
-                'workflow_delete',
-                'workflow_export',
-                'workflow_run',
-                'workflow_stop',
-                'export_list',
-                'export_delete',
-                'app_errors',
-                'workspace_info',
-                'workspace_list',
-                'workspace_read',
-            }
+            offered = set(skill.tools) | UNIVERSAL_TOOLS
             if allow_files:
-                offered |= {'workspace_set', 'workspace_write', 'workspace_import', 'run_cmd'}
+                offered |= FILE_TOOLS
             tool_schemas = [tool for tool in tool_schemas if tool['name'] in offered]
         else:
             tool_schemas = []

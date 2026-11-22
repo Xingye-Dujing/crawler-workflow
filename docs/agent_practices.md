@@ -199,6 +199,10 @@
 - **一个 provider 目录，因为一次运行不能谎报它的传输。** 目录拥有端点、模型表、能力清单与云端/本地拒绝；浏览器只渲染
   `/api/ai/providers` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
 - **能力是承诺。** 传输不支持 `thinking`/`web_search` 就得按名拒绝，不能发一个 provider 会静默忽略的字段。
+- **能力必须有入口，入口必须是注册表算出来的。** `ai.coverage` 不手写清单：节点来自 `nodes.catalog`，平台模式来自
+  `capabilities.registry`，算子/图表来自各自的 `OPS`/`SPECS`，工具来自 `TOOLS` 与技能/通用集合的交集。新加一个节点或算子
+  却没有任何 AI 入口时，`tests/unit/gates/test_ai_coverage.py` 直接红；这条门禁还能反向失败（测试里清空技能列表会报
+  `dataset_page` 缺失），所以它不是一个永远为真的报表。
 - **删除不属于“自动同意”的范围。** `ai_auto_approve` 的意思是“别再问我你的日常操作”，不是“你可以删我的文件”。
   `workflow_delete` / `export_delete` 因此走 `ALWAYS_APPROVAL_TOOLS`：即使总开关打开，也要一张针对**这次参数**的授权卡，
   并且真正删之前走域服务（`WorkflowManager.delete` / `delete_export_file`），日志里留 `ai.auditLog` 的账号+会话记录。

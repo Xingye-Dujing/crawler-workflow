@@ -36,6 +36,7 @@
 | 监控目录/自动分析/`monitor_events` | host 域层 | 框架只做投递；采析绘保留自己的 monitor catalog |
 | 数据集行读取授权（会话/数据集/行数，可撤销） | host + 框架暂停通道 | 采析绘有 `request_dataset_access`、`ai/dataset_access` registry 和侧栏撤销；框架的 ask/approval 通道要能承载“人授权后创建资源”的控制工具，而不是只认 `request_approval` 一个名字 |
 | 工作流/导出管理（list/read/update/rename/delete/export/run/stop） | host | 采析绘调用 `WorkflowManager` / `build_bundle` / `engine.run.begin_run/stop_run`；框架的审批策略要能表达“删除永远要人批”，而不是只看全局 auto-approve |
+| 能力→AI 入口覆盖矩阵 | host + kernel | 采析绘 `ai.coverage` 从节点/平台/算子/图表/工具注册表生成并门禁；P1 后应由 capability manifest 生成同一张表，框架不维护第二份 |
 | Files API / 附件文本抽取 / 图片内联 / workspace 浏览 / 文件夹选择 | host + 框架 attachment hook | 采析绘 host 侧做本地抽取（pdf/docx/pptx/xlsx/csv/txt/html）并把 `files`/`vision`/`inline_images` 拆成三个独立能力；框架的 attachment hook 必须能接收“已提取文本”，不能只认 file_id |
 | 账号级 Python workspace（解释器安装/文件） | host | 采析绘 `services/python_runtime.py` |
 | 68 条 HTTP 路由 | host | 采析绘 Flask blueprint；框架 adapter 只做通用 41 条 |

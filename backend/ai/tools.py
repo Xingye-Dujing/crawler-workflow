@@ -83,6 +83,13 @@ def tool_project_facts(_args: dict, _ctx: dict) -> dict:
     return {'facts': project_facts()}
 
 
+def tool_ai_coverage(_args: dict, _ctx: dict) -> dict:
+    """The generated capability→entry matrix. A missing cell is a product gap, not a prompt issue."""
+    from ai import coverage
+
+    return coverage.audit()
+
+
 def tool_capabilities(args: dict, _ctx: dict) -> dict:
     import capabilities.registry as capabilities
 
@@ -1454,6 +1461,13 @@ TOOLS = {
             'Read the crawler capability matrix. Pass a platform to narrow it.',
             {'type': 'object', 'properties': {'platform': {'type': 'string'}}},
             handler=tool_capabilities,
+        ),
+        ToolSpec(
+            'ai_coverage',
+            'Read the generated capability→AI-entry matrix: workflow nodes, platform modes, analysis '
+            'operators, chart types and tools, each with the entry that reaches it and any gap.',
+            {'type': 'object', 'properties': {}},
+            handler=tool_ai_coverage,
         ),
         ToolSpec(
             'catbus_status',

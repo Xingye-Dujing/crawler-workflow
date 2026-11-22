@@ -19,6 +19,7 @@
 | H11 | 无文件 API 的模型不能收附件 | D | 服务端抽取 pdf/docx/pptx/xlsx/csv/txt/html 并缓存；`files`/`vision`/`inline_images` 三能力拆分；图片可内联；旧 `.doc/.ppt` 按名拒绝 | `ai/file_text.py`、`ai/agent.py`、`ai/providers/`、`api/ai.py`、`tests/unit/ai/test_file_text.py`、`tests/api/test_ai_workflow.py` |
 | H12 | 表格读取没有临时授权 | D | `request_dataset_access` 走同一个暂停/恢复问题通道；grant 按会话+数据集+行数，进程内可撤销；`dataset_page`/`dataset_sample`/筛选查询累计行数；`dataset_peek` 免费 5 行；侧栏列出授权并可撤销 | `ai/dataset_access.py`、`ai/agent.py`、`ai/tools.py`、`api/ai.py`、`ai-workspace.js`、`tests/unit/ai/test_dataset_access.py`、`tests/api/test_ai_workflow.py` |
 | H13 | AI 不能管理工作流/产物 | D | `workflow_list/read/update/rename/delete/export/run/stop` + `export_list/delete`；全部走 `WorkflowManager`/`engine.run`/`build_bundle`/`services.exports`；删除（工作流与导出）绕过 `ai_auto_approve` 强制审批并写审计日志；停止与 HTTP 按钮共用 `engine.run.stop_run` | `ai/tools.py`、`engine/run.py`、`api/workflow.py`、`services/exports/writer.py`、`tests/unit/ai/test_workflow_admin.py` |
+| H14 | 工具覆盖没有审计 | D | `ai.coverage.audit()` 从节点/平台模式/算子/图表/工具注册表生成矩阵；`UNIVERSAL_TOOLS` + `FILE_TOOLS` 是唯一入口集合；`ai_coverage` 工具可读；门禁拒绝空格子 | `ai/coverage.py`、`ai/agent.py`、`ai/tools.py`、`tests/unit/gates/test_ai_coverage.py` |
 
 ## 待办（热修列车，按优先级）
 
