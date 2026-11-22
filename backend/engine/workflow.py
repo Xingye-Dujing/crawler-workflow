@@ -14,9 +14,7 @@ from sessions.cookies import CookieManager
 
 from i18n import t
 from services import pool
-from services.biblio.fuse import collect_errors as fuse_param_errors
 from services.biblio.schema import collect_errors as biblio_param_errors
-from services.charts.contracts import NO_X_TYPES
 from services.pool import selector
 from services.validation.engine import ValidationContext, validation_problems
 
@@ -532,14 +530,6 @@ class WorkflowEngine:
                     )
                 for message in biblio_param_errors(params, label):
                     add(nid, 'engine.biblio', message)
-            if ntype == 'fuse':
-                # Unlike ``biblio``, fusion WANTS several parents — that is the feature. A name
-                # node still does not count as a table, so the check is on data inputs, not on
-                # the raw wire count.
-                if nid not in data_inputs:
-                    add(nid, 'fuse.no_input', t('fuse.no_input', nid=label))
-                for message in fuse_param_errors(params, label):
-                    add(nid, 'engine.fuse', message)
             # A migrated node declares its pre-run refusals in its manifest; this loop is the one
             # evaluator, so the console, the canvas badge and the AI tools cannot disagree about
             # what a node needs. Warnings are collected for the UI later; nothing downgrades an
@@ -561,30 +551,6 @@ class WorkflowEngine:
                         problem['code'],
                         t(problem['message_key'], nid=label, **problem['context']),
                     )
-            # 分词 is also a 处理 operation now, but its missing column is declared by the
-            # manifest's validator; the old canvas remains valid by the same code.
-            if ntype == 'visualize':
-                chart_type = str(params.get('chart_type') or '')
-                if not chart_type:
-                    add(nid, 'engine.visualize_no_chart', t('engine.visualize_no_chart', nid=label))
-                if not params.get('x_field') and chart_type not in NO_X_TYPES:
-                    add(nid, 'engine.visualize_no_x', t('engine.visualize_no_x', nid=label))
-                # A chart's OWN required parameters (占比堆叠图's stack_fields) are declared on its
-                # ChartSpec and checked here, so the missing field is named at validate time rather
-                # than after the upstream crawl was paid for. Defaults are applied first: a box the
-                # contract fills is not missing to the user.
-                from services.charts.registry import spec_for, with_chart_defaults
-
-                spec = spec_for(chart_type)
-                if spec is not None:
-                    effective = with_chart_defaults(chart_type, params)
-                    for field in spec.required_params:
-                        if not str(effective.get(field) or '').strip():
-                            add(
-                                nid,
-                                'engine.chart_field_missing',
-                                t('engine.chart_field_missing', nid=label, chart=chart_type, field=field),
-                            )
         try:
             self.topological_sort()
         except ValueError as e:

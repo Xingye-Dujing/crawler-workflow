@@ -21,6 +21,11 @@ from services.biblio import fuse
 NODE_TYPE = 'fuse'
 
 
+def validate_node(node: dict, _context) -> list[dict]:
+    """The fusion parameter check, in data form so the one validator engine can word it."""
+    return fuse.collect_problems(node.get('params') or {})
+
+
 def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
     """A fusion node's output is a fixed contract, not a projection of its inputs: that is the
     whole point — downstream reads canonical names whatever the sources called their columns."""

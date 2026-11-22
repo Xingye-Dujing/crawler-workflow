@@ -12,13 +12,38 @@ from runtime.state import add_log
 
 from i18n import t
 from nodes.context import NodeCall, columns_from_params, node_params, split_panel_columns
-from services.charts.contracts import BIBLIO_CHART_READS
+from services.charts.contracts import BIBLIO_CHART_READS, NO_X_TYPES
 from services.charts.outputs import build_latex_outputs
-from services.charts.registry import with_chart_defaults
+from services.charts.registry import spec_for, with_chart_defaults
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
 
 NODE_TYPE = 'visualize'
+
+
+def validate_node(node: dict, _context) -> list[dict]:
+    """The chart type, its x field and the chart spec's own required parameters."""
+    params = node_params(node)
+    chart_type = str(params.get('chart_type') or '')
+    problems: list[dict] = []
+    if not chart_type:
+        problems.append({'code': 'engine.visualize_no_chart', 'message_key': 'engine.visualize_no_chart'})
+    if not params.get('x_field') and chart_type not in NO_X_TYPES:
+        problems.append({'code': 'engine.visualize_no_x', 'message_key': 'engine.visualize_no_x'})
+    spec = spec_for(chart_type)
+    if spec is not None:
+        effective = with_chart_defaults(chart_type, params)
+        for field in spec.required_params:
+            if not str(effective.get(field) or '').strip():
+                problems.append(
+                    {
+                        'code': 'engine.chart_field_missing',
+                        'message_key': 'engine.chart_field_missing',
+                        'context': {'chart': chart_type, 'field': field},
+                    },
+                )
+    return problems
+
 
 #: The columns a chart reads from its upstream table (``stack_fields`` is split like a list by
 #: the lineage model; a biblio chart adds its own contract through ``chart_contracts``).

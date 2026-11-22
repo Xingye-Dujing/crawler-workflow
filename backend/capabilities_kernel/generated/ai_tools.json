@@ -448,6 +448,83 @@
       "read_columns": "nodes.executors.verify:read_columns"
     },
     {
+      "capability": "node:fuse",
+      "tool": "",
+      "summary": "文献融合 merges several source tables into one canonical record table: each role (entity, year, title, author, affiliation, text, reference, source) declares candidate column names, and the first candidate a source really has answers the role.",
+      "steps": [
+        "Wire every source table in.",
+        "Keep or edit the candidate column lists per role; at least the entity role must find a column.",
+        "Choose whether undated records are kept and whether per-source files are exported."
+      ],
+      "examples": [
+        {
+          "type": "fuse",
+          "params": {
+            "entity_columns": "关键词,话题,主题,主题词,标签",
+            "title_columns": "题名,标题,内容,正文",
+            "keep_undated": true
+          }
+        }
+      ],
+      "failures": [
+        "No input table: fuse.no_input.",
+        "No entity candidate found: fuse.needs_entity names the node.",
+        "Differing source columns are normalized per role; a missing role is left empty, never guessed."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "entity_columns": {
+            "type": "string",
+            "default": "关键词,话题,主题,主题词,标签"
+          },
+          "year_columns": {
+            "type": "string",
+            "default": "年份,发布时间,发表日期,日期"
+          },
+          "title_columns": {
+            "type": "string",
+            "default": "题名,标题,内容,正文"
+          },
+          "author_columns": {
+            "type": "string",
+            "default": "作者,用户名,昵称,发布者"
+          },
+          "affiliation_columns": {
+            "type": "string",
+            "default": "作者单位,机构"
+          },
+          "text_columns": {
+            "type": "string",
+            "default": "摘要,正文,内容"
+          },
+          "reference_columns": {
+            "type": "string",
+            "default": "参考文献,引文"
+          },
+          "source_columns": {
+            "type": "string",
+            "default": "平台,来源"
+          },
+          "source_labels": {
+            "type": "string",
+            "default": ""
+          },
+          "keep_undated": {
+            "type": "boolean",
+            "default": true
+          },
+          "export_files": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "nodes.executors.fuse:emit_columns",
+      "read_columns": "nodes.executors.fuse:read_columns"
+    },
+    {
       "capability": "node:accumulate",
       "tool": "",
       "summary": "数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every row; ``identity=columns`` appends only rows whose key columns are not already present.",
@@ -498,6 +575,80 @@
       },
       "emit_columns": "nodes.executors.accumulate:emit_columns",
       "read_columns": ""
+    },
+    {
+      "capability": "node:visualize",
+      "tool": "",
+      "summary": "可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus optional LaTeX figure/table. Chart type decides the fields; ChartSpec.required_params decides what must be filled before a run.",
+      "steps": [
+        "Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).",
+        "Pick the x/y/value/label fields; a chart that needs no x says so.",
+        "Turn on LaTeX outputs only when a PDF 编译/保存 will consume them."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "bar",
+            "x_field": "word",
+            "y_field": "frequency",
+            "engine": "echarts"
+          }
+        }
+      ],
+      "failures": [
+        "No chart type: engine.visualize_no_chart.",
+        "No x field for a chart that needs one: engine.visualize_no_x.",
+        "A chart-specific field missing (e.g. stack_fields): engine.chart_field_missing names the chart and field."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "chart_type": {
+            "type": "string",
+            "default": "bar"
+          },
+          "x_field": {
+            "type": "string",
+            "default": ""
+          },
+          "y_field": {
+            "type": "string",
+            "default": ""
+          },
+          "value_field": {
+            "type": "string",
+            "default": ""
+          },
+          "agg": {
+            "type": "string",
+            "default": "sum"
+          },
+          "engine": {
+            "type": "string",
+            "default": "echarts"
+          },
+          "title": {
+            "type": "string",
+            "default": ""
+          },
+          "tokenize": {
+            "type": "boolean",
+            "default": false
+          },
+          "emit_latex": {
+            "type": "boolean",
+            "default": true
+          },
+          "emit_latex_table": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": "nodes.executors.visualize:read_columns"
     },
     {
       "capability": "node:compile",

@@ -15,6 +15,8 @@
 | analysis | `nodeType.analysis` | analysis | [docs/capabilities/nodes/analysis.md](../capabilities/nodes/analysis.md) | `tests/unit/capabilities/test_analysis_manifest.py` | `e783e71dfb61` |
 | tokenize | `nodeType.tokenize` | process | [docs/capabilities/nodes/tokenize.md](../capabilities/nodes/tokenize.md) | `tests/unit/capabilities/test_tokenize_manifest.py` | `726441e50265` |
 | verify | `nodeType.verify` | process | [docs/capabilities/nodes/verify.md](../capabilities/nodes/verify.md) | `tests/unit/capabilities/test_verify_manifest.py` | `748a46a15674` |
+| fuse | `nodeType.fuse` | biblio | [docs/capabilities/nodes/fuse.md](../capabilities/nodes/fuse.md) | `tests/unit/capabilities/test_fuse_manifest.py` | `ef076e4aba01` |
 | accumulate | `nodeType.accumulate` | data | [docs/capabilities/nodes/accumulate.md](../capabilities/nodes/accumulate.md) | `tests/unit/capabilities/test_accumulate_manifest.py` | `5a48e441bac3` |
+| visualize | `nodeType.visualize` | visualize | [docs/capabilities/nodes/visualize.md](../capabilities/nodes/visualize.md) | `tests/unit/capabilities/test_visualize_manifest.py` | `f9140957f6f9` |
 | compile | `nodeType.compile` | visualize | [docs/capabilities/nodes/compile.md](../capabilities/nodes/compile.md) | `tests/unit/capabilities/test_compile_manifest.py` | `b64ab4cc9b63` |
 | output | `nodeType.output` | output | [docs/capabilities/nodes/output.md](../capabilities/nodes/output.md) | `tests/unit/capabilities/test_output_manifest.py` | `c1151286d0db` |

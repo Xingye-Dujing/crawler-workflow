@@ -55,8 +55,6 @@ _DECLARED: dict[str, NodePlugin] = {
     'source': NodePlugin('source', 'nodeType.source', 'data'),
     'comment': NodePlugin('comment', 'nodeType.comment', 'data'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
-    'fuse': NodePlugin('fuse', 'nodeType.fuse', 'biblio'),
-    'visualize': NodePlugin('visualize', 'nodeType.visualize', 'visualize', rows='pdf'),
 }
 
 

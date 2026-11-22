@@ -1065,6 +1065,218 @@
     },
     {
       "kind": "node",
+      "id": "fuse",
+      "digest": "ef076e4aba011a68b78d4c3e2a6eda431f88b6a44f40f1b78e7860b8d1d2ccf5",
+      "manifest": {
+        "identity": {
+          "id": "fuse",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.fuse",
+          "category": "biblio",
+          "order": 11,
+          "description": "Merge several source tables into ONE canonical bibliographic record table.",
+          "when_to_use": "When CNKI/platform tables from different sources should become one record set."
+        },
+        "params": [
+          {
+            "name": "entity_columns",
+            "type": "string",
+            "default": "关键词,话题,主题,主题词,标签",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "year_columns",
+            "type": "string",
+            "default": "年份,发布时间,发表日期,日期",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "title_columns",
+            "type": "string",
+            "default": "题名,标题,内容,正文",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "author_columns",
+            "type": "string",
+            "default": "作者,用户名,昵称,发布者",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "affiliation_columns",
+            "type": "string",
+            "default": "作者单位,机构",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "text_columns",
+            "type": "string",
+            "default": "摘要,正文,内容",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "reference_columns",
+            "type": "string",
+            "default": "参考文献,引文",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "source_columns",
+            "type": "string",
+            "default": "平台,来源",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "source_labels",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "keep_undated",
+            "type": "boolean",
+            "default": true,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "export_files",
+            "type": "boolean",
+            "default": false,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": -1,
+          "emit_columns": "nodes.executors.fuse:emit_columns",
+          "read_columns": "nodes.executors.fuse:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.fuse:run",
+          "quiet": false
+        },
+        "rules": [
+          {
+            "kind": "upstream_required",
+            "code": "fuse.no_input",
+            "message_key": "fuse.no_input",
+            "param": "",
+            "severity": "error"
+          }
+        ],
+        "validators": [
+          "nodes.executors.fuse:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "文献融合 merges several source tables into one canonical record table: each role (entity, year, title, author, affiliation, text, reference, source) declares candidate column names, and the first candidate a source really has answers the role.",
+          "steps": [
+            "Wire every source table in.",
+            "Keep or edit the candidate column lists per role; at least the entity role must find a column.",
+            "Choose whether undated records are kept and whether per-source files are exported."
+          ],
+          "examples": [
+            {
+              "type": "fuse",
+              "params": {
+                "entity_columns": "关键词,话题,主题,主题词,标签",
+                "title_columns": "题名,标题,内容,正文",
+                "keep_undated": true
+              }
+            }
+          ],
+          "failures": [
+            "No input table: fuse.no_input.",
+            "No entity candidate found: fuse.needs_entity names the node.",
+            "Differing source columns are normalized per role; a missing role is left empty, never guessed."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_fuse_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/fuse.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
       "id": "accumulate",
       "digest": "5a48e441bac355e080a5f84abef1117244b46718cf132073816d3d3760d73972",
       "manifest": {
@@ -1168,6 +1380,199 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/accumulate.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
+      "id": "visualize",
+      "digest": "f9140957f6f9fe7fcc6057793ac9a42d03e152e4af2af9e5c3076ab3ad26bd9c",
+      "manifest": {
+        "identity": {
+          "id": "visualize",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.visualize",
+          "category": "visualize",
+          "order": 13,
+          "description": "Build an ECharts/matplotlib chart (plus LaTeX) from the upstream table.",
+          "when_to_use": "When rows should become a chart; a PDF document belongs on PDF 编译."
+        },
+        "params": [
+          {
+            "name": "chart_type",
+            "type": "string",
+            "default": "bar",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "x_field",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "y_field",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "value_field",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "agg",
+            "type": "string",
+            "default": "sum",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "engine",
+            "type": "string",
+            "default": "echarts",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "tokenize",
+            "type": "boolean",
+            "default": false,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "emit_latex",
+            "type": "boolean",
+            "default": true,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "emit_latex_table",
+            "type": "boolean",
+            "default": true,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "pdf",
+          "inputs": -1,
+          "emit_columns": "",
+          "read_columns": "nodes.executors.visualize:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.visualize:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.visualize:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus optional LaTeX figure/table. Chart type decides the fields; ChartSpec.required_params decides what must be filled before a run.",
+          "steps": [
+            "Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).",
+            "Pick the x/y/value/label fields; a chart that needs no x says so.",
+            "Turn on LaTeX outputs only when a PDF 编译/保存 will consume them."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "bar",
+                "x_field": "word",
+                "y_field": "frequency",
+                "engine": "echarts"
+              }
+            }
+          ],
+          "failures": [
+            "No chart type: engine.visualize_no_chart.",
+            "No x field for a chart that needs one: engine.visualize_no_x.",
+            "A chart-specific field missing (e.g. stack_fields): engine.chart_field_missing names the chart and field."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_visualize_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/visualize.md",
           "skill": "",
           "version_hash": ""
         },
@@ -1491,6 +1896,23 @@
     },
     {
       "kind": "node",
+      "id": "fuse",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_fuse_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/fuse.md"
+    },
+    {
+      "kind": "node",
       "id": "accumulate",
       "checks": [
         "structure",
@@ -1505,6 +1927,23 @@
         "tests/unit/capabilities/test_accumulate_manifest.py"
       ],
       "docs": "docs/capabilities/nodes/accumulate.md"
+    },
+    {
+      "kind": "node",
+      "id": "visualize",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_visualize_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/visualize.md"
     },
     {
       "kind": "node",

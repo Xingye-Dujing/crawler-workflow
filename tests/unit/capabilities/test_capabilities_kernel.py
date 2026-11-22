@@ -42,7 +42,9 @@ class TestDiscovery:
             'analysis',
             'tokenize',
             'verify',
+            'fuse',
             'accumulate',
+            'visualize',
             'compile',
             'output',
         ]

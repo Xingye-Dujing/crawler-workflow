@@ -109,13 +109,17 @@ def _parse_source_labels(text: str) -> dict[str, str]:
     return mapping
 
 
+def collect_problems(params: dict) -> list[dict]:
+    """The same check as :func:`collect_errors`, as code/message_key data for the validator seam."""
+    normalized = normalize_params(params)
+    if not normalized['entity']:
+        return [{'code': 'fuse.needs_entity', 'message_key': 'fuse.needs_entity'}]
+    return []
+
+
 def collect_errors(params: dict, nid: str = '') -> list[str]:
     """A fusion node with no entity role has nothing to build a graph from."""
-    params = normalize_params(params)
-    errors = []
-    if not params['entity']:
-        errors.append(t('fuse.needs_entity', nid=nid or '(fuse)'))
-    return errors
+    return [t(problem['message_key'], nid=nid or '(fuse)') for problem in collect_problems(params)]
 
 
 def _candidates(columns, wanted: list[str]) -> str:

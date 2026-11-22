@@ -72,10 +72,9 @@ backend/capabilities_kernel/
 
 ## 已迁移 / 还没迁移
 
-已迁移（P2 前三批）：`name`、`upload`、`resume`、`process`、`python`、`analysis`、`tokenize`、`verify`、
-`accumulate`、`compile`、`output`。
-还没迁移：`source`、`comment`、`biblio`、`fuse`、`visualize`；前端表单与 `canvas.js`/`runs.js` 的第二套规则也在
-P2 后续切片删除。
+已迁移（P2 前四批）：`name`、`upload`、`resume`、`process`、`python`、`analysis`、`tokenize`、`verify`、
+`fuse`、`accumulate`、`visualize`、`compile`、`output`。
+还没迁移：`source`、`comment`、`biblio`；前端表单与 `canvas.js`/`runs.js` 的第二套规则也在 P2 后续切片删除。
 
 ## 已迁移的例子
 

@@ -17,31 +17,6 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
 _DECLARED: dict[str, dict] = {
     'biblio': dict(BIBLIO_DEFAULTS),
-    'visualize': {
-        'chart_type': 'bar',
-        'x_field': '',
-        'y_field': '',
-        'value_field': '',
-        'agg': 'sum',
-        'engine': 'echarts',
-        'title': '',
-        'tokenize': False,
-        'emit_latex': True,
-        'emit_latex_table': True,
-    },
-    'fuse': {
-        'entity_columns': '关键词,话题,主题,主题词,标签',
-        'year_columns': '年份,发布时间,发表日期,日期',
-        'title_columns': '题名,标题,内容,正文',
-        'author_columns': '作者,用户名,昵称,发布者',
-        'affiliation_columns': '作者单位,机构',
-        'text_columns': '摘要,正文,内容',
-        'reference_columns': '参考文献,引文',
-        'source_columns': '平台,来源',
-        'source_labels': '',
-        'keep_undated': True,
-        'export_files': False,
-    },
     'comment': {
         'urls': '',
         'comment_limit': 0,

@@ -113,6 +113,16 @@
 - 本片验证：`181 passed`（capabilities + node plugins/schema + executors）、`1770 passed`
   （analysis + workflow/node-types API + runs）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
 
+## P2 第四批：visualize / fuse（2026-11-22）
+
+- `visualize`：chart_type/x_field/ChartSpec.required_params 移进 `nodes.executors.visualize:validate_node`；
+  engine 删除整段图表校验与 `NO_X_TYPES` 导入。`read_columns` 继续回答图表字段与文献固定列。
+- `fuse`：输入要求变成声明规则 `upstream_required`；参数错误由 `services.biblio.fuse.collect_problems` 返回
+  `{code,message_key}`，validator 求值；`collect_errors` 仍是给直接调用者的已本地化句子。
+- `nodes/catalog.py` / `nodes/defaults.py` 只剩 `source`/`comment`/`biblio` 三个未迁移类型。
+- 本片验证：`196 passed`（capabilities + node plugins/schema + executors）、`1293 passed`
+  （charts/biblio + workflow API + runs + capabilities）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
@@ -134,8 +144,9 @@
 
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移其余 5 个节点（`biblio`/`fuse` 需要把参数错误从“已本地化句子”改为 code/message_key；
-   然后 `source`/`comment`/`visualize`）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
+1. **P2 续**：迁移剩余 3 个节点：`biblio`（把 56 个参数默认值/错误从 services.biblio.schema 搬到清单或生成）、
+   `comment`（链接 + 账号会话检查）、`source`（平台矩阵）；再做 schema 表单渲染器 + 删除 `canvas.js`/`runs.js`
+   的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

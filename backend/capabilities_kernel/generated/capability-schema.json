@@ -606,6 +606,154 @@
       }
     },
     {
+      "type": "fuse",
+      "labelKey": "nodeType.fuse",
+      "category": "biblio",
+      "order": 11,
+      "params": [
+        {
+          "name": "entity_columns",
+          "type": "string",
+          "default": "关键词,话题,主题,主题词,标签",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "year_columns",
+          "type": "string",
+          "default": "年份,发布时间,发表日期,日期",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "title_columns",
+          "type": "string",
+          "default": "题名,标题,内容,正文",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "author_columns",
+          "type": "string",
+          "default": "作者,用户名,昵称,发布者",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "affiliation_columns",
+          "type": "string",
+          "default": "作者单位,机构",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "text_columns",
+          "type": "string",
+          "default": "摘要,正文,内容",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "reference_columns",
+          "type": "string",
+          "default": "参考文献,引文",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "source_columns",
+          "type": "string",
+          "default": "平台,来源",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "source_labels",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "keep_undated",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "export_files",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        }
+      ],
+      "rules": [
+        {
+          "kind": "upstream_required",
+          "code": "fuse.no_input",
+          "messageKey": "fuse.no_input",
+          "param": "",
+          "severity": "error"
+        }
+      ],
+      "ports": {
+        "rows": "table",
+        "inputs": -1,
+        "emitColumns": "nodes.executors.fuse:emit_columns",
+        "readColumns": "nodes.executors.fuse:read_columns"
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
       "type": "accumulate",
       "labelKey": "nodeType.accumulate",
       "category": "data",
@@ -654,6 +802,135 @@
         "inputs": 1,
         "emitColumns": "nodes.executors.accumulate:emit_columns",
         "readColumns": ""
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
+      "type": "visualize",
+      "labelKey": "nodeType.visualize",
+      "category": "visualize",
+      "order": 13,
+      "params": [
+        {
+          "name": "chart_type",
+          "type": "string",
+          "default": "bar",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "x_field",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "y_field",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "value_field",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "agg",
+          "type": "string",
+          "default": "sum",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "engine",
+          "type": "string",
+          "default": "echarts",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "tokenize",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "emit_latex",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "emit_latex_table",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "pdf",
+        "inputs": -1,
+        "emitColumns": "",
+        "readColumns": "nodes.executors.visualize:read_columns"
       },
       "ui": {
         "form": "schema",

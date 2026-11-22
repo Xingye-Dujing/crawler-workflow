@@ -309,6 +309,56 @@
           "result_key_column"
         ]
       },
+      "NodeParams.fuse": {
+        "type": "object",
+        "properties": {
+          "entity_columns": {
+            "type": "string",
+            "default": "关键词,话题,主题,主题词,标签"
+          },
+          "year_columns": {
+            "type": "string",
+            "default": "年份,发布时间,发表日期,日期"
+          },
+          "title_columns": {
+            "type": "string",
+            "default": "题名,标题,内容,正文"
+          },
+          "author_columns": {
+            "type": "string",
+            "default": "作者,用户名,昵称,发布者"
+          },
+          "affiliation_columns": {
+            "type": "string",
+            "default": "作者单位,机构"
+          },
+          "text_columns": {
+            "type": "string",
+            "default": "摘要,正文,内容"
+          },
+          "reference_columns": {
+            "type": "string",
+            "default": "参考文献,引文"
+          },
+          "source_columns": {
+            "type": "string",
+            "default": "平台,来源"
+          },
+          "source_labels": {
+            "type": "string",
+            "default": ""
+          },
+          "keep_undated": {
+            "type": "boolean",
+            "default": true
+          },
+          "export_files": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
       "NodeParams.accumulate": {
         "type": "object",
         "properties": {
@@ -333,6 +383,52 @@
         "required": [
           "lineage_name"
         ]
+      },
+      "NodeParams.visualize": {
+        "type": "object",
+        "properties": {
+          "chart_type": {
+            "type": "string",
+            "default": "bar"
+          },
+          "x_field": {
+            "type": "string",
+            "default": ""
+          },
+          "y_field": {
+            "type": "string",
+            "default": ""
+          },
+          "value_field": {
+            "type": "string",
+            "default": ""
+          },
+          "agg": {
+            "type": "string",
+            "default": "sum"
+          },
+          "engine": {
+            "type": "string",
+            "default": "echarts"
+          },
+          "title": {
+            "type": "string",
+            "default": ""
+          },
+          "tokenize": {
+            "type": "boolean",
+            "default": false
+          },
+          "emit_latex": {
+            "type": "boolean",
+            "default": true
+          },
+          "emit_latex_table": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": true
       },
       "NodeParams.compile": {
         "type": "object",
