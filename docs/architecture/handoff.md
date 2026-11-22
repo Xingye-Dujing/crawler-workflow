@@ -124,6 +124,15 @@
 - 本片验证：`196 passed`（capabilities + node plugins/schema + executors）、`1293 passed`
   （charts/biblio + workflow API + runs + capabilities）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
 
+### P2 剩余 3 个节点的已知风险
+
+- **`biblio`**：56 个参数默认值/校验都在 `services/biblio/schema.py`，错误是已本地化句子。迁移前要决定：
+  清单直接声明 56 个 `ParamSpec`，还是给 manifest 增加一个 `params_from` 引用（会破坏“清单只导入标准库”的轻规则，
+  需要显式例外）；同时把 `collect_errors` 改成 code/message_key 数据。
+- **`comment`**：`urls` 必填是普通规则；账号会话检查目前在 `engine/workflow.py::_account_session_errors`，
+  同时被 source 使用。先把它移到 `sessions/preflight.py`，再让 comment 的 validator 调用，避免 executor 反向导入 engine。
+- **`source`**：`_source_errors` 约 100 行，依赖平台矩阵、必填字段、会话和链接归属；最后迁移，先保持现状。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
