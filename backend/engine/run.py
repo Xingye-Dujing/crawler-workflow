@@ -54,6 +54,7 @@ from runtime.state import (
     execution_state,
     forget_ambient,
     reset_console_state,
+    run_is_foreign,
     set_ambient,
     set_log_sink,
     stop_requested,
@@ -67,12 +68,19 @@ from engine.executor import TaskExecutor
 from engine.plan import component_name, llm_provider, run_mode, workflow_needs_llm
 from engine.run_logs import LogTee, run_log_writer
 from engine.workflow import WorkflowEngine, effective_workflow
-from i18n import normalize, set_lang, t
+from i18n import get_lang, normalize, set_lang, t
 from services.analysis.pipeline import UnknownOperationError
+from services.ingest.lifecycle import close_login_browser
 from services.runs.history import record_execution_history
 from services.runs.payload import resume_refusal, workflow_shape_error
 from services.runs.queue import drain_queue, enqueue_run
-from services.runs.settlement import close_run, housekeep
+from services.runs.settlement import (
+    STOP_QUIT_GRACE,
+    close_active_crawlers,
+    close_run,
+    housekeep,
+    mark_records_stopping,
+)
 from services.runs.store import (
     NODE_DONE,
     NODE_FAILED,
@@ -1837,3 +1845,77 @@ def begin_run(data: dict, lang_header: str) -> dict:
         return {'status': 500, 'drop': True, 'body': {'ok': False, 'error': str(start_error)}}
 
     return {'status': 200, 'body': {'ok': True, 'message': 'Workflow started', 'run_id': run_id}}
+
+
+def _reap_login_browser(crawler, lang: str, owner) -> None:
+    """Close one browser this run owned, in its own thread and under the account it ran as."""
+    token = account_context.bind(owner)
+    try:
+        set_lang(lang)
+        close_login_browser(crawler, quit_timeout=STOP_QUIT_GRACE)
+    finally:
+        account_context.unbind(token)
+
+
+def _finish_stop(crawlers, lang: str, owner, stopped_run_id: str) -> None:
+    """The side of Stop that may take seconds: reap every browser, then register the verdict."""
+    token = account_context.bind(owner)
+    try:
+        set_lang(lang)
+        reapers = [
+            threading.Thread(target=_reap_login_browser, args=(crawler, lang, owner), daemon=True)
+            for crawler in crawlers
+        ]
+        for reaper in reapers:
+            reaper.start()
+        for reaper in reapers:
+            reaper.join(STOP_QUIT_GRACE + 12)
+        # A browser registered AFTER the snapshot above is still in the registry; nothing else on
+        # this path reaches a node that is standing in a page load.
+        close_active_crawlers(quit_timeout=STOP_QUIT_GRACE, run_id=stopped_run_id)
+    finally:
+        account_context.unbind(token)
+
+
+def stop_run() -> dict:
+    """Stop the account's live run; the HTTP route and the AI tool both call THIS function.
+
+    Guard and writes share ``execute_lock`` with ``begin_run``, so a run finishing right now cannot
+    hand the slot to a queued one and then have ``running=False``/``stopping=True`` land on that
+    brand-new run. The verdict itself is still written by the worker's ``settle``; this only says
+    "the user stopped it" and closes the browsers it owned.
+    """
+    with execute_lock:
+        thread = execution_state.get('thread')
+        if run_is_foreign():
+            return {'status': 409, 'body': {'ok': False, 'error': t('api.foreignRun')}}
+        if not execution_state['running'] and not (thread is not None and thread.is_alive()):
+            # Nothing running and nothing unwinding: answering as if a stop had been honoured
+            # would leave ``stopping`` set, and the NEXT run would read it as "the user stopped me".
+            return {'status': 200, 'body': {'ok': True, 'browsers': 0, 'records': [], 'idle': True}}
+        if execution_state['executor']:
+            execution_state['executor'].stop()
+        # Finished rows are checkpointed; this asks the row loop to bail at the next boundary.
+        execution_state['cancel_event'].set()
+        execution_state['stopping'] = True
+        execution_state['running'] = False
+        mark_records_stopping()
+        crawlers = execution_state['active_crawlers'].take_all()
+        # The late sweep closes THIS run's browsers only; the queue may already be starting the
+        # next run by the time it runs.
+        stopped_run_id = str(execution_state.get('run_id') or '')
+        lang = get_lang()
+        owner = account_context.current()
+        # Clear the handle INSIDE the lock: a drain can hand the slot to a queued run the moment
+        # it is released, and clearing it afterwards would erase that run's own stop handle.
+        execution_state.pop('current_input', None)
+        execution_state['executor'] = None
+
+    # A visible Chrome can take its bounded grace to die; the Stop request must not hang behind it.
+    threading.Thread(target=_finish_stop, args=(crawlers, lang, owner, stopped_run_id), daemon=True).start()
+    # The console and the node counters stay: stopping is when the user most needs to read what
+    # happened. The next run resets both when it claims the slot.
+    return {
+        'status': 200,
+        'body': {'ok': True, 'browsers': len(crawlers), 'records': list(execution_state['open_records'])},
+    }

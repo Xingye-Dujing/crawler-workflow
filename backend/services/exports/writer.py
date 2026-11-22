@@ -372,3 +372,28 @@ class DataExporter:
     def _write_markdown(df: pd.DataFrame, filepath: str, **_):
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(df.to_markdown(index=False))
+
+
+def save_bytes(export_dir: str, filename: str, data: bytes) -> dict:
+    """Write already-built bytes (a project bundle, a binary artifact) into ``export_dir``.
+
+    ``DataExporter.save`` writes a DataFrame; the AI's workflow export already has the finished zip
+    from ``services.workflows.bundle``. Both doorways need the same rule: one sanitized name, one
+    temp file, one atomic move, so a crash cannot leave a half-written file the panel lists as a
+    finished export.
+    """
+    from core.refs import sanitize_filename
+
+    directory = str(export_dir or '')
+    if not directory:
+        raise ValueError('the account has no export directory')
+    safe = sanitize_filename(os.path.basename(str(filename or '')), truncate=True) or 'export.bin'
+    target = os.path.join(directory, safe)
+    os.makedirs(directory, exist_ok=True)
+    temp = f'{target}.part-{os.getpid()}-{uuid.uuid4().hex[:8]}'
+    with open(temp, 'wb') as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    atomic_replace(temp, target)
+    return {'name': safe, 'path': target, 'size': len(data)}

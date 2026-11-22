@@ -20,13 +20,11 @@ import os
 import threading
 
 from flask import Blueprint, jsonify, request
-from runtime import account_context
 from runtime.state import (
     LOG_KEEP,
     _completed_lock,
     _results_snapshot,
     ambient,
-    execute_lock,
     execution_state,
     run_is_foreign,
     set_ambient,
@@ -44,20 +42,14 @@ from api.http import _bad_body, _bad_param, _json_body, _optional_int
 from engine import run as run_engine
 from engine.workflow import effective_workflow
 from engine.workflow_rerun import RerunRefusalError, rerun_node
-from i18n import get_lang, set_lang, t
+from i18n import t
 from services import lock_store
 from services.accounts.service import accounts_mode
-from services.ingest.lifecycle import close_login_browser as _close_login_browser
 from services.runs.queue import (
     QUEUE_MAX,
     cancel_queued,
     clear_queue,
     queue_snapshot,
-)
-from services.runs.settlement import (
-    STOP_QUIT_GRACE,
-    close_active_crawlers,
-    mark_records_stopping,
 )
 from services.runs.store import (
     workflow_fingerprint,
@@ -378,105 +370,11 @@ def workflow_queue_clear():
 
 @bp.route('/api/workflow/stop', methods=['POST'])
 def stop_workflow():
-    # Hold the claim lock across the guard-and-write. ``begin_run`` claims a run under
-    # this same lock, so a run finishing right now cannot hand off to a queued one and
-    # then have ``running=False``/``stopping=True`` land on that brand-new run — the
-    # interleaving that made a stop aimed at run A silently kill run B. The idle check
-    # and every state write below are therefore one atomic decision.
-    with execute_lock:
-        thread = execution_state.get('thread')
-        if run_is_foreign():
-            # The slot belongs to another account. Answering as if a stop had been honoured would
-            # set ``stopping``/``running`` on a run this caller does not own — killing someone
-            # else's crawl from a panel that is not theirs.
-            return jsonify({'ok': False, 'error': t('api.foreignRun')}), 409
-        if not execution_state['running'] and not (thread is not None and thread.is_alive()):
-            # Nothing is running and nothing is unwinding. Answering as if a stop had been
-            # honoured would leave `stopping` standing with no run behind it — and
-            # `stop_requested()` hands that flag to every crawl, so the next one would
-            # answer "the user stopped me" to a button nobody pressed.
-            return jsonify({'ok': True, 'browsers': 0, 'records': [], 'idle': True})
-        if execution_state['executor']:
-            execution_state['executor'].stop()
-        # Tell any row-by-row LLM loop to bail out at the next row boundary —
-        # finished rows are already checkpointed and stay in results.
-        execution_state['cancel_event'].set()
-        # The run is over as far as the browser is concerned; the verdict is not. The
-        # worker thread still owes `settle`/`finish_run`, and until it pays the record
-        # reads "stopping" — not "running", which is what made a stop look ignored, and
-        # not an outcome the run has not written yet.
-        execution_state['stopping'] = True
-        execution_state['running'] = False
-        mark_records_stopping()
-        crawlers = execution_state['active_crawlers'].take_all()
-        # The run that was just stopped: the late sweep below must close ITS browsers only. By the
-        # time it runs the queue may have started the next run, whose browsers are registered under
-        # a different id — closing those failed a crawl nobody had stopped.
-        stopped_run_id = str(execution_state.get('run_id') or '')
-        # A daemon thread starts with a fresh (default) language; capture the request's
-        # so every line this stop path prints — including run.browserStuck below — reads
-        # in the UI's own language, not Chinese in an English panel.
-        lang = get_lang()
-        # And it starts with no account: the queue may hand the slot to another account while
-        # these reapers are still unwinding, and ``_push_log``/the run-log writer resolve their
-        # owner at CALL time. Without this, account A's stop lines landed in account B's console
-        # and durable run log.
-        owner = account_context.current()
-        # Clear the handle INSIDE the lock: a drain can hand the slot to a queued run the moment
-        # it is released, and writing ``executor = None`` afterwards erased the NEW run's stop
-        # handle (its 停止 then skipped TaskExecutor.stop()).
-        execution_state.pop('current_input', None)
-        execution_state['executor'] = None
-
-    def _reap(c):
-        token = account_context.bind(owner)
-        try:
-            set_lang(lang)
-            _close_login_browser(c, quit_timeout=STOP_QUIT_GRACE)
-        finally:
-            account_context.unbind(token)
-
-    def _finish_stop():
-        token = account_context.bind(owner)
-        try:
-            _finish_stop_as_owner()
-        finally:
-            account_context.unbind(token)
-
-    def _finish_stop_as_owner():
-        set_lang(lang)
-        # One thread per browser. Reaping them in series made the LAST crawl of a
-        # parallel run wait behind every earlier reap, and the run record cannot be
-        # written until all of them are over (`pool.shutdown` waits by design).
-        reapers = [threading.Thread(target=_reap, args=(c,), daemon=True) for c in crawlers]
-        for r in reapers:
-            r.start()
-        for r in reapers:
-            r.join(STOP_QUIT_GRACE + 12)
-        # A browser the worker registered *after* the snapshot above is still in the
-        # registry, and nothing else on this path would ever reach it: the node that
-        # bought it is standing in a page load, not in its finally.
-        close_active_crawlers(quit_timeout=STOP_QUIT_GRACE, run_id=stopped_run_id)
-
-    # Closing a browser is quick but not instantaneous, and a visible Chrome with a
-    # pending dialog can take its bounded grace to die. Doing it inline made the Stop
-    # *request* wait on it, so the button, its toast and the run-record refresh all
-    # hung behind teardown the user can already see happening. It runs on a side
-    # thread now; the crawlers are already out of the registry, so the worker's own
-    # finally cannot double-close them, and a browser the stop thread has not reached
-    # yet is closed by that finally when the run unwinds.
-    threading.Thread(target=_finish_stop, daemon=True).start()
-    # Clear the console but NOT the results: a stopped run keeps everything it
-    # already produced (rows, tables, exports) so nothing paid for is lost.
-    #
-    # The console is not cleared either, and neither are the node counters.
-    # Stopping is the moment someone most wants to read what the run did before
-    # it was cut short, and the worker's own finally writes the summary line
-    # under those counters — zeroing them here turned every stopped run into
-    # "运行结束（0/0 个节点完成）" and wiped the log that explained it. The next
-    # run resets both when it claims the slot (begin_run), which is where a
-    # fresh slate belongs.
-    return jsonify({'ok': True, 'browsers': len(crawlers), 'records': list(execution_state['open_records'])})
+    # The decision lives in ``engine.run.stop_run`` because the AI's workflow_stop tool calls the
+    # same door: a second implementation of "which run am I stopping, under which lock" is exactly
+    # how a stop aimed at run A killed run B.
+    answer = run_engine.stop_run()
+    return jsonify(answer['body']), answer['status']
 
 
 @bp.route('/api/workflow/status', methods=['GET'])

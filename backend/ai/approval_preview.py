@@ -166,6 +166,17 @@ def _rerun(tool: str, detail: dict) -> dict:
     return _frame(tool, 'rerun', facts, changed=True)
 
 
+def _workflow(tool: str, detail: dict) -> dict:
+    facts = [('name', str(detail.get('name') or ''))]
+    if detail.get('new_name'):
+        facts.append(('new_name', str(detail.get('new_name') or '')))
+    workflow = detail.get('workflow')
+    if isinstance(workflow, dict):
+        facts.append(('nodes', len(workflow.get('nodes') or [])))
+        facts.append(('connections', len(workflow.get('connections') or [])))
+    return _frame(tool, 'workflow', facts, changed=True)
+
+
 #: One entry per tool that ``tools.APPROVAL_TOOLS`` may ask about. A new mutating tool adds its
 #: describer here and nowhere else; an unknown one falls back to its raw arguments.
 _BUILDERS = {
@@ -173,4 +184,10 @@ _BUILDERS = {
     'run_cmd': _command,
     'workspace_import': _import,
     'rerun_node': _rerun,
+    'workflow_update': _workflow,
+    'workflow_rename': _workflow,
+    'workflow_delete': _workflow,
+    'workflow_export': _workflow,
+    'workflow_run': _workflow,
+    'export_delete': _workflow,
 }

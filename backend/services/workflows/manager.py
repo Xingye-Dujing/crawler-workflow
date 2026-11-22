@@ -141,6 +141,10 @@ class WorkflowManager:
         verified = str(computed.get(str(node_id)) or '') == str(fingerprint or '')
         return dict(node.get('params') or {}), verified
 
+    def exists(self, name: str) -> bool:
+        """Whether this account already has a file under that name (even a corrupt one)."""
+        return os.path.exists(self.path_for(name))
+
     def list_workflows(self) -> list:
         if not os.path.exists(self.workflow_dir):
             return []

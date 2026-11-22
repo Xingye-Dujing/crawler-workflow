@@ -39,7 +39,7 @@
 - [x] H10 并发 workers（面板 1-8；API 并行；Ollama 串行）
 - [x] H11 附件文本抽取（pdf/docx/pptx/xlsx/csv/txt/html；files/vision/inline_images 拆分）
 - [x] H12 数据读取授权（会话/数据集/行数 grant；peek 免费；可撤销）
-- [ ] H13 工作流/产物工具
+- [x] H13 工作流/产物工具（list/read/update/rename/delete/export/run/stop；删除强制审批+审计）
 - [ ] H14 工具覆盖审计
 - [ ] H15 重试 parity
 - [ ] H16 stack_pct 临时验证
