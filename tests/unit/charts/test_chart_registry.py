@@ -131,3 +131,52 @@ class TestEveryConsoleTypeHasOneBuilder:
 
         homes = {fn.__module__.rsplit('.', 1)[-1] for fn in BUILDERS.values()}
         assert homes == {'series', 'distributions', 'relations', 'topics'}, homes
+
+
+class TestRequiredParamsReachValidation:
+    def test_stack_pct_declares_stack_fields_on_its_spec(self):
+        from services.charts.registry import spec_for
+
+        spec = spec_for('stack_pct')
+        assert spec is not None and spec.required_params == ('stack_fields',)
+
+    def test_validation_names_stack_fields_before_the_run(self):
+        """The builder used to be the only place that noticed; the user paid for the upstream
+        crawl first. The engine now reads the spec's required parameters."""
+        from engine.workflow import WorkflowEngine
+
+        workflow = {
+            'nodes': [
+                {
+                    'id': 'chart-1',
+                    'type': 'visualize',
+                    'params': {'chart_type': 'stack_pct', 'x_field': '平台'},
+                }
+            ],
+            'connections': [],
+        }
+        entries = WorkflowEngine(workflow).validate_detailed()
+        named = [entry for entry in entries if entry['code'] == 'engine.chart_field_missing']
+        assert named, 'validate did not name the missing stack_fields before a run'
+        assert 'stack_fields' in named[0]['message']
+        assert named[0]['id'] == 'chart-1'
+
+    def test_a_filled_stack_fields_is_not_reported(self):
+        from engine.workflow import WorkflowEngine
+
+        workflow = {
+            'nodes': [
+                {
+                    'id': 'chart-1',
+                    'type': 'visualize',
+                    'params': {
+                        'chart_type': 'stack_pct',
+                        'x_field': '平台',
+                        'stack_fields': '正面,中性,负面',
+                    },
+                }
+            ],
+            'connections': [],
+        }
+        codes = [entry['code'] for entry in WorkflowEngine(workflow).validate_detailed()]
+        assert 'engine.chart_field_missing' not in codes

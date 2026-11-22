@@ -654,10 +654,27 @@ class WorkflowEngine:
             if ntype == 'process' and operation == 'tokenize' and not params.get('text_column'):
                 add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
             if ntype == 'visualize':
-                if not params.get('chart_type'):
+                chart_type = str(params.get('chart_type') or '')
+                if not chart_type:
                     add(nid, 'engine.visualize_no_chart', t('engine.visualize_no_chart', nid=label))
-                if not params.get('x_field') and params.get('chart_type') not in NO_X_TYPES:
+                if not params.get('x_field') and chart_type not in NO_X_TYPES:
                     add(nid, 'engine.visualize_no_x', t('engine.visualize_no_x', nid=label))
+                # A chart's OWN required parameters (占比堆叠图's stack_fields) are declared on its
+                # ChartSpec and checked here, so the missing field is named at validate time rather
+                # than after the upstream crawl was paid for. Defaults are applied first: a box the
+                # contract fills is not missing to the user.
+                from services.charts.registry import spec_for, with_chart_defaults
+
+                spec = spec_for(chart_type)
+                if spec is not None:
+                    effective = with_chart_defaults(chart_type, params)
+                    for field in spec.required_params:
+                        if not str(effective.get(field) or '').strip():
+                            add(
+                                nid,
+                                'engine.chart_field_missing',
+                                t('engine.chart_field_missing', nid=label, chart=chart_type, field=field),
+                            )
             if ntype == 'name':
                 # The name node is pure metadata: it carries no data, so it
                 # must sit at the head (nothing feeds into it), wire into a

@@ -44,6 +44,11 @@ class ChartSpec:
     #: contract" — an untouched 主题距离图 / 显著词图 node used to refuse at RUN time (after the
     #: upstream crawl was paid for) because nobody had typed ``pc1``/``term`` into the panel.
     defaults: tuple[tuple[str, str], ...] = ()
+    #: Parameters this chart cannot be built without, beyond the generic x check. The engine's
+    #: validation reads THIS list, so the refusal names the field at validate time instead of
+    #: failing after the upstream crawl was paid for. 占比堆叠图 is the first entry: its
+    #: ``stack_fields`` has no default and the builder used to be the only thing that noticed.
+    required_params: tuple[str, ...] = ()
 
     @property
     def label_key(self) -> str:
@@ -68,7 +73,7 @@ SPECS: tuple[ChartSpec, ...] = (
     ChartSpec('bar', FAMILY_CONSOLE),
     ChartSpec('line', FAMILY_CONSOLE),
     ChartSpec('dual_line', FAMILY_CONSOLE, echarts_only=True),
-    ChartSpec('stack_pct', FAMILY_CONSOLE),
+    ChartSpec('stack_pct', FAMILY_CONSOLE, required_params=('stack_fields',)),
     ChartSpec(
         'topic_map',
         FAMILY_CONSOLE,
