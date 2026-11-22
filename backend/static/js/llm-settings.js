@@ -38,7 +38,7 @@ const LLMSettings = {
         },
         batch_size: 10,       // rows between checkpoint saves
         max_chars: 600,       // per-row truncation — long texts burn tokens
-        workers: 3,           // openrouter only
+        workers: 3,           // API providers only; local Ollama stays serial
     },
 
     load() {
@@ -134,6 +134,7 @@ const LLMSettings = {
         put('ai-api-model', (s[s.provider] || {}).model || '');
         put('ai-api-key', (s[s.provider] || {}).api_key || '');
         put('ai-batch', s.batch_size);
+        put('ai-workers', s.workers);
         put('ai-maxchars', s.max_chars);
         this.toggleProviderRows(s.provider);
         this.renderOllamaHost();
@@ -231,7 +232,7 @@ function onAIAPIKeyInput(value) {
 }
 
 function onAINumberInput(field, value) {
-    const limits = { batch_size: [1, 100], max_chars: [0, 20000] };
+    const limits = { batch_size: [1, 100], max_chars: [0, 20000], workers: [1, 8] };
     const [lo, hi] = limits[field] || [0, 999999];
     let n = parseInt(value, 10);
     if (isNaN(n)) n = LLMSettings.load()[field];

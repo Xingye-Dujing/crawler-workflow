@@ -130,6 +130,7 @@
         'ai.test': 'Test connection',
         'ai.testing': 'Testing…',
         'ai.batch': 'Save every N rows',
+        'ai.workers': 'Concurrent API requests',
         'ai.maxChars': 'Truncate row at (chars)',
         'ai.hintTitle': 'How the AI is called',
         'ai.hint1':
@@ -290,6 +291,7 @@
         'ai.test': '测试连接',
         'ai.testing': '测试中…',
         'ai.batch': '每批保存条数',
+        'ai.workers': '并发请求数',
         'ai.maxChars': '单行截断长度（字符）',
         'ai.hintTitle': '调用方式说明',
         'ai.hint1':

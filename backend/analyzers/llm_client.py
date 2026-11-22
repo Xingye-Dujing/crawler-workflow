@@ -993,6 +993,10 @@ def run_llm_dataframe(
             df.at[idx, col] = val
 
     abort_reason = None
+    # A local daemon has one GPU queue: sending several rows at once only makes them wait in a
+    # different order and can interleave two generations. API providers do answer in parallel, so
+    # the user's workers setting applies there.
+    workers = 1 if client.provider == 'ollama' else max(1, int(cfg.get('workers') or 1))
     try:
         run_llm_rows(
             jobs,
@@ -1004,7 +1008,7 @@ def run_llm_dataframe(
             publish=publish,
             cancel_event=cfg.get('cancel_event'),
             batch_size=max(1, int(cfg.get('batch_size') or 10)),
-            workers=max(1, int(cfg.get('workers') or 1)),
+            workers=workers,
             # ``run_llm_rows`` calls ``log`` with exactly the one message it builds, so the
             # logger's own method is the callback — no wrapper to keep in step with it.
             log=logger.info,

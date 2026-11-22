@@ -233,6 +233,38 @@ class TestOllamaTransport:
         LLMClient(provider='ollama', model='m').chat('p')
         assert fake_ollama.instances[0].calls[0]['think'] is False
 
+    def test_ollama_rows_stay_serial_while_api_rows_use_the_workers_setting(self, monkeypatch):
+        """A local daemon has one GPU queue; an API provider can answer several rows at once."""
+        from types import SimpleNamespace
+
+        import pandas as pd
+
+        seen = []
+
+        def fake_rows(jobs, client, build_prompt, parse, **kwargs):
+            seen.append({'provider': client.provider, 'workers': kwargs['workers']})
+            return []
+
+        monkeypatch.setattr(lc, 'run_llm_rows', fake_rows)
+        frame = pd.DataFrame({'text': ['a', 'b']})
+        base = {'model': 'm', 'max_chars': 10, 'host': 'http://x', 'label': 'l'}
+        for provider in ('ollama', 'openrouter'):
+            lc.run_llm_dataframe(
+                frame.copy(),
+                'text',
+                'op',
+                ['out'],
+                [''],
+                (None,),
+                lambda text: text,
+                lambda content: (content,),
+                ctx={'client': SimpleNamespace(provider=provider, **base), 'workers': 8},
+            )
+        assert seen == [
+            {'provider': 'ollama', 'workers': 1},
+            {'provider': 'openrouter', 'workers': 8},
+        ]
+
     def test_object_style_response_is_parsed(self, fake_ollama, monkeypatch):
         monkeypatch.setattr(lc, '_CHAT_KWARGS', frozenset())
         fake_ollama.reply = type('R', (), {'message': type('M', (), {'content': 'obj style'})})()

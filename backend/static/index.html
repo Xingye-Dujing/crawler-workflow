@@ -2077,6 +2077,20 @@
         </span>
       </div>
       <div class="dd-item-row">
+        <span data-i18n="ai.workers">并发请求数</span>
+        <span class="dd-ctrl">
+          <input
+            type="number"
+            id="ai-workers"
+            class="settings-input"
+            min="1"
+            max="8"
+            value="3"
+            oninput="onAINumberInput('workers', this.value)"
+          />
+        </span>
+      </div>
+      <div class="dd-item-row">
         <span data-i18n="ai.maxChars">单行截断长度</span>
         <span class="dd-ctrl">
           <input
