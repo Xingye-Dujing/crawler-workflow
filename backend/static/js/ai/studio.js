@@ -140,14 +140,14 @@ const AIStudio = {
             if (!data.ok) throw new Error(data.error || 'memories unavailable');
             host._memories = data.memories || [];
             host._memoryLimit = Number(data.limit || 0);
-            if ((host._studioTab || '') === 'memory') this.render(host._dom.chat, host);
+            if ((host._studioTab || '') === 'memory') host._renderStudio();
         } catch (error) {
             host._toast(error.message);
         }
     },
 
     async saveMemory(host) {
-        const box = host._dom.chat.querySelector('#ai-memory-text');
+        const box = host._dom.panel.querySelector('#ai-memory-text');
         const text = String(box?.value || '').trim();
         if (!text) return;
         try {
@@ -288,7 +288,7 @@ const AIStudio = {
 
     async savePython(host) {
         const editor = host._pythonScript || {};
-        const read = (name) => host._dom.chat.querySelector('[data-ai-python-field="' + name + '"]');
+        const read = (name) => host._dom.panel.querySelector('[data-ai-python-field="' + name + '"]');
         const payload = {
             id: (read('id')?.value || editor.id || '').trim(),
             name: (read('name')?.value || '').trim(),

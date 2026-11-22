@@ -46,6 +46,7 @@
 | 18 个领域技能 + 47 个工具 | host | host adapter 的 `skills()`/`tools()`；不塞回框架 |
 | workflow draft / apply / rerun | host | 采析绘工具 + `apply_artifact` |
 | codebooks / traces | host | 采析绘服务与路由 |
+| 对话区与设置/工作室共用一个列 | host（P5 迁移到框架 UI） | 采析绘现在是 `#ai-chat` 里的两个同级面：`#ai-transcript`（按 turn id 复用）与 `#ai-panel`；框架 UI 必须保留“面板不覆盖转录、转录按 turn_id 复用”的约定，不能回到整段重建 |
 
 ## 迁移顺序
 

@@ -21,6 +21,8 @@
 | H13 | AI 不能管理工作流/产物 | D | `workflow_list/read/update/rename/delete/export/run/stop` + `export_list/delete`；全部走 `WorkflowManager`/`engine.run`/`build_bundle`/`services.exports`；删除（工作流与导出）绕过 `ai_auto_approve` 强制审批并写审计日志；停止与 HTTP 按钮共用 `engine.run.stop_run` | `ai/tools.py`、`engine/run.py`、`api/workflow.py`、`services/exports/writer.py`、`tests/unit/ai/test_workflow_admin.py` |
 | H14 | 工具覆盖没有审计 | D | `ai.coverage.audit()` 从节点/平台模式/算子/图表/工具注册表生成矩阵；`UNIVERSAL_TOOLS` + `FILE_TOOLS` 是唯一入口集合；`ai_coverage` 工具可读；门禁拒绝空格子 | `ai/coverage.py`、`ai/agent.py`、`ai/tools.py`、`tests/unit/gates/test_ai_coverage.py` |
 | H16 | 占比堆叠图运行才报错 | D | `ChartSpec.required_params` 声明 `stack_fields`，`WorkflowEngine.validate_detailed` 读该声明并在 validate 阶段命名缺字段；默认值先填充，填了就不报 | `services/charts/registry.py`、`engine/workflow.py`、`tests/unit/charts/test_chart_registry.py` |
+| H17 | 关技能面板后答案消失 | D | `#ai-chat` 拆成两个同级面：`#ai-transcript` 与 `#ai-panel`；设置/工作室只渲染 panel 并隐藏转录（不覆盖），关闭时原 DOM 直接拿回；回来经 `selectConversation` 重读 pending，卡片挂回提问那一轮 | `index.html`、`ai.css`、`ai-workspace.js`、`ai/studio.js`、`tests/integration/test_ui_layout.py`、`tests/unit/frontend/test_frontend_ai_js.py` |
+| H18 | 切会话又开一个消息区 | D | `_renderMessages` 按 `turn:<turn_id>` / `message:<id>` / `row:<id>` 协调复用节点，不再整段重建；流式气泡带同一 key，重绘与 A→B→A 都复用它；回到仍在流式的会话时把存储的轮次元素接管为 live，下一条 delta 写入同一气泡 | `ai-workspace.js`、`tests/frontend/harness_ai_workspace.mjs`、`tests/frontend/harness_dom.mjs`、`tests/unit/frontend/test_frontend_ai_js.py`、`tests/integration/test_ui_layout.py` |
 
 ## 待办（热修列车，按优先级）
 

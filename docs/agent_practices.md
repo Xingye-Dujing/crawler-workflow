@@ -207,6 +207,15 @@
   `capabilities.registry`，算子/图表来自各自的 `OPS`/`SPECS`，工具来自 `TOOLS` 与技能/通用集合的交集。新加一个节点或算子
   却没有任何 AI 入口时，`tests/unit/gates/test_ai_coverage.py` 直接红；这条门禁还能反向失败（测试里清空技能列表会报
   `dataset_page` 缺失），所以它不是一个永远为真的报表。
+- **对话是常驻的，面板是它旁边的一个面。** `#ai-chat` 里有两个同级元素：`#ai-transcript` 是对话，`#ai-panel` 是设置/
+  工作室。面板打开时只把转录 `hidden`，绝不清空——否则正在流式的回答会写进一个已经脱离文档的气泡，关闭面板再从存储
+  重建，用户看到的“答案消失”就是这么来的。关闭面板直接拿回原 DOM，再走一次 `selectConversation` 重读 pending 问题，
+  卡片挂回**提问的那一轮**，而不是在末尾新建一个 “AI” 气泡（那正是“两个消息区”）。
+- **转录按存储身份复用，不整段重建。** 用户行 `message:<id>`、一轮 `turn:<turn_id>`、独立工具行 `row:<id>`；重绘时按
+  key 找已有节点，只增删差集，最后按顺序 `appendChild`（浏览器会移动节点，不会复制）。流式气泡在 `meta` 到达时打上同一
+  个 turn key，所以重绘、轮询和 A→B→A 都复用它；从别的会话回到仍在流式的会话时，把存储的轮次元素接管为 live，下一条
+  delta 写进同一个气泡。`tests/frontend/harness_dom.mjs` 的 `appendChild` 必须和浏览器一样“移动而不是复制”，
+  否则这类复用只会在测试里看起来重复。
 - **删除不属于“自动同意”的范围。** `ai_auto_approve` 的意思是“别再问我你的日常操作”，不是“你可以删我的文件”。
   `workflow_delete` / `export_delete` 因此走 `ALWAYS_APPROVAL_TOOLS`：即使总开关打开，也要一张针对**这次参数**的授权卡，
   并且真正删之前走域服务（`WorkflowManager.delete` / `delete_export_file`），日志里留 `ai.auditLog` 的账号+会话记录。

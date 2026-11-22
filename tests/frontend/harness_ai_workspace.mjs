@@ -145,21 +145,21 @@ out.sessions = {
 workspace._studioTab = 'memory';
 workspace._memories = [{ id: 'mem1', text: '默认账号是 default' }];
 workspace._memoryLimit = 200;
-sandbox.AIStudio.render(workspace._dom.chat, workspace);
+workspace._renderStudio();
 sandbox.AIStudio.saveMemory = async () => calls.push('memory-save');
 sandbox.AIStudio.deleteMemory = async (_host, id) => calls.push('memory-delete:' + id);
-const memoryAdd = workspace._dom.chat.querySelector('[data-ai-memory-add]');
-const memoryDelete = workspace._dom.chat.querySelector('[data-ai-memory-delete]');
+const memoryAdd = workspace._dom.panel.querySelector('[data-ai-memory-add]');
+const memoryDelete = workspace._dom.panel.querySelector('[data-ai-memory-delete]');
 for (const row of [memoryAdd, memoryDelete]) {
     if (!row) continue;
     dispatchOn(workspace._dom.root, 'click', { target: row });
 }
 out.memoryTab = {
-    cards: workspace._dom.chat.querySelectorAll('.ai-memory-card').length,
-    text: String(workspace._dom.chat.innerHTML || ''),
+    cards: workspace._dom.panel.querySelectorAll('.ai-memory-card').length,
+    text: String(workspace._dom.panel.innerHTML || ''),
     add: calls.includes('memory-save'),
     delete: calls.includes('memory-delete:mem1'),
-    count: String(workspace._dom.chat.innerHTML || '').includes('1 / 200'),
+    count: String(workspace._dom.panel.innerHTML || '').includes('1 / 200'),
 };
 
 const artifactHolder = sandbox.document.createElement('div');
@@ -349,9 +349,9 @@ out.provider = { stored: sandbox.AISettings.load().provider };
  * (no toast, no request, no error). Each target must reach its own method. */
 workspace.openSettings();
 const settingsButtons = {
-    save: workspace._dom.chat.querySelector('[data-ai-save-settings]'),
-    models: workspace._dom.chat.querySelector('[data-ai-refresh-models]'),
-    test: workspace._dom.chat.querySelector('[data-ai-test]'),
+    save: workspace._dom.panel.querySelector('[data-ai-save-settings]'),
+    models: workspace._dom.panel.querySelector('[data-ai-refresh-models]'),
+    test: workspace._dom.panel.querySelector('[data-ai-test]'),
 };
 const settingsCalls = [];
 workspace._saveSettings = async () => settingsCalls.push('save');
@@ -1668,6 +1668,168 @@ workspace._dom.chat.scrollTop = 120;
 workspace._current.blocks.push({ type: 'text', text: 'streamed paragraph' });
 workspace._paintAssistant();
 out.scrollAnchor = { top: workspace._dom.chat.scrollTop };
+
+/* H17: settings and the studio have their OWN surface. Opening either used to paint over
+   `#ai-chat`, so a live answer kept streaming into a detached bubble and closing the panel
+   rebuilt the list from the store. The transcript node must survive both round trips. */
+workspace._sending = false;
+workspace._current = null;
+workspace._conversationId = 'c-panels';
+workspace._messages = [
+    { id: 'h17u', role: 'user', content: 'keep me', meta: {} },
+    {
+        id: 'h17a',
+        role: 'assistant',
+        content: '',
+        blocks: [{ type: 'text', text: 'the answer' }],
+        meta: { turn_id: 'h17t' },
+        usage: {},
+    },
+];
+workspace._renderMessages([]);
+const keptAnswer = workspace._dom.chat.querySelector('[data-ai-message="h17a"]');
+workspace.openSettings();
+const afterOpen = workspace._dom.chat.querySelector('[data-ai-message="h17a"]');
+const surface = {
+    settingsVisible: workspace._dom.panel.hidden === false && workspace._dom.chat.hidden === true,
+    settingsInPanel: !!workspace._dom.panel.querySelector('[data-ai-save-settings]'),
+    settingsNotInTranscript: !workspace._dom.chat.querySelector('[data-ai-save-settings]'),
+    sameAfterOpen: afterOpen === keptAnswer,
+};
+workspace._showChat();
+surface.sameAfterClose = workspace._dom.chat.querySelector('[data-ai-message="h17a"]') === keptAnswer;
+surface.transcriptVisible = workspace._dom.chat.hidden === false && workspace._dom.panel.hidden === true;
+surface.assistants = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+
+/* A pending question restored from the server binds to the turn that ASKED it, not to a new
+   bubble appended after the transcript. */
+workspace._renderMessages([
+    {
+        id: 'q-card',
+        message_id: 'h17a',
+        questions: [{ id: 'qh17', question: 'Which?', options: [{ label: 'A' }] }],
+    },
+]);
+surface.pendingBubbles = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+const pendingCard = workspace._dom.chat.querySelector('[data-ai-question-card="qh17"]');
+surface.pendingInsideTurn = !!pendingCard && !!pendingCard.closest('[data-ai-message="h17a"]');
+surface.pendingCard = !!pendingCard;
+out.panelSurface = surface;
+
+/* H18: switching A→B→A reuses the SAME assistant element and leaves one message area. */
+const rowA1 = { id: 'a-u1', role: 'user', content: 'A question', meta: {} };
+const rowA2 = {
+    id: 'a-t1',
+    role: 'assistant',
+    content: '',
+    blocks: [{ type: 'text', text: 'A answer' }],
+    meta: { turn_id: 'tA' },
+    usage: {},
+};
+const rowB1 = { id: 'b-u1', role: 'user', content: 'B question', meta: {} };
+const rowB2 = {
+    id: 'b-t1',
+    role: 'assistant',
+    content: '',
+    blocks: [{ type: 'text', text: 'B answer' }],
+    meta: { turn_id: 'tB' },
+    usage: {},
+};
+workspace._sending = false;
+workspace._current = null;
+workspace._conversationId = 'A';
+workspace._messages = [rowA1, rowA2];
+workspace._renderMessages([]);
+const aEl = workspace._dom.chat.querySelector('[data-ai-message="a-t1"]');
+/* A repaint of the SAME conversation must reuse the node it already drew. */
+workspace._renderMessages([]);
+const aReused = workspace._dom.chat.querySelector('[data-ai-message="a-t1"]') === aEl;
+workspace._conversationId = 'B';
+workspace._messages = [rowB1, rowB2];
+workspace._renderMessages([]);
+const bBubbles = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+const bLeak = !!workspace._dom.chat.querySelector('[data-ai-message="a-t1"]');
+workspace._conversationId = 'A';
+workspace._messages = [rowA1, rowA2];
+workspace._renderMessages([]);
+out.switchConversation = {
+    bBubbles,
+    bLeak,
+    aBubbles: workspace._dom.chat.querySelectorAll('.ai-message.assistant').length,
+    totalMessages: workspace._dom.chat.querySelectorAll('.ai-message').length,
+    aReused,
+    aHtml: String(workspace._dom.chat.querySelector('[data-ai-message="a-t1"]').innerHTML || ''),
+};
+
+/* H18 while STREAMING: a repaint of the same turn must not append a second bubble, and a return
+   from another conversation must adopt the stored turn element so the next delta lands there. */
+workspace._sending = true;
+workspace._current = null;
+workspace._conversationId = 'L';
+workspace._messages = [{ id: 'l-u1', role: 'user', content: 'go', meta: {} }];
+workspace._streamConversation = 'L';
+workspace._streamTurnId = '';
+workspace._dom.chat.innerHTML = '';
+workspace._onEvent({
+    type: 'meta',
+    conversation_id: 'L',
+    message_id: 'l-t1',
+    turn_id: 'tL',
+    skill: 'project',
+    skill_reason: 'auto',
+});
+workspace._onEvent({ type: 'text', text: 'first ' });
+workspace._paintAssistant();
+const liveEl = workspace._dom.chat.querySelector('.ai-message.assistant');
+workspace._messages = [
+    { id: 'l-u1', role: 'user', content: 'go', meta: {} },
+    {
+        id: 'l-t1',
+        role: 'assistant',
+        content: '',
+        blocks: [{ type: 'text', text: 'first ' }],
+        meta: { turn_id: 'tL' },
+        usage: {},
+        status: 'streaming',
+    },
+];
+workspace._renderMessages([]);
+const afterRepaint = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+const sameLive = workspace._dom.chat.querySelector('.ai-message.assistant') === liveEl;
+workspace._onEvent({ type: 'text', text: 'second' });
+workspace._paintAssistant();
+/* Leave for B and come back: the stored row is all the page has, so the next delta must paint
+   into that element instead of appending a second "AI" area. */
+workspace._conversationId = 'B';
+workspace._messages = [{ id: 'b-only', role: 'user', content: 'elsewhere', meta: {} }];
+workspace._renderMessages([]);
+workspace._conversationId = 'L';
+workspace._messages = [
+    { id: 'l-u1', role: 'user', content: 'go', meta: {} },
+    {
+        id: 'l-t1',
+        role: 'assistant',
+        content: '',
+        blocks: [{ type: 'text', text: 'first second' }],
+        meta: { turn_id: 'tL' },
+        usage: {},
+        status: 'streaming',
+    },
+];
+workspace._renderMessages([]);
+const returned = workspace._dom.chat.querySelectorAll('.ai-message.assistant').length;
+workspace._onEvent({ type: 'text', text: ' third' });
+workspace._paintAssistant();
+out.liveTurn = {
+    afterRepaint,
+    sameLive,
+    bubbles: workspace._dom.chat.querySelectorAll('.ai-message.assistant').length,
+    returned,
+    html: String((workspace._dom.chat.querySelector('.ai-flow') || {}).innerHTML || ''),
+};
+workspace._sending = false;
+workspace._streamConversation = '';
+workspace._streamTurnId = '';
 
 fs.writeFileSync(1, JSON.stringify(out));
 

@@ -84,7 +84,11 @@ const AIWorkspace = {
             root: 'ai-workspace',
             resizer: 'ai-resizer',
             sessions: 'ai-sessions',
-            chat: 'ai-chat',
+            /* The transcript is its own element inside the chat column. Settings and the studio
+               render into `panel`, so opening either one can never destroy a live answer. */
+            chat: 'ai-transcript',
+            panel: 'ai-panel',
+            chatHost: 'ai-chat',
             side: 'ai-side',
             input: 'ai-input',
             send: 'ai-send-btn',
@@ -1283,6 +1287,7 @@ const AIWorkspace = {
                 '</div>';
             this._dom.chat.appendChild(el);
             this._current = { el };
+            this._current.conversationId = this._conversationId;
             this._current.flowEl = el.querySelector('.ai-flow');
             this._current.artifactsEl = el.querySelector('.ai-artifacts');
             this._current.questionEl = el.querySelector('.ai-question-slot');
@@ -1447,9 +1452,15 @@ const AIWorkspace = {
     /* ``record`` is what separates a new turn from a repaint. ``_renderMessages`` replays stored
        rows and already has them; pushing there used to append into the array it was iterating,
        which never terminates. A repaint draws only. */
-    _appendUser(text, context, attachments, extra, record = true) {
+    _appendUser(text, context, attachments, extra, record = true, messageId = '') {
         const el = document.createElement('article');
         el.className = 'ai-message user';
+        /* The stored id is the identity a repaint matches on; a row just typed has none until the
+           server writes it, and is therefore never mistaken for an older message. */
+        if (messageId) {
+            el.setAttribute('data-ai-key', 'message:' + String(messageId));
+            el.setAttribute('data-ai-message', String(messageId));
+        }
         const files = (attachments || []).map((row) =>
             '<span class="ai-attachment">' + AIRender.escape(row.name || 'file') + '</span>'
         ).join('');
@@ -1471,6 +1482,7 @@ const AIWorkspace = {
             });
         }
         this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
+        return el;
     },
 
     /* ─── Working folder (the harness's one root) ─── */
@@ -2180,7 +2192,7 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-studio-tab')) {
             this._studioTab = target.getAttribute('data-ai-studio-tab');
-            AIStudio.render(this._dom.chat, this);
+            AIStudio.render(this._dom.panel, this);
             if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') AIStudio.loadPython(this);
             if (this._studioTab === 'memory' && typeof AIStudio.loadMemory === 'function') AIStudio.loadMemory(this);
             return;
@@ -2188,12 +2200,15 @@ const AIWorkspace = {
         if (target.hasAttribute('data-ai-studio-close')) {
             this._mode = 'chat';
             this._editingSkill = null;
-            this._renderMessages();
+            /* Hiding the panel is enough: the transcript was never overwritten, so an answer that
+               arrived (or is still streaming) is still there. The second argument re-reads the
+               conversation so a question that arrived while the studio was up gets its card. */
+            this._showChat(true);
             return;
         }
         if (target.hasAttribute('data-ai-new-skill')) {
             this._editingSkill = { id: '', name: '', prompt: '', context: [], tools: [], suggested: [], ask_policy: 'auto' };
-            AIStudio.render(this._dom.chat, this);
+            AIStudio.render(this._dom.panel, this);
             return;
         }
         if (target.hasAttribute('data-ai-edit-skill')) {
@@ -2217,7 +2232,7 @@ const AIWorkspace = {
         }
         if (target.hasAttribute('data-ai-cancel-skill')) {
             this._editingSkill = null;
-            AIStudio.render(this._dom.chat, this);
+            AIStudio.render(this._dom.panel, this);
             return;
         }
         if (target.hasAttribute('data-ai-toggle-plugin')) {
@@ -2323,6 +2338,9 @@ const AIWorkspace = {
         if (this._sending && String(id) === String(this._conversationId)) return;
         this._conversationId = id;
         this._mode = 'chat';
+        /* Selecting a conversation is a request to READ it: a settings/studio panel that was up
+           must give the column back instead of hiding the transcript the click asked for. */
+        this._showChat();
         this._editingSkill = null;
         /* A slow answer for the conversation the user just left must not replace the one they
            clicked next. Every await below is preceded by one token check; the last click wins. */
@@ -2487,25 +2505,58 @@ const AIWorkspace = {
         AISettings.save({ conversation: String(id || '') });
     },
 
-    _showChat() {
-        /* Settings and the studio paint into the same column as the transcript. Sending while one
-           of them is up used to look inerta: the click ran, the panel stayed on settings, and the
-           user saw no reaction at all. A send always returns to the conversation first. */
-        if (this._mode === 'chat') return;
+    /* Settings and the studio get their OWN surface. They used to paint into `#ai-chat`, which
+       destroyed the transcript: a live answer kept streaming into a detached bubble, and closing
+       the studio rebuilt the list from the store, so an unanswered card and the live DOM were
+       lost. `_showPanel` hides the transcript (never clears it); `_showChat` brings it back as it
+       was, then re-reads the conversation so a pending question that arrived meanwhile appears. */
+    _showPanel() {
+        if (this._dom.panel) this._dom.panel.hidden = false;
+        if (this._dom.chat) this._dom.chat.hidden = true;
+    },
+
+    /* The studio owns its own surface; one entry point so no caller can render it into the
+       transcript (which used to erase a live answer). */
+    _renderStudio() {
+        this._showPanel();
+        AIStudio.render(this._dom.panel, this);
+    },
+
+    _showChat(refresh = false) {
+        if (this._dom.panel) this._dom.panel.hidden = true;
+        if (this._dom.chat) this._dom.chat.hidden = false;
+        /* A send always returns to the conversation first: the click ran while settings were up
+           and looked inert because the panel stayed painted. */
+        if (this._mode === 'chat' && !refresh) return;
         this._mode = 'chat';
-        if (this._dom.chat) this._dom.chat.innerHTML = '';
-        this._renderMessages();
+        if (!this._dom.chat) return;
+        if (!this._messages.length && !this._conversationId) {
+            this._renderWelcome();
+            return;
+        }
+        if (refresh && this._conversationId && !this._sending) {
+            /* One fetch through the ordinary selection path: it reconciles the same DOM nodes
+               (`_renderMessages`) and re-applies pending questions, instead of a second renderer. */
+            this.selectConversation(this._conversationId);
+        }
     },
 
     _renderMessages(pending) {
         if (!this._dom.chat) return;
         this._mode = 'chat';
-        this._dom.chat.innerHTML = '';
-        /* The live turn's element lived in the DOM just wiped. Keeping the pointer made a pending
-           question paint into a DETACHED node — the card was built and never visible, which reads
-           as “my question disappeared after the reload”. */
-        this._current = null;
+        const chat = this._dom.chat;
+        /* The transcript is RECONCILED by stored identity, never wiped and rebuilt. Two defects
+           came from the wipe: switching A→B→A re-drew every row (a second area whenever a turn was
+           still streaming), and a live bubble the repaint could not see was left orphaned while a
+           new one was appended. */
+        const existing = new Map();
+        for (const child of Array.from(chat.children)) {
+            const key = child.getAttribute ? String(child.getAttribute('data-ai-key') || '') : '';
+            if (key && !existing.has(key)) existing.set(key, child);
+        }
         if (!this._messages.length) {
+            for (const child of Array.from(chat.children)) child.remove();
+            this._current = null;
             this._renderWelcome();
             return;
         }
@@ -2599,15 +2650,113 @@ const AIWorkspace = {
                 block.result = found.payload;
             }
         }
+        /* Adopt the live bubble only while it is actually part of THIS snapshot: either the list
+           carries its turn (a repaint of the same conversation mid-stream) or it carries no
+           assistant row at all (the server has not written the turn's first row yet). Otherwise it
+           belongs to a transcript this render is replacing. */
+        const liveTurnId = String(this._current?.turnId || '');
+        const storedTurns = order.filter((item) => item.kind === 'turn');
+        const liveIsInSnapshot =
+            !storedTurns.length || (!!liveTurnId && storedTurns.some((item) => String(item.turnId || '') === liveTurnId));
+        const live =
+            this._sending &&
+            liveIsInSnapshot &&
+            this._current &&
+            this._current.el &&
+            this._current.conversationId === this._conversationId
+                ? this._current.el
+                : null;
+        if (!live) this._current = null;
+        const ordered = [];
+        const placed = new Set();
+        const seenKeys = new Set();
         for (const item of order) {
-            if (item.kind === 'user') this._appendUser(item.message.content, item.message.meta?.context, item.message.meta?.attachments, null, false);
-            else if (item.kind === 'turn') this._renderTurn(item);
-            else this._renderStoredTool(item.message);
+            let key = '';
+            if (item.kind === 'user') key = item.message.id ? 'message:' + String(item.message.id) : '';
+            else if (item.kind === 'turn') {
+                key = item.turnId || item.messageId ? 'turn:' + String(item.turnId || item.messageId) : '';
+            } else key = item.message.id ? 'row:' + String(item.message.id) : '';
+            if (key && seenKeys.has(key)) continue;
+            if (key) seenKeys.add(key);
+            let el = key ? existing.get(key) : null;
+            if (el) {
+                if (item.kind === 'turn') this._refreshTurnEl(el, item);
+            } else if (item.kind === 'user') {
+                el = this._appendUser(
+                    item.message.content,
+                    item.message.meta?.context,
+                    item.message.meta?.attachments,
+                    null,
+                    false,
+                    item.message.id || '',
+                );
+            } else if (item.kind === 'turn') {
+                el = this._renderTurn(item);
+            } else {
+                el = this._renderStoredTool(item.message);
+            }
+            if (el) {
+                placed.add(el);
+                ordered.push(el);
+            }
+        }
+        if (live && !placed.has(live)) ordered.push(live);
+        for (const child of Array.from(chat.children)) {
+            if (ordered.includes(child)) continue;
+            child.remove();
+        }
+        /* appendChild MOVES an existing node, so walking the list in order is what places them. */
+        for (const el of ordered) chat.appendChild(el);
+        /* Coming back to a turn that is still streaming in another tab: its live element is stale
+           by however much went by while another conversation was shown. The stored row is the
+           server's truth, so adopt it when it has MORE rounds than the view already holds; equal
+           length means the live text is the fresher copy of the same round. */
+        if (live && this._current) {
+            const stored = order.find(
+                (item) => item.kind === 'turn' && String(item.turnId || '') === String(this._current.turnId || '')
+            );
+            if (stored && (stored.blocks || []).length > (this._current.blocks || []).length) {
+                this._current.blocks = (stored.blocks || []).slice();
+                this._current._flowHtml = '';
+                this._paintAssistant();
+            }
+        }
+        /* Back on a conversation whose turn is STILL streaming: adopt the stored turn element as
+           the live one, so the next delta paints into it instead of appending a second bubble.
+           Without this, A→B→A drew the partial answer and then a duplicate "AI" area beside it. */
+        if (this._sending && this._streamTurnId && String(this._streamConversation || '') === String(this._conversationId || '')) {
+            const streamEntry = order.find(
+                (item) => item.kind === 'turn' && String(item.turnId || '') === String(this._streamTurnId)
+            );
+            const el = chat.querySelector('[data-ai-key="turn:' + String(this._streamTurnId).replace(/"/g, '') + '"]');
+            if (el && (!this._current || this._current.el !== el)) {
+                this._current = {
+                    el,
+                    conversationId: this._conversationId,
+                    turnId: this._streamTurnId,
+                    messageId: streamEntry ? streamEntry.messageId : '',
+                    blocks: streamEntry ? (streamEntry.blocks || []).slice() : [],
+                    questions: [],
+                    answers: {},
+                    flowEl: el.querySelector('.ai-flow'),
+                    artifactsEl: el.querySelector('.ai-artifacts'),
+                    questionEl: el.querySelector('.ai-question-slot'),
+                    usageEl: el.querySelector('.ai-usage'),
+                    _flowHtml: '',
+                };
+                this._paintAssistant();
+            }
         }
         for (const question of pending || []) {
-            this._appendQuestion(question);
+            /* The turn entry carries the blocks the element was drawn from; seeding the bound live
+               state with them is what lets an ANSWER to this card repaint the whole turn instead of
+               replacing its earlier paragraphs with only the continuation. */
+            const owner = order.find(
+                (item) => item.kind === 'turn' && String(item.messageId || '') === String(question.message_id || '')
+            );
+            this._appendQuestion(question, owner || null);
         }
-        this._dom.chat.scrollTop = this._dom.chat.scrollHeight;
+        chat.scrollTop = chat.scrollHeight;
     },
 
     /* One stored row that deserves its own element: an answered/abandoned question (the answer is
@@ -2626,11 +2775,10 @@ const AIWorkspace = {
         return !inline && !!meta.name && meta.name !== 'update_plan';
     },
 
-    _renderTurn(turn) {
-        const el = document.createElement('article');
-        el.className = 'ai-message assistant';
-        if (turn.messageId) el.setAttribute('data-ai-message', turn.messageId);
-        el.innerHTML =
+    /* The inside of one turn bubble. Shared by a first paint and a repaint of an element that was
+       reused, so a keyed reconciliation cannot drift from a fresh render. */
+    _turnHtml(turn) {
+        return (
             '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div><div class="ai-message-body">' +
             '<div class="ai-flow">' + AIRender.assistantFlow(turn.blocks) + '</div>' +
             /* A turn that ENDED in an error is part of the transcript: the reason was painted into
@@ -2644,19 +2792,60 @@ const AIWorkspace = {
             (turn.stopped ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stopped')) + '</div>' : '') +
             (turn.interrupted ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.interrupted')) + '</div>' : '') +
             (turn.live ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stillStreaming')) + '</div>' : '') +
+            '<div class="ai-question-slot"></div>' +
             '<div class="ai-extras"></div>' +
             '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +
             '<div class="ai-message-actions">' +
             '<button type="button" class="ai-ghost" data-ai-copy-answer="1">' + AIRender.escape(I18n.t('ai.copyAnswer')) + '</button>' +
             '<button type="button" class="ai-ghost" data-ai-retry="1">' + AIRender.escape(I18n.t('ai.retry')) + '</button>' +
             '</div>' +
-            '</div>';
-        this._dom.chat.appendChild(el);
+            '</div>'
+        );
+    },
+
+    _fillTurnExtras(el, turn) {
         const extras = el.querySelector('.ai-extras');
-        for (const message of turn.extras) {
+        if (!extras) return;
+        extras.innerHTML = '';
+        for (const message of turn.extras || []) {
             const node = this._storedRowNode(message);
-            if (node && extras) extras.appendChild(node);
+            if (node) extras.appendChild(node);
         }
+    },
+
+    _turnSignature(turn) {
+        return JSON.stringify({
+            blocks: turn.blocks || [],
+            error: turn.error || '',
+            usage: turn.usage || {},
+            flags: [!!turn.truncated, !!turn.stopped, !!turn.interrupted, !!turn.live],
+            extras: (turn.extras || []).map((row) => String((row || {}).id || '')),
+        });
+    },
+
+    _renderTurn(turn) {
+        const el = document.createElement('article');
+        el.className = 'ai-message assistant';
+        if (turn.turnId || turn.messageId) el.setAttribute('data-ai-key', 'turn:' + String(turn.turnId || turn.messageId));
+        if (turn.messageId) el.setAttribute('data-ai-message', String(turn.messageId));
+        el.innerHTML = this._turnHtml(turn);
+        el.__aiSig = this._turnSignature(turn);
+        this._dom.chat.appendChild(el);
+        this._fillTurnExtras(el, turn);
+        this._applyOpenDetails(el);
+        return el;
+    },
+
+    /* A repaint reuses the element it already drew for this turn; content is refreshed only when
+       the stored picture actually changed, and never under the live turn (its blocks are ahead of
+       the store while it streams). */
+    _refreshTurnEl(el, turn) {
+        if (this._current && el === this._current.el) return;
+        const sig = this._turnSignature(turn);
+        if (el.__aiSig === sig) return;
+        el.__aiSig = sig;
+        el.innerHTML = this._turnHtml(turn);
+        this._fillTurnExtras(el, turn);
         this._applyOpenDetails(el);
     },
 
@@ -2664,7 +2853,7 @@ const AIWorkspace = {
        assistant's COLUMN: `.ai-message` is a role + body grid, and appending a bare card put it at
        the panel's left edge, above the next "AI" label. */
     _wrapStoredRow(el) {
-        if (!el) return;
+        if (!el) return null;
         const article = document.createElement('article');
         article.className = 'ai-message assistant ai-message-tool';
         article.innerHTML = '<div class="ai-message-role"></div><div class="ai-message-body"></div>';
@@ -2673,6 +2862,7 @@ const AIWorkspace = {
         else article.appendChild(el);
         this._dom.chat.appendChild(article);
         this._applyOpenDetails(article);
+        return article;
     },
 
     /* The element for one standalone stored row, or null when it has no rendering of its own. */
@@ -2740,11 +2930,51 @@ const AIWorkspace = {
 
     _renderStoredTool(message) {
         const node = this._storedRowNode(message);
-        if (node) this._wrapStoredRow(node);
+        if (!node) return null;
+        const article = this._wrapStoredRow(node);
+        if (article && message && message.id) {
+            article.setAttribute('data-ai-key', 'row:' + String(message.id));
+            article.setAttribute('data-ai-message', String(message.id));
+        }
+        return article;
     },
 
-    _appendQuestion(question) {
-        const current = this._ensureAssistant();
+    _appendQuestion(question, turn = null) {
+        const messageId = String(question.message_id || '');
+        /* A restored pending card belongs to the turn that ASKED it (the stored assistant row),
+           not to a fresh "AI" bubble appended after the transcript. That extra bubble was the
+           second message area a reopened chat showed. */
+        const hostEl = messageId
+            ? this._dom.chat.querySelector('[data-ai-message="' + messageId.replace(/"/g, '') + '"]')
+            : null;
+        if (!this._current || (hostEl && this._current.el !== hostEl)) {
+            if (!hostEl) {
+                this._current = this._ensureAssistant();
+            } else {
+                this._current = {
+                    el: hostEl,
+                    blocks: turn ? (turn.blocks || []).slice() : [],
+                    questions: [],
+                    answers: {},
+                    turnId: turn ? turn.turnId : '',
+                    flowEl: hostEl.querySelector('.ai-flow'),
+                    artifactsEl: hostEl.querySelector('.ai-artifacts'),
+                    usageEl: hostEl.querySelector('.ai-usage'),
+                };
+            }
+        }
+        let slot = this._current.questionEl;
+        if (!slot || !slot.parentElement) {
+            slot = hostEl ? hostEl.querySelector('.ai-question-slot') : null;
+            if (!slot) {
+                slot = document.createElement('div');
+                slot.className = 'ai-question-slot';
+                const body = (hostEl && hostEl.querySelector('.ai-message-body')) || hostEl || this._current.el;
+                body.appendChild(slot);
+            }
+            this._current.questionEl = slot;
+        }
+        this._current.conversationId = this._conversationId;
         this._current.questions = question.questions || [];
         this._current.answers = this._current.answers || {};
         this._current.questionId = question.id;
@@ -2753,6 +2983,8 @@ const AIWorkspace = {
            assistant row that asked it. The server also derives it from the question row, but
            keeping both in sync here makes the DOM state honest on its own. */
         this._current.messageId = question.message_id || this._current.messageId;
+        const cardId = String(question.id || '').replace(/"/g, '');
+        if (cardId && slot.querySelector('[data-ai-question-card="' + cardId + '"]')) return;
         this._current.questionEl.innerHTML = this._current.questions.map((item) => AIRender.questionCard(item, false)).join('');
     },
 
@@ -3076,8 +3308,12 @@ const AIWorkspace = {
            one toast, which is a better answer than a dead input. */
         if (this._dom.input) this._dom.input.disabled = false;
         this._renderToggles();
-        /* A closed turn no longer owns a conversation: the next one states its own. */
-        if (!sending) this._streamConversation = '';
+        /* A closed turn no longer owns a conversation: the next one states its own. The turn id is
+           how a repaint recognizes the bubble this stream is still appending to. */
+        if (!sending) {
+            this._streamConversation = '';
+            this._streamTurnId = '';
+        }
         /* The live line follows the same switch as the buttons: it is shown exactly while a turn is
            open. One funnel, so no ending path can leave "生成中" painted on a finished answer. */
         this._renderStatus();
@@ -3103,6 +3339,12 @@ const AIWorkspace = {
             this._current = this._ensureAssistant();
             this._current.messageId = event.message_id;
             this._current.turnId = event.turn_id;
+            this._streamTurnId = String(event.turn_id || '');
+            this._current.conversationId = this._conversationId;
+            /* The SAME identity the stored row will carry. A later reconcile matches the live
+               bubble by this key instead of building a second one for the same turn. */
+            if (event.turn_id) this._current.el.setAttribute('data-ai-key', 'turn:' + String(event.turn_id));
+            if (event.message_id) this._current.el.setAttribute('data-ai-message', String(event.message_id));
             this._current.runId = event.run_id;
             this._contextMeta = event.context || {};
             /* The server opens EVERY provider round with a meta event, and all rounds of one turn
@@ -3316,6 +3558,7 @@ const AIWorkspace = {
         this._turnEnded = false;
         /* Which conversation this turn paints into; a new chat learns it from the first `meta`. */
         this._streamConversation = this._conversationId || '';
+        this._streamTurnId = '';
         this._startClock();
     },
 
@@ -3508,6 +3751,9 @@ const AIWorkspace = {
         this._grants = [];
         this._attachments = [];
         this._mode = 'chat';
+        /* A new chat must leave whatever panel was open: the welcome hint is drawn into the
+           transcript, and a hidden transcript would look like nothing happened. */
+        this._showChat();
         this._renderWelcome();
         this._renderSessions();
         this._renderSide();
@@ -3729,7 +3975,7 @@ const AIWorkspace = {
         };
         this._mode = 'studio';
         this._studioTab = 'skills';
-        AIStudio.render(this._dom.chat, this);
+        this._renderStudio();
     },
 
     _applyPluginArtifact(id) {
@@ -3737,8 +3983,8 @@ const AIWorkspace = {
         if (!artifact) return;
         this._mode = 'studio';
         this._studioTab = 'plugins';
-        AIStudio.render(this._dom.chat, this);
-        const box = this._dom.chat.querySelector('[data-ai-plugin-manifest]');
+        this._renderStudio();
+        const box = this._dom.panel.querySelector('[data-ai-plugin-manifest]');
         if (box) box.value = JSON.stringify(artifact.payload || {}, null, 2);
     },
 
@@ -3827,7 +4073,8 @@ const AIWorkspace = {
         const key = AISettings.keyFor(this._provider);
         const models = provider.models || [];
         const capabilityRows = (provider.capabilities || []).map((cap) => '<span class="ai-chip">' + AIRender.escape(I18n.has('ai.cap.' + cap) ? I18n.t('ai.cap.' + cap) : cap) + '</span>').join('');
-        this._dom.chat.innerHTML =
+        this._showPanel();
+        this._dom.panel.innerHTML =
             '<section class="ai-settings">' +
             '<header class="ai-studio-head"><div><h2>' + AIRender.escape(I18n.t('ai.settingsTitle')) + '</h2><p class="ai-hint">' + AIRender.escape(I18n.t('ai.settingsHint')) + '</p></div><button type="button" class="ai-ghost" data-ai-studio-close="1">' + AIRender.escape(I18n.t('ai.close')) + '</button></header>' +
             '<div class="ai-field-row"><label class="ai-field"><span>' + AIRender.escape(I18n.t('ai.provider')) + '</span><select class="ai-select" data-ai-switch-provider>' +
@@ -3851,14 +4098,13 @@ const AIWorkspace = {
     },
 
     async _saveSettings() {
-        const key = this._dom.chat.querySelector('[data-ai-key]');
+        const key = this._dom.panel.querySelector('[data-ai-key]');
         if (key) AISettings.setKey(this._provider, key.value.trim());
         AISettings.setProvider(this._provider);
         AISettings.setModel(this._provider, this._model);
         this._toast(I18n.t('ai.saved'));
         await this._loadBootstrap();
-        this._mode = 'chat';
-        this._renderWelcome();
+        this._showChat(true);
     },
 
     async _refreshModels() {
@@ -3879,9 +4125,9 @@ const AIWorkspace = {
     },
 
     async _testProvider() {
-        const keyInput = this._dom.chat.querySelector('[data-ai-key]');
+        const keyInput = this._dom.panel.querySelector('[data-ai-key]');
         const key = keyInput ? keyInput.value.trim() : AISettings.keyFor(this._provider);
-        const result = this._dom.chat.querySelector('[data-ai-test-result]');
+        const result = this._dom.panel.querySelector('[data-ai-test-result]');
         if (result) result.textContent = I18n.t('ai.testing');
         try {
             const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/test', {
@@ -3925,7 +4171,7 @@ const AIWorkspace = {
            because the mode is no longer 'chat'. */
         if (!this._open) this.open({ silent: true });
         this._mode = 'studio';
-        AIStudio.render(this._dom.chat, this);
+        this._renderStudio();
         if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') {
             AIStudio.loadPython(this);
         }
@@ -3943,15 +4189,15 @@ const AIWorkspace = {
         } catch (e) {
             this._editingSkill = (this._bootstrap?.skills || []).find((item) => item.id === id) || null;
         }
-        AIStudio.render(this._dom.chat, this);
+        AIStudio.render(this._dom.panel, this);
     },
 
     async _saveSkillFromEditor() {
         const editor = this._editingSkill;
         if (!editor) return;
-        const value = (name) => this._dom.chat.querySelector('[data-ai-skill-field="' + name + '"]')?.value || '';
-        const context = Array.from(this._dom.chat.querySelectorAll('[data-ai-skill-context]:checked')).map((el) => el.getAttribute('data-ai-skill-context'));
-        const tools = Array.from(this._dom.chat.querySelectorAll('[data-ai-skill-tool]:checked')).map((el) => el.getAttribute('data-ai-skill-tool'));
+        const value = (name) => this._dom.panel.querySelector('[data-ai-skill-field="' + name + '"]')?.value || '';
+        const context = Array.from(this._dom.panel.querySelectorAll('[data-ai-skill-context]:checked')).map((el) => el.getAttribute('data-ai-skill-context'));
+        const tools = Array.from(this._dom.panel.querySelectorAll('[data-ai-skill-tool]:checked')).map((el) => el.getAttribute('data-ai-skill-tool'));
         const payload = {
             id: editor.builtin ? (editor.id || value('id')) : value('id') || editor.id,
             name: value('name'),
@@ -3962,7 +4208,7 @@ const AIWorkspace = {
             context,
             tools,
             suggested: value('suggested').split('\n').map((item) => item.trim()).filter(Boolean),
-            ask_policy: this._dom.chat.querySelector('[data-ai-skill-field="ask_policy"]')?.value || 'auto',
+            ask_policy: this._dom.panel.querySelector('[data-ai-skill-field="ask_policy"]')?.value || 'auto',
         };
         try {
             const response = await fetch('/api/ai/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -4027,7 +4273,7 @@ const AIWorkspace = {
     },
 
     async _installPlugin() {
-        const box = this._dom.chat.querySelector('[data-ai-plugin-manifest]');
+        const box = this._dom.panel.querySelector('[data-ai-plugin-manifest]');
         if (!box) return;
         let payload;
         try {

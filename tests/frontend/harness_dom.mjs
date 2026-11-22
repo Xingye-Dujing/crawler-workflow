@@ -305,6 +305,11 @@ export function makeEl(tag = 'div', id = '') {
         },
     });
     el.appendChild = (child) => {
+        /* The browser MOVES a node that is already in the tree; it never keeps a second copy.
+           This stub used to push unconditionally, so a product that re-orders its children (a
+           keyed transcript, a docked panel) looked duplicated here and only here. */
+        if (child && child.parentElement === el) return child;
+        if (child && child.parentElement && child.parentElement.removeChild) child.parentElement.removeChild(child);
         el.children.push(child);
         /* Ancestry has to be real, not faked per test: code that delegates a
            click by walking up to the nearest `.node` (which is how the canvas
@@ -324,6 +329,9 @@ export function makeEl(tag = 'div', id = '') {
     /* The dialog shell puts its close button at the TOP of the box (DOM order = visual order),
        so a stub without insertBefore made the real showClose path throw inside the harness. */
     el.insertBefore = (child, reference) => {
+        if (child && child !== reference && child.parentElement && child.parentElement.removeChild) {
+            child.parentElement.removeChild(child);
+        }
         const i = reference ? el.children.indexOf(reference) : -1;
         if (i >= 0) el.children.splice(i, 0, child);
         else el.children.push(child);

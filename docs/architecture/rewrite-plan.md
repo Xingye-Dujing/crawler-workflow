@@ -43,7 +43,7 @@
 - [x] H14 工具覆盖审计（能力矩阵 + `ai_coverage` 工具 + 门禁）
 - [ ] H15 重试 parity
 - [x] H16 stack_pct 验证（`ChartSpec.required_params` → validate 阶段命名）
-- [ ] H17/H18 视图单实例
+- [x] H17/H18 视图单实例（转录/面板两个面；按 turn_id 复用节点）
 - [ ] H19 重试气泡
 - [ ] H20 工具结果上限
 - [ ] H21 @-only 消息

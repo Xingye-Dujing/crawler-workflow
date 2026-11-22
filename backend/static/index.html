@@ -2622,7 +2622,13 @@
       <div class="ai-body">
         <aside id="ai-sessions" class="ai-sessions" data-i18n-aria-label="ai.sessions" aria-label="Conversations"></aside>
         <div class="ai-col-grip" data-ai-resize="sessions" data-i18n-aria-label="ai.resizeSessions" aria-label="Resize conversations" role="separator" tabindex="0"></div>
-        <main id="ai-chat" class="ai-chat" aria-live="polite"></main>
+        <main id="ai-chat" class="ai-chat" aria-live="polite">
+          <!-- Two surfaces, ONE column: the transcript is never destroyed by opening the settings
+               or the studio, and the panel is never appended below a message. Both occupy the same
+               grid cell, so switching hides one and shows the other. -->
+          <div id="ai-transcript" class="ai-transcript"></div>
+          <div id="ai-panel" class="ai-panel" hidden></div>
+        </main>
         <button type="button" class="ai-jump" id="ai-jump" onclick="AIWorkspace.jumpLatest()" data-i18n-aria-label="ai.jumpLatest" aria-label="Jump to the latest message" hidden>↓</button>
         <div class="ai-col-grip" data-ai-resize="side" data-i18n-aria-label="ai.resizeSide" aria-label="Resize context" role="separator" tabindex="0"></div>
         <aside id="ai-side" class="ai-side" data-i18n-aria-label="ai.side" aria-label="Context and agent trace"></aside>

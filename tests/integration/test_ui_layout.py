@@ -6396,6 +6396,142 @@ def test_a_press_outside_the_ai_workspace_gives_the_page_back(app_url, driver):
     assert outside is True, 'a press on the page left the workspace open'
 
 
+PANEL_SURFACE_JS = """
+const box = (el) => {
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return {w: Math.round(rect.width), h: Math.round(rect.height),
+            display: style.display, hidden: el.hidden === true};
+};
+const chat = document.getElementById('ai-chat');
+const transcript = document.getElementById('ai-transcript');
+const panel = document.getElementById('ai-panel');
+AIWorkspace._sending = false;
+AIWorkspace._current = null;
+AIWorkspace._conversationId = 'c-surface';
+AIWorkspace._messages = [
+    {id: 'u-surface', role: 'user', content: 'keep this question', meta: {}},
+    {id: 'a-surface', role: 'assistant', content: '',
+     blocks: [{type: 'text', text: 'the answer survives'}], meta: {turn_id: 't-surface'}, usage: {}},
+];
+AIWorkspace._renderMessages([]);
+const row = transcript.querySelector('[data-ai-message="a-surface"]');
+const before = {row: !!row, text: row ? String(row.textContent) : '',
+                transcript: box(transcript), chat: box(chat),
+                rows: transcript.querySelectorAll('.ai-message.assistant').length};
+AIWorkspace.openSettings();
+const opened = {transcript: box(transcript), panel: box(panel),
+                same: transcript.querySelector('[data-ai-message="a-surface"]') === row,
+                panelHasSettings: !!panel.querySelector('[data-ai-save-settings]'),
+                transcriptHasSettings: !!transcript.querySelector('[data-ai-save-settings]')};
+AIWorkspace._showChat();
+const rowAfter = transcript.querySelector('[data-ai-message="a-surface"]');
+const closed = {transcript: box(transcript), panel: box(panel), same: rowAfter === row,
+                text: rowAfter ? String(rowAfter.textContent) : '',
+                rows: transcript.querySelectorAll('.ai-message.assistant').length,
+                chat: box(chat)};
+return {before, opened, closed};
+"""
+
+
+def test_settings_paint_beside_the_transcript_and_give_it_back_unchanged(app_url, driver):
+    """The settings page used to be painted INTO `#ai-chat`: the answer's DOM was destroyed, so a
+    live turn kept streaming into a detached bubble and closing the panel showed nothing new.
+
+    Measured in a real browser: the transcript's own node survives the round trip, the panel takes
+    exactly the chat column's box while it is up, and one assistant row is there before and after.
+    """
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.6)
+    facts = driver.execute_script(PANEL_SURFACE_JS)
+    before, opened, closed = facts['before'], facts['opened'], facts['closed']
+    assert before['row'] and 'the answer survives' in before['text'], before
+    assert before['rows'] == 1, before
+    assert before['transcript']['w'] > 200 and before['transcript']['h'] > 100, (
+        f'the transcript box was never measured at a usable size: {before}'
+    )
+
+    assert opened['panelHasSettings'] is True, 'the settings page is not in the panel'
+    assert opened['transcriptHasSettings'] is False, 'the settings page painted over the transcript'
+    assert opened['transcript']['display'] == 'none', opened['transcript']
+    assert opened['panel']['display'] != 'none', opened['panel']
+    assert opened['panel']['w'] == before['transcript']['w'], (
+        f'the panel does not occupy the transcript box: panel={opened["panel"]} transcript={before["transcript"]}'
+    )
+    assert opened['panel']['h'] > 100, opened['panel']
+    assert opened['same'] is True, 'opening settings replaced the answer node'
+
+    assert closed['panel']['display'] == 'none', closed['panel']
+    assert closed['transcript']['display'] != 'none', closed['transcript']
+    assert closed['same'] is True, 'closing settings rebuilt the answer instead of showing it again'
+    assert 'the answer survives' in closed['text'], closed
+    assert closed['rows'] == 1, closed
+    assert closed['chat']['w'] == before['chat']['w'], (
+        f'the chat column changed width across the round trip: {before["chat"]} → {closed["chat"]}'
+    )
+    assert closed['transcript']['w'] == before['transcript']['w'], (
+        f'the transcript box changed across the round trip: {before["transcript"]} → {closed["transcript"]}'
+    )
+
+
+SWITCH_AREA_JS = """
+const transcript = document.getElementById('ai-transcript');
+const rowsA = [
+    {id: 'ua', role: 'user', content: 'A question', meta: {}},
+    {id: 'aa', role: 'assistant', content: '', blocks: [{type: 'text', text: 'A answer'}],
+     meta: {turn_id: 'ta'}, usage: {}},
+];
+const rowsB = [
+    {id: 'ub', role: 'user', content: 'B question', meta: {}},
+    {id: 'ab', role: 'assistant', content: '', blocks: [{type: 'text', text: 'B answer'}],
+     meta: {turn_id: 'tb'}, usage: {}},
+];
+AIWorkspace._sending = false;
+AIWorkspace._current = null;
+AIWorkspace._conversationId = 'A';
+AIWorkspace._messages = rowsA;
+AIWorkspace._renderMessages([]);
+const first = transcript.querySelector('[data-ai-message="aa"]');
+AIWorkspace._renderMessages([]);
+const reused = transcript.querySelector('[data-ai-message="aa"]') === first;
+AIWorkspace._conversationId = 'B';
+AIWorkspace._messages = rowsB;
+AIWorkspace._renderMessages([]);
+const b = {bubbles: transcript.querySelectorAll('.ai-message.assistant').length,
+           leak: !!transcript.querySelector('[data-ai-message="aa"]')};
+AIWorkspace._conversationId = 'A';
+AIWorkspace._messages = rowsA;
+AIWorkspace._renderMessages([]);
+return {reused, b, a: {bubbles: transcript.querySelectorAll('.ai-message.assistant').length,
+                       rows: transcript.querySelectorAll('.ai-message').length,
+                       text: String(transcript.textContent || '')}};
+"""
+
+
+def test_switching_conversations_keeps_one_message_area(app_url, driver):
+    """A→B→A drew a second area for the same turn: the transcript was rebuilt from the store into
+    the column a live bubble also held. Measured here in the real DOM — a repaint of the same
+    conversation reuses its node, A leaves with B, and A comes back with exactly one turn."""
+    _set_viewport(driver, 1280, 800)
+    _load_app(driver, app_url)
+    _kill_animations(driver)
+    driver.execute_script(AI_BOOTSTRAP_STUB, [])
+    driver.execute_script('AIWorkspace.open({silent: true});')
+    time.sleep(0.6)
+    facts = driver.execute_script(SWITCH_AREA_JS)
+    assert facts['reused'] is True, 'a repaint of the same conversation replaced its node'
+    assert facts['b']['bubbles'] == 1, facts['b']
+    assert facts['b']['leak'] is False, 'conversation A stayed painted while B was shown'
+    assert facts['a']['bubbles'] == 1, facts['a']
+    assert facts['a']['rows'] == 2, facts['a']
+    assert 'A answer' in facts['a']['text'], facts['a']
+
+
 def test_a_press_inside_a_dropdown_the_workspace_opened_keeps_it_open(app_url, driver):
     """The select popups are painted into <body>, so a DOM-level "outside" test closed the panel
     while the user was picking a skill or a provider."""

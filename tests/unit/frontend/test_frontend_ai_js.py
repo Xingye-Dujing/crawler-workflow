@@ -192,6 +192,48 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['detached'] == 0, 'a standalone tool row appeared beside the bubble'
         assert out['details'] == 1, 'the stored card lost its result, so it could not be opened'
 
+    def test_settings_paint_beside_the_transcript_and_give_it_back(self):
+        """The settings page used to be painted INTO `#ai-chat`, destroying the answer: closing it
+        rebuilt the list, and a live turn kept streaming into a detached bubble."""
+        out = _run_workspace()['panelSurface']
+        assert out['settingsInPanel'] is True, 'the settings page is not in the panel'
+        assert out['settingsNotInTranscript'] is True, 'the settings page painted over the transcript'
+        assert out['settingsVisible'] is True, out
+        assert out['sameAfterOpen'] is True, 'opening settings replaced the answer node'
+        assert out['sameAfterClose'] is True, 'closing settings rebuilt the answer instead of showing it'
+        assert out['transcriptVisible'] is True, out
+        assert out['assistants'] == 1, out
+
+    def test_a_restored_pending_question_binds_to_the_turn_that_asked_it(self):
+        """A pending card appended its own "AI" bubble: that was the second message area a reopened
+        chat showed. It belongs under the turn whose stored row asked the question."""
+        out = _run_workspace()['panelSurface']
+        assert out['pendingCard'] is True, 'the pending question card was not drawn'
+        assert out['pendingInsideTurn'] is True, 'the card sits outside the turn that asked it'
+        assert out['pendingBubbles'] == 1, out
+
+    def test_switching_conversations_keeps_one_message_area_and_reuses_the_nodes(self):
+        """A→B→A must leave one message area per conversation, and a repaint of the same
+        conversation must reuse the node it already drew instead of rebuilding the list."""
+        out = _run_workspace()['switchConversation']
+        assert out['aBubbles'] == 1, out
+        assert out['bBubbles'] == 1, out
+        assert out['bLeak'] is False, 'conversation A stayed painted while B was selected'
+        assert out['totalMessages'] == 2, out
+        assert out['aReused'] is True, 'a repaint of the same conversation rebuilt its nodes'
+        assert 'A answer' in out['aHtml'], out
+
+    def test_a_streaming_turn_is_not_duplicated_by_a_repaint_or_a_return(self):
+        """The live bubble is keyed by its turn id: a repaint keeps the SAME element, and coming
+        back from another conversation adopts the stored turn element so the next delta paints
+        into it instead of appending a second area."""
+        out = _run_workspace()['liveTurn']
+        assert out['afterRepaint'] == 1, out
+        assert out['sameLive'] is True, 'a repaint replaced the live bubble instead of reusing it'
+        assert out['returned'] == 1, out
+        assert out['bubbles'] == 1, 'returning to a streaming turn drew a second message area'
+        assert 'first' in out['html'] and 'third' in out['html'], out
+
     def test_controls_outside_the_transcript_reach_the_delegated_handler(self):
         out = _run_workspace()['delegated']
         assert out['sessionRowFound'] and out['disarmRowFound'] and out['refreshRowFound']

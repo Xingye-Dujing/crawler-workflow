@@ -298,6 +298,26 @@
 }
 .ai-chat {
   grid-column: 2;
+  /* The transcript and the settings/studio panel share this cell: switching modes hides one and
+     shows the other, so the column never changes geometry and no transcript is thrown away. */
+  display: grid;
+  grid-template:
+    minmax(0, 1fr)
+    / minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+.ai-transcript,
+.ai-panel {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scroll-behavior: smooth;
+}
+.ai-transcript[hidden],
+.ai-panel[hidden] {
+  display: none;
 }
 .ai-side {
   grid-column: 3;
@@ -536,9 +556,8 @@
 }
 .ai-chat {
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 16px 18px 8px;
-  scroll-behavior: smooth;
 }
 .ai-welcome {
   max-width: 620px;
@@ -1596,7 +1615,8 @@
     animation: none;
     transition: none;
   }
-  .ai-chat {
+  .ai-transcript,
+  .ai-panel {
     scroll-behavior: auto;
   }
 }
