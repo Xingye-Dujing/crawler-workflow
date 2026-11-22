@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`109cb3d 功能更新：节点目录单一来源，前端删除类型与默认值字面表`
+- 最后提交：`d72b0a62 功能更新：运行前校验统一走服务端，删除前端规则副本`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -43,6 +43,7 @@
 | `6ce014e` | 第二轮死代码清理：移除 15 个 executor 的 `NODE_TYPE`、无调用函数/方法/常量/helper（AST 扫描逐项确认） |
 | `cd6cdc2` | P2 第七批：source 迁移；`_source_errors`/watermark 检查搬入 executor，`session_errors` 删除 |
 | `109cb3d` | P2 前端第一片：`/api/node-types` 与生成的 `node-types-fallback.js` 同源；canvas 删除类型/标签/默认值字面表 |
+| `d72b0a62` | P2 前端第二片：`/api/workflow/validate` 成为唯一运行门；删除 `runs.js` 校验 if 链与 `sourceNodeErrors` |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
