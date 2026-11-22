@@ -19,7 +19,7 @@ from capabilities_kernel.manifest import KINDS
 ROOT = Path(__file__).resolve().parents[2]
 
 #: One row per dimension the doctor can answer live.
-CHECKS = ('structure', 'executor', 'port_hooks', 'docs', 'contracts', 'artifacts')
+CHECKS = ('structure', 'executor', 'port_hooks', 'validators', 'docs', 'contracts', 'artifacts')
 
 
 def _row(name: str, ok: bool, detail: str = '') -> dict:
@@ -53,6 +53,15 @@ def capability_rows(manifest, root: Path = ROOT) -> list[dict]:
         except Exception as exc:
             bad_hooks.append(f'{reference}: {exc}')
     rows.append(_row('port_hooks', not bad_hooks, '; '.join(bad_hooks)))
+
+    bad_validators = []
+    for reference in manifest.validators:
+        try:
+            if not callable(registry.resolve(reference)):
+                bad_validators.append(f'{reference} is not callable')
+        except Exception as exc:
+            bad_validators.append(f'{reference}: {exc}')
+    rows.append(_row('validators', not bad_validators, '; '.join(bad_validators)))
 
     page = manifest.docs.page
     page_ok = bool(page) and (root / page).is_file()

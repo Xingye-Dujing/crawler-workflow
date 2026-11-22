@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 import capabilities.registry as capabilities
 from capabilities_kernel.registry import manifest_for_node
 from core.refs import as_bool, platform_for, split_urls
-from nodes.catalog import NODE_TYPES, PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
+from nodes.catalog import NODE_TYPES, TABLE_NODE_TYPES
 from nodes.labels import node_label
 from runtime import paths
 from sessions import preflight
@@ -18,7 +18,7 @@ from services.biblio.fuse import collect_errors as fuse_param_errors
 from services.biblio.schema import collect_errors as biblio_param_errors
 from services.charts.contracts import NO_X_TYPES
 from services.pool import selector
-from services.validation.engine import static_problems
+from services.validation.engine import ValidationContext, validation_problems
 
 logger = logging.getLogger(__name__)
 
@@ -505,8 +505,6 @@ class WorkflowEngine:
                         add(nid, 'engine.watermarkUnsupported', t('engine.watermarkUnsupported', nid=label))
                     if as_bool(params.get('recrawl')):
                         add(nid, 'engine.watermarkRecrawl', t('engine.watermarkRecrawl', nid=label))
-            if ntype == 'upload' and not params.get('dataset_id'):
-                add(nid, 'engine.upload_no_file', t('engine.upload_no_file', nid=label))
             if ntype == 'accumulate':
                 parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
                 name = str(params.get('lineage_name') or '').strip()
@@ -553,59 +551,6 @@ class WorkflowEngine:
             operation = node.get('operation') or params.get('operation')
             if ntype == 'process' and not operation:
                 add(nid, 'engine.process_no_op', t('engine.process_no_op', nid=label))
-            if ntype == 'output' and not operation:
-                add(nid, 'engine.output_no_op', t('engine.output_no_op', nid=label))
-            if ntype == 'compile':
-                # A compile node turns a visualize parent's LaTeX into a PDF. Its ONLY honest source is a
-                # visualize node that will actually emit some: every parent must be a visualize, and each one
-                # must have at least one LaTeX box on — a both-off chart gives the compiler nothing, which is
-                # checked here (before the run is paid for) rather than surfacing as an empty-page PDF.
-                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
-                if not parents:
-                    add(nid, 'engine.compile_no_upstream', t('engine.compile_no_upstream', nid=label))
-                for pid in parents:
-                    pnode = self.nodes.get(pid) or {}
-                    if pnode.get('type') != 'visualize':
-                        add(
-                            nid,
-                            'engine.compile_bad_parent',
-                            t('engine.compile_bad_parent', nid=label, up=node_label(pnode, pid)),
-                        )
-                    elif not (
-                        as_bool((pnode.get('params') or {}).get('emit_latex', True))
-                        or as_bool((pnode.get('params') or {}).get('emit_latex_table', True))
-                    ):
-                        add(
-                            nid,
-                            'engine.compile_source_both_off',
-                            t('engine.compile_source_both_off', nid=label, up=node_label(pnode, pid)),
-                        )
-            if ntype == 'output':
-                # A save node is the canvas's merge point: several incoming tables become one file. Two
-                # shapes are legitimate and mutually exclusive — a TABULAR export (merged row tables), and a
-                # PDF export (a visualize/compile parent's LaTeX). Both halves of "nothing to save here"
-                # once passed silently (no wire at all; a chart wired to a csv save), so each format is
-                # checked against the parent types it can actually consume.
-                parents = [str(c.get('from')) for c in self.connections if str(c.get('to')) == str(nid)]
-                ptypes = {(self.nodes.get(pid) or {}).get('type') for pid in parents}
-                is_pdf = operation in ('save', 'save_csv') and (
-                    str(params.get('format') or '').lower() == 'pdf'
-                    or str(params.get('filename') or '').lower().endswith('.pdf')
-                )
-                if not parents:
-                    add(nid, 'engine.output_no_upstream', t('engine.output_no_upstream', nid=label))
-                elif is_pdf:
-                    if ptypes & TABLE_NODE_TYPES:
-                        add(nid, 'engine.output_pdf_mixed', t('engine.output_pdf_mixed', nid=label))
-                    if not (ptypes & PDF_SOURCE_NODE_TYPES):
-                        add(nid, 'engine.output_pdf_only_pdfable', t('engine.output_pdf_only_pdfable', nid=label))
-                    if 'visualize' in ptypes and 'compile' in ptypes:
-                        add(nid, 'engine.output_pdf_two_sources', t('engine.output_pdf_two_sources', nid=label))
-                elif not (ptypes & TABLE_NODE_TYPES):
-                    if ptypes & PDF_SOURCE_NODE_TYPES:
-                        add(nid, 'engine.output_needs_pdf', t('engine.output_needs_pdf', nid=label))
-                    else:
-                        add(nid, 'engine.output_no_table', t('engine.output_no_table', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
             if ntype == 'verify':
@@ -655,7 +600,14 @@ class WorkflowEngine:
             # error today.
             manifest = manifest_for_node(ntype)
             if manifest is not None:
-                for problem in static_problems(manifest, node, has_input=nid in data_inputs):
+                context = ValidationContext(
+                    node_id=str(nid),
+                    label=label,
+                    nodes=self.nodes,
+                    connections=self.connections,
+                    data_inputs=frozenset(data_inputs),
+                )
+                for problem in validation_problems(manifest, node, context):
                     if problem['severity'] != 'error':
                         continue
                     add(
@@ -689,17 +641,6 @@ class WorkflowEngine:
                                 'engine.chart_field_missing',
                                 t('engine.chart_field_missing', nid=label, chart=chart_type, field=field),
                             )
-            if ntype == 'name':
-                # The name node is pure metadata: it carries no data, so it
-                # must sit at the head (nothing feeds into it), wire into a
-                # real node, and carry a non-empty label — that label is what
-                # groups the run in the Execution History panel.
-                if not str(params.get('workflow_name') or '').strip():
-                    add(nid, 'engine.name_no_label', t('engine.name_no_label', nid=label))
-                if any(c.get('to') == nid for c in self.connections):
-                    add(nid, 'engine.name_not_head', t('engine.name_not_head', nid=label))
-                if not any(c.get('from') == nid for c in self.connections):
-                    add(nid, 'engine.name_no_downstream', t('engine.name_no_downstream', nid=label))
         try:
             self.topological_sort()
         except ValueError as e:

@@ -16,8 +16,6 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 #: Which types have static defaults. ``source`` and ``reusable`` are the documented exceptions:
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
 _DECLARED: dict[str, dict] = {
-    'name': {'workflow_name': '', 'layout_order': ''},
-    'upload': {'dataset_id': '', 'dataset_name': '', 'row_count': ''},
     'accumulate': {'lineage_name': '', 'identity': 'row', 'key_columns': ''},
     'process': {'operation': 'clean', 'text_column': '正文', 'topic': '', 'live_export': False, 'format': 'csv'},
     # 扩展: `script_id` names a row in services.python_scripts; `args` is a JSON object the script
@@ -83,8 +81,6 @@ _DECLARED: dict[str, dict] = {
         'recrawl': False,
         'format': 'csv',
     },
-    'compile': {},
-    'output': {'operation': 'save', 'format': 'csv', 'filename': 'export.csv'},
 }
 
 

@@ -56,6 +56,12 @@ class TestAFailureIsNamed:
         assert rows['docs']['ok'] is False and 'gone.md' in rows['docs']['detail']
         assert rows['contracts']['ok'] is False and 'gone.py' in rows['contracts']['detail']
 
+    def test_a_broken_validator_fails_its_row(self):
+        broken = replace(_manifest(), validators=('moonbase.validate:check',))
+        rows = {row['name']: row for row in doctor.capability_rows(broken)}
+        assert rows['validators']['ok'] is False
+        assert 'moonbase' in rows['validators']['detail']
+
     def test_an_unknown_filter_is_a_failed_row_not_an_empty_green_report(self):
         rows = doctor.check_all(['node:moonbase'])
         assert [(row['capability'], row['ok']) for row in rows] == [('node:moonbase', False)]

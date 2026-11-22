@@ -51,6 +51,10 @@ class TestAManifestIsWhole:
             if reference:
                 assert callable(registry.resolve(reference)), reference
 
+    def test_the_declared_validators_resolve(self, manifest):
+        for reference in manifest.validators:
+            assert callable(registry.resolve(reference)), reference
+
     def test_the_documented_page_and_contract_tests_exist(self, manifest):
         if manifest.docs.page:
             assert (REPO / manifest.docs.page).is_file(), manifest.docs.page

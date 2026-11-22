@@ -66,7 +66,8 @@ def test_the_engine_reads_the_same_sets():
 
     assert workflow.NODE_TYPES == catalog.NODE_TYPES
     assert workflow.TABLE_NODE_TYPES == catalog.TABLE_NODE_TYPES
-    assert workflow.PDF_SOURCE_NODE_TYPES == catalog.PDF_SOURCE_NODE_TYPES
+    # PDF_SOURCE_NODE_TYPES moved with the save/compile validation into the capabilities' own
+    # validators; the engine no longer branches on it, so pinning it here would be a stale promise.
 
 
 def test_the_frontend_paste_guard_lists_the_same_types():

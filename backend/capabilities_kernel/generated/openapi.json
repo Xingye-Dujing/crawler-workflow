@@ -86,6 +86,44 @@
           }
         }
       },
+      "NodeParams.name": {
+        "type": "object",
+        "properties": {
+          "workflow_name": {
+            "type": "string",
+            "default": ""
+          },
+          "layout_order": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "workflow_name"
+        ]
+      },
+      "NodeParams.upload": {
+        "type": "object",
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "default": ""
+          },
+          "dataset_name": {
+            "type": "string",
+            "default": ""
+          },
+          "row_count": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "dataset_id"
+        ]
+      },
       "NodeParams.tokenize": {
         "type": "object",
         "properties": {
@@ -111,6 +149,29 @@
         "required": [
           "text_column"
         ]
+      },
+      "NodeParams.compile": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "NodeParams.output": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "save"
+          },
+          "format": {
+            "type": "string",
+            "default": "csv"
+          },
+          "filename": {
+            "type": "string",
+            "default": "export.csv"
+          }
+        },
+        "additionalProperties": true
       }
     }
   }

@@ -38,7 +38,7 @@ _PARAM_TYPES = ('string', 'integer', 'number', 'boolean', 'object', 'array')
 #: box that silently replaces the control the author meant.
 WIDGETS = ('text', 'textarea', 'number', 'select', 'switch', 'column', 'dataset', 'json')
 
-_RULE_KINDS = ('required_param', 'enum_param', 'upstream_required')
+_RULE_KINDS = ('required_param', 'enum_param', 'upstream_required', 'no_input', 'requires_output')
 _SEVERITIES = ('error', 'warning')
 _UI_FORMS = ('schema', 'custom')
 
@@ -176,6 +176,10 @@ class Manifest:
     ports: Ports = field(default_factory=Ports)
     execution: Execution = field(default_factory=Execution)
     rules: tuple[Rule, ...] = ()
+    #: Node-specific checks a rule cannot express (parent shapes, an operation carried on the node
+    #: itself). Each is ``module:function`` returning ``[{code, message_key, context?, severity?}]``;
+    #: the function lives with the capability, never in the shared validator.
+    validators: tuple[str, ...] = ()
     ui: Ui = field(default_factory=Ui)
     ai: Ai = field(default_factory=Ai)
     tests: Tests = field(default_factory=Tests)
@@ -267,6 +271,12 @@ class Manifest:
                     found.append(f'rules.{rule.code}: param {rule.param!r} is not declared')
                 elif rule.kind == 'enum_param' and not self.param(rule.param).enum:
                     found.append(f'rules.{rule.code}: enum_param names a param with no enum')
+
+        for reference in self.validators:
+            if not str(reference or '').strip():
+                found.append('validators: empty reference')
+            elif ':' not in reference:
+                found.append(f'validators: {reference!r} is not module:function')
 
         if self.ui.form not in _UI_FORMS:
             found.append(f'ui.form: {self.ui.form!r} is not one of {", ".join(_UI_FORMS)}')

@@ -36,7 +36,7 @@ GENERATED = 'backend/capabilities_kernel/generated'
 
 #: What a capability's generated test-matrix row enumerates. The gate reads the matrix; ``doctor``
 #: computes the same dimensions live.
-MATRIX_CHECKS = ('structure', 'executor', 'port_hooks', 'docs', 'contracts', 'title_keys')
+MATRIX_CHECKS = ('structure', 'executor', 'port_hooks', 'validators', 'docs', 'contracts', 'title_keys')
 
 #: Artifact path → renderer name. A new artifact is one entry plus one function.
 OUTPUTS = {

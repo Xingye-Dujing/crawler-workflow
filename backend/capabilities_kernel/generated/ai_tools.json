@@ -3,6 +3,96 @@
   "generated_by": "tools/gen_capabilities.py",
   "tools": [
     {
+      "capability": "node:name",
+      "tool": "",
+      "summary": "工作流命名 is pure metadata: it names the run and must feed a real node.",
+      "steps": [
+        "Put 工作流命名 at the head of the canvas (no incoming wire).",
+        "Type the run name; a blank name is refused before the run and in history grouping.",
+        "Wire it into the node whose work the name describes."
+      ],
+      "examples": [
+        {
+          "type": "name",
+          "params": {
+            "workflow_name": "知乎评论 · 10 月",
+            "layout_order": ""
+          }
+        }
+      ],
+      "failures": [
+        "Blank workflow_name: refused with engine.name_no_label.",
+        "An incoming wire: refused with engine.name_not_head.",
+        "No outgoing wire: refused with engine.name_no_downstream."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "workflow_name": {
+            "type": "string",
+            "default": ""
+          },
+          "layout_order": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "workflow_name"
+        ]
+      },
+      "emit_columns": "nodes.executors.name:emit_columns",
+      "read_columns": ""
+    },
+    {
+      "capability": "node:upload",
+      "tool": "",
+      "summary": "文件上传 turns one stored dataset into the same row table a crawl produces. Downstream nodes never know the difference; the dataset id is the binding.",
+      "steps": [
+        "Upload or paste a file in the data panel and note its dataset id.",
+        "Create 文件上传 and pick the dataset.",
+        "Wire it into 清洗/分词/分析 as if it were a crawl."
+      ],
+      "examples": [
+        {
+          "type": "upload",
+          "params": {
+            "dataset_id": "ds_123",
+            "dataset_name": "comments.csv",
+            "row_count": ""
+          }
+        }
+      ],
+      "failures": [
+        "No dataset_id: refused with engine.upload_no_file before the run.",
+        "The dataset was deleted and no name/row-count replacement exists: the executor refuses instead of returning []."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "default": ""
+          },
+          "dataset_name": {
+            "type": "string",
+            "default": ""
+          },
+          "row_count": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "dataset_id"
+        ]
+      },
+      "emit_columns": "nodes.executors.upload:emit_columns",
+      "read_columns": ""
+    },
+    {
       "capability": "node:tokenize",
       "tool": "",
       "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",
@@ -54,6 +144,81 @@
       },
       "emit_columns": "nodes.executors.tokenize:emit_columns",
       "read_columns": "nodes.executors.tokenize:read_columns"
+    },
+    {
+      "capability": "node:compile",
+      "tool": "",
+      "summary": "PDF 编译 collects the LaTeX emitted by visualize parents and compiles one document. It reads parent artifacts, not rows, and refuses an empty source instead of producing a blank PDF.",
+      "steps": [
+        "Turn on 输出 LaTeX and/or LaTeX 表格 on every visualize parent.",
+        "Wire those visualize nodes into PDF 编译.",
+        "Wire the compile node into 保存 when the PDF needs a user-chosen filename."
+      ],
+      "examples": [
+        {
+          "type": "compile",
+          "params": {}
+        }
+      ],
+      "failures": [
+        "No parent: engine.compile_no_upstream.",
+        "A parent is not a visualize node: engine.compile_bad_parent names it.",
+        "A visualize parent has both LaTeX boxes off: engine.compile_source_both_off names it."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "node:output",
+      "tool": "",
+      "summary": "保存 merges every incoming table into one file, or saves a PDF from visualize/compile parents. Column sets must match; the executor refuses a merge rather than exporting only the first table.",
+      "steps": [
+        "Wire one or more table producers into 保存 for a tabular export.",
+        "For a PDF, choose format=pdf (or a .pdf filename) and wire visualize/compile parents only.",
+        "Set the filename; the exporter appends the format extension when it is missing."
+      ],
+      "examples": [
+        {
+          "type": "output",
+          "params": {
+            "operation": "save",
+            "format": "csv",
+            "filename": "comments.csv"
+          }
+        }
+      ],
+      "failures": [
+        "No parent: engine.output_no_upstream.",
+        "A PDF save mixed with table parents: engine.output_pdf_mixed.",
+        "A PDF save with no visualize/compile parent: engine.output_pdf_only_pdfable.",
+        "Both a visualize and a compile PDF source: engine.output_pdf_two_sources.",
+        "A table save fed only by a PDF source: engine.output_needs_pdf."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "save"
+          },
+          "format": {
+            "type": "string",
+            "default": "csv"
+          },
+          "filename": {
+            "type": "string",
+            "default": "export.csv"
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
     }
   ]
 }

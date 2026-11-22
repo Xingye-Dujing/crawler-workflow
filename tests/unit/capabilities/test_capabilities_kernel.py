@@ -33,7 +33,13 @@ def _tokenize():
 
 class TestDiscovery:
     def test_the_pilot_is_discovered_without_a_second_list(self):
-        assert [manifest.identity.id for manifest in registry.manifests('node')] == ['tokenize']
+        assert [manifest.identity.id for manifest in registry.manifests('node')] == [
+            'name',
+            'upload',
+            'tokenize',
+            'compile',
+            'output',
+        ]
 
     def test_an_unknown_kind_is_refused_by_name(self):
         with pytest.raises(registry.ManifestError, match='unknown capability kind'):

@@ -73,6 +73,7 @@ ZH = {
     'engine.source_unknown_platform': '节点 {nid}：{platform} 还没有可用的采集实现，请改用已支持的平台',
     'engine.tokenize_no_column': '节点 {nid}：分词节点缺少文本列',
     'engine.unknown_node_type': '节点 {nid}：未知的节点类型“{type}”，工作流引擎无法执行它',
+    'engine.validator_failed': '节点 {nid} 的验证器 {ref} 失败：{err}',
     'engine.upload_no_file': '节点 {nid}：上传节点还没有选择文件',
     # 采集校验 needs exactly two DATA tables: the first wire is the list, the second the
     # result. A name node carries no rows and never occupies a role, so it is not counted.
@@ -541,6 +542,7 @@ EN = {
     'engine.source_unknown_platform': 'Node {nid}: {platform} has no crawler yet — pick a supported platform',
     'engine.tokenize_no_column': 'Node {nid}: tokenize node is missing its text column',
     'engine.unknown_node_type': 'Node {nid}: unknown node type "{type}", the workflow engine cannot execute it',
+    'engine.validator_failed': 'Node {nid}: validator {ref} failed: {err}',
     'engine.upload_no_file': 'Node {nid}: upload node has no file selected',
     'engine.verify_need_list_col': 'Node {nid}: the audit has no list column to compare (default 链接)',
     'engine.verify_need_result_col': (

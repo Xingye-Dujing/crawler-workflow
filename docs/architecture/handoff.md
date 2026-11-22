@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`afc7d34 功能更新：迁移开关与数据资产骨架`
+- 最后提交：`cb34dce 修改：补交能力生成器与 doctor 命令`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -33,6 +33,7 @@
 | `55329a7` | P1 第二片：`tools/gen_capabilities.py` 五类产物、`tools/doctor.py`、生成物 freshness gate |
 | `ef5b789` | P1 第三片：`runtime/fsm.py` 四张状态机表 + recipe 工厂；`runtime/events.py` 字段契约 + AST 调用点 census |
 | `afc7d34` | P1 第四片：`runtime/flags.py` 迁移开关与到期门禁；`core/asset.py` 的 `DataAsset` 骨架 |
+| `7a5f660` | 生成的前端目录从 `static/js` 移到 `generated/capability-schema.json`（全量快测的前端门禁拒绝无人加载的模块） |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -69,6 +70,26 @@
   tests pylint 10.00/10；`test_boot_import_budget` 9 passed。
 - P1 清单已全部落地；下一步进入 P2（15 个节点迁移 + schema 表单 + 删除前端第二套规则）。
 
+## P2 第一批：name / upload / tokenize / compile / output（2026-11-22）
+
+- manifest 验证段扩展：`Rule` 新增 `no_input`/`requires_output`；`Manifest.validators` 指向能力目录自己的
+  `module:function`。`services/validation/engine.py` 新增 `ValidationContext`（父节点、连线、标签、数据输入），
+  并同时求值声明规则与 validators。
+- 迁移：`name`（头部/命名/下游三条规则）、`upload`（dataset_id 必填 + 数据集列钩子）、`compile`/`output`
+  （父节点形状检查移到 executor 的 `validate_node`）、`tokenize` 保持。`engine/workflow.py` 删掉这五个节点的
+  验证 if 分支；`nodes/catalog.py` / `nodes/defaults.py` 的字面表只剩 11 个未迁移节点（顺序与槽位不变）。
+- 失败语义：validator 抛错、返回非 list、缺 code/message_key、非法 severity/context 都变成
+  `engine.validator_failed` 并有 zh/en 文案；`/api/workflow/diagnostics` 不 500，其他徽章仍显示。
+- 门禁：completeness gate/doctor 增加 validators 可解析；生成物矩阵增加 `validators` 检查项。
+- 测试：`tests/unit/capabilities/test_{name,upload,compile,output}_manifest.py`、
+  `test_validation_engine.py`；`tests/unit/analysis/test_node_plugins.py` 不再把 `PDF_SOURCE_NODE_TYPES`
+  钉在 engine 上（它已随保存/编译的校验移入能力目录）。
+- 本片验证：相关用例 `245 passed`（capabilities + node plugins/schema + workflow/node-types API）、
+  `1262 passed`（workflow API + runs/charts/biblio/frontend node-types + capabilities）；ruff 全绿；
+  product pylint 10.00/10、tests pylint 10.00/10；生成物 `--check` 通过、doctor 全绿。
+- 未做（P2 后续）：`source`/`resume`/`comment`/`process`/`python`/`analysis`/`biblio`/`verify`/`fuse`/
+  `accumulate`/`visualize` 的清单；schema 表单渲染器；删除 `canvas.js`/`runs.js` 的第二套规则；executor 搬进能力目录。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
@@ -90,8 +111,8 @@
 
 ## 下一步（按顺序）
 
-1. **P2 节点内核全量**：15 个节点逐个迁移到 `capabilities_kernel/nodes/<id>/manifest.py`；schema 表单渲染器与
-   custom renderer 注册表；删除 `canvas.js` 的类型/默认参数/表单分派与 `runs.js` 的验证 if 链。
+1. **P2 续**：迁移其余 11 个节点（先 `process`/`python`/`resume`，再 `analysis`/`biblio`/`fuse`/`accumulate`/`verify`，
+   最后 `source`/`comment`/`visualize`）；然后 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

@@ -26,6 +26,6 @@
 
 ## 状态
 
-- 当前阶段：**P1 内核骨架**（`tokenize` pilot 已完成；生成器/doctor/FSM/events 待后续切片）
+- 当前阶段：**P2 节点内核全量**（P1 内核骨架已完成：manifest/registry/generator/doctor/FSM/events/flags/Asset）
 - 已确认的 10 个方向决策见 [rewrite-plan.md](rewrite-plan.md#已确认的决策)
 - 一个勾选项只有在“代码 + 测试 + 文档/技能 + 门禁 + 收口”全部通过后才能打勾

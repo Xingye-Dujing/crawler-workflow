@@ -14,15 +14,44 @@ nodes node-1, node-2… — so a second run silently replaced the file the first
 
 import contextlib
 
-from core.refs import sanitize_filename
+from core.refs import as_bool, sanitize_filename
 from runtime import paths
 from runtime.state import add_log
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.context import NodeCall, node_params
 from services.charts import pdf
 
 NODE_TYPE = 'compile'
+
+
+def validate_node(_node: dict, context) -> list[dict]:
+    """Every parent must be a visualize that will actually emit LaTeX; named before the run."""
+    problems: list[dict] = []
+    parents = context.parent_ids()
+    if not parents:
+        return [{'code': 'engine.compile_no_upstream', 'message_key': 'engine.compile_no_upstream'}]
+    for pid in parents:
+        parent = context.node(pid)
+        if parent.get('type') != 'visualize':
+            problems.append(
+                {
+                    'code': 'engine.compile_bad_parent',
+                    'message_key': 'engine.compile_bad_parent',
+                    'context': {'up': context.label_of(pid)},
+                },
+            )
+            continue
+        params = node_params(parent)
+        if not (as_bool(params.get('emit_latex', True)) or as_bool(params.get('emit_latex_table', True))):
+            problems.append(
+                {
+                    'code': 'engine.compile_source_both_off',
+                    'message_key': 'engine.compile_source_both_off',
+                    'context': {'up': context.label_of(pid)},
+                },
+            )
+    return problems
 
 
 def execute_compile_node(node: dict, _current_input: list, upstream: list = None, ctx: dict = None):

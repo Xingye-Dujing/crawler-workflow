@@ -17,7 +17,8 @@ from runtime import paths
 from runtime.state import _wf_local, add_log
 
 from i18n import t
-from nodes.context import NodeCall
+from nodes.catalog import PDF_SOURCE_NODE_TYPES, TABLE_NODE_TYPES
+from nodes.context import NodeCall, node_params
 from nodes.labels import node_label, parent_label
 from services.charts import pdf
 from services.exports.writer import DataExporter, UnsupportedFormatError
@@ -25,6 +26,35 @@ from services.runs.files import record_file
 from services.runs.windows import window_for_save
 
 NODE_TYPE = 'output'
+
+
+def validate_node(node: dict, context) -> list[dict]:
+    """The two legitimate save shapes — merged rows and a PDF artifact — checked before a run."""
+    params = node_params(node)
+    problems: list[dict] = []
+    operation = str(node.get('operation') or params.get('operation') or '')
+    if not operation:
+        problems.append({'code': 'engine.output_no_op', 'message_key': 'engine.output_no_op'})
+    parents = context.parent_ids()
+    ptypes = {context.node(pid).get('type') for pid in parents}
+    is_pdf = operation in ('save', 'save_csv') and (
+        str(params.get('format') or '').lower() == 'pdf' or str(params.get('filename') or '').lower().endswith('.pdf')
+    )
+    if not parents:
+        problems.append({'code': 'engine.output_no_upstream', 'message_key': 'engine.output_no_upstream'})
+    elif is_pdf:
+        if ptypes & TABLE_NODE_TYPES:
+            problems.append({'code': 'engine.output_pdf_mixed', 'message_key': 'engine.output_pdf_mixed'})
+        if not (ptypes & PDF_SOURCE_NODE_TYPES):
+            problems.append(
+                {'code': 'engine.output_pdf_only_pdfable', 'message_key': 'engine.output_pdf_only_pdfable'},
+            )
+        if 'visualize' in ptypes and 'compile' in ptypes:
+            problems.append({'code': 'engine.output_pdf_two_sources', 'message_key': 'engine.output_pdf_two_sources'})
+    elif not (ptypes & TABLE_NODE_TYPES):
+        code = 'engine.output_needs_pdf' if ptypes & PDF_SOURCE_NODE_TYPES else 'engine.output_no_table'
+        problems.append({'code': code, 'message_key': code})
+    return problems
 
 
 def merge_upstream_tables(

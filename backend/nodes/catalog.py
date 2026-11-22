@@ -52,9 +52,7 @@ class NodePlugin:
 #: Types still declared the old way. ``tokenize`` moved to
 #: ``capabilities_kernel/nodes/tokenize/manifest.py`` as the pilot; the rest follow in P2.
 _DECLARED: dict[str, NodePlugin] = {
-    'name': NodePlugin('name', 'nodeType.name', 'meta', rows='none', quiet=True),
     'source': NodePlugin('source', 'nodeType.source', 'data'),
-    'upload': NodePlugin('upload', 'nodeType.upload', 'data', quiet=True),
     'resume': NodePlugin('resume', 'nodeType.resume', 'data'),
     'comment': NodePlugin('comment', 'nodeType.comment', 'data'),
     'process': NodePlugin('process', 'nodeType.process', 'process'),
@@ -69,8 +67,6 @@ _DECLARED: dict[str, NodePlugin] = {
     'fuse': NodePlugin('fuse', 'nodeType.fuse', 'biblio'),
     'accumulate': NodePlugin('accumulate', 'nodeType.accumulate', 'data'),
     'visualize': NodePlugin('visualize', 'nodeType.visualize', 'visualize', rows='pdf'),
-    'compile': NodePlugin('compile', 'nodeType.compile', 'visualize', rows='pdf'),
-    'output': NodePlugin('output', 'nodeType.output', 'output'),
 }
 
 
