@@ -701,7 +701,12 @@ function openSettings(nodeId) {
         html += renderFuseSettings(nodeId, node.params);
     } else if (node.type === 'process') {
         var p = node.params;
-        var PROCESS_OPS = ['clean', 'tokenize', 'emotion', 'tendency', 'sentiment', 'keyword', 'cluster', 'ner', 'zero_shot', 'qualitative_code', 'content_analysis', 'aggression', 'bot', 'anomaly', 'correlation', 'significance'];
+        var opSpec = null;
+        var specs = (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) ? NodeTypes.params('process') : [];
+        for (var i = 0; i < specs.length; i++) {
+            if (specs[i].name === 'operation') { opSpec = specs[i]; break; }
+        }
+        var PROCESS_OPS = (opSpec && opSpec.enum) || [];
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
             '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value);openSettings(\'' + nodeId + '\')">' +
             selectOptionTags(

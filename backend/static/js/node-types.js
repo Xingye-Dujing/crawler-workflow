@@ -8,7 +8,9 @@
 
    A failure is NAMED, never silently replaced by a guess: the generated fallback stays in use and
    the toast says the server's catalogue could not be read. */
-const NodeTypes = {
+/* A page loads this once; a harness may concatenate the same module through two companions.
+   Keeping the first instance makes that harmless (one object, never a redeclaration). */
+var NodeTypes = window.NodeTypes || {
     _types: null,
     _failure: '',
 

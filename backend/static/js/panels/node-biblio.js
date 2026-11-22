@@ -6,16 +6,16 @@
  * it a companion of that file, so a harness naming one receives both.
  */
 /* ── Bibliometrics node settings ── */
-var BIBLIO_ENTITY_TYPES = ['keyword', 'author', 'institution', 'country', 'term', 'category', 'journal', 'source', 'funder', 'grant', 'document_cocitation', 'author_cocitation', 'journal_cocitation', 'article', 'document', 'bibliographic_coupling'];
-var BIBLIO_SELECTION_MODES = ['top_n', 'top_pct', 'g_index', 'threshold'];
-var BIBLIO_LINK_MEASURES = ['cosine', 'dice', 'jaccard', 'association'];
-var BIBLIO_COUNTING = ['full', 'fractional'];
-var BIBLIO_PRUNING_MODES = ['none', 'mst', 'pathfinder'];
-var BIBLIO_PRUNING_SCOPES = ['slices', 'merged'];
-var BIBLIO_PATHFINDER_R = ['1', '2', 'inf'];
-var BIBLIO_LABEL_METHODS = ['llr', 'lsi', 'mi', 'tfidf'];
-var BIBLIO_LABEL_SOURCES = ['all', 'title', 'abstract', 'keywords', 'author'];
-var BIBLIO_OUTPUT_SHAPES = ['nodes', 'edges', 'clusters', 'bursts', 'variation', 'dual_map'];
+/* Every option list is the manifest's enum (``capabilities_kernel/nodes/biblio/manifest.py``), so
+   a value added to the validator/executor is offered here without a second edit. Read at render
+   time: ``node-types.js`` may evaluate after this file (one global, lazy seed). */
+function biblioEnum(name) {
+    var specs = (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) ? NodeTypes.params('biblio') : [];
+    for (var i = 0; i < specs.length; i++) {
+        if (specs[i].name === name && specs[i].enum) return specs[i].enum;
+    }
+    return [];
+}
 
 function biblioOption(value, label) {
     /* Both shapes: `selectOptionTags` reads value/label, `renderParamSelect`
@@ -103,7 +103,7 @@ function renderBiblioSettings(nodeId, p) {
 
     html += '<div class="settings-group"><label class="settings-label">' + I18n.t('biblio.ui.entityType') + '</label>' +
         '<select class="settings-select" onchange="updateBiblioEntity(\'' + nodeId + '\', this.value)">' +
-        selectOptionTags(biblioEntityOptions(BIBLIO_ENTITY_TYPES), entity, 'keyword') +
+        selectOptionTags(biblioEntityOptions(biblioEnum('entity_type')), entity, 'keyword') +
         '</select></div>';
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.columns') + '</div>';
@@ -122,7 +122,7 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'slice_years', 'biblio.ui.sliceYears', 'number', 1) +
         renderParamInput(nodeId, p, 'look_back_years', 'biblio.ui.lookBackYears', 'number', 0) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.timeHint') + '</div>';
-    html += renderParamSelect(nodeId, p, 'selection', 'biblio.ui.selection', 'top_n', biblioSelectionOptions(BIBLIO_SELECTION_MODES)) +
+    html += renderParamSelect(nodeId, p, 'selection', 'biblio.ui.selection', 'top_n', biblioSelectionOptions(biblioEnum('selection'))) +
         renderParamInput(nodeId, p, 'top_n', 'biblio.ui.topN', 'number', 50) +
         renderParamInput(nodeId, p, 'top_pct', 'biblio.ui.topPct', 'number', 10) +
         renderParamInput(nodeId, p, 'g_index', 'biblio.ui.gIndex', 'number', 25) +
@@ -133,15 +133,15 @@ function renderBiblioSettings(nodeId, p) {
         renderParamInput(nodeId, p, 'min_tc', 'biblio.ui.minTc', 'number', '') +
         renderParamInput(nodeId, p, 'min_usage', 'biblio.ui.minUsage', 'number', '') +
         renderParamCheckbox(nodeId, p, 'largest_component', 'biblio.ui.largestComponent', false);
-    html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(BIBLIO_LINK_MEASURES)) +
-        renderParamSelect(nodeId, p, 'counting', 'biblio.ui.counting', 'full', biblioCountingOptions(BIBLIO_COUNTING)) +
+    html += renderParamSelect(nodeId, p, 'link_measure', 'biblio.ui.linkMeasure', 'cosine', biblioMeasureOptions(biblioEnum('link_measure'))) +
+        renderParamSelect(nodeId, p, 'counting', 'biblio.ui.counting', 'full', biblioCountingOptions(biblioEnum('counting'))) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.countingHint') + '</div>' +
         renderParamInput(nodeId, p, 'citation_expansion', 'biblio.ui.citationExpansion', 'number', 0) +
         renderParamInput(nodeId, p, 'max_links_per_node', 'biblio.ui.maxLinks', 'number', 10) +
         renderParamInput(nodeId, p, 'lrf', 'biblio.ui.lrf', 'number', 2.5) +
-        renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(BIBLIO_PRUNING_MODES)) +
-        renderParamSelect(nodeId, p, 'pruning_scope', 'biblio.ui.pruningScope', 'slices', biblioPruningScopeOptions(BIBLIO_PRUNING_SCOPES)) +
-        renderParamSelect(nodeId, p, 'pathfinder_r', 'biblio.ui.pathfinderR', 'inf', biblioPathfinderOptions(BIBLIO_PATHFINDER_R)) +
+        renderParamSelect(nodeId, p, 'pruning', 'biblio.ui.pruning', 'none', biblioPruningOptions(biblioEnum('pruning'))) +
+        renderParamSelect(nodeId, p, 'pruning_scope', 'biblio.ui.pruningScope', 'slices', biblioPruningScopeOptions(biblioEnum('pruning_scope'))) +
+        renderParamSelect(nodeId, p, 'pathfinder_r', 'biblio.ui.pathfinderR', 'inf', biblioPathfinderOptions(biblioEnum('pathfinder_r'))) +
         renderParamInput(nodeId, p, 'pathfinder_lmax', 'biblio.ui.pathfinderLmax', 'number', 0) +
         renderParamInput(nodeId, p, 'pathfinder_dmax', 'biblio.ui.pathfinderDmax', 'number', 1) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.pathfinderHint') + '</div>';
@@ -149,8 +149,8 @@ function renderBiblioSettings(nodeId, p) {
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.cluster') + '</div>';
     html += renderParamCheckbox(nodeId, p, 'cluster', 'biblio.ui.cluster', true) +
         renderParamInput(nodeId, p, 'cluster_count', 'biblio.ui.clusterCount', 'number', '') +
-        renderParamSelect(nodeId, p, 'label_method', 'biblio.ui.labelMethod', 'llr', biblioLabelOptions(BIBLIO_LABEL_METHODS)) +
-        renderParamSelect(nodeId, p, 'label_source', 'biblio.ui.labelSource', 'all', biblioLabelSourceOptions(BIBLIO_LABEL_SOURCES)) +
+        renderParamSelect(nodeId, p, 'label_method', 'biblio.ui.labelMethod', 'llr', biblioLabelOptions(biblioEnum('label_method'))) +
+        renderParamSelect(nodeId, p, 'label_source', 'biblio.ui.labelSource', 'all', biblioLabelSourceOptions(biblioEnum('label_source'))) +
         renderParamInput(nodeId, p, 'top_terms', 'biblio.ui.topTerms', 'number', 5) +
         '<div class="settings-hint">' + I18n.t('biblio.ui.labelSourceHint') + '</div>' +
         '<div class="settings-hint">' + I18n.t('biblio.ui.clusterHint') + '</div>';
@@ -201,7 +201,7 @@ function renderBiblioSettings(nodeId, p) {
     }
 
     html += '<div class="settings-group" style="font-size:11px;color:var(--accent);">' + I18n.t('biblio.ui.section.output') + '</div>';
-    html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(BIBLIO_OUTPUT_SHAPES));
+    html += renderParamSelect(nodeId, p, 'output_shape', 'biblio.ui.outputShape', 'nodes', biblioOutputShapeOptions(biblioEnum('output_shape')));
     var basemapId = escapeHtml(p.basemap_dataset_id || '');
     var basemapOptions = '<option value="' + basemapId + '" selected>' + escapeHtml(p.basemap_dataset_id || I18n.t('biblio.ui.noBasemap')) + '</option>';
     if (p.basemap_dataset_id && dataNodes._datasets && dataNodes._datasets[p.basemap_dataset_id]) {

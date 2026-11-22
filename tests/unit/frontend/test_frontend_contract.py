@@ -31,17 +31,8 @@ from static_assets import css_text, js_text
 import i18n
 from crawlers import CRAWLERS, is_crawlable
 from services.biblio.schema import (
-    COUNTING_MODES,
     DEFAULTS,
-    ENTITY_TYPES,
-    LABEL_METHODS,
     LABEL_SOURCES,
-    LINK_MEASURES,
-    OUTPUT_SHAPES,
-    PATHFINDER_R,
-    PRUNING_MODES,
-    PRUNING_SCOPES,
-    SELECTION_MODES,
 )
 from services.charts.contracts import BIBLIO_CHART_TYPES
 
@@ -327,19 +318,22 @@ class TestLlmGateParity:
         assert 'canvas.saveState(' not in window, 'the resume default pick persisted an edit on a render'
 
     def test_the_process_selector_offers_exactly_the_operations_the_executor_serves(self):
-        """``PROCESS_OPS`` in the settings panel is what the 算法处理 node's dropdown offers; the
-        branches inside ``execute_process_node`` are what actually run. Read from the
-        source of both, because either half drifting is silent in the other direction:
+        """The process manifest's ``operation`` enum is what the 算法处理 dropdown offers; the
+        branches inside ``execute_process_node`` are what actually run. Read from both, because
+        either half drifting is silent in the other direction:
 
-        a name only in the browser is an option that validates, runs, and then fails on
+        a name only in the manifest is an option that validates, runs, and then fails on
         “未知操作” after the user paid for the crawl above it; a name only in the backend
         is a capability nobody can reach.
         """
         import ast
 
-        js = js_text('panels/settings.js')
-        listed = js[js.index('var PROCESS_OPS = [') :]
-        offered = re.findall(r"""'([a-z_]+)'""", listed[: listed.index('];')])
+        from capabilities_kernel import registry
+
+        manifest = registry.manifest_for_node('process')
+        assert manifest is not None
+        offered = list(next(spec for spec in manifest.params if spec.name == 'operation').enum)
+        assert "NodeTypes.params('process')" in js_text('panels/settings.js')
 
         source = (STATIC_DIR.parent / 'nodes' / 'executors' / 'process.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
@@ -486,9 +480,15 @@ class TestFrontendCatalog:
         """
         js = js_text('panels/settings.js')
         offered = set()
-        for name in ('ANALYSIS_OPS', 'PROCESS_OPS'):
+        for name in ('ANALYSIS_OPS',):
             body = js[js.index(f'var {name} = [') :]
             offered.update(re.findall(r"'([a-z_]+)'", body[: body.index('];')]))
+        from capabilities_kernel import registry
+
+        process_manifest = registry.manifest_for_node('process')
+        assert process_manifest is not None
+        operation = next(spec for spec in process_manifest.params if spec.name == 'operation')
+        offered.update(operation.enum)
         assert len(offered) > 40, offered
         named = {lang: {key[3:] for key in table if key.startswith('op.')} for lang, table in _catalog_keys().items()}
         missing = [
@@ -514,27 +514,25 @@ class TestFrontendCatalog:
 
 
 class TestBiblioPanelContract:
-    """The panel's option lists are the Python enums, not a second opinion."""
+    """The panel's option lists are the manifest enums, not a second opinion."""
 
-    @staticmethod
-    def _js_array(name: str) -> list[str]:
-        src = js_text('panels/settings.js')
-        match = re.search(rf'var {name} = \[([^\]]*)\];', src)
-        assert match, f'the settings panel no longer declares {name} as a flat array'
-        return re.findall(r"'([^']*)'", match.group(1))
-
-    def test_every_panel_list_matches_the_service(self):
-        assert self._js_array('BIBLIO_ENTITY_TYPES') == list(ENTITY_TYPES)
-        assert self._js_array('BIBLIO_SELECTION_MODES') == list(SELECTION_MODES)
-        assert self._js_array('BIBLIO_LINK_MEASURES') == list(LINK_MEASURES)
-        assert self._js_array('BIBLIO_COUNTING') == list(COUNTING_MODES)
-        assert self._js_array('BIBLIO_PRUNING_MODES') == list(PRUNING_MODES)
-        assert self._js_array('BIBLIO_PRUNING_SCOPES') == list(PRUNING_SCOPES)
-        assert self._js_array('BIBLIO_PATHFINDER_R') == list(PATHFINDER_R)
-        assert self._js_array('BIBLIO_LABEL_METHODS') == list(LABEL_METHODS)
-        assert self._js_array('BIBLIO_LABEL_SOURCES') == list(LABEL_SOURCES)
-        assert self._js_array('BIBLIO_OUTPUT_SHAPES') == list(OUTPUT_SHAPES)
-        assert self._js_array('BIBLIO_CHARTS') == list(BIBLIO_CHART_TYPES)
+    def test_the_panel_reads_its_option_lists_from_the_manifest(self):
+        """A value added to the biblio manifest must appear in the panel with no JS edit."""
+        src = js_text('panels/node-biblio.js')
+        assert "NodeTypes.params('biblio')" in src
+        for name in (
+            'entity_type',
+            'selection',
+            'link_measure',
+            'counting',
+            'pruning',
+            'pruning_scope',
+            'pathfinder_r',
+            'label_method',
+            'label_source',
+            'output_shape',
+        ):
+            assert f"biblioEnum('{name}')" in src, name
 
     def test_every_bibliometric_view_has_a_word_in_both_catalogues(self):
         """``chart.<type>`` is a computed key: the dropdown asks for it by concatenation, so a
@@ -621,9 +619,13 @@ class TestPaletteContract:
         assert NODE_DEFAULTS['tokenize'] == {'text_column': '', 'top_n': '', 'output_mode': 'word_freq'}
         canvas_src = js_text('canvas.js')
         assert 'isTokenizeNode(node)' in canvas_src, 'the chart coupling no longer recognises 处理 → 分词'
-        settings = js_text('panels/settings.js')
-        ops = settings[settings.index('var PROCESS_OPS =') : settings.index(';', settings.index('var PROCESS_OPS ='))]
-        assert "'tokenize'" in ops, 'the process operation picker cannot create a tokenizer'
+        from capabilities_kernel import registry
+
+        process_manifest = registry.manifest_for_node('process')
+        assert process_manifest is not None
+        operation = next(spec for spec in process_manifest.params if spec.name == 'operation')
+        assert 'tokenize' in operation.enum, 'the process operation picker cannot create a tokenizer'
+        assert "NodeTypes.params('process')" in js_text('panels/settings.js')
 
 
 class TestEmotionPaletteCoverage:

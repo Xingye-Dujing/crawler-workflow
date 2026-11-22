@@ -34,7 +34,8 @@
         "panels/datasets.js",
         "panels/files.js",
         "panels/diagnostics.js",
-        "panels/settings.js"
+        "panels/settings.js",
+        "node-types.js"
     ],
     "panels/settings.js": [
         "panels/node-analysis.js",

@@ -168,6 +168,17 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P2 前端第三片：选项表来自清单（2026-11-23）
+
+- `process` 清单的 `operation` 声明 16 个 enum 值；`panels/settings.js` 的 `PROCESS_OPS` 数组删除，
+  面板在渲染时读 `NodeTypes.params('process')`。
+- `panels/node-biblio.js` 的 10 个手写选项数组（实体、选择、连线、计数、剪枝、寻径、标签、输出形态）删除，
+  统一由 `biblioEnum(name)` 读 `NodeTypes.params('biblio')` 的 enum；工作区 `panels/biblio.js` 也读同一处。
+- `node-types.js` 改为幂等全局（`var NodeTypes = window.NodeTypes || {...}`）：一个 harness 可能通过两条
+  companion 路径读到同一模块，重复求值不再触发 `Identifier 'NodeTypes' has already been declared`。
+- `splits.json` 让 workflow/settings 侧也能拿到目录；测试改为断言面板读清单，而不是逐字比较两份数组。
+- 本片验证：全量快测 `11012 passed`；ruff、两档 pylint、生成物 freshness、doctor 全绿。
+
 ## P2 前端第二片：校验单一来源（2026-11-23）
 
 - `/api/workflow/validate` 返回 `engine.workflow.validate_detailed()` 的 `messages`/`perNode`/`entries`；

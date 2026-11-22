@@ -589,7 +589,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "fe9afec136e7ced085645dd1ef1ff65228602aa97ea1acc64eaec80c2ee3d956",
+      "digest": "165fbb322a656bc2740b798e2be363568e52243ae0bd491cd2b60d8cb01f87c3",
       "manifest": {
         "identity": {
           "id": "process",
@@ -607,7 +607,24 @@
             "type": "string",
             "default": "clean",
             "required": false,
-            "enum": [],
+            "enum": [
+              "clean",
+              "tokenize",
+              "emotion",
+              "tendency",
+              "sentiment",
+              "keyword",
+              "cluster",
+              "ner",
+              "zero_shot",
+              "qualitative_code",
+              "content_analysis",
+              "aggression",
+              "bot",
+              "anomaly",
+              "correlation",
+              "significance"
+            ],
             "minimum": null,
             "maximum": null,
             "widget": "select",

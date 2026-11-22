@@ -196,7 +196,25 @@
         "properties": {
           "operation": {
             "type": "string",
-            "default": "clean"
+            "default": "clean",
+            "enum": [
+              "clean",
+              "tokenize",
+              "emotion",
+              "tendency",
+              "sentiment",
+              "keyword",
+              "cluster",
+              "ner",
+              "zero_shot",
+              "qualitative_code",
+              "content_analysis",
+              "aggression",
+              "bot",
+              "anomaly",
+              "correlation",
+              "significance"
+            ]
           },
           "text_column": {
             "type": "string",

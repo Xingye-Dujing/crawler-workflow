@@ -12,7 +12,7 @@
 | upload | `nodeType.upload` | data | [docs/capabilities/nodes/upload.md](../capabilities/nodes/upload.md) | `tests/unit/capabilities/test_upload_manifest.py` | `fcf5d5744e9e` |
 | resume | `nodeType.resume` | data | [docs/capabilities/nodes/resume.md](../capabilities/nodes/resume.md) | `tests/unit/capabilities/test_resume_manifest.py` | `092120708387` |
 | comment | `nodeType.comment` | data | [docs/capabilities/nodes/comment.md](../capabilities/nodes/comment.md) | `tests/unit/capabilities/test_comment_manifest.py` | `41d777f14f29` |
-| process | `nodeType.process` | process | [docs/capabilities/nodes/process.md](../capabilities/nodes/process.md) | `tests/unit/capabilities/test_process_manifest.py` | `fe9afec136e7` |
+| process | `nodeType.process` | process | [docs/capabilities/nodes/process.md](../capabilities/nodes/process.md) | `tests/unit/capabilities/test_process_manifest.py` | `165fbb322a65` |
 | python | `nodeType.python` | process | [docs/capabilities/nodes/python.md](../capabilities/nodes/python.md) | `tests/unit/capabilities/test_python_manifest.py` | `3c4773ba340c` |
 | analysis | `nodeType.analysis` | analysis | [docs/capabilities/nodes/analysis.md](../capabilities/nodes/analysis.md) | `tests/unit/capabilities/test_analysis_manifest.py` | `27ea8873e612` |
 | tokenize | `nodeType.tokenize` | process | [docs/capabilities/nodes/tokenize.md](../capabilities/nodes/tokenize.md) | `tests/unit/capabilities/test_tokenize_manifest.py` | `b0f0e878a712` |

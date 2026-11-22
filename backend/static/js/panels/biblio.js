@@ -352,7 +352,7 @@ var biblioWorkspace = {
         // Read off the one list the panel and the settings select already share — a second
         // literal copy is how a shipped shape ends up labelled “输出形态未知”.
         var s = String(shape || '');
-        return BIBLIO_OUTPUT_SHAPES.indexOf(s) >= 0 ? I18n.t('biblioWs.shape.' + s) : I18n.t('biblioWs.shapeUnknown');
+        return biblioEnum('output_shape').indexOf(s) >= 0 ? I18n.t('biblioWs.shape.' + s) : I18n.t('biblioWs.shapeUnknown');
     },
 
     _rows() {
