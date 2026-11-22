@@ -31,7 +31,21 @@ backend/capabilities_kernel/
 | 测试 | `Tests` | 证明该能力的契约测试路径 |
 | 文档 | `Docs` | 说明页路径、生成的技能路径、文档哈希 |
 
-`Manifest.problems()` 是完整性门禁的结构半部；`tools/doctor.py` 与 `tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、文档存在、生成物最新、双语键齐全）。
+`Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
+
+## 生成物（freshness gate）
+
+`python tools/gen_capabilities.py` 从清单渲染五个产物；`--check` 只比较字节：
+
+| 产物 | 用途 |
+|---|---|
+| `backend/capabilities_kernel/generated/catalog.json` | 机器目录 + 能力 × 检查项测试矩阵（含每个清单的 digest） |
+| `backend/capabilities_kernel/generated/openapi.json` | `/api/node-types` 的 OpenAPI 3.1 描述与每个节点的参数 schema |
+| `backend/capabilities_kernel/generated/ai_tools.json` | AI 可读的摘要/步骤/示例/失败模式（P4/P6 生成技能与工具） |
+| `backend/static/js/capability-schema.generated.js` | 浏览器 schema 表单目录（P2 渲染器读取；当前页面仍走 `/api/node-types`） |
+| `docs/capabilities/index.md` | 人类可读的能力索引 |
+
+`tests/unit/gates/test_capability_completeness.py` 调用同一个 `generate.check()`：改了清单却忘记重新生成，CI 直接红，并打印 `run python tools/gen_capabilities.py`。渲染是确定性的（registry 顺序、dataclass 字段顺序、跨平台 LF），所以 Windows 与 Linux 比较的是同一串字节。
 
 ## 注册表
 
@@ -53,12 +67,14 @@ backend/capabilities_kernel/
 - `services/validation/engine.py`：`Rule` 的唯一求值器；`engine/workflow.py` 不再为 tokenize 写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
+- 五个生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.generated.js`/`docs/capabilities/index.md`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- `tools/doctor.py`：同一组事实的逐项勾选，`--capability node:<id>` 只看一个能力。
 
-## 还没迁移的表面（P2）
+## 还没迁移的表面（P2 及以后）
 
 - 前端表单渲染、`canvas.js` 的类型/默认参数/摘要分支、`runs.js` 的验证 if 链。
 - executor 文件仍在 `nodes/executors/<type>.py`；P2 把它们移进能力目录。
-- 生成物（OpenAPI/工具 schema/技能索引/测试矩阵）与 `doctor` 在 P1 后续切片落地。
+- 技能/工具目录的实际消费在 P4/P6；P1 只生成数据并保证它与清单同步。
 
 ## Pilot：tokenize
 

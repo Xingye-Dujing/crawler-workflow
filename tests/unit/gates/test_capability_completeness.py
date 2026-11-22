@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from capabilities_kernel import registry
+from capabilities_kernel import generate, registry
 from capabilities_kernel.manifest import KINDS
 from frontend_catalogue import catalog_keys
 
@@ -93,3 +93,18 @@ class TestManifestsStayLight:
                         continue
                     offenders.append(f'{path.relative_to(BACKEND).as_posix()}: imports {root}')
         assert offenders == [], 'a manifest reached outside the kernel: ' + '; '.join(offenders)
+
+
+class TestTheGeneratedArtifactsAreCurrent:
+    def test_no_committed_artifact_is_stale(self):
+        """A rename that skips the generator must fail here, not in the P2 form."""
+        assert generate.check() == [], 'run `python tools/gen_capabilities.py` and commit the result'
+
+    def test_the_generator_renderers_and_the_outputs_table_agree(self):
+        assert {path.name for path in generate.render()} == {
+            'catalog.json',
+            'openapi.json',
+            'ai_tools.json',
+            'capability-schema.generated.js',
+            'index.md',
+        }

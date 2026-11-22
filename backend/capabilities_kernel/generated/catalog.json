@@ -1,0 +1,141 @@
+{
+  "api_version": 1,
+  "generated_by": "tools/gen_capabilities.py",
+  "capabilities": [
+    {
+      "kind": "node",
+      "id": "tokenize",
+      "digest": "7a0e4dd78b71bc565e079032075a1ca73b6147a4352782b15885f13bd9ac38f3",
+      "manifest": {
+        "identity": {
+          "id": "tokenize",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.tokenize",
+          "category": "process",
+          "order": 8,
+          "description": "Segment a text column into words and emit word frequencies or one word per row.",
+          "when_to_use": "When a later step needs word frequencies or one word per row: word cloud, bar chart, corpus statistics. Use the process node for cleaning-only passes."
+        },
+        "params": [
+          {
+            "name": "text_column",
+            "type": "string",
+            "default": "",
+            "required": true,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "正文",
+            "description_key": ""
+          },
+          {
+            "name": "top_n",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "120",
+            "description_key": ""
+          },
+          {
+            "name": "output_mode",
+            "type": "string",
+            "default": "word_freq",
+            "required": false,
+            "enum": [
+              "word_freq",
+              "words_only",
+              "csv_line"
+            ],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "nodes.executors.tokenize:emit_columns",
+          "read_columns": "nodes.executors.tokenize:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.tokenize:run",
+          "quiet": false
+        },
+        "rules": [
+          {
+            "kind": "required_param",
+            "code": "engine.tokenize_no_column",
+            "message_key": "engine.tokenize_no_column",
+            "param": "text_column",
+            "severity": "error"
+          }
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",
+          "steps": [
+            "Wire a node that produces text rows into 分词.",
+            "Pick the text column and an output mode.",
+            "For word_freq, optionally cap the table with top_n (blank means the executor default)."
+          ],
+          "examples": [
+            {
+              "type": "tokenize",
+              "params": {
+                "text_column": "正文",
+                "top_n": "120",
+                "output_mode": "word_freq"
+              }
+            }
+          ],
+          "failures": [
+            "No text column configured: refuses before the run with engine.tokenize_no_column.",
+            "The column is absent from the upstream table: the executor names the column and the columns it saw.",
+            "No upstream rows: the executor refuses instead of settling an empty table DONE."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_tokenize_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/tokenize.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    }
+  ],
+  "matrix": [
+    {
+      "kind": "node",
+      "id": "tokenize",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_tokenize_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/tokenize.md"
+    }
+  ]
+}

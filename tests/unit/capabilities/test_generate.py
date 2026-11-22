@@ -1,0 +1,110 @@
+"""Generated artifacts are derived, deterministic and current.
+
+Five files are rendered from the manifests. The failures this file guards are the quiet ones: an
+artifact left behind after a parameter rename looks authoritative, a renderer that sorts dict keys
+differently on another run makes every freshness check red, and a JS catalogue that no longer parses
+breaks the P2 form before anyone opens the page.
+"""
+
+import json
+import shutil
+import subprocess
+
+import pytest
+from capabilities_kernel import generate, registry
+
+pytestmark = pytest.mark.unit
+
+
+def _manifest():
+    manifest = registry.manifest_for_node('tokenize')
+    assert manifest is not None
+    return manifest
+
+
+class TestTheRenderedSet:
+    def test_the_five_surfaces_exist(self):
+        rendered = generate.render()
+        assert len(rendered) == 5
+        names = {path.relative_to(generate.ROOT).as_posix() for path in rendered}
+        assert names == {
+            'backend/capabilities_kernel/generated/catalog.json',
+            'backend/capabilities_kernel/generated/openapi.json',
+            'backend/capabilities_kernel/generated/ai_tools.json',
+            'backend/static/js/capability-schema.generated.js',
+            'docs/capabilities/index.md',
+        }
+
+    def test_rendering_twice_is_byte_identical(self):
+        first = {str(path): text for path, text in generate.render().items()}
+        second = {str(path): text for path, text in generate.render().items()}
+        assert first == second
+
+    def test_no_committed_artifact_is_stale(self):
+        assert generate.check() == [], 'run `python tools/gen_capabilities.py` and commit the result'
+
+    def test_the_outputs_table_names_every_renderer(self):
+        functions = {
+            'catalog': generate._catalog_payload,
+            'openapi': generate._openapi_payload,
+            'ai_tools': generate._ai_payload,
+            'frontend_schema': generate._frontend_schema,
+            'docs_index': generate._docs_index,
+        }
+        assert set(generate.OUTPUTS.values()) == set(functions)
+        for name, function in functions.items():
+            assert callable(function), name
+
+
+class TestTheArtifactsSayTheSameThing:
+    def test_the_catalog_carries_the_manifest_digest(self):
+        payload = json.loads(generate.render()[generate.ROOT / 'backend/capabilities_kernel/generated/catalog.json'])
+        entry = next(row for row in payload['capabilities'] if row['id'] == 'tokenize')
+        assert entry['digest'] == _manifest().digest()
+        assert entry['manifest']['identity']['title_key'] == 'nodeType.tokenize'
+
+    def test_the_test_matrix_enumerates_every_check(self):
+        payload = json.loads(generate.render()[generate.ROOT / 'backend/capabilities_kernel/generated/catalog.json'])
+        row = next(item for item in payload['matrix'] if item['id'] == 'tokenize')
+        assert row['checks'] == list(generate.MATRIX_CHECKS)
+        assert row['docs'] == 'docs/capabilities/nodes/tokenize.md'
+        assert row['contract_tests'] == ['tests/unit/capabilities/test_tokenize_manifest.py']
+
+    def test_openapi_describes_the_catalogue_endpoint_and_the_tokenize_params(self):
+        payload = json.loads(generate.render()[generate.ROOT / 'backend/capabilities_kernel/generated/openapi.json'])
+        assert payload['openapi'].startswith('3.1')
+        assert '/api/node-types' in payload['paths']
+        params = payload['components']['schemas']['NodeParams.tokenize']
+        assert params['required'] == ['text_column']
+        assert params['properties']['output_mode']['enum'] == ['word_freq', 'words_only', 'csv_line']
+
+    def test_the_ai_catalogue_carries_the_example_and_failure_modes(self):
+        payload = json.loads(generate.render()[generate.ROOT / 'backend/capabilities_kernel/generated/ai_tools.json'])
+        entry = next(row for row in payload['tools'] if row['capability'] == 'node:tokenize')
+        assert entry['examples'] == list(_manifest().ai.examples)
+        assert entry['emit_columns'] == 'nodes.executors.tokenize:emit_columns'
+
+    def test_the_docs_index_links_the_documented_page(self):
+        text = generate.render()[generate.ROOT / 'docs/capabilities/index.md']
+        assert '| tokenize |' in text
+        assert '(../capabilities/nodes/tokenize.md)' in text
+
+
+class TestTheFrontendCatalogue:
+    def test_it_is_a_window_global_of_nodes(self):
+        text = generate.render()[generate.ROOT / 'backend/static/js/capability-schema.generated.js']
+        assert 'window.CapabilitySchema' in text
+        payload = json.loads(text.split('window.CapabilitySchema = ', 1)[1].rstrip().rstrip(';'))
+        node = next(item for item in payload['nodes'] if item['type'] == 'tokenize')
+        assert node['params'][0]['widget'] == 'column'
+        assert node['rules'][0]['code'] == 'engine.tokenize_no_column'
+
+    @pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')
+    def test_node_parses_the_generated_file(self, tmp_path):
+        path = generate.ROOT / 'backend/static/js/capability-schema.generated.js'
+        completed = subprocess.run(
+            ['node', '--check', str(path)],
+            capture_output=True,
+            check=False,
+        )
+        assert completed.returncode == 0, completed.stderr.decode('utf-8', 'replace')

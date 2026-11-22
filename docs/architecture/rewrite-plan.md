@@ -55,13 +55,13 @@
 
 - [x] `capabilities_kernel/` manifest dataclasses + JSON Schema 子集
 - [x] registry 自动发现/去重/懒加载
-- [ ] `tools/gen_capabilities.py` 生成 5 类产物
-- [ ] `tools/doctor.py` 逐项勾选
+- [x] `tools/gen_capabilities.py` 生成 5 类产物
+- [x] `tools/doctor.py` 逐项勾选
 - [ ] `runtime/fsm.py` + 转换表测试
 - [ ] `runtime/events.py` + 契约测试
 - [x] `services/validation/engine.py` 骨架 + static 规则
 - [x] pilot：`tokenize` 节点全链路迁移（服务端；前端表单/if 链在 P2）
-- [ ] 生成物 freshness gate
+- [x] 生成物 freshness gate
 - [ ] `runtime/flags.py` 迁移开关 + 到期门禁
 - [x] manifest `api_version`/`manifest_hash` + 兼容检查
 - [ ] Asset 数据模型骨架

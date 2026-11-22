@@ -1,0 +1,59 @@
+{
+  "api_version": 1,
+  "generated_by": "tools/gen_capabilities.py",
+  "tools": [
+    {
+      "capability": "node:tokenize",
+      "tool": "",
+      "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",
+      "steps": [
+        "Wire a node that produces text rows into 分词.",
+        "Pick the text column and an output mode.",
+        "For word_freq, optionally cap the table with top_n (blank means the executor default)."
+      ],
+      "examples": [
+        {
+          "type": "tokenize",
+          "params": {
+            "text_column": "正文",
+            "top_n": "120",
+            "output_mode": "word_freq"
+          }
+        }
+      ],
+      "failures": [
+        "No text column configured: refuses before the run with engine.tokenize_no_column.",
+        "The column is absent from the upstream table: the executor names the column and the columns it saw.",
+        "No upstream rows: the executor refuses instead of settling an empty table DONE."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "text_column": {
+            "type": "string",
+            "default": ""
+          },
+          "top_n": {
+            "type": "string",
+            "default": ""
+          },
+          "output_mode": {
+            "type": "string",
+            "default": "word_freq",
+            "enum": [
+              "word_freq",
+              "words_only",
+              "csv_line"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "text_column"
+        ]
+      },
+      "emit_columns": "nodes.executors.tokenize:emit_columns",
+      "read_columns": "nodes.executors.tokenize:read_columns"
+    }
+  ]
+}

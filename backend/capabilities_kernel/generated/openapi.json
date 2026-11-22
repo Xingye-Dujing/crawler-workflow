@@ -1,0 +1,117 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "采析绘 capabilities",
+    "version": "1",
+    "description": "Generated from capabilities_kernel manifests by tools/gen_capabilities.py."
+  },
+  "paths": {
+    "/api/node-types": {
+      "get": {
+        "summary": "Every node type, its word, shape and seed parameters",
+        "responses": {
+          "200": {
+            "description": "The catalogue the canvas reads",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeTypesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "NodeType": {
+        "type": "object",
+        "required": [
+          "type",
+          "labelKey",
+          "category",
+          "rows",
+          "quiet"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "labelKey": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "string",
+            "enum": [
+              "table",
+              "pdf",
+              "none"
+            ]
+          },
+          "quiet": {
+            "type": "boolean"
+          },
+          "defaults": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true
+          },
+          "defaultsFrom": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeTypesResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "types"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeType"
+            }
+          }
+        }
+      },
+      "NodeParams.tokenize": {
+        "type": "object",
+        "properties": {
+          "text_column": {
+            "type": "string",
+            "default": ""
+          },
+          "top_n": {
+            "type": "string",
+            "default": ""
+          },
+          "output_mode": {
+            "type": "string",
+            "default": "word_freq",
+            "enum": [
+              "word_freq",
+              "words_only",
+              "csv_line"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "text_column"
+        ]
+      }
+    }
+  }
+}

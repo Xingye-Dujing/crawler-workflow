@@ -43,13 +43,16 @@
   的声明式规则；血缘钩子由 `ports.emit_columns/read_columns` 解析到 executor 自己的函数。
 - pilot：`backend/capabilities_kernel/nodes/tokenize/manifest.py`；`tests/unit/capabilities/test_tokenize_manifest.py`
   逐项钉住“旧家不再有答案”（catalogue/defaults/validate/hooks）。
-- 门禁：`tests/unit/gates/test_capability_completeness.py`（结构/执行器/端口/文档/契约测试/双语词/清单轻导入）；
+- 门禁：`tests/unit/gates/test_capability_completeness.py`（结构/执行器/端口/文档/契约测试/双语词/清单轻导入/生成物 fresh）；
   `test_doc_paths` 与 `test_requirements_pinned` 的包清单已加 `capabilities_kernel`。
+- 生成物：`tools/gen_capabilities.py` 渲染 `catalog.json`（目录 + 测试矩阵）、`openapi.json`、
+  `ai_tools.json`、`backend/static/js/capability-schema.generated.js`、`docs/capabilities/index.md`；
+  `--check` 与门禁共用 `generate.check()`。`tools/doctor.py --all` 逐项打印 `[x]`，未知 `--capability` 也是失败行。
 - 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`。
 - 本片验证：相关模块 `2048 passed`（analysis/gates/runs/executors/capabilities + node-types/workflow API）；
   ruff 全绿；product pylint 10.00/10、tests pylint（本片文件）10.00/10；`test_boot_import_budget` 9 passed。
-- 未做（P1 后续切片）：`tools/gen_capabilities.py`、`tools/doctor.py`、生成物 freshness、`runtime/fsm.py`、
-  `runtime/events.py`、`runtime/flags.py`、Asset 骨架。前端表单与 `canvas.js`/`runs.js` 的 if 链按计划在 P2。
+- 未做（P1 后续切片）：`runtime/fsm.py`、`runtime/events.py`、`runtime/flags.py`、Asset 骨架。
+  前端表单与 `canvas.js`/`runs.js` 的 if 链按计划在 P2。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 

@@ -39,6 +39,8 @@ a defect, not a shortcut.
   type's facts go in its manifest — never back into the shared tables. A manifest imports only the standard library
   and the kernel: `nodes.catalog` reads manifests while parsing a DAG, so pandas/Selenium here cost every start.
   Pilot: `capabilities_kernel/nodes/tokenize/manifest.py` (see `docs/architecture/capabilities-kernel.md`).
+  `tools/gen_capabilities.py` renders the five artifacts and `tools/doctor.py` prints the same checks; a manifest change
+  without a re-render is a red freshness gate, never a stale catalog.
 - **Node types**: one `NodePlugin` in `backend/nodes/catalog.py` + one `nodes/executors/<type>.py` registered in
   `nodes/registry.py`; the browser reads the server's `node-types.js`, never a second list.
 - **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same
