@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`5e038bd 修改：附件文本抽取与 files/vision 能力拆分`
+- 最后提交：`438723e 修改：数据集行读取改为会话级授权`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -19,6 +19,7 @@
 | `0c965b8` | LLM 行任务可配置并发；API 并行；Ollama 串行 |
 | `279ed41` | agent-workspace parity 矩阵 |
 | `5e038bd` | 附件文本抽取（pdf/docx/pptx/xlsx/csv/txt/html，缓存）；`files`/`vision`/`inline_images` 三能力拆分；图片内联；本地/无 key 供应商可上传；`pypdf` 依赖 |
+| `438723e` | 数据集行读取授权：`request_dataset_access` 走暂停/恢复问题通道；会话+数据集+行数 grant；`dataset_page`/`sample`/筛选查询累计；`peek` 免费；侧栏列出/撤销 |
 
 ## 测试基线
 
@@ -29,12 +30,11 @@
 
 ## 下一步（按顺序）
 
-1. **H12 数据读取授权**：`request_dataset_access` + 会话/数据集/行数 grant + revoke；`dataset_page` 遵守 grant。
-2. **H13 工作流/产物管理工具**：list/read/create/update/delete/rename/export/run/stop；走域服务，不走裸文件系统；删除需审批 + 审计。
-3. **H14 工具覆盖审计**：能力→工具/技能覆盖门禁。
-4. **H16 占比堆叠图验证**：`stack_fields` 在 validate 阶段命名；P3 迁移到 ChartSpec preflight。
-5. **H17/H18 视图单实例**：设置/工作室不覆盖 `#ai-chat`；切会话不重复消息区（可与 P5 框架 UI 合并）。
-6. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
+1. **H13 工作流/产物管理工具**：list/read/create/update/delete/rename/export/run/stop；走域服务，不走裸文件系统；删除需审批 + 审计。
+2. **H14 工具覆盖审计**：能力→工具/技能覆盖门禁。
+3. **H16 占比堆叠图验证**：`stack_fields` 在 validate 阶段命名；P3 迁移到 ChartSpec preflight。
+4. **H17/H18 视图单实例**：设置/工作室不覆盖 `#ai-chat`；切会话不重复消息区（可与 P5 框架 UI 合并）。
+5. **P1 内核骨架**：manifest/registry/generator/doctor/FSM/events；pilot `tokenize`。
 
 ## H11 的关键落点（避免重复调查）
 
@@ -56,4 +56,4 @@
 
 ## 给压缩后的第一句话
 
-> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `5e038bd`。先做 H12。
+> 从 `docs/architecture/handoff.md` 的“下一步”继续；当前工作区干净，最后提交 `438723e`。先做 H13。
