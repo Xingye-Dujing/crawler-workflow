@@ -13,6 +13,7 @@
 | H1 | 本地 Ollama 仍会出现思考 | D | 两条路径强制 `think:false`；忽略 `thinking` 字段；剥离 `<think>` 标签；UI 开关禁用 | `ai/providers/ollama.py`、`ai/agent.py`、`tests/unit/ai/test_ollama_transport.py` |
 | H3a | 新消息会取消同会话待答问题 | D | 新消息在有待答问题时按名拒绝，不取消；问题仍可回答。邮箱/插话在 P4 | `ai/agent.py`、`tests/api/test_ai_workflow.py` |
 | H4/H5 | 侧栏缩到最小拉不大、流式滚动跳回开头 | D | 按实测宽度切换 `.narrow`；列宽随 dock 夹紧；12px grip + pointer capture；重绘前保存并恢复 `scrollTop` | `ai-workspace.js`、`ai.css`、`tests/unit/frontend/test_frontend_ai_js.py` |
+| H8 | Python 节点卡片空白、标题显示 Node | D | `getNodeSummary('python')` 显示脚本/参数；标题 map 补 `python`/`fuse` | `canvas.js`、`tests/unit/frontend/test_frontend_fuse_panel_js.py` |
 
 ## 待办（热修列车，按优先级）
 

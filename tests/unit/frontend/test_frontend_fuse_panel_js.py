@@ -65,6 +65,12 @@ class TestThePanelEditsWhatItShows:
         assert '5 candidate columns' in panel['summary_count'] or '5 个候选列' in panel['summary_count']
         assert '2 candidate columns' in panel['summary_after_edit'] or '2 个候选列' in panel['summary_after_edit']
 
+    def test_a_python_node_card_names_its_script_and_args(self, panel):
+        """An unselected Python node drew an empty card body; the summary must say what it is."""
+        assert 'py_demo' in panel['python_summary'], panel['python_summary']
+        assert '正文' in panel['python_summary'], panel['python_summary']
+        assert panel['python_empty'], 'an empty Python node must say "pick a script", not draw nothing'
+
 
 class TestTheLineageIsVisible:
     def test_the_panel_and_the_server_agree_on_the_record_table(self):

@@ -1490,6 +1490,8 @@ const canvas = {
             source: I18n.t('node.source'),
             upload: I18n.t('node.upload'),
             process: I18n.t('node.process'),
+            python: I18n.t('node.python'),
+            fuse: I18n.t('node.fuse'),
             analysis: I18n.t('node.analysis'),
             biblio: I18n.t('node.biblio'),
             visualize: I18n.t('node.visualize'),
@@ -1915,6 +1917,16 @@ const canvas = {
         if (type === 'process') {
             var op = params.operation || '';
             return I18n.t('settings.operation') + ': ' + (op ? I18n.t('op.' + op) : '?');
+        }
+        if (type === 'python') {
+            /* A Python node stores a script id, never inline code. An unselected node used to
+               render an empty card body, which reads as a broken node rather than "pick a script". */
+            var script = String(params.script_name || params.script_id || '').trim();
+            if (!script) return I18n.t('settings.pythonPick');
+            var pyLines = [I18n.t('settings.pythonScript') + ': ' + script];
+            var pyArgs = String(params.args || '').trim();
+            if (pyArgs && pyArgs !== '{}') pyLines.push(I18n.t('settings.pythonArgs') + ': ' + pyArgs);
+            return pyLines.join('\n');
         }
         if (type === 'analysis') {
             var op = params.operation || '';

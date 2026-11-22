@@ -142,6 +142,12 @@ const seeded = {
     out.edit_lands_in_model = w.x.canvas.nodes['fuse-1'].params.entity_columns;
     out.edit_repaints = after.includes('话题,标签') && !after.includes('关键词,话题,主题,主题词,标签');
     out.summary_after_edit = w.x.canvas.getNodeSummary('fuse', w.x.canvas.nodes['fuse-1'].params);
+    /* The canvas summary is shared by every type; a Python node used to draw an empty card. */
+    out.python_summary = w.x.canvas.getNodeSummary('python', {
+        script_id: 'py_demo',
+        args: '{"column":"正文"}',
+    });
+    out.python_empty = w.x.canvas.getNodeSummary('python', {});
 }
 
 /* ─── a type this build has no word for ───────────────────────────────────── */
