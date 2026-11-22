@@ -284,7 +284,10 @@ class AgentService:
             if parsed:
                 raise AIError(parsed[0], kind='capability', **parsed[1])
             raise AIError('ai.skillUnknown', kind='capability', skill=skill_id)
-        _abandon_pending(conversation['id'])
+        # A new message must not cancel a pending question. Refuse by name until the user answers
+        # it (or explicitly cancels); the full queue + steer mailbox lands with the turn runner.
+        if store.pending_questions(conversation['id']):
+            raise AIError('ai.questionPending', kind='bad_request')
         lang = str(payload.get('locale') or 'zh')
         reminder = (
             _latest_reminder(lang, str(payload.get('location') or ''))
@@ -1653,9 +1656,11 @@ def _turn_user(conversation_id: str, turn_id: str) -> dict | None:
 
 
 def _abandon_pending(conversation_id: str) -> None:
-    """A new user message takes the transcript back, so the old question cannot be answered.
+    """Cancel pending questions for an EXPLICIT cancel, never for an ordinary new message.
 
-    Its approval request must go with it: otherwise a grant nobody chose would survive in memory.
+    A new message used to call this and silently invalidate the card the user was still looking
+    at. The route now refuses a second message by name while a question is pending; this helper is
+    kept for a future "cancel question" action, where the cancellation is the user's choice.
     """
     approvals.revoke(conversation_id)
     pending = store.pending_questions(conversation_id)

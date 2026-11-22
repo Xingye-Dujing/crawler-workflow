@@ -427,6 +427,40 @@ def test_a_stale_message_id_cannot_misdirect_a_question_answer(client, fake_ai, 
     )
 
 
+def test_a_new_message_does_not_cancel_a_pending_question(client, fake_ai, clean_ai):
+    """The question must outlive a second message; the old code cancelled it silently.
+
+    A refusal by name is the honest queue boundary for now: the question stays pending and can
+    still be answered. The full mailbox (queue + steer) lands with the turn runner.
+    """
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+
+    second = _chat(
+        client,
+        provider='fake_ask',
+        model='fake-model',
+        text='also this',
+        conversation_id=meta['conversation_id'],
+    )
+    assert second.status_code == 400, second.get_json()
+    assert second.get_json()['key'] == 'ai.questionPending'
+
+    from ai import store
+
+    assert store.pending_questions(meta['conversation_id']), 'the question was cancelled by the new message'
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+        'api_key': 'secret-key',
+    }
+    resumed = client.post('/api/ai/answer?stream=0', json=answer)
+    assert resumed.status_code == 200, resumed.get_json()
+
+
 def test_an_answer_can_reference_a_file_and_the_model_sees_it(client, fake_ai, clean_ai, monkeypatch):
     """The question card's answer box takes `@`: the server resolves it into the resumed turn.
 

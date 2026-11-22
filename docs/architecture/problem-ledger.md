@@ -11,6 +11,7 @@
 | H2 | 重开/切换会话后回答待答问题报“找不到消息：” | D | answer 只按 `question_id`；服务端从 question 行派生 `message_id`；前端恢复卡也写 `messageId` | `backend/api/ai.py`、`backend/ai/agent.py`、`tests/api/test_ai_workflow.py` |
 | H2b | 多选问题只改 CSS、永远提交不了 | D | `_answerOption` 把选中项写入 `answers`；提交仍由卡片按钮触发 | `ai-workspace.js`、`tests/unit/frontend/test_frontend_ai_js.py` |
 | H1 | 本地 Ollama 仍会出现思考 | D | 两条路径强制 `think:false`；忽略 `thinking` 字段；剥离 `<think>` 标签；UI 开关禁用 | `ai/providers/ollama.py`、`ai/agent.py`、`tests/unit/ai/test_ollama_transport.py` |
+| H3a | 新消息会取消同会话待答问题 | D | 新消息在有待答问题时按名拒绝，不取消；问题仍可回答。邮箱/插话在 P4 | `ai/agent.py`、`tests/api/test_ai_workflow.py` |
 
 ## 待办（热修列车，按优先级）
 

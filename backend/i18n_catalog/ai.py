@@ -176,6 +176,7 @@ ZH = {
     'ai.untitled': '未命名会话',
     'ai.newConversation': '新会话',
     'ai.questionUnanswered': '用户没有回答问题，改发了新消息',
+    'ai.questionPending': '这个会话还有一个待回答的问题；先回答它（或明确取消），再发新消息。',
     'ai.monitorEvent': '监控事件“{event}”不存在；可用：run.started、node.finished、run.finished、run.log。',
     'ai.monitorStatus': '监控状态“{status}”不存在；可用：done、restored、partial、failed、skipped。',
     'ai.monitorOutcome': '运行结果“{outcome}”不存在；可用：completed、failed、interrupted。',
@@ -444,6 +445,9 @@ EN = {
     'ai.untitled': 'Untitled conversation',
     'ai.newConversation': 'New conversation',
     'ai.questionUnanswered': 'The user did not answer the question and sent a new message instead.',
+    'ai.questionPending': (
+        'This conversation still has an unanswered question; answer it (or cancel it explicitly) before sending.'
+    ),
     'ai.monitorEvent': 'Unknown monitor event “{event}”; use run.started, node.finished, run.finished or run.log.',
     'ai.monitorStatus': 'Unknown node status “{status}”; use done, restored, partial, failed or skipped.',
     'ai.monitorOutcome': 'Unknown run outcome “{outcome}”; use completed, failed or interrupted.',
