@@ -657,15 +657,63 @@ const answerChips = (answerRefsHost ? answerRefsHost.querySelectorAll('.ai-ref-l
     String(el.textContent || '')
 );
 let sentAnswer = null;
+const realMaybeAnswer = workspace._maybeAnswer;
 workspace._maybeAnswer = async () => {
     sentAnswer = workspace._current.answers.q1;
 };
 workspace._answerCustom('q1', answerBox.value);
+workspace._maybeAnswer = realMaybeAnswer;
 out.answerRefs = {
     targetOk: refTargetOk,
     chips: answerChips,
     custom: sentAnswer && sentAnswer.custom,
     refs: (sentAnswer && sentAnswer.references) || [],
+};
+
+/* A restored pending card has no live message element. The answer request must still carry the
+   assistant row that asked it, or /api/ai/answer 404s with "找不到消息：". */
+workspace._messages = [];
+workspace._conversationId = 'c-restored';
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._streamConversation = '';
+workspace._appendQuestion({
+    id: 'q2',
+    message_id: 'm-restored',
+    questions: [{ id: 'q2', header: 'Scope', question: 'Which data?', options: [{ label: 'A' }] }],
+});
+let restoredPayload = null;
+workspace._stream = async (url, payload) => {
+    restoredPayload = { url, payload };
+};
+workspace._current.answers.q2 = { id: 'q2', selected: ['A'] };
+await workspace._maybeAnswer();
+out.restoredQuestion = {
+    messageId: workspace._current.messageId,
+    sentMessageId: restoredPayload && restoredPayload.payload.message_id,
+    sentQuestionId: restoredPayload && restoredPayload.payload.question_id,
+};
+
+/* Multi-select: each click updates the answer set; the card's own answer button submits it. */
+workspace._current = null;
+workspace._dom.chat.innerHTML = '';
+workspace._appendQuestion({
+    id: 'q3',
+    message_id: 'm-multi',
+    questions: [
+        {
+            id: 'q3',
+            header: 'Pick',
+            question: 'Which ones?',
+            multi_select: true,
+            options: [{ label: 'A' }, { label: 'B' }],
+        },
+    ],
+});
+workspace._answerOption('q3', 'A');
+workspace._answerOption('q3', 'B');
+out.multiSelect = {
+    selected: (workspace._current.answers.q3 && workspace._current.answers.q3.selected) || [],
 };
 
 /* A disclosure the reader opened survives the streaming repaint. The live turn used to rebuild the

@@ -380,6 +380,53 @@ def test_ask_user_pauses_and_answer_resumes(client, fake_ai, clean_ai):
     assert any(event['type'] == 'text' and 'Dataset A' in event.get('text', '') for event in resumed_events)
 
 
+def test_answer_needs_only_the_question_id_after_a_reopen(client, fake_ai, clean_ai):
+    """A reopened card has no live message element; the question row must be enough.
+
+    The old route trusted the browser's ``message_id`` and answered 404 "找不到消息：" when a
+    reload, a conversation switch or a repaint had cleared it. The question row remembers the
+    assistant row that asked, so the server derives it and the answer resumes.
+    """
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+
+    # No message_id at all — the restored-card shape.
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+        'api_key': 'secret-key',
+    }
+    resumed = client.post('/api/ai/answer?stream=0', json=answer)
+    assert resumed.status_code == 200, resumed.get_json()
+    assert any(
+        event['type'] == 'text' and 'Dataset A' in event.get('text', '') for event in resumed.get_json()['events']
+    )
+
+
+def test_a_stale_message_id_cannot_misdirect_a_question_answer(client, fake_ai, clean_ai):
+    """The question row wins over a stale id the browser kept from another turn."""
+    response = _chat(client, provider='fake_ask', model='fake-model', text='which?')
+    events = response.get_json()['events']
+    meta = next(event for event in events if event['type'] == 'meta')
+    question = next(event for event in events if event['type'] == 'question')
+
+    answer = {
+        'conversation_id': meta['conversation_id'],
+        'message_id': 'msg_from_another_turn',
+        'question_id': question['question_id'],
+        'answers': [{'id': 'scope', 'selected': ['Dataset A']}],
+        'api_key': 'secret-key',
+    }
+    resumed = client.post('/api/ai/answer?stream=0', json=answer)
+    assert resumed.status_code == 200, resumed.get_json()
+    assert any(
+        event['type'] == 'text' and 'Dataset A' in event.get('text', '') for event in resumed.get_json()['events']
+    )
+
+
 def test_an_answer_can_reference_a_file_and_the_model_sees_it(client, fake_ai, clean_ai, monkeypatch):
     """The question card's answer box takes `@`: the server resolves it into the resumed turn.
 

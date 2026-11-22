@@ -2659,6 +2659,10 @@ const AIWorkspace = {
         this._current.answers = this._current.answers || {};
         this._current.questionId = question.id;
         this._current.questionMessageId = question.message_id;
+        /* A restored card has no live `messageId`; the answer request must still carry the
+           assistant row that asked it. The server also derives it from the question row, but
+           keeping both in sync here makes the DOM state honest on its own. */
+        this._current.messageId = question.message_id || this._current.messageId;
         this._current.questionEl.innerHTML = this._current.questions.map((item) => AIRender.questionCard(item, false)).join('');
     },
 
@@ -3219,6 +3223,11 @@ const AIWorkspace = {
         if (multi) {
             const button = this._findByData(this._dom.chat, 'data-ai-answer', label);
             if (button && button.getAttribute('data-ai-question') === String(questionId)) button.classList.toggle('selected');
+            /* Multi-select is confirmed by the card's answer box/button, not by the first
+               click: writing the current set here keeps the progress hint honest and lets
+               the user pick several options before submitting. */
+            current.answers[questionId] = { id: questionId, selected: this._selectedLabels(questionId) };
+            this._renderAnswerProgress();
             return;
         }
         current.answers[questionId] = { id: questionId, selected: [label] };
@@ -3315,7 +3324,7 @@ const AIWorkspace = {
         try {
             await this._stream('/api/ai/answer', {
                 conversation_id: this._conversationId,
-                message_id: current.messageId,
+                message_id: current.messageId || current.questionMessageId,
                 question_id: current.questionId,
                 answers,
                 references,

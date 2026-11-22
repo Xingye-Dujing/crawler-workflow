@@ -1310,6 +1310,16 @@ def ai_answer():
     refs = data.get('references') if isinstance(data.get('references'), list) else []
     account = account_context.current()
     lang = get_lang()
+    # The question row is the authority: a reloaded card (or a conversation switched away
+    # and back) has no live `messageId`, and an older client may send '' or a stale row.
+    # Deriving the message from the question makes answering independent of the DOM state
+    # that was lost — the exact cause of "找不到消息：" after a reconnect.
+    if question_id:
+        question = store.get_question(question_id)
+        if question is not None and question.get('conversation_id') == conversation_id:
+            message_id = str(question.get('message_id') or message_id)
+    if not question_id:
+        return _error(AIError('ai.apiNoQuestion', kind='bad_request', question=question_id), 400)
     assistant = store.get_message(message_id)
     if assistant is None:
         return _error(AIError('ai.apiNoMessage', kind='not_found', message=message_id), 404)

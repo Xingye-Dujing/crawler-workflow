@@ -433,6 +433,22 @@ class TestWorkspaceRepaintAndDelegation:
         # “answered” row while two questions are still open (the hint proves the card is still there).
         assert out['submitted'] <= 1, out
 
+    def test_a_restored_question_carries_the_message_that_asked_it(self):
+        """A reopened card has no live message id; the answer request must still name the row.
+
+        The old code wrote `questionMessageId` and submitted `messageId`, so a restored card sent
+        an empty id and the server answered 404 "找不到消息：".
+        """
+        out = _run_workspace()['restoredQuestion']
+        assert out['messageId'] == 'm-restored', out
+        assert out['sentMessageId'] == 'm-restored', out
+        assert out['sentQuestionId'] == 'q2', out
+
+    def test_multi_select_writes_every_clicked_option(self):
+        """Toggling the CSS class alone left `answers` empty, so the card could never submit."""
+        out = _run_workspace()['multiSelect']
+        assert out['selected'] == ['A', 'B'], out
+
     def test_a_stored_artifact_still_draws_its_card_and_a_running_tool_says_what_it_does(self):
         """Reloading dropped the artifact card (only the tool row survived), and a running
         present_artifact said “读取中…”, which reads as a stalled turn."""

@@ -479,6 +479,10 @@ class AgentService:
             raise AIError('ai.apiNoQuestion', kind='bad_request', question=question_id)
         if question.get('status') != 'pending':
             raise AIError('ai.apiAlreadyAnswered', kind='bad_request')
+        # The question row remembers the assistant row that asked it. Prefer that row over a
+        # client-supplied id: a reopened transcript has no live message element, and a stale
+        # id from another turn must not become this answer's target.
+        message_id = str(question.get('message_id') or message_id)
         answered = store.answer_question(question_id, {'answers': answers})
         if answered is None:
             raise AIError('ai.apiAlreadyAnswered', kind='bad_request')
