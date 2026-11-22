@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`cb34dce 修改：补交能力生成器与 doctor 命令`
+- 最后提交：`0086cca 功能更新：节点验证清单化，迁移 name/upload/compile/output`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -34,6 +34,7 @@
 | `ef5b789` | P1 第三片：`runtime/fsm.py` 四张状态机表 + recipe 工厂；`runtime/events.py` 字段契约 + AST 调用点 census |
 | `afc7d34` | P1 第四片：`runtime/flags.py` 迁移开关与到期门禁；`core/asset.py` 的 `DataAsset` 骨架 |
 | `7a5f660` | 生成的前端目录从 `static/js` 移到 `generated/capability-schema.json`（全量快测的前端门禁拒绝无人加载的模块） |
+| `0086cca` | P2 第一批：manifest 增加 `validators` 与 `no_input`/`requires_output`；name/upload/compile/output 迁移，engine 删除对应 if 分支 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
