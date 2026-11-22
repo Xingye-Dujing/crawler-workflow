@@ -1068,301 +1068,33 @@ var runsManager = {
 };
 
 workflow.validate = function () {
-    /* The run-gate and the parity tests read this flat, ordered list. It is a one-line
-       projection of validateDetailed so there is exactly ONE rule body; the edit-time
-       badges read validateDetailed to know WHICH node each message is about. */
-    return workflow.validateDetailed().messages;
+    /* The run gate's flat list. The rules live on the server (``engine.workflow``); this is a
+       one-line projection so the console and the canvas badges agree by construction. */
+    return this.validateDetailed().then(function (result) { return result.messages; });
 };
 
+/* Every pre-run rule is the server's (manifest rules, validators, the source matrix, the DAG).
+   Keeping a second copy in this file is how “the panel accepted it and the engine refused it”
+   became possible; the answer is worded in the request's language by the same evaluator. */
 workflow.validateDetailed = function () {
-    var errors = [];
-    var perNode = {};
-    function add(id, msg) {
-        errors.push(msg);
-        if (id !== null && id !== undefined) {
-            (perNode[id] = perNode[id] || []).push(msg);
-        }
-    }
-    /* 被禁用的节点直接跳过：a node the run will not execute — its own switch off, its type off, or
-       starved because every upstream is gone — is as if it were not on the canvas, and so is every
-       wire that touched it. That is the graph the engine actually runs
-       (engine.workflow.effective_workflow), so validating the FULL canvas instead put a red badge
-       on the greyed-out box the user had just switched off and refused the whole run over a wire
-       the run never had. ``effectiveNodeMap`` is the canvas mirror of that same filter; a harness
-       without the canvas layer gets the full map back, which is the old behaviour there. */
-    var nodes = effectiveNodeMap();
-    var conns = (canvas.connections || []).filter(function (c) {
-        return nodes[c.from] && nodes[c.to];
-    });
-
-    if (Object.keys(nodes).length === 0) {
-        /* Same answer as the backend's own validate for a canvas whose every box is switched off
-           (``engine.empty_canvas``): a run of nothing is not a success. */
-        add(null, I18n.t('validate.empty'));
-        return { messages: errors, perNode: perNode };
-    }
-
-    /* Build lookup: which nodes have inputs/outputs, and how many inputs each
-       one has (a join needs two: left table, right table). */
-    var hasInput = {};
-    var hasOutput = {};
-    var inputCount = {};
-    /* A wire FROM a name node is the labelling pattern, not a data table — the
-       source feed gate must not see it as a feed (backend validate builds the same
-       distinction off the same rule: parent type !== 'name'). */
-    var dataInput = {};
-    /* Data parents only: a two-table step reads exactly two TABLES, and a name wire carries
-       no rows (the backend's validate counts them the same way). */
-    var dataParentCount = {};
-    conns.forEach(function (c) {
-        hasOutput[c.from] = true;
-        hasInput[c.to] = true;
-        inputCount[c.to] = (inputCount[c.to] || 0) + 1;
-        var src = nodes[c.from];
-        if (src && src.type !== 'name' && nodes[c.to]) {
-            dataInput[c.to] = true;
-            dataParentCount[c.to] = (dataParentCount[c.to] || 0) + 1;
-        }
-    });
-    /* Direct parents' types per node — the compile/output rules below key on exactly the same
-       immediate-upstream distinction the backend validate builds. */
-    var parentTypes = {};
-    conns.forEach(function (c) {
-        var src = nodes[c.from];
-        if (src && nodes[c.to]) (parentTypes[c.to] = parentTypes[c.to] || []).push(src.type);
-    });
-    var TABLE_TYPES = ['source', 'upload', 'resume', 'comment', 'process', 'analysis', 'biblio', 'accumulate', 'tokenize', 'output'];
-
-    Object.keys(nodes).forEach(function (id) {
-        var node = nodes[id];
-        var params = node.params || {};
-        var type = node.type;
-        /* Old saved workflows can carry title:null — the message must still
-           name the node (type label + id), never read 'node "null"'. */
-        var label = node.title || I18n.t('node.' + type);
-
-        if (type === 'source') {
-            sourceNodeErrors(node, label, !!dataInput[id]).forEach(function (m) { add(id, m); });
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.sourceDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'process') {
-            if (!hasInput[id]) {
-                add(id, I18n.t('validate.processInput').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.processDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'analysis') {
-            if (!hasInput[id]) {
-                add(id, I18n.t('validate.analysisInput').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.analysisDownstream').replace('{title}', label));
-            }
-            if (!params.operation) {
-                add(id, I18n.t('validate.analysisOperation').replace('{title}', label));
-            }
-            if (params.operation === 'join_tables' && (dataParentCount[id] || 0) < 2) {
-                /* The right-hand table is the node's second incoming
-                   connection — without it the join has nothing to join with. */
-                add(id, I18n.t('validate.joinNeedsTwo').replace('{title}', label));
-            }
-            if (params.operation === 'anti_join' && (dataParentCount[id] || 0) < 2) {
-                /* 内容去重: the table being filtered and the basis table are two wires; the
-                   roles are read in order, and one wire is not a two-table question. */
-                add(id, I18n.t('validate.antiJoinNeedsTwo').replace('{title}', label));
-            }
-        }
-
-        if (type === 'verify') {
-            /* 采集校验 reads exactly two data tables (1st = list, 2nd = result). The columns
-               are checked here so a node that would refuse at run time is flagged before the
-               run is paid for — the backend validate refuses the same two. */
-            var verifyParents = dataParentCount[id] || 0;
-            if (verifyParents !== 2) {
-                add(id, I18n.t('validate.verifyNeedsTwo')
-                    .replace('{title}', label)
-                    .replace('{n}', String(verifyParents)));
-            }
-            if (!String(params.input_key_column || '').trim()) {
-                add(id, I18n.t('validate.verifyListCol').replace('{title}', label));
-            }
-            if (!String(params.result_key_column || '').trim()) {
-                add(id, I18n.t('validate.verifyResultCol').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.verifyDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'upload') {
-            /* A source like any other: nothing upstream, but it must have a file. */
-            if (!params.dataset_id) {
-                add(id, I18n.t('validate.uploadFile').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.uploadDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'accumulate') {
-            if (!String(params.lineage_name || '').trim()) {
-                add(id, I18n.t('validate.accumulateName').replace('{title}', label));
-            }
-            if (params.identity === 'columns' && !String(params.key_columns || '').trim()) {
-                add(id, I18n.t('validate.accumulateKeys').replace('{title}', label));
-            }
-            if ((inputCount[id] || 0) !== 1) {
-                add(id, I18n.t('validate.accumulateOneParent').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.accumulateDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'biblio') {
-            var biblioParents = parentTypes[id] || [];
-            if (!dataInput[id]) {
-                add(id, I18n.t('validate.biblioInput').replace('{title}', label));
-            } else if (biblioParents.length > 1) {
-                add(id, I18n.t('validate.biblioOneInput').replace('{title}', label).replace('{n}', biblioParents.length));
-            }
-            var entity = params.entity_type || 'keyword';
-            var shape = params.output_shape || 'nodes';
-            if (BIBLIO_ENTITY_TYPES.indexOf(entity) < 0) {
-                add(id, I18n.t('validate.biblioEntity').replace('{title}', label));
-            }
-            if (BIBLIO_OUTPUT_SHAPES.indexOf(shape) < 0) {
-                add(id, I18n.t('validate.biblioShape').replace('{title}', label));
-            }
-            if (isBiblioCoupling(entity) && boolParam(params.burst, true)) {
-                add(id, I18n.t('validate.biblioBurstCoupling').replace('{title}', label));
-            }
-            if (shape === 'clusters' && !boolParam(params.cluster, true)) {
-                add(id, I18n.t('validate.biblioShapeCluster').replace('{title}', label));
-            }
-            if (shape === 'bursts' && !boolParam(params.burst, !isBiblioCoupling(entity))) {
-                add(id, I18n.t('validate.biblioShapeBurst').replace('{title}', label));
-            }
-            if (shape === 'dual_map' && !String(params.basemap_dataset_id || '').trim()) {
-                add(id, I18n.t('validate.biblioBasemap').replace('{title}', label));
-            }
-        }
-
-        if (type === 'name') {
-            /* The name node is metadata, not data: it must sit at the head of
-               the workflow (no incoming edges), wire into something, and
-               carry a non-empty label — that label is what groups the run in
-               the Execution History panel. */
-            if (!params.workflow_name || !String(params.workflow_name).trim()) {
-                add(id, I18n.t('validate.nameEmpty').replace('{title}', label));
-            }
-            if (hasInput[id]) {
-                add(id, I18n.t('validate.nameMustLead').replace('{title}', label));
-            }
-            if (!hasOutput[id]) {
-                add(id, I18n.t('validate.nameDownstream').replace('{title}', label));
-            }
-        }
-
-        if (type === 'tokenize') {
-            if (!hasInput[id]) {
-                add(id, I18n.t('validate.tokenizeInput').replace('{title}', label));
-            }
-            if (!params.text_column || !params.text_column.trim()) {
-                add(id, I18n.t('validate.tokenizeColumn').replace('{title}', label));
-            }
-        }
-
-        if (type === 'visualize') {
-            if (!hasInput[id]) {
-                add(id, I18n.t('validate.visualizeInput').replace('{title}', label));
-            }
-            if (!params.chart_type) {
-                add(id, I18n.t('validate.visualizeChartType').replace('{title}', label));
-            }
-            // 模型一致率 has no x/y — it reads the tidy table's label column (the model/id columns
-            // default to 模型/原行). The four bibliometric views read fixed columns too. Requiring
-            // x_field here would block a chart that never uses it, so ask for the field THIS type
-            // really needs, matching the backend's own refusal.
-            if (BIBLIO_CHARTS.indexOf(params.chart_type) >= 0) {
-                // fixed columns; nothing to ask for
-            } else if (params.chart_type === 'model_agreement') {
-                if (!params.agreement_label_field || !String(params.agreement_label_field).trim()) {
-                    add(id, I18n.t('validate.visualizeAgreementLabel').replace('{title}', label));
-                }
-            } else if (!params.x_field || !params.x_field.trim()) {
-                add(id, I18n.t('validate.visualizeXField').replace('{title}', label));
-            }
-        }
-
-        if (type === 'compile') {
-            /* A compile node turns a visualize parent's LaTeX into a PDF. Its source must be a visualize
-               node that will actually emit some — mirrored off the same immediate-upstream rule as the
-               backend, so a chart with neither LaTeX box on, or a non-visualize wire, is refused here too. */
-            var cmpParents = parentTypes[id] || [];
-            if (!cmpParents.length) {
-                add(id, I18n.t('validate.compileInput').replace('{title}', label));
-            }
-            cmpParents.forEach(function (ptype) {
-                if (ptype !== 'visualize') {
-                    add(id, I18n.t('validate.compileBadParent').replace('{title}', label));
-                }
+    return Promise.resolve()
+        .then(function () {
+            return fetchJSON('/api/workflow/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ workflow: canvas.toWorkflowJSON() }),
             });
-            conns.forEach(function (c) {
-                if (String(c.to) !== String(id)) return;
-                var par = nodes[c.from];
-                if (par && par.type === 'visualize') {
-                    var pp = par.params || {};
-                    if (!boolParam(pp.emit_latex, true) && !boolParam(pp.emit_latex_table, true)) {
-                        add(id, I18n.t('validate.compileSourceBothOff').replace('{title}', label));
-                    }
-                }
-            });
-        }
-
-        if (type === 'output') {
-            if (!hasInput[id]) {
-                add(id, I18n.t('validate.outputInput').replace('{title}', label));
-            }
-            if ((params.operation === 'save' || params.operation === 'save_csv') && (!params.filename || !params.filename.trim())) {
-                add(id, I18n.t('validate.outputFilename').replace('{title}', label));
-            }
-            /* PDF and a row table are mutually exclusive outputs: a pdf format needs a visualize/compile
-               source (and no table alongside); a table format must not be fed only by a chart/compile. */
-            var outTypes = parentTypes[id] || [];
-            var isPdf = (params.operation === 'save' || params.operation === 'save_csv') &&
-                (String(params.format || '').toLowerCase() === 'pdf' || String(params.filename || '').toLowerCase().endsWith('.pdf'));
-            var anyTable = outTypes.some(function (t) { return TABLE_TYPES.indexOf(t) >= 0; });
-            var anyPdfable = outTypes.some(function (t) { return t === 'visualize' || t === 'compile'; });
-            if (isPdf) {
-                if (anyTable) add(id, I18n.t('validate.outputPdfMixed').replace('{title}', label));
-                if (!anyPdfable) add(id, I18n.t('validate.outputPdfOnly').replace('{title}', label));
-                if (outTypes.indexOf('visualize') >= 0 && outTypes.indexOf('compile') >= 0) {
-                    add(id, I18n.t('validate.outputPdfTwoSources').replace('{title}', label));
-                }
-            } else if (anyPdfable && !anyTable) {
-                add(id, I18n.t('validate.outputNeedsPdf').replace('{title}', label));
-            }
-        }
-    });
-
-    var hasUpstream = Object.keys(nodes).some(function (id) {
-        return ['source', 'upload', 'process', 'analysis', 'tokenize', 'resume', 'comment'].indexOf(nodes[id].type) >= 0;
-    });
-    if (hasUpstream) {
-        var hasTerminal = Object.keys(nodes).some(function (id) {
-            return nodes[id].type === 'output' || nodes[id].type === 'visualize';
+        })
+        .then(function (result) {
+            if (!result || !result.ok) throw new Error('HTTP');
+            return { messages: result.messages || [], perNode: result.perNode || {} };
+        })
+        .catch(function (err) {
+            /* A validation that could not run must not look like a clean canvas: name it, and the
+               server's own run gate still refuses a bad POST. */
+            return {
+                messages: [I18n.t('validate.unavailable', { err: String((err && err.message) || err) })],
+                perNode: {},
+            };
         });
-        if (!hasTerminal) {
-            add(null, I18n.t('validate.noTerminal'));
-        }
-    }
-
-    return { messages: errors, perNode: perNode };
 };

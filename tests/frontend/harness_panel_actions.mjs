@@ -792,7 +792,7 @@ out.dataset_reconcile_missing = {
 };
 
 /* ── edit-time diagnostics: badges, missing-column, cost ─────────────
-   The backend answers the columns; recompute() merges the offline validateDetailed
+   The backend answers the columns; recompute() merges the server's validation
    problems with a missing-column diff and paints. A node whose upstream is a crawl
    (unknown columns) must NEVER be flagged — the whole point is to not guess a shape. */
 fresh();
@@ -827,10 +827,11 @@ out.diagnostics_unknown_upstream_no_flag = {
     chartInvalid: pa.canvas._nodeEl(dChart2).classList.contains('node-invalid'),
 };
 
-/* A config problem (an upload with no file) still badges, offline. */
+/* A config problem (an upload with no file) badges from the server's diagnostics payload. */
 fresh();
 const badUp = addCanvasNode('upload', { dataset_id: '', dataset_name: '', row_count: '' });
 pa.Diagnostics._columns = {}; pa.Diagnostics._reads = {};
+pa.Diagnostics._validation = { messages: ['p1', 'p2'], perNode: { [badUp]: ['p1', 'p2'] } };
 pa.Diagnostics.recompute();
 out.diagnostics_config_badge = {
     invalid: pa.canvas._nodeEl(badUp).classList.contains('node-invalid'),
@@ -1212,10 +1213,12 @@ out.language_back = { tag: doc.body.dataset.lang };
 /* Two source nodes with nothing typed in: the validator has two separate things to
    say, and the user has to hear both. Looping `showToast` over them printed only the
    last (one element, text replaced each time), so a canvas with N problems needed N
-   presses of 执行 to discover them one at a time. */
+   presses of 执行 to discover them one at a time. The gate is the server's now, so the
+   harness seeds its answer. */
 fresh();
 addCanvasNode('source', { platform: 'zhihu', collect: 'posts', keyword: '' });
 addCanvasNode('source', { platform: 'weibo', collect: 'posts', keyword: '' });
+route('/api/workflow/validate', { ok: true, messages: ['问题一', '问题二'], perNode: {} });
 requests.length = 0;
 await pa.workflow.execute();
 await drain();
@@ -1228,6 +1231,7 @@ out.two_problems_one_toast = {
    scaffolding around a sentence that already names the node. */
 fresh();
 addCanvasNode('output', { operation: 'save', format: 'csv', filename: 'a.csv' });
+route('/api/workflow/validate', { ok: true, messages: ['唯一问题'], perNode: {} });
 requests.length = 0;
 await pa.workflow.execute();
 await drain();

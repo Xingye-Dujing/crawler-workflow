@@ -295,7 +295,6 @@ class TestTheLabelCatalogueCoversEveryManifestMode:
                 'settings.backendUnknown',
                 'settings.catbusModeNote',
                 'settings.catbusUrlsHint',
-                'validate.modeUnavailable',
             )
             for lang in ('en', 'zh')
             if key not in tables[lang]

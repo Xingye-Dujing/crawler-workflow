@@ -412,9 +412,9 @@ class TestDiagnostics:
         would be guessing a shape the server cannot see."""
         assert pa['diagnostics_unknown_upstream_no_flag']['chartInvalid'] is False
 
-    def test_a_config_problem_badges_offline(self, pa):
-        """An upload with no file and no downstream is two problems — counted on the
-        badge without waiting for the server."""
+    def test_a_config_problem_badges_from_the_diagnostics_payload(self, pa):
+        """An upload with no file and no downstream is two problems — the server's diagnostics
+        payload counts them on the badge."""
         d = pa['diagnostics_config_badge']
         assert d['invalid'] is True
         assert d['badgeText'] == '2'

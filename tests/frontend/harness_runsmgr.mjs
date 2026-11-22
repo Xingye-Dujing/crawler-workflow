@@ -92,8 +92,18 @@ sandbox.fetch = (url, options) => {
     const payload = frag
         ? sandbox.__routes[frag]
         : { ok: true, removed: true, run_id: 'r-new', rows: [], columns: [], total_rows: 0 };
-    return Promise.resolve({ json: () => Promise.resolve(payload) });
+    return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(payload),
+        /* `fetchJSON` reads text and parses it; a reply without `text()` reads as a server
+           failure and would refuse every run as "could not validate". */
+        text: () => Promise.resolve(JSON.stringify(payload)),
+    });
 };
+/* The run gate is a server call now. These scenarios are about the run manager, so the canvas
+   under test is clean and the gate answers "nothing to fix". */
+sandbox.__routes['/api/workflow/validate'] = { ok: true, messages: [], perNode: {} };
 sandbox.__byId('runs-mgr-body').innerHTML = '';
 const manager = sandbox.__wf.runsManager;
 /* The older scenarios below are about the ALL-records list (its buttons and its

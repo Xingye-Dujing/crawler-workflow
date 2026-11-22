@@ -531,13 +531,14 @@ SCENARIOS = [
         'preflight': CLEAN,
     },
     {
-        # A cell this machine cannot crawl at all is refused by name when the walk starts; asking
-        # the gate first would only invent a second refusal for the same fact.
+        # A cell this machine cannot crawl at all is refused by the server's run gate; asking
+        # the cookie gate first would only invent a second refusal for the same fact.
         'id': 'catbus-cell-not-runnable-asks-nothing',
         'settings': AUTO,
         **_canvas(_chain(1, 'bilibili', backend='catbus', catbus_account='cb')),
         'matrix': _matrix_with_catbus({'bilibili.posts': _cell('planned', runnable=False)}),
         'preflight': CLEAN,
+        'validate': {'ok': True, 'messages': ['这个采集单元在这台机器上跑不了'], 'perNode': {}},
     },
     {
         # The remedy for a dead CatBus login is not the cookie panel. The refusal stays hard; only

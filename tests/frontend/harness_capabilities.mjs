@@ -50,7 +50,7 @@ function world() {
     vm.runInContext(
         sourceOf(wfPath) +
             '\n;globalThis.__workflow = workflow; globalThis.__platformAdviceMessage = platformAdviceMessage;' +
-            'globalThis.__sourceNodeErrors = sourceNodeErrors; globalThis.__Machine = Machine;',
+            ' globalThis.__Machine = Machine;',
         sandbox,
     );
     return sandbox;
@@ -93,7 +93,6 @@ for (const sc of scenarios) {
            it (dataset flag, greyed option, pre-run refusal) is JS and Python cannot
            see it, so it is read out here rather than asserted against a string. */
         winDesktop: sandbox.document.documentElement.dataset.winDesktop || '',
-        errors: sandbox.__sourceNodeErrors(canvas.nodes[id], 't', !!sc.hasDataInput).map(String),
     };
     if (sc.switchBackend) {
         /* The engine is a selector, not a label: switching it may have to move the stored mode to
@@ -102,7 +101,6 @@ for (const sc of scenarios) {
         out[sc.id].afterBackend = canvas.nodes[id].params.backend;
         out[sc.id].afterMode = canvas.nodes[id].params.collect;
         out[sc.id].afterHtml = sandbox.__byId('settings-content').innerHTML;
-        out[sc.id].afterErrors = sandbox.__sourceNodeErrors(canvas.nodes[id], 't', !!sc.hasDataInput).map(String);
     }
     if (sc.refresh) {
         /* The matrix arrives after a restored draft has drawn its nodes, so the

@@ -165,7 +165,11 @@ for (const sc of scenarios) {
                 : path === '/api/workflow/execute'
                     ? { ok: true, run_id: 'r1' }
                     : { ok: true, settings: {} };
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(payload), text: () => Promise.resolve('x') });
+        return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(payload),
+            text: () => Promise.resolve(JSON.stringify(payload)),
+        });
     };
     vm.runInContext(
         `workflow.pollStatus = function () {};

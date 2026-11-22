@@ -1,24 +1,17 @@
-/* Runs the REAL workflow.validate() (backend/static/js/workflow.js) in node.
+/* Drives the workflow module's browser-side surfaces.
  *
- * workflow.validate() is the gate a run must pass before the browser POSTs
- * /api/workflow/execute — the exact place the user was bitten twice (a renamed
- * node reading 'node-1', a comments node demanding a keyword). The Python suite
- * rebuilds its own workflow dicts, so a rule that lives only in JS is invisible
- * to them. This harness loads the actual file and answers, for a batch of
- * canvases, which validation messages fire — the message KEYS, so the result
- * does not depend on UI language.
+ * The pre-run gate is the server's (`/api/workflow/validate`, `engine.workflow`), so this harness
+ * no longer answers validation rules: it renders the settings panels, reads the analysis badge
+ * from the diagnostics payload, routes links by domain, and checks the "needs a model" parity
+ * table and the file-import verdict.
  *
  * Usage: node harness_validate.mjs <path/to/workflow.js> <scenarios.json>
- * scenarios.json = [ { "id": "...", "lang": "en",
- *                      "nodes": [{id,type,title,params}...],
- *                      "connections": [{from,to}...] } ]
- * Prints {id: [keys...]} to stdout.
- *
- * Two extra scenario shapes ride along, because they belong to the same file:
- *   {"node": {...}}        → render that node's settings panel, return its HTML
- *   {"needsLlm": {...}}    → answer nodeNeedsLlm(params, nodeOperation), which is
- *                            the browser's half of the "does this run need a
- *                            model?" gate (backend/app.py holds the other half)
+ * scenarios.json = [
+ *   { "id", "node": {...}, "extraNodes": [...], "connections": [...] },   // settings HTML
+ *   { "id", "nodes": [...], "connections": [...], "badge": "id", ... },   // badge text
+ *   { "id", "needsLlm": {...}, "operation": "..." },
+ * ]
+ * Prints {url, placeholder, settings, needsLlm, badges, parseWorkflow} to stdout.
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
@@ -115,7 +108,7 @@ if (matrix) sandbox.__routes['/api/capabilities'] = matrix;
 vm.runInContext(
     src +
         '\n;globalThis.__wf = {' +
-        ' workflow, urlPlatform, selectSourcePlatform, openSettings, nodeNeedsLlm, parseWorkflowFileText };',
+        ' urlPlatform, selectSourcePlatform, openSettings, nodeNeedsLlm, parseWorkflowFileText };',
     sandbox,
 );
 /* The panel render below is a synchronous read of what the fetch produced, so
@@ -123,13 +116,12 @@ vm.runInContext(
    which is the other branch and is asserted too. */
 await sandbox.Capabilities.load();
 
-const workflow = sandbox.__wf.workflow;
 const urlPlatform = sandbox.__wf.urlPlatform;
 const selectSourcePlatform = sandbox.__wf.selectSourcePlatform;
 const openSettings = sandbox.__wf.openSettings;
 const nodeNeedsLlm = sandbox.__wf.nodeNeedsLlm;
 
-const out = { validate: {}, url: [], placeholder: {}, settings: {}, needsLlm: {}, badges: {} };
+const out = { url: [], placeholder: {}, settings: {}, needsLlm: {}, badges: {} };
 
 for (const sc of scenarios) {
     I18n.lang = sc.lang || 'en';
@@ -182,10 +174,8 @@ for (const sc of scenarios) {
         };
     }
     sandbox.canvas.connections = sc.connections || [];
-    out.validate[sc.id] = workflow.validate();
-    /* The badge's own channel: the step contract's problems join the offline list in
-       Diagnostics.recompute (validateDetailed must stay untouched — it is the run gate).
-       ``badge`` names the node whose badge text is returned. */
+    /* The badge's own channel: the step contract's problems join the server's diagnostics in
+       Diagnostics.recompute. ``badge`` names the node whose badge text is returned. */
     if (sc.badge && sandbox.Diagnostics) {
         sandbox.Diagnostics._paramProblems = sc.paramProblems || {};
         /* The paint step needs real DOM node elements; the badge TEXT is what this measures. */

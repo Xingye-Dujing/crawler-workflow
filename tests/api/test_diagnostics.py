@@ -89,3 +89,49 @@ def test_a_failed_column_check_logs_one_message_and_keeps_the_traceback(client, 
     assert response.get_json()['ok'] is False
     assert len(calls) == 1
     assert len(calls[0][0]) == 1  # only the message; the traceback comes from exc_info, not an arg
+
+
+def test_diagnostics_carries_the_run_gates_validation(client):
+    """The panel badges read the same rule body a run is gated by — one evaluator, two surfaces."""
+    body = {
+        'nodes': {'s': {'id': 's', 'type': 'source', 'params': {}}},
+        'connections': [],
+        'settings': {},
+    }
+    data = client.post('/api/workflow/diagnostics', json=body).get_json()
+    validation = data['validation']
+    assert validation['entries'][0]['id'] == 's'
+    assert validation['entries'][0]['code'] == 'engine.source'
+    assert validation['perNode']['s'] == [validation['entries'][0]['message']]
+    assert validation['messages'] == [entry['message'] for entry in validation['entries']]
+
+
+def test_the_run_gate_is_its_own_endpoint_and_answers_by_name(client):
+    """`/api/workflow/validate` is what the browser calls before POSTing a run.
+
+    A source with no platform is refused by the matrix rule, and the answer carries both the flat
+    list (the toast) and the per-node map (the badges) from that one pass.
+    """
+    body = {'nodes': {'s': {'id': 's', 'type': 'source', 'params': {}}}, 'connections': [], 'settings': {}}
+    r = client.post('/api/workflow/validate', json=body)
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data['ok'] is True
+    assert data['messages'], 'an empty platform is refused'
+    assert data['perNode']['s'] == data['messages']
+    assert data['entries'][0]['code'] == 'engine.source'
+
+
+def test_a_clean_canvas_passes_the_run_gate(client):
+    body = {
+        'nodes': {
+            'n': {'id': 'n', 'type': 'name', 'params': {'workflow_name': 'x'}},
+            'u': {'id': 'u', 'type': 'upload', 'params': {'dataset_id': 'd1'}},
+            'o': {'id': 'o', 'type': 'output', 'params': {'operation': 'save', 'filename': 'x.csv'}},
+        },
+        'connections': [{'from': 'n', 'to': 'u'}, {'from': 'u', 'to': 'o'}],
+        'settings': {},
+    }
+    data = client.post('/api/workflow/validate', json=body).get_json()
+    assert data['messages'] == []
+    assert data['perNode'] == {}

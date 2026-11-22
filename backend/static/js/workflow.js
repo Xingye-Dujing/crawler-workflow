@@ -1084,8 +1084,8 @@ const workflow = {
     },
 
     async _executeOnce(opts) {
-        /* Validate before running */
-        var validationErrors = this.validate();
+        /* Validate before running — on the server, where the rules live. */
+        var validationErrors = await this.validate();
         /* A reusable node's errors exist only in the expanded graph, so the canvas's
            own validate() cannot see them. Asking here means a bad group refuses the
            press by name instead of sending a graph the engine will reject halfway. */
@@ -1624,134 +1624,6 @@ const workflow = {
         this._pollTimer = interval;
     },
 };
-
-/* What a data source still needs is the MATRIX's answer, not this file's.
-
-   The branch this replaces knew three shapes — comments→links, wechat→links,
-   everything else→keyword — which is the `if platform == '…'` second opinion
-   AGENTS.md forbids, and it was not hypothetical: four platforms offer
-   “某作者的作品” (which asks for a creator, not a keyword) and 哔哩哔哩 offers
-   热榜 (which asks for nothing at all). Both were declared in the matrix, rendered
-   in the panel, executable by the backend — and unreachable from the UI, because
-   a filled-in author or board node was refused “缺少关键词” and no request ever
-   left the page. Same payload, one source: `/api/capabilities`. */
-function sourceNodeErrors(node, label, hasDataInput) {
-    var params = node.params || {};
-    var platform = node.platform || params.platform;
-    if (!platform) {
-        return [I18n.t('validate.sourceNoPlatform').replace('{title}', label)];
-    }
-    if (!Capabilities.ready()) {
-        /* Refusing to guess is the honest answer: without the matrix this function
-           cannot know which fields the mode asks for, and the panel already says so
-           with a retry button wherever it renders a form. */
-        return [I18n.t('validate.capUnavailable').replace('{title}', label)];
-    }
-    if (!Capabilities.platform(platform)) {
-        return [I18n.t('validate.sourceUnknownPlatform', { title: label, platform: String(platform) })];
-    }
-    var wanted = String(params.collect || params.mode || '');
-    /* The engine is part of the question: the same platform offers a different function list under
-       each one, and the run will fall back inside THAT list. Asking the union would bless a stored
-       browser-only mode for a CatBus node the adapter has no handler for. */
-    var backend = String(params.backend || '') || Capabilities.defaultBackend(platform);
-    var offered = Capabilities.modes(platform, backend);
-    var mode = Capabilities.mode(platform, wanted, backend);
-    if (!mode) {
-        return [I18n.t('validate.sourceUnknownPlatform', { title: label, platform: String(platform) })];
-    }
-    if (wanted && offered.length > 1 && mode.key !== wanted) {
-        return [I18n.t('validate.sourceUnknownMode')
-            .replace('{title}', label)
-            .replace('{platform}', I18n.t('platform.' + platform))];
-    }
-    var engine = Capabilities.engine(platform, backend);
-    if (engine && engine.available === false) {
-        return [
-            I18n.t('validate.modeUnavailable', {
-                title: label,
-                reason: I18n.t(engine.reasonKey || 'settings.backendProbeFailed'),
-            }),
-        ];
-    }
-    if (!Capabilities.runnable(mode) || !Capabilities.cellRunnable(mode, backend)) {
-        /* The server already answered that this machine or this engine cannot run the pair, so this is
-           not a warning about a risk — it is a refusal of a certainty, said before the run is paid
-           for. The same rule runs in ``engine/workflow.py``, and the wording is the catalogue's. */
-        return [
-            I18n.t('validate.modeUnavailable', {
-                title: label,
-                reason: Capabilities.modeRefusal(platform, mode, backend),
-            }),
-        ];
-    }
-    var errors = [];
-    /* Feed gate, matrix-driven like the rest of this function: a field the matrix
-       marks feedable (f.fedBy) reads an upstream table column, and a wired table
-       REPLACES the pasted list — its requiredness and ownership become runtime
-       facts about the parent's rows, not design-time claims about this node.
-       A wire that cannot feed and a column named with nothing wired are both
-       half-mistakes this gate refuses by name (backend validate agrees exactly). */
-    var feedFields = (mode.fields || []).filter(function (f) { return f.fedBy; });
-    if (hasDataInput && !feedFields.length) {
-        errors.push(I18n.t('validate.sourceFeedNoMode').replace('{title}', label));
-    }
-    if (!hasDataInput && feedFields.some(function (f) { return String(params[f.fedBy] || '').trim(); })) {
-        errors.push(I18n.t('validate.sourceFeedNoInput').replace('{title}', label));
-    }
-    (mode.fields || []).forEach(function (field) {
-        if (field.fedBy && hasDataInput) {
-            if (!String(params[field.fedBy] || '').trim()) {
-                errors.push(
-                    I18n.t('validate.sourceFeedNoColumn')
-                        .replace('{title}', label)
-                        .replace('{field}', I18n.t(field.labelKey))
-                );
-            }
-            return;
-        }
-        var raw = params[field.key];
-        var text = String(raw === undefined || raw === null ? '' : raw);
-        if (field.linksOf) {
-            var links = text.replace(/,/g, '\n').split(/\r?\n/).filter(function (s) { return s.trim(); });
-            if (!links.length) {
-                if (field.required) {
-                    errors.push(I18n.t('validate.sourceFieldMissing')
-                        .replace('{title}', label)
-                        .replace('{field}', I18n.t(field.labelKey)));
-                }
-                return;
-            }
-            /* Each pasted line has to belong to the platform named for it — the
-               engine refuses others at crawl time; say it before the run. A field
-               that declares it also takes NAMES (红果: the walk runs inside the
-               client, whose own boards answer to a title) does not call a title a
-               broken link; a line that does look like a link still has to match.
-               The link test is spelled [A-Za-z0-9_] rather than \w so it is the
-               ONE rule the server answers too (crawl_capabilities.is_url_cell) —
-               JS \w is ASCII, Python \w is not, and two spellings would let the
-               panel bless a line the engine then refuses. */
-            var bad = links.filter(function (u) {
-                if (field.acceptsNames && !/:\/\/|[?&][A-Za-z0-9_]+=/.test(u)) return false;
-                return urlPlatform(u) !== field.linksOf;
-            }).length;
-            if (bad) {
-                errors.push(I18n.t('validate.sourceCommentPlat')
-                    .replace('{title}', label)
-                    .replace('{n}', bad)
-                    .replace('{plat}', I18n.t('platform.' + field.linksOf)));
-            }
-            return;
-        }
-        if (field.required && !text.trim()) {
-            errors.push(I18n.t('validate.sourceFieldMissing')
-                .replace('{title}', label)
-                .replace('{field}', I18n.t(field.labelKey)));
-        }
-    });
-    return errors;
-}
-
 
 /* The bert-mode fields, shared by the sentiment / emotion / tendency analyzers. When
    the registry names any models a picker lists them by name (each option's value is

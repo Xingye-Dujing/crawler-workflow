@@ -672,16 +672,10 @@ class TestAModeThisMachineCannotRun:
         assert 'cap.requiresWindowsDesktop' in verdicts['server']['asked']
         assert 'cap.requiresWindowsDesktop' not in verdicts['desktop']['asked']
 
-    def test_the_run_is_refused_before_it_is_paid_for(self, verdicts):
-        assert 'validate.modeUnavailable' in verdicts['server']['errors']
-        assert 'validate.modeUnavailable' not in verdicts['desktop']['errors']
-        assert 'validate.modeUnavailable' not in verdicts['noanswer']['errors']
-
     def test_a_mode_without_a_requirement_is_never_collateral_damage(self, verdicts):
         # The harvest option is hidden entirely on this machine (the node is on the board
         # mode, and comments is not offered); what must be untouched is the mode the node
         # actually holds — hot stays enabled and named.
-        assert verdicts['board']['errors'] == []
         board = re.search(r'<option value="hot"[^>]*>', verdicts['board']['html'])
         assert board and 'disabled' not in board.group(0), board
 

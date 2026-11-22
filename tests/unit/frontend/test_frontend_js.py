@@ -1,10 +1,9 @@
 """Behaviour tests for the REAL frontend JS, run through node (no npm).
 
-The browser validates a canvas BEFORE the server is ever asked to run it
-(workflow.js:validate), routes comment links by domain (urlPlatform) and
-normalises platform switches (selectSourcePlatform). Those decisions change
-what a run produces, so they are product logic — and product logic lives under
-test. Each harness loads the untouched file from backend/static/js and prints
+The run gate is the server's (`/api/workflow/validate`); this file drives the browser surfaces that
+remain product logic: the settings panels (`openSettings`), the analysis/diagnostics badge, link
+routing (`urlPlatform`), platform switches (`selectSourcePlatform`), the "needs a model" parity and
+the workflow-file verdict. Each harness loads the untouched file from backend/static/js and prints
 what it computed; this module asserts on that.
 
 Requirements: plain `node` on PATH (already needed for the canvas harness).
@@ -28,17 +27,6 @@ JS_DIR = REPO / 'backend' / 'static' / 'js'
 HARNESS = Path(__file__).resolve().parents[2] / 'frontend' / 'harness_validate.mjs'
 
 
-def _parse(msg: str) -> tuple:
-    """'validate.key|Title|2|zhihu|{col}|{op}|{field}' → ('validate.key', {...})."""
-    head, *fields = msg.split('|')
-    names = ['title', 'n', 'plat', 'col', 'op', 'field']
-    out = {}
-    for name, value in zip(names, fields, strict=False):
-        if not value.startswith('{'):  # unfilled placeholders stay literal
-            out[name] = value
-    return head, out
-
-
 def _run_validate(tmp_path: Path, scenarios: list, matrix: Path | None = None) -> dict:
     sc_path = tmp_path / 'scenarios.json'
     sc_path.write_text(json.dumps(scenarios, ensure_ascii=False), encoding='utf-8')
@@ -52,10 +40,6 @@ def _run_validate(tmp_path: Path, scenarios: list, matrix: Path | None = None) -
 
 def _node(nid, ntype, params, title='t'):
     return {'id': nid, 'type': ntype, 'title': title, 'params': params}
-
-
-def _save(nid='out-1', filename='f'):
-    return {'id': nid, 'type': 'output', 'title': '保存', 'params': {'operation': 'save', 'filename': filename}}
 
 
 #: Parameters that SELECT which panel is drawn. Poisoning one of these would test
@@ -181,279 +165,7 @@ def _poison(params: dict) -> dict:
 def results(tmp_path_factory, capabilities_matrix):
     tmp = tmp_path_factory.mktemp('js-validate')
     scenarios = [
-        {
-            'id': 'clean',
-            'nodes': [_node('n1', 'source', {'platform': 'weibo', 'keyword': 'k'}), _save()],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'comments_mismatch',
-            'nodes': [
-                _node(
-                    'n1',
-                    'source',
-                    {
-                        'platform': 'zhihu',
-                        'collect': 'comments',
-                        'urls': 'https://www.zhihu.com/question/1\nhttps://weibo.com/1/a\njunk',
-                    },
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'comments_names',
-            'nodes': [
-                _node(
-                    'n1',
-                    'source',
-                    {
-                        # 红果's comment form declares it also takes plain drama titles (the
-                        # crawl runs inside the client, whose boards answer to a name). The
-                        # browser must not flag what the engine will crawl — and must still
-                        # flag the one line that IS a foreign link.
-                        # The third line is the shared-spelling case: a title holding a
-                        # question mark and an equals sign. Python's \w covers Chinese and
-                        # JavaScript's does not, so the two sides used to answer opposite
-                        # questions about exactly this string.
-                        'platform': 'hongguo',
-                        'collect': 'comments',
-                        'urls': '聚宝仙盆之杂灵根才是真BOSS\n繁花\nhttps://weibo.com/1/a\n我在八零年代？第=集',
-                    },
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'comments_ok',
-            'nodes': [
-                _node(
-                    'n1',
-                    'source',
-                    {
-                        'platform': 'zhihu',
-                        'collect': 'comments',
-                        'urls': 'https://www.zhihu.com/question/1, https://www.zhihu.com/question/2',
-                    },
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'comments_empty',
-            'nodes': [
-                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '   '}, title=''),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        # ── the matrix decides what a source needs, not workflow.js ──
-        # These four modes exist in crawl_capabilities, are rendered by the panel and
-        # run on the backend — and every one of them was unreachable from the UI,
-        # because validate() knew only "comments→links, wechat→links, else keyword".
-        {
-            'id': 'author_bilibili',
-            'nodes': [
-                _node(
-                    'n1',
-                    'source',
-                    {'platform': 'bilibili', 'collect': 'author', 'author': 'space.bilibili.com/546195'},
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'hot_bilibili',
-            'nodes': [_node('n1', 'source', {'platform': 'bilibili', 'collect': 'hot', 'board': 'popular'}), _save()],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'author_douyin_missing',
-            'nodes': [_node('n1', 'source', {'platform': 'douyin', 'collect': 'author', 'author': ''}), _save()],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'mode_the_platform_lacks',
-            'nodes': [_node('n1', 'source', {'platform': 'xiaohongshu', 'collect': 'author', 'author': 'x'}), _save()],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'keyword_still_required',
-            'nodes': [_node('n1', 'source', {'platform': 'zhihu', 'keyword': '  '}), _save()],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'wechat_stale_comments',
-            'nodes': [
-                _node(
-                    'n1',
-                    'source',
-                    {'platform': 'wechat', 'collect': 'comments', 'urls': 'https://mp.weixin.qq.com/s/abc'},
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'no_terminal',
-            'nodes': [_node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'})],
-            'connections': [],
-        },
-        # ── a disabled node is as if it were not on the canvas (engine.effective_workflow) ──
-        # A workflow whose boxes are all switched off must not refuse the press: the live chain
-        # beside it is what runs. Validating the FULL canvas instead put a red badge on every
-        # greyed-out box and blocked the run over wires it never had.
-        {
-            'id': 'disabled_workflow_skipped',
-            'nodes': [
-                _node('nm', 'name', {'workflow_name': '旧稿', 'enabled': False}),
-                _node('src', 'source', {'platform': 'zhihu', 'keyword': '', 'enabled': False}),
-                _node('old-out', 'output', {'operation': 'save', 'filename': '', 'enabled': False}),
-                _node('live', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
-                _save(),
-            ],
-            'connections': [
-                {'from': 'nm', 'to': 'src'},
-                {'from': 'src', 'to': 'old-out'},
-                {'from': 'live', 'to': 'out-1'},
-            ],
-        },
-        {
-            'id': 'disabled_type_skipped',
-            'nodes': [
-                _node('v', 'visualize', {}),
-                _node('live', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
-                _save(),
-            ],
-            'connections': [{'from': 'live', 'to': 'out-1'}],
-            'disabledTypes': ['visualize'],
-        },
-        {
-            'id': 'starved_chain_skipped',
-            'nodes': [
-                _node('src', 'source', {'platform': 'zhihu', 'keyword': '', 'enabled': False}),
-                _node('p', 'process', {'operation': 'clean'}),
-                _save(),
-            ],
-            'connections': [{'from': 'src', 'to': 'p'}, {'from': 'p', 'to': 'out-1'}],
-        },
-        # ── the feed gate: a wired table must feed, a named column needs a table ──
-        # Same distinction the backend engine builds: parent type 'name' is a label,
-        # not data; and what can be fed at all is the payload's (field.fedBy), which
-        # is why these scenarios run against the matrix dumped from Python.
-        {
-            'id': 'feed_clean',
-            'nodes': [
-                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
-                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'}),
-                _save(),
-            ],
-            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'feed_no_column',
-            'nodes': [
-                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
-                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '  '}),
-                _save(),
-            ],
-            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'feed_no_input',
-            'nodes': [
-                _node('n1', 'source', {'platform': 'zhihu', 'collect': 'comments', 'urls': '', 'input_column': '链接'}),
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'feed_no_mode',
-            'nodes': [
-                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
-                _node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
-                _save(),
-            ],
-            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'feed_name_wire',
-            'nodes': [
-                _node('nm', 'name', {'workflow_name': '标注'}),
-                _node('n1', 'source', {'platform': 'zhihu', 'keyword': 'k'}),
-                _save(),
-            ],
-            'connections': [{'from': 'nm', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
-        },
-        {
-            'id': 'feed_owned_junk',
-            'nodes': [
-                _node('u1', 'upload', {'dataset_id': 'd1', 'dataset_name': 'links.csv'}),
-                _node(
-                    'n1',
-                    'source',
-                    {
-                        'platform': 'zhihu',
-                        'collect': 'comments',
-                        'urls': 'https://weibo.com/1/a',
-                        'input_column': '链接',
-                    },
-                ),
-                _save(),
-            ],
-            'connections': [{'from': 'u1', 'to': 'n1'}, {'from': 'n1', 'to': 'out-1'}],
-        },
-        {'id': 'empty', 'nodes': [], 'connections': []},
-        # ── compile node + PDF output validation (frontend mirror of engine.validate) ──
-        {'id': 'compile_no_up', 'nodes': [_node('c', 'compile', {})], 'connections': []},
-        {
-            'id': 'compile_bad_parent',
-            'nodes': [_node('p', 'process', {'operation': 'clean'}), _node('c', 'compile', {})],
-            'connections': [{'from': 'p', 'to': 'c'}],
-        },
-        {
-            'id': 'compile_both_off',
-            'nodes': [
-                _node(
-                    'v',
-                    'visualize',
-                    {'chart_type': 'bar', 'x_field': 'a', 'emit_latex': False, 'emit_latex_table': False},
-                ),
-                _node('c', 'compile', {}),
-            ],
-            'connections': [{'from': 'v', 'to': 'c'}],
-        },
-        {
-            'id': 'compile_clean',
-            'nodes': [_node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}), _node('c', 'compile', {})],
-            'connections': [{'from': 'v', 'to': 'c'}],
-        },
-        {
-            'id': 'output_chart_csv',
-            'nodes': [_node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}), _save('out-1', 'x.csv')],
-            'connections': [{'from': 'v', 'to': 'out-1'}],
-        },
-        {
-            'id': 'output_chart_pdf',
-            'nodes': [
-                _node('v', 'visualize', {'chart_type': 'bar', 'x_field': 'a'}),
-                _node('out-1', 'output', {'operation': 'save', 'format': 'pdf', 'filename': 'x.pdf'}),
-            ],
-            'connections': [{'from': 'v', 'to': 'out-1'}],
-        },
-        {
-            'id': 'output_pdf_mixed',
-            'nodes': [
-                _node('p', 'process', {'operation': 'clean'}),
-                _node('out-1', 'output', {'operation': 'save', 'format': 'pdf', 'filename': 'x.pdf'}),
-            ],
-            'connections': [{'from': 'p', 'to': 'out-1'}],
-        },
-        # ── the output format GATE on the panel: pdf-only behind a chart/compile upstream ──
+        # ── settings-panel renders (node = openSettings target, HTML captured) ──
         {
             'id': 'panel_output_pdf_gate',
             'node': _node('n1', 'output', {'operation': 'save', 'filename': 'x.csv'}),
@@ -465,40 +177,6 @@ def results(tmp_path_factory, capabilities_matrix):
             'node': _node('n1', 'output', {'operation': 'save', 'filename': 'x.csv'}),
             'extraNodes': [_node('proc', 'process', {'operation': 'clean'})],
             'connections': [{'from': 'proc', 'to': 'n1'}],
-        },
-        {
-            'id': 'titleless',
-            'nodes': [
-                {'id': 'n1', 'type': 'source', 'title': None, 'params': {'platform': 'zhihu', 'keyword': ''}},
-                _save(),
-            ],
-            'connections': [{'from': 'n1', 'to': 'out-1'}],
-        },
-        # ── 模型一致率 (model_agreement): the field a comparison chart really needs ──
-        # A model_agreement chart has no x/y — it reads the tidy table's label column. These three
-        # scenarios pin that the validate branch asks for the RIGHT field, and that ordinary charts
-        # (bar) still demand x_field: a node with no model set must not quietly become a chart that
-        # the backend then refuses for a missing column.
-        {
-            'id': 'viz_agreement_no_label',
-            'nodes': [
-                _node('u', 'process', {'operation': 'emotion'}),
-                _node('v', 'visualize', {'chart_type': 'model_agreement'}),
-            ],
-            'connections': [{'from': 'u', 'to': 'v'}],
-        },
-        {
-            'id': 'viz_agreement_with_label',
-            'nodes': [
-                _node('u', 'process', {'operation': 'emotion'}),
-                _node('v', 'visualize', {'chart_type': 'model_agreement', 'agreement_label_field': 'emotion'}),
-            ],
-            'connections': [{'from': 'u', 'to': 'v'}],
-        },
-        {
-            'id': 'viz_bar_no_x',
-            'nodes': [_node('u', 'process', {'operation': 'emotion'}), _node('v', 'visualize', {'chart_type': 'bar'})],
-            'connections': [{'from': 'u', 'to': 'v'}],
         },
         # ── settings-panel renders (node = openSettings target, HTML captured) ──
         *({'id': pid, 'node': _node('n1', ntype, params)} for pid, ntype, params in _PANELS),
@@ -553,163 +231,6 @@ class TestWorkflowImportVerdict:
 
     def test_an_empty_file_is_a_parse_failure_not_a_crash(self, results):
         assert results['parseWorkflow']['blank'] == {'ok': False, 'reason': 'parse'}
-
-
-class TestValidateGate:
-    def test_a_wired_clean_canvas_passes(self, results):
-        assert results['validate']['clean'] == []
-
-    def test_foreign_platform_links_are_flagged_with_count_and_platform(self, results):
-        parsed = [_parse(m) for m in results['validate']['comments_mismatch']]
-        assert len(parsed) == 1
-        key, fields = parsed[0]
-        assert key == 'validate.sourceCommentPlat'
-        # two of the three lines are not zhihu links — the message says exactly that
-        assert fields['n'] == '2'
-        assert fields['plat'] == 'zhihu'
-        assert fields['title'] == 't'
-
-    def test_a_platform_that_takes_names_flags_only_the_real_foreign_link(self, results):
-        # Same rule as the backend's validate, asked of the same matrix payload: the
-        # browser and the engine must not disagree about what one input line IS. The
-        # “我在八零年代？第=集” line is the one that used to disagree: both sides now spell
-        # the query test with an ASCII word class (capabilities.registry.is_url_cell).
-        parsed = [_parse(m) for m in results['validate']['comments_names']]
-        assert len(parsed) == 1
-        key, fields = parsed[0]
-        assert key == 'validate.sourceCommentPlat'
-        assert fields['n'] == '1', 'three drama titles are inputs, not three broken links'
-        assert fields['plat'] == 'hongguo'
-
-    def test_comma_separated_links_are_split_like_the_backend(self, results):
-        # The backend's split_urls accepts commas; the validator must not flag
-        # what the executor will happily crawl.
-        assert results['validate']['comments_ok'] == []
-
-    def test_comments_mode_without_urls_names_the_field_the_matrix_declares(self, results):
-        key, fields = _parse(results['validate']['comments_empty'][0])
-        assert key == 'validate.sourceFieldMissing'
-        # The field is named from the payload, so a field renamed in the matrix
-        # cannot be contradicted by a wording hardcoded in tests.
-        assert fields['field'].startswith('field.') or fields['field'].startswith('settings.'), fields
-
-    def test_an_author_mode_node_validates_without_a_keyword(self, results):
-        """“某作者的作品” asks for a creator, never a keyword — and used to be refused for lacking one.
-
-        The message the user got named a field the panel had not even shown them, and
-        no request left the page, so a mode shipped in the matrix, rendered in the
-        panel and executable by the backend was unreachable from the UI.
-        """
-        assert results['validate']['author_bilibili'] == [], results['validate']['author_bilibili']
-
-    def test_a_hot_board_needs_nothing_at_all(self, results):
-        # 热榜 is one pick: the matrix declares no required field for it, so a node
-        # that selected the board must not be asked for a keyword or an author.
-        assert results['validate']['hot_bilibili'] == [], results['validate']['hot_bilibili']
-
-    def test_an_untouched_author_field_is_reported_as_that_field(self, results):
-        key, fields = _parse(results['validate']['author_douyin_missing'][0])
-        assert key == 'validate.sourceFieldMissing'
-        assert 'author' in fields['field'], fields
-
-    def test_a_mode_the_platform_does_not_offer_is_refused_by_name(self, results):
-        """小红书 has no author mode (its per-note token is not reliably reachable);
-        running its keyword search or saying “缺少关键词” there would each be a lie.
-        The refusal must name the mode the platform never offered."""
-        keys = [_parse(message)[0] for message in results['validate']['mode_the_platform_lacks']]
-        assert keys == ['validate.sourceUnknownMode'], results['validate']['mode_the_platform_lacks']
-
-    def test_a_blank_keyword_is_still_a_missing_field(self, results):
-        """The gate did not get looser: the keyword mode still refuses an empty one."""
-        keys = [_parse(message)[0] for message in results['validate']['keyword_still_required']]
-        assert keys == ['validate.sourceFieldMissing'], results['validate']['keyword_still_required']
-
-    def test_without_the_matrix_the_refusal_says_so_instead_of_guessing(self, tmp_path):
-        """No payload → no invented answer.
-
-        The old branch kept its own list of what each platform needs, so it could
-        always "answer" — wrongly. Now the only honest response is that the required
-        fields could not be checked, and the panel's own retry note says what to do.
-        """
-        scenarios = [
-            {
-                'id': 'no_matrix',
-                'nodes': [_node('n1', 'source', {'platform': 'bilibili', 'collect': 'hot'}), _save()],
-                'connections': [{'from': 'n1', 'to': 'out-1'}],
-            }
-        ]
-        out = _run_validate(tmp_path, scenarios, None)
-        keys = [_parse(message)[0] for message in out['validate']['no_matrix']]
-        assert keys == ['validate.capUnavailable'], out['validate']['no_matrix']
-
-    def test_wechat_with_a_stale_comments_flag_validates_as_article_crawl(self, results):
-        # collect='comments' + wechat is the panel's old leak; both ends now
-        # read it as the URL-driven article crawl it is — no comments error.
-        assert results['validate']['wechat_stale_comments'] == []
-
-    def test_an_unwired_source_is_reported_twice_reasonably(self, results):
-        keys = [_parse(m)[0] for m in results['validate']['no_terminal']]
-        assert keys == ['validate.sourceDownstream', 'validate.noTerminal']
-
-    def test_a_disabled_workflow_never_blocks_the_live_one(self, results):
-        """被禁用的节点直接跳过: a switched-off box is not on the run's canvas — the engine drops it
-        and its wires before validating (``effective_workflow``) — so its missing keyword, its
-        missing file name and its dangling downstream must not be reported, and must not refuse
-        the press while a live chain sits beside it."""
-        assert results['validate']['disabled_workflow_skipped'] == []
-
-    def test_a_switched_off_node_type_is_not_validated(self, results):
-        # The type switch removes every box of that kind, so the chart's missing type must not
-        # surface — the same graph the backend runs has no visualize node in it.
-        keys = [_parse(m)[0] for m in results['validate']['disabled_type_skipped']]
-        assert keys == [], keys
-
-    def test_a_chain_starved_by_its_disabled_head_validates_as_an_empty_canvas(self, results):
-        # Same answer the backend's validate gives when every node is off: a run of nothing is
-        # not a success. The cascade is the canvas's own (``disableStates``), not a second copy.
-        keys = [_parse(m)[0] for m in results['validate']['starved_chain_skipped']]
-        assert keys == ['validate.empty'], keys
-
-    def test_a_fed_source_validates_without_pasted_links(self, results):
-        # Wired table + named column: the pasted box is neither required nor
-        # ownership-checked, and nothing else is missing.
-        assert results['validate']['feed_clean'] == [], results['validate']['feed_clean']
-
-    def test_a_wired_source_that_named_no_column_is_refused_once_by_name(self, results):
-        """One mistake, one line: the textarea must NOT also be demanded behind a
-        wire — "paste links" would contradict "name the column"."""
-        keys = [_parse(m)[0] for m in results['validate']['feed_no_column']]
-        assert keys == ['validate.sourceFeedNoColumn'], results['validate']['feed_no_column']
-
-    def test_a_column_named_without_a_wire_refuses_itself_and_asks_for_links(self, results):
-        keys = [_parse(m)[0] for m in results['validate']['feed_no_input']]
-        assert keys == ['validate.sourceFeedNoInput', 'validate.sourceFieldMissing'], keys
-
-    def test_a_form_that_cannot_be_fed_refuses_the_wired_table_by_name(self, results):
-        keys = [_parse(m)[0] for m in results['validate']['feed_no_mode']]
-        assert keys == ['validate.sourceFeedNoMode'], results['validate']['feed_no_mode']
-
-    def test_a_name_wire_is_not_a_data_input(self, results):
-        # The labelling pattern must not trip the feed gate: a name node carries no
-        # table, and every labelled workflow would otherwise read as half-fed.
-        assert results['validate']['feed_name_wire'] == [], results['validate']['feed_name_wire']
-
-    def test_a_fed_field_skips_the_pasted_ownership_check(self, results):
-        # Foreign links sit in a box that will be ignored; the parent's column is
-        # what runs, and runtime names foreign rows per article.
-        assert results['validate']['feed_owned_junk'] == [], results['validate']['feed_owned_junk']
-
-    def test_an_empty_canvas_short_circuits(self, results):
-        keys = [_parse(m)[0] for m in results['validate']['empty']]
-        assert keys == ['validate.empty']
-
-    def test_a_titleless_node_never_prints_undefined(self, results):
-        # title=None must fall back to the type label — 'Source', not 'null'.
-        parsed = [_parse(m) for m in results['validate']['titleless']]
-        keywords = [k for k, _ in parsed]
-        assert 'validate.sourceFieldMissing' in keywords
-        got = next(f for k, f in parsed if k == 'validate.sourceFieldMissing')
-        assert got['title'] == 'Source'
 
 
 class TestSettingsPanel:
@@ -1623,45 +1144,8 @@ class TestThePanelFollowsALiveRun:
 
 
 class TestCompileAndPdfGate:
-    """The browser's half of the compile/PDF rules: which validate messages fire, and the output
-    node's format dropdown narrowing to PDF only when it is fed a chart / compile — the exact
-    rule the backend enforces, checked here against the REAL workflow.js (not a mirror)."""
-
-    @staticmethod
-    def _keys(messages):
-        return [_parse(m)[0] for m in messages]
-
-    def test_a_compile_with_no_upstream_is_named(self, results):
-        assert 'validate.compileInput' in self._keys(results['validate']['compile_no_up'])
-
-    def test_a_compile_fed_by_a_non_chart_is_named(self, results):
-        assert 'validate.compileBadParent' in self._keys(results['validate']['compile_bad_parent'])
-
-    def test_a_compile_fed_by_a_chart_with_both_boxes_off_is_named(self, results):
-        assert 'validate.compileSourceBothOff' in self._keys(results['validate']['compile_both_off'])
-
-    def test_a_compile_fed_by_a_chart_that_emits_latex_is_clean(self, results):
-        # The frontend also insists a chart has an upstream (validate.visualizeInput), which the
-        # backend does not — so assert the COMPILE rules specifically stayed silent.
-        keys = self._keys(results['validate']['compile_clean'])
-        assert not {'validate.compileInput', 'validate.compileBadParent', 'validate.compileSourceBothOff'} & set(
-            keys
-        ), keys
-
-    def test_a_chart_wired_to_a_csv_save_is_told_to_use_pdf(self, results):
-        assert 'validate.outputNeedsPdf' in self._keys(results['validate']['output_chart_csv'])
-
-    def test_a_chart_wired_to_a_pdf_save_is_clean(self, results):
-        keys = self._keys(results['validate']['output_chart_pdf'])
-        assert not {
-            'validate.outputPdfMixed',
-            'validate.outputPdfOnly',
-            'validate.outputPdfTwoSources',
-            'validate.outputNeedsPdf',
-        } & set(keys), keys
-
-    def test_a_pdf_save_mixed_with_a_table_is_named(self, results):
-        assert 'validate.outputPdfMixed' in self._keys(results['validate']['output_pdf_mixed'])
+    """The output panel's format dropdown narrows to PDF only when it is fed a chart / compile —
+    the exact rule the backend enforces, checked here against the REAL workflow.js."""
 
     def test_the_output_dropdown_offers_only_pdf_behind_a_chart(self, results):
         html = results['settings']['panel_output_pdf_gate']
@@ -1675,29 +1159,8 @@ class TestCompileAndPdfGate:
 
 
 class TestModelAgreementChart:
-    """The browser's half of 模型一致率: which field a comparison chart asks for, and what its
-    settings panel shows. The chart has no x/y (it reads the tidy 模型/标签/原行 table), so a node
-    must be refused for a missing LABEL column, never for a missing x_field — and an ordinary
-    chart like bar must STILL demand x_field. Checked against the REAL workflow.js, not a mirror.
-    """
-
-    @staticmethod
-    def _keys(messages):
-        return [str(m).split('|')[0] for m in messages]
-
-    def test_an_agreement_chart_without_a_label_column_is_named(self, results):
-        keys = self._keys(results['validate']['viz_agreement_no_label'])
-        assert 'validate.visualizeAgreementLabel' in keys, keys
-        assert 'validate.visualizeXField' not in keys, 'a comparison chart has no x field to miss'
-
-    def test_an_agreement_chart_with_a_label_column_passes_the_field_rule(self, results):
-        keys = self._keys(results['validate']['viz_agreement_with_label'])
-        assert 'validate.visualizeAgreementLabel' not in keys, keys
-        assert 'validate.visualizeXField' not in keys, keys
-
-    def test_a_normal_bar_chart_still_demands_x_field(self, results):
-        keys = self._keys(results['validate']['viz_bar_no_x'])
-        assert 'validate.visualizeXField' in keys, 'the agreement branch must not relax every other chart'
+    """The 模型一致率 settings panel: three semantic fields and no x/y box (the chart reads the
+    tidy 模型/标签/原行 table)."""
 
     def test_the_agreement_panel_offers_its_three_fields_and_no_x_field(self, results):
         html = results['settings']['panel_visualize_model_agreement']

@@ -148,6 +148,7 @@ BODY_ROUTES = [
     '/api/workflow/rerun-node',
     '/api/workflow/rename',
     '/api/workflow/save',
+    '/api/workflow/validate',
 ]
 NON_OBJECT_BODIES = ['null', '[1, 2]', '"abc"', '123']
 # POST routes that read no field at all. A malformed body is not their error to

@@ -14,12 +14,43 @@ from flask import Blueprint, jsonify
 from nodes.schema import compute_columns, param_errors, referenced_columns
 
 from api.http import _bad_body, _json_body
-from engine.workflow import effective_workflow
+from engine.workflow import WorkflowEngine, effective_workflow
 from i18n import t
 
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('diagnostics', __name__)
+
+
+def _workflow_from_body(body: dict) -> dict:
+    """The workflow a diagnostics/validate request describes, with every shape guarded."""
+    nodes = body.get('nodes')
+    if not isinstance(nodes, dict):
+        nodes = {}
+    connections = body.get('connections')
+    if not isinstance(connections, list):
+        connections = []
+    settings = body.get('settings')
+    if not isinstance(settings, dict):
+        # ``effective_workflow`` reads ``settings.get(...)`` before this route's guarded block, so
+        # a string here used to kill the very route that exists to survive a malformed canvas.
+        settings = {}
+    return {'nodes': list(nodes.values()), 'connections': connections, 'settings': settings}
+
+
+def validation_payload(workflow: dict) -> dict:
+    """The run gate's answer for one canvas: per-node messages plus the flat list.
+
+    ``engine.workflow.WorkflowEngine`` is the ONE rule body (manifest rules, validators, the
+    source matrix, cycles); the console and the canvas badges word it from the same entries.
+    """
+    entries = WorkflowEngine(workflow).validate_detailed()
+    per_node: dict[str, list[str]] = {}
+    for entry in entries:
+        if entry['id'] is None:
+            continue
+        per_node.setdefault(str(entry['id']), []).append(entry['message'])
+    return {'messages': [entry['message'] for entry in entries], 'perNode': per_node, 'entries': entries}
 
 
 def _readable_params(nodes: dict) -> tuple[dict, dict]:
@@ -51,18 +82,7 @@ def workflow_diagnostics():
     body = _json_body()
     if body is None:
         return _bad_body()
-    nodes = body.get('nodes')
-    if not isinstance(nodes, dict):
-        nodes = {}
-    connections = body.get('connections')
-    if not isinstance(connections, list):
-        connections = []
-    settings = body.get('settings')
-    if not isinstance(settings, dict):
-        # ``effective_workflow`` reads ``settings.get(...)`` before this route's guarded block, so
-        # a string here used to kill the very route that exists to survive a malformed canvas.
-        settings = {}
-    workflow = {'nodes': list(nodes.values()), 'connections': connections, 'settings': settings}
+    workflow = _workflow_from_body(body)
     # Validate on the SAME effective graph a run would use: a disabled node (or one
     # starved by a disabled upstream) is not on the canvas, so it must not be judged.
     effective = effective_workflow(workflow)
@@ -89,7 +109,31 @@ def workflow_diagnostics():
         # "not all arguments converted" on every hit: the traceback was discarded and a
         # "--- Logging error ---" block landed on stderr.
         logger.exception(t('api.diagnosticsFailed'))
-        return jsonify({'ok': False, 'error': str(exc)[:300], 'columns': {}, 'reads': {}, 'problems': {}})
+        return jsonify(
+            {
+                'ok': False,
+                'error': str(exc)[:300],
+                'columns': {},
+                'reads': {},
+                'problems': {},
+                'validation': {'messages': [], 'perNode': {}, 'entries': []},
+            }
+        )
     for nid, rows in broken.items():
         problems[nid] = rows + list(problems.get(nid) or [])
-    return jsonify({'ok': True, 'columns': columns, 'reads': reads, 'problems': problems})
+    validation = validation_payload(effective)
+    return jsonify({'ok': True, 'columns': columns, 'reads': reads, 'problems': problems, 'validation': validation})
+
+
+@bp.route('/api/workflow/validate', methods=['POST'])
+def workflow_validate():
+    """The run gate before the browser POSTs a run — one rule body, on the server.
+
+    The canvas used to keep a JavaScript copy of every node's pre-run rule (``runs.js``); the
+    two drifted, and a stored option the server refused could still pass the panel. The answer
+    here is ``engine.workflow``'s own entries, worded by the request's language.
+    """
+    body = _json_body()
+    if body is None:
+        return _bad_body()
+    return jsonify({'ok': True, **validation_payload(effective_workflow(_workflow_from_body(body)))})

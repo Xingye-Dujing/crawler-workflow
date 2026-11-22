@@ -60,6 +60,8 @@ function world(sc) {
     routes['/api/workflow/execute'] = { ok: true, run_id: 'r1' };
     routes['/api/cookies/preflight'] = sc.preflight === undefined ? CLEAN : sc.preflight;
     if (sc.matrix) routes['/api/capabilities'] = sc.matrix;
+    /* The run gate is the server's; a scenario that expects a refusal seeds its own answer. */
+    if (sc.validate) routes['/api/workflow/validate'] = sc.validate;
     loadPageScripts(sandbox, { jsDir, only: WANTED });
     /* Declared after the load: workflow.js declares `fetchJSON` and `showToast`
        itself, and a function declaration in the script wins over anything seeded

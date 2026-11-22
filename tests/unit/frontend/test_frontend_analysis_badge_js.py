@@ -6,8 +6,8 @@ to prove two things a Python-only test cannot see: nothing is flagged before the
 arrives (the browser keeps no second copy of the contract), and a payload becomes the message
 the node's top-right badge shows — worded through the catalogue, naming the panel's own label.
 
-It also pins the boundary: these are EDIT-TIME diagnostics, merged like a missing column, so
-``workflow.validate()`` (the run gate) keeps refusing exactly the graph it always refused.
+It also pins the boundary: these are EDIT-TIME diagnostics merged like a missing column, so the
+run gate stays the server's (``/api/workflow/validate``); this harness answers no local rule body.
 """
 
 import json
@@ -143,7 +143,7 @@ class TestAnalysisBadge:
     def test_a_complete_node_is_never_flagged(self, results):
         assert results['badges']['clean_node'] == [], results['badges']['clean_node']
 
-    def test_the_run_gate_is_unchanged(self, results):
-        """The badge is edit-time advice, like a missing column: it does not become a second
-        validation pass in ``workflow.validate``, which keeps its own rule body."""
-        assert results['validate']['blank_column'] == [], results['validate']['blank_column']
+    def test_the_badge_is_edit_time_and_never_a_second_run_gate(self, results):
+        """These messages come from the server's diagnostics payload, so the harness answers no
+        ``validate`` channel at all: the run gate is ``/api/workflow/validate``, not this file."""
+        assert 'validate' not in results, results.keys()

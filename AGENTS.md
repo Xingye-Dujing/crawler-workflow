@@ -162,8 +162,9 @@ repository root.
   module split from its companions. Harnesses take files through `sourcesWithCompanions` (**one read per file**), never
   their own `readFileSync(argv)`; Python scans use `static_assets.js_text(name)`. **Splitting an object's MEMBERS keeps ONE
   global via `Object.assign(obj, { … })`**: member lines stay verbatim, sections' member sets must be disjoint.
-- **The frontend holds no second opinion about a crawl.** `sourceNodeErrors()` asks `Capabilities` which fields the mode
-  requires — if not loaded, refuse, never guess. A stored value off the option list shows as itself
+- **The frontend holds no second opinion about a crawl.** The pre-run gate is the server's
+  (`/api/workflow/validate` → one `WorkflowEngine` body); the panel asks `Capabilities` only to render, and refuses to
+  guess when the matrix has not loaded. A stored value off the option list shows as itself
   (`selectOptionTags`/`boolParam`), never option #0.
 - **Six frontend rules, each costing a feature:** (1) `if (window.X)` can't see a top-level `const X` — guard or export it;
   (2) the DOM stub's matcher is real — never fabricate a child a query finds nothing for; (3) a wrapper must forward its

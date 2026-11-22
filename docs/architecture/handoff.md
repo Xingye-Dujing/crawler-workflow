@@ -167,6 +167,18 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P2 前端第二片：校验单一来源（2026-11-23）
+
+- `/api/workflow/validate` 返回 `engine.workflow.validate_detailed()` 的 `messages`/`perNode`/`entries`；
+  `/api/workflow/diagnostics` 的同一份 payload 也带上 `validation`，编辑期徽章与运行门读同一套规则。
+- `panels/runs.js` 删除整段本地校验 if 链（约 290 行）与 `workflow.js::sourceNodeErrors`（约 120 行）；
+  `workflow.validate()` / `validateDetailed()` 改为一次服务端调用，网络失败按名报“无法校验”，不伪装成干净画布。
+- `panels/diagnostics.js::recompute()` 读服务端 `validation.perNode`；分析算子的参数徽章仍由浏览器措辞。
+- `i18n/checks.js` 只保留仍在前端渲染的词（analysis 参数 + `validate.unavailable`），60 余个只服务于旧 if 链的键删除。
+- 测试：删除 `TestValidateGate`/compile/PDF/model_agreement 的 JS 规则用例（Python `WorkflowEngine` 用例已覆盖），
+  harness 不再断言本地规则；运行管理/画像/Cookie 门/面板场景改为提供 `/api/workflow/validate` 的应答。
+- 新增 API 用例：诊断 payload 的 `validation`、独立 validate 端点、干净画布通过。
+
 ## P2 前端第一片：目录单一来源（2026-11-23）
 
 - `/api/node-types` 与生成物 `backend/static/js/node-types-fallback.js` 现在读同一个投影
@@ -180,8 +192,7 @@
   与页面一致的目录。
 - 测试改钉生成物：`test_node_plugins.py` 解析 fallback 并对比 `NODE_TYPES`/rows/seeds；
   `test_frontend_node_types_js.py` 驱动真实画布验证冷启动、失败保留与深拷贝。
-- 还没做：schema 表单渲染器（`panels/settings.js` 的 `openSettings` 分派）与删除 `workflow.js::sourceNodeErrors`
-  的验证 if 链。
+- 还没做：schema 表单渲染器（`panels/settings.js` 的 `openSettings` 分派）。
 
 ## 测试基线（H11-H16 收口，2026-11-22）
 
@@ -236,7 +247,7 @@
 
 ## 下一步（按顺序）
 
-1. **P2 收尾**：schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套类型/默认参数/校验规则。
+1. **P2 收尾**：schema 表单渲染器 + custom renderer 注册表，替换 `panels/settings.js::openSettings` 的逐类型分支。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

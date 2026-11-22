@@ -718,7 +718,14 @@ export function baseSandbox() {
                throw inside its own catch. */
             const hit = Object.keys(routes).filter((frag) => String(url).indexOf(frag) >= 0)[0];
             const payload = hit ? routes[hit] : { ok: true };
-            return Promise.resolve({ ok: true, json: () => Promise.resolve(payload) });
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve(payload),
+                /* `fetchJSON` reads text and parses it; a reply without `text()` reads as a server
+                   failure, which the run gate would surface as "could not validate". */
+                text: () => Promise.resolve(JSON.stringify(payload)),
+            });
         },
         /* The same object the `fetch` above reads, handed out so a harness can
            seed `/api/capabilities` (or any other endpoint) before driving code

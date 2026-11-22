@@ -10,10 +10,10 @@
    Before this, a wrong column or a missing config only surfaced when a run was
    already paid for. The backend answers WHAT each node emits and reads (the schema
    truth lives beside the executors); the frontend decides WHICH nodes to flag and
-   words it in the UI's language. Config/wiring problems come from the offline
-   validateDetailed mirror; missing-column problems are the diff between a node's
-   reads and its upstream's known columns — never flagged when the upstream is a
-   crawl/comment/resume whose columns the server cannot see without running. */
+   words it in the UI's language. Config/wiring problems come from the SAME server answer
+   (``/api/workflow/diagnostics`` carries ``engine.workflow.validate_detailed``); missing-column
+   problems are the diff between a node's reads and its upstream's known columns — never flagged
+   when the upstream is a crawl/comment/resume whose columns the server cannot see without running. */
 /* One parameter problem, worded for the badge. The server answers WHICH box is wrong
    (``services/analysis/step_checks``); this function owns the words, exactly as
    ``missingColumnProblems`` does for a missing column. ``field`` is a label key the
@@ -60,6 +60,7 @@ var Diagnostics = {
     _armed: false,
     _columns: {},
     _reads: {},
+    _validation: { messages: [], perNode: {} },
     _paramProblems: {},
     _problems: {},
 
@@ -104,6 +105,7 @@ var Diagnostics = {
             if (!result || !result.ok) return; /* offline: keep the last known picture */
             this._columns = result.columns || {};
             this._reads = result.reads || {};
+            this._validation = result.validation || { messages: [], perNode: {} };
             /* The step contract answered which boxes are empty; the badge words it the same
                way it words a missing column — the run gate itself is unchanged. */
             this._paramProblems = result.problems || {};
@@ -163,7 +165,7 @@ var Diagnostics = {
 
     recompute() {
         if (typeof canvas === 'undefined' || !canvas || !canvas.nodes) return;
-        var perNode = workflow.validateDetailed().perNode || {};
+        var perNode = (this._validation && this._validation.perNode) || {};
         var merged = {};
         Object.keys(perNode).forEach(function (id) { merged[id] = perNode[id].slice(); });
         var missing = this.missingColumnProblems();
@@ -171,7 +173,7 @@ var Diagnostics = {
             (merged[id] = merged[id] || []).push.apply(merged[id], missing[id]);
         });
         /* Same channel as a missing column: what the step's own contract answers joins the
-           offline list, so a blank required box gets its badge before a run is paid for. */
+           server's validation, so a blank required box gets its badge before a run is paid for. */
         Object.keys(this._paramProblems).forEach(function (id) {
             (merged[id] = merged[id] || []).push.apply(merged[id], this.paramProblems(id));
         }, this);

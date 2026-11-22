@@ -246,7 +246,6 @@ class TestTheFunctionListFollowsTheEngine:
         made = panel['switch-moves-mode']
         assert made['afterBackend'] == 'catbus'
         assert made['afterMode'] == 'posts', 'the first runnable CatBus function, the same fallback the backend uses'
-        assert made['afterErrors'] == [], made['afterErrors']
 
 
 class TestAnOfferedCellThatCannotRun:
@@ -256,10 +255,6 @@ class TestAnOfferedCellThatCannotRun:
         option = html[marker : html.index('</option>', marker)]
         assert 'disabled' in option, option
         assert 'CatBus 没有热榜命令' in option, 'the adapter owns the sentence, not the panel'
-
-    def test_the_run_is_refused_before_it_is_paid_for(self, panel):
-        errors = panel['unusable-named']['errors']
-        assert any('validate.modeUnavailable' in error for error in errors), errors
 
 
 class TestAPlatformOnlyCatBusCanCrawl:
@@ -272,5 +267,4 @@ class TestAPlatformOnlyCatBusCanCrawl:
 
     def test_its_required_field_is_the_manifest_parameter(self, panel):
         made = panel['catbus-only-platform']
-        assert made['errors'] == [], made['errors']
         assert 'settings.author' in made['html']
