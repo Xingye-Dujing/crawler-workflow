@@ -263,6 +263,10 @@ class AgentService:
         model = str(payload.get('model') or '')
         api_key = str(payload.get('api_key') or '')
         thinking = bool(payload.get('thinking'))
+        # Local models never think here. The transport also sends think=false; forcing it at the
+        # turn boundary means a stale browser preference cannot even reach the provider.
+        if provider_id == 'ollama':
+            thinking = False
         web_search = bool(payload.get('web_search'))
         provider, model = _validate_provider(provider_id, model, api_key, thinking, web_search)
         conversation = store.get_conversation(conversation_id) if conversation_id else None
@@ -427,11 +431,13 @@ class AgentService:
         if user is None:
             raise AIError('ai.apiNoText', kind='bad_request')
         meta = user.get('meta') or {}
+        retry_provider = meta.get('provider') or 'deepseek'
+        retry_thinking = bool(meta.get('thinking')) and retry_provider != 'ollama'
         provider, model = _validate_provider(
-            meta.get('provider') or 'deepseek',
+            retry_provider,
             meta.get('model') or '',
             api_key,
-            bool(meta.get('thinking')),
+            retry_thinking,
             bool(meta.get('web_search')),
         )
         skill = skills.get_skill(meta.get('skill') or 'auto')
@@ -457,7 +463,7 @@ class AgentService:
             provider=provider,
             model=model,
             api_key=api_key,
-            thinking=bool(meta.get('thinking')),
+            thinking=retry_thinking,
             web_search=bool(meta.get('web_search')),
             safety=str(meta.get('safety') or 'high'),
             context_meta=meta.get('context_meta') or {},
@@ -545,11 +551,13 @@ class AgentService:
             isinstance(item, dict) and item.get('id') == 'token_budget' for item in (question.get('questions') or [])
         ):
             store.update_message(user['id'], meta={**meta, 'token_budget_ack': True})
+        answer_provider = meta.get('provider') or 'deepseek'
+        answer_thinking = bool(meta.get('thinking')) and answer_provider != 'ollama'
         provider, model = _validate_provider(
-            meta.get('provider') or 'deepseek',
+            answer_provider,
             meta.get('model') or '',
             api_key,
-            bool(meta.get('thinking')),
+            answer_thinking,
             bool(meta.get('web_search')),
         )
         skill = skills.get_skill(meta.get('skill') or 'auto')
@@ -561,7 +569,7 @@ class AgentService:
             provider=provider,
             model=model,
             api_key=api_key,
-            thinking=bool(meta.get('thinking')),
+            thinking=answer_thinking,
             web_search=bool(meta.get('web_search')),
             safety=str(meta.get('safety') or 'high'),
             context_meta=_note_redaction(meta.get('context_meta') or {}, '引用', redacted_refs),

@@ -620,10 +620,13 @@ const AIWorkspace = {
         const provider = (this._bootstrap?.providers || []).find((item) => item.id === this._provider);
         const capabilities = provider?.capabilities || [];
         const thinking = this._thinkingOn();
+        const localOnly = !!(provider && provider.local_only);
         const search = !!AISettings.load().search && capabilities.includes('web_search');
         if (this._dom.thinking) {
             this._dom.thinking.classList.toggle('selected', thinking);
-            this._dom.thinking.disabled = !capabilities.includes('thinking');
+            /* Local models never think here: the server forces think=false, so offering a switch
+               that does nothing would be a lie. */
+            this._dom.thinking.disabled = localOnly || !capabilities.includes('thinking');
             this._dom.thinking.setAttribute('aria-pressed', thinking ? 'true' : 'false');
         }
         if (this._dom.search) {
@@ -3981,21 +3984,22 @@ const AIWorkspace = {
         AISettings.save({ skill: value });
     },
 
-    /* The local daemon is its own choice: qwen3.5 thinks by default, which doubles a batch call's
-       wall time, so a local turn stays non-thinking unless this switch says otherwise. */
+    /* The local daemon never thinks in this product: qwen3.5 thinks by default, which doubles a
+       local turn's wall time and leaks a trace the workspace does not show. The server enforces
+       this too; the switch is disabled for local providers. */
     _thinkingOn() {
         const settings = AISettings.load();
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
+        if (provider && provider.local_only) return false;
         const caps = (provider && provider.capabilities) || [];
-        const wanted = provider && provider.local_only ? settings.thinkingLocal : settings.thinking;
-        return !!wanted && caps.includes('thinking');
+        return !!settings.thinking && caps.includes('thinking');
     },
 
     toggleThinking() {
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
-        const local = !!(provider && provider.local_only);
+        if (provider && provider.local_only) return;
         const settings = AISettings.load();
-        AISettings.save(local ? { thinkingLocal: !settings.thinkingLocal } : { thinking: !settings.thinking });
+        AISettings.save({ thinking: !settings.thinking });
         this._renderToggles();
     },
 

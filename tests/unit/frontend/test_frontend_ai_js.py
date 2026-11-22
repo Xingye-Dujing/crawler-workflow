@@ -408,12 +408,14 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['refused'] is True, out
         assert 'Ollama' in out['toast'] or '本机' in out['toast'] or 'Local' in out['toast'], out
 
-    def test_a_local_turn_does_not_think_unless_the_switch_is_on(self):
-        """qwen3.5 thinks by default; a batch call must not pay for a thought trace it never asked
-        for. A paid provider keeps its own choice."""
+    def test_a_local_turn_never_thinks_and_the_switch_is_disabled(self):
+        """qwen3.5 thinks by default; a local turn must not pay for a trace the workspace never
+        shows. The server forces it too, so the switch is disabled rather than a silent no-op.
+        A paid provider keeps its own choice."""
         out = _run_workspace()['thinking']
         assert out['localDefault'] is False, out
-        assert out['localOn'] is True, 'the local switch did not turn thinking on'
+        assert out['localOn'] is False, 'a local turn must stay non-thinking even with the old flag set'
+        assert out['localDisabled'] is True, out
         assert out['paidDefault'] is True, out
 
     def test_a_markdown_link_is_escaped_exactly_once(self):

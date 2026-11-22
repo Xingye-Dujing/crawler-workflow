@@ -19,6 +19,7 @@ What belongs to the daemon, not to us:
 """
 
 import json
+import re
 import threading
 import time
 
@@ -44,6 +45,11 @@ CATALOG_TTL = 20.0
 #: A local daemon answers in single-digit milliseconds; a machine with no daemon must not pay a
 #: socket timeout on every page bootstrap, so the answer is cached for ``CATALOG_TTL`` either way.
 PROBE_TIMEOUT = 1.0
+
+#: Some GGUF templates ignore ``think: false`` and put their reasoning in ``content``. The daemon
+#: may also return a ``thinking`` field even when it was told not to. Both are stripped here: the
+#: product's policy is that a local turn never carries a visible reasoning trace.
+_THINK_TAGS = re.compile(r'(?is)<think(?:ing)?>.*?</think(?:ing)?>')
 
 SPEC = ProviderSpec(
     id='ollama',
@@ -255,9 +261,10 @@ class OllamaProvider(Provider):
         tools = self._tool_schemas(request.get('tools') or ())
         if tools and self.supports('tools', model):
             payload['tools'] = tools
-        thinking = bool(request.get('thinking')) and self.supports('thinking', model)
-        # Sent both ways: a reasoning model thinks by default, so "off" has to say so.
-        payload['think'] = thinking
+        # Local models never think in this product. This is a server policy, not a UI preference:
+        # qwen3.5 thinks by default, a reasoning trace doubles a local turn's wall time and is not
+        # what the workspace shows. The field is always sent so a daemon/model default cannot win.
+        payload['think'] = False
         return payload
 
     def stream(self, request: dict):
@@ -283,10 +290,12 @@ class OllamaProvider(Provider):
                 if frame.get('error'):
                     raise AIProviderError('ai.server', kind='network', detail=str(frame['error'])[:300])
                 message = frame.get('message') or {}
-                if message.get('thinking'):
-                    yield event('thinking_delta', text=str(message['thinking']))
+                # A daemon or template that ignores ``think: false`` must not leak reasoning into
+                # the transcript. Drop the field and strip paired think tags from the content.
                 if message.get('content'):
-                    yield event('text_delta', text=str(message['content']))
+                    text = _THINK_TAGS.sub('', str(message['content']))
+                    if text.strip():
+                        yield event('text_delta', text=text)
                 for call in message.get('tool_calls') or ():
                     function = (call or {}).get('function') or {}
                     arguments = function.get('arguments')

@@ -1124,21 +1124,29 @@ out.answerClick = {
 };
 
 
-/* Local turns do not think unless the switch says so: qwen3.5 thinks by default, which doubles a
-   batch call's wall time. A paid provider keeps its own (on-by-default) choice. */
-sandbox.AISettings.save({ thinkingLocal: false, thinking: true });
+/* Local turns never think: qwen3.5 thinks by default, which doubles a local turn's wall time and
+   leaks a trace the workspace does not show. The switch is disabled, not merely off. A paid
+   provider keeps its own (on-by-default) choice. */
+sandbox.AISettings.save({ thinkingLocal: true, thinking: true });
 workspace._bootstrap.providers = [
     { id: 'ollama', local_only: true, requires_key: false, capabilities: ['thinking'], models: [{ id: 'qwen3.5:4b' }] },
     { id: 'deepseek', local_only: false, requires_key: true, capabilities: ['thinking'], models: [{ id: 'deepseek-flash' }] },
 ];
 workspace._provider = 'ollama';
 const localDefault = workspace._thinkingOn();
+workspace._renderToggles();
+const localDisabled = !!workspace._dom.thinking && workspace._dom.thinking.disabled;
 workspace.toggleThinking();
 const localOn = workspace._thinkingOn();
 workspace._provider = 'deepseek';
 const paidDefault = workspace._thinkingOn();
 sandbox.AISettings.save({ thinkingLocal: false });
-out.thinking = { localDefault: localDefault, localOn: localOn, paidDefault: paidDefault };
+out.thinking = {
+    localDefault: localDefault,
+    localOn: localOn,
+    localDisabled: localDisabled,
+    paidDefault: paidDefault,
+};
 
 /* A URL with a query string must be escaped exactly once. The old inline() escaped the whole
    string first and then escaped the captured URL again: `&` became `&amp;amp;` and the browser

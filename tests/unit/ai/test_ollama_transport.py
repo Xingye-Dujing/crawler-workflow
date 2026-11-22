@@ -96,7 +96,7 @@ def test_capabilities_are_the_models_own_answer(monkeypatch):
     assert provider.supports('thinking', 'qwen3.5:9b') is False
 
 
-def test_the_request_carries_tools_thinking_and_the_real_context(monkeypatch):
+def test_the_request_carries_tools_and_the_real_context_but_never_thinking(monkeypatch):
     provider = _daemon(monkeypatch)
     payload = provider._payload(
         {
@@ -117,7 +117,8 @@ def test_the_request_carries_tools_thinking_and_the_real_context(monkeypatch):
         }
     )
     assert payload['tools'][0]['function']['name'] == 'workspace_list'
-    assert payload['think'] is True
+    # A local turn never thinks: the request asked for it, the transport still refuses.
+    assert payload['think'] is False
     # Ollama's own default is 4096 and does not grow with the model; a harness turn would be cut.
     assert payload['options']['num_ctx'] == ollama_max()
     assert payload['messages'][1]['tool_calls'][0]['function']['name'] == 'workspace_list'
@@ -162,3 +163,30 @@ def test_a_streamed_tool_call_becomes_a_tool_call_event(monkeypatch):
     assert call['name'] == 'workspace_read'
     assert call['arguments'] == {'path': 'a.txt'}
     assert events[-1] == {'type': 'done', 'stop_reason': 'max_tokens'}
+
+
+def test_a_daemon_that_ignores_think_false_cannot_leak_reasoning(monkeypatch):
+    """Some GGUF templates still emit ``thinking`` or put a think block in ``content``.
+
+    The product shows no reasoning trace for a local turn, so the transport drops the field and
+    strips paired tags before the text reaches the transcript.
+    """
+    from ai.providers import ollama
+
+    provider = _daemon(monkeypatch)
+    frames = [
+        {'message': {'thinking': 'secret plan', 'content': '<think>secret plan</think>answer'}, 'done': False},
+        {'message': {}, 'done': True, 'prompt_eval_count': 3, 'eval_count': 1},
+    ]
+
+    def post(url, **kwargs):
+        if url.endswith('/api/chat'):
+            return FakeResponse(lines=[json.dumps(frame) for frame in frames])
+        return FakeResponse(
+            {'capabilities': ['completion', 'tools', 'thinking'], 'model_info': {'qwen35.context_length': 262144}}
+        )
+
+    monkeypatch.setattr(ollama.requests, 'post', post)
+    events = list(provider.stream({'model': 'qwen3.5:9b', 'messages': [], 'tools': []}))
+    assert not any(event['type'] == 'thinking_delta' for event in events)
+    assert ''.join(event.get('text', '') for event in events if event['type'] == 'text_delta') == 'answer'
