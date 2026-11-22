@@ -14,9 +14,10 @@ scikit-learn；拖节点、连线条、点执行，中断后从断点续跑，�
 
 <img src="docs/promo/promo-cover.png" alt="采析绘宣传片封面：把研究画成一条路" width="100%">
 
-[`video/`](video/) 是宣传片的可复现工程：**B 站 16:9 约 95 秒、抖音 9:16 约 49 秒**，画面来自采析绘的实机浏览器录屏
-与实机截图，不是重绘界面。`video/README.md` 说明如何采集与渲染，`video/SCRIPT.md` 是旁白稿；成片与采集素材在本地
-`video/out/`、`video/public/real/`，不进 git。
+[`video/`](video/) 是宣传片的可复现工程：**B 站 16:9 约 118 秒、抖音 9:16 约 52 秒**，快速浏览式功能巡礼，
+覆盖 16 类节点、25 种真实渲染的图表（简单→复杂递进）、分析与采集功能。画面来自采析绘自身的浏览器录屏、
+面板截图与 `/api/visualize/render` 现场渲染，不是重绘界面。`video/README.md` 说明如何采集与渲染，
+`video/SCRIPT.md` 是字幕稿；成片与素材在本地 `video/out/`、`video/public/real/`，不进 git。
 
 ## 快速开始
 

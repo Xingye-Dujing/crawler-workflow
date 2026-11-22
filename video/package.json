@@ -1,0 +1,28 @@
+{
+  "name": "caixihui-promo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Remotion promo film for 采析绘 — real browser footage, paper chapter cards",
+  "scripts": {
+    "start": "remotion studio src/index.ts",
+    "cover": "remotion still src/index.ts Cover out/cover.png --scale=1.3333",
+    "render": "remotion render src/index.ts BiliPromo out/bilibili.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p --scale=1.3333 --muted",
+    "render:bili": "remotion render src/index.ts BiliPromo out/bilibili.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p --scale=1.3333 --muted",
+    "render:douyin": "remotion render src/index.ts DouyinPromo out/douyin.mp4 --codec=h264 --crf=16 --pixel-format=yuv420p --concurrency=2 --scale=1.3333 --muted",
+    "capture": "python scripts/browser_capture.py",
+    "capture:film": "python scripts/browser_capture.py --profile film",
+    "render:preview": "remotion render src/index.ts BiliPromo out/preview.mp4 --codec=h264 --crf=22 --scale=0.5 --muted",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.540",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.540"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.0",
+    "@types/react-dom": "19.1.0",
+    "typescript": "5.8.3"
+  }
+}
