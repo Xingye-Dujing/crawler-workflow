@@ -2,13 +2,11 @@
 
 Five files are rendered from the manifests. The failures this file guards are the quiet ones: an
 artifact left behind after a parameter rename looks authoritative, a renderer that sorts dict keys
-differently on another run makes every freshness check red, and a JS catalogue that no longer parses
-breaks the P2 form before anyone opens the page.
+differently on another run makes every freshness check red, and a form catalogue that no longer
+parses breaks the P2 form before anyone opens the page.
 """
 
 import json
-import shutil
-import subprocess
 
 import pytest
 from capabilities_kernel import generate, registry
@@ -31,7 +29,7 @@ class TestTheRenderedSet:
             'backend/capabilities_kernel/generated/catalog.json',
             'backend/capabilities_kernel/generated/openapi.json',
             'backend/capabilities_kernel/generated/ai_tools.json',
-            'backend/static/js/capability-schema.generated.js',
+            'backend/capabilities_kernel/generated/capability-schema.json',
             'docs/capabilities/index.md',
         }
 
@@ -91,20 +89,14 @@ class TestTheArtifactsSayTheSameThing:
 
 
 class TestTheFrontendCatalogue:
-    def test_it_is_a_window_global_of_nodes(self):
-        text = generate.render()[generate.ROOT / 'backend/static/js/capability-schema.generated.js']
-        assert 'window.CapabilitySchema' in text
-        payload = json.loads(text.split('window.CapabilitySchema = ', 1)[1].rstrip().rstrip(';'))
+    def test_it_is_a_json_catalogue_of_nodes(self):
+        text = generate.render()[generate.ROOT / 'backend/capabilities_kernel/generated/capability-schema.json']
+        payload = json.loads(text)
         node = next(item for item in payload['nodes'] if item['type'] == 'tokenize')
         assert node['params'][0]['widget'] == 'column'
         assert node['rules'][0]['code'] == 'engine.tokenize_no_column'
 
-    @pytest.mark.skipif(shutil.which('node') is None, reason='node not on PATH')
-    def test_node_parses_the_generated_file(self, tmp_path):
-        path = generate.ROOT / 'backend/static/js/capability-schema.generated.js'
-        completed = subprocess.run(
-            ['node', '--check', str(path)],
-            capture_output=True,
-            check=False,
-        )
-        assert completed.returncode == 0, completed.stderr.decode('utf-8', 'replace')
+    def test_it_is_data_not_a_page_module(self):
+        """No page loads it yet; a ``static/js`` module nobody loads is dead code the frontend gate refuses."""
+        paths = {path.as_posix() for path in generate.render()}
+        assert not any('/static/js/' in path for path in paths)

@@ -105,6 +105,6 @@ class TestTheGeneratedArtifactsAreCurrent:
             'catalog.json',
             'openapi.json',
             'ai_tools.json',
-            'capability-schema.generated.js',
+            'capability-schema.json',
             'index.md',
         }

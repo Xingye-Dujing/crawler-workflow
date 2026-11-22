@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`ef5b789 功能更新：状态机转换表与事件契约`
+- 最后提交：`afc7d34 功能更新：迁移开关与数据资产骨架`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -32,6 +32,7 @@
 | `a8420a1` | P1 第一片：`capabilities_kernel` 九段清单 + registry 投影；`tokenize` pilot；声明式验证改由 `services/validation/engine.py` 求值 |
 | `55329a7` | P1 第二片：`tools/gen_capabilities.py` 五类产物、`tools/doctor.py`、生成物 freshness gate |
 | `ef5b789` | P1 第三片：`runtime/fsm.py` 四张状态机表 + recipe 工厂；`runtime/events.py` 字段契约 + AST 调用点 census |
+| `afc7d34` | P1 第四片：`runtime/flags.py` 迁移开关与到期门禁；`core/asset.py` 的 `DataAsset` 骨架 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -48,8 +49,10 @@
 - 门禁：`tests/unit/gates/test_capability_completeness.py`（结构/执行器/端口/文档/契约测试/双语词/清单轻导入/生成物 fresh）；
   `test_doc_paths` 与 `test_requirements_pinned` 的包清单已加 `capabilities_kernel`。
 - 生成物：`tools/gen_capabilities.py` 渲染 `catalog.json`（目录 + 测试矩阵）、`openapi.json`、
-  `ai_tools.json`、`backend/static/js/capability-schema.generated.js`、`docs/capabilities/index.md`；
-  `--check` 与门禁共用 `generate.check()`。`tools/doctor.py --all` 逐项打印 `[x]`，未知 `--capability` 也是失败行。
+  `ai_tools.json`、`capability-schema.json`、`docs/capabilities/index.md`；`--check` 与门禁共用
+  `generate.check()`。`tools/doctor.py --all` 逐项打印 `[x]`，未知 `--capability` 也是失败行。
+  前端表单目录先放在 `capabilities_kernel/generated/`：全量快测的 `test_frontend_page_scripts_js` 拒绝
+  “没有页面加载的 static/js 模块”，P2 真正接页面时再移入 `static/js` 并注册到 `index.html`。
 - `runtime/fsm.py`：`RUN`/`NODE`/`TURN`/`VIEW` 四张表 + `recipe_machine(steps)`；构造时拒绝不连贯表，
   `require()` 对非法移动按名拒绝；`tests/unit/foundation/test_fsm.py` 穷举全部状态对。
 - `runtime/events.py`：四个运行事件的字段类型契约；`publish()` 校验后交给 `run_events` 总线；
@@ -61,7 +64,9 @@
   只导入标准库，供 P2 的运行库、节点、API、AI 共用。`services/components` 的 `Asset` 是可下载组件载荷，不是同一种。
 - 文档：`docs/architecture/capabilities-kernel.md`、`docs/capabilities/nodes/tokenize.md`、ADR-001/ADR-003 的 P1 落点。
 - 本片验证：相关模块 `2048 passed`（analysis/gates/runs/executors/capabilities + node-types/workflow API）；
-  ruff 全绿；product pylint 10.00/10、tests pylint（本片文件）10.00/10；`test_boot_import_budget` 9 passed。
+  全量快测 `10789 passed, 7 skipped, 386 deselected, 1 failed`（14:16），失败项是“前端目录是无人加载的
+  static/js 模块”，已改为 `generated/capability-schema.json` 并单跑通过；ruff 全绿；product pylint 10.00/10、
+  tests pylint 10.00/10；`test_boot_import_budget` 9 passed。
 - P1 清单已全部落地；下一步进入 P2（15 个节点迁移 + schema 表单 + 删除前端第二套规则）。
 
 ## 测试基线（H11-H16 收口，2026-11-22）

@@ -42,7 +42,7 @@ backend/capabilities_kernel/
 | `backend/capabilities_kernel/generated/catalog.json` | 机器目录 + 能力 × 检查项测试矩阵（含每个清单的 digest） |
 | `backend/capabilities_kernel/generated/openapi.json` | `/api/node-types` 的 OpenAPI 3.1 描述与每个节点的参数 schema |
 | `backend/capabilities_kernel/generated/ai_tools.json` | AI 可读的摘要/步骤/示例/失败模式（P4/P6 生成技能与工具） |
-| `backend/static/js/capability-schema.generated.js` | 浏览器 schema 表单目录（P2 渲染器读取；当前页面仍走 `/api/node-types`） |
+| `backend/capabilities_kernel/generated/capability-schema.json` | 浏览器 schema 表单目录（P2 渲染器读取；当前页面仍走 `/api/node-types`，所以它是数据而非已加载的 JS 模块） |
 | `docs/capabilities/index.md` | 人类可读的能力索引 |
 
 `tests/unit/gates/test_capability_completeness.py` 调用同一个 `generate.check()`：改了清单却忘记重新生成，CI 直接红，并打印 `run python tools/gen_capabilities.py`。渲染是确定性的（registry 顺序、dataclass 字段顺序、跨平台 LF），所以 Windows 与 Linux 比较的是同一串字节。
