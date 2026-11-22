@@ -53,12 +53,7 @@ class NodePlugin:
 #: ``capabilities_kernel/nodes/tokenize/manifest.py`` as the pilot; the rest follow in P2.
 _DECLARED: dict[str, NodePlugin] = {
     'source': NodePlugin('source', 'nodeType.source', 'data'),
-    'resume': NodePlugin('resume', 'nodeType.resume', 'data'),
     'comment': NodePlugin('comment', 'nodeType.comment', 'data'),
-    'process': NodePlugin('process', 'nodeType.process', 'process'),
-    # 扩展: a saved Python script over the upstream rows. The script lives in the account's
-    # python_scripts library, so the workflow references it by id/name rather than inlining code.
-    'python': NodePlugin('python', 'nodeType.python', 'process'),
     'analysis': NodePlugin('analysis', 'nodeType.analysis', 'analysis'),
     'biblio': NodePlugin('biblio', 'nodeType.biblio', 'biblio'),
     # 采集校验 reads two tables (a list and a crawl result) and answers a report table; it

@@ -549,8 +549,6 @@ class WorkflowEngine:
             # or a hand-edited file that would run perfectly is refused as
             # misconfigured — the strictness has no counterpart in the runner.
             operation = node.get('operation') or params.get('operation')
-            if ntype == 'process' and not operation:
-                add(nid, 'engine.process_no_op', t('engine.process_no_op', nid=label))
             if ntype == 'analysis' and not (params.get('steps') or operation):
                 add(nid, 'engine.analysis_no_op', t('engine.analysis_no_op', nid=label))
             if ntype == 'verify':
@@ -615,10 +613,8 @@ class WorkflowEngine:
                         problem['code'],
                         t(problem['message_key'], nid=label, **problem['context']),
                     )
-            # 分词 is also a 处理 operation now. It keeps the same named refusal at the
-            # validation boundary, not only when the executor finally reads the column.
-            if ntype == 'process' and operation == 'tokenize' and not params.get('text_column'):
-                add(nid, 'engine.tokenize_no_column', t('engine.tokenize_no_column', nid=label))
+            # 分词 is also a 处理 operation now, but its missing column is declared by the
+            # manifest's validator; the old canvas remains valid by the same code.
             if ntype == 'visualize':
                 chart_type = str(params.get('chart_type') or '')
                 if not chart_type:

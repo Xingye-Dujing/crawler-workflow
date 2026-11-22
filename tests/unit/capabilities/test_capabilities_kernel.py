@@ -36,6 +36,9 @@ class TestDiscovery:
         assert [manifest.identity.id for manifest in registry.manifests('node')] == [
             'name',
             'upload',
+            'resume',
+            'process',
+            'python',
             'tokenize',
             'compile',
             'output',

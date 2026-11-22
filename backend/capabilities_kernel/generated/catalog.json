@@ -232,6 +232,370 @@
     },
     {
       "kind": "node",
+      "id": "resume",
+      "digest": "42a8da19e26d97ccac323a0f770535e95ae2d3c5cc743a602979396a7e7044d4",
+      "manifest": {
+        "identity": {
+          "id": "resume",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.resume",
+          "category": "data",
+          "order": 3,
+          "description": "Adopt a stored node output from an earlier run as this node’s rows.",
+          "when_to_use": "When the original source cannot run again but its rows are already paid for."
+        },
+        "params": [
+          {
+            "name": "resume_run_id",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "resume_node_id",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "resume_limit",
+            "type": "integer",
+            "default": 0,
+            "required": false,
+            "enum": [],
+            "minimum": 0,
+            "maximum": null,
+            "widget": "number",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 0,
+          "emit_columns": "",
+          "read_columns": ""
+        },
+        "execution": {
+          "handler": "nodes.executors.resume:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "断点续采 adopts rows an earlier run already stored. Blank ids mean “newest unfinished run of this workflow shape, fullest node”; a limit truncates the adopted table.",
+          "steps": [
+            "Pick a resumable run and node, or leave both blank for the automatic choice.",
+            "Optionally set a row limit.",
+            "Wire the adopted rows into the rest of the chain."
+          ],
+          "examples": [
+            {
+              "type": "resume",
+              "params": {
+                "resume_run_id": "",
+                "resume_node_id": "",
+                "resume_limit": 0
+              }
+            }
+          ],
+          "failures": [
+            "No resumable run: the executor logs resume.no_run and returns no rows.",
+            "The picked node holds nothing and no node has rows: resume.empty."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_resume_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/resume.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
+      "id": "process",
+      "digest": "5387e43d9debf5841a074eb59bd6dd13b1e68ae1f024fb314b4202520913c361",
+      "manifest": {
+        "identity": {
+          "id": "process",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.process",
+          "category": "process",
+          "order": 5,
+          "description": "Clean, tokenize or analyze a text column; emits per-operation columns.",
+          "when_to_use": "After a crawl/upload when the rows need cleaning or one text/algorithm operation."
+        },
+        "params": [
+          {
+            "name": "operation",
+            "type": "string",
+            "default": "clean",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "text_column",
+            "type": "string",
+            "default": "正文",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "column",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "topic",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "live_export",
+            "type": "boolean",
+            "default": false,
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "switch",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "format",
+            "type": "string",
+            "default": "csv",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "text",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "nodes.executors.process:emit_columns",
+          "read_columns": "nodes.executors.process:read_columns"
+        },
+        "execution": {
+          "handler": "nodes.executors.process:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [
+          "nodes.executors.process:validate_node"
+        ],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "处理 runs one operation over the upstream text column: cleaning, tokenize, word frequency, TF-IDF/TextRank, sentiment/emotion/tendency, NER, clustering, correlation and the qualitative coding operations. The operation selects both the result columns and the required inputs.",
+          "steps": [
+            "Pick the operation; the panel shows only that operation’s fields.",
+            "Pick the text column (正文 is the usual crawl column).",
+            "For BERT operations choose one model, or several for the comparison table."
+          ],
+          "examples": [
+            {
+              "type": "process",
+              "params": {
+                "operation": "clean",
+                "text_column": "正文",
+                "format": "csv"
+              }
+            },
+            {
+              "type": "process",
+              "params": {
+                "operation": "tokenize",
+                "text_column": "正文",
+                "output_mode": "word_freq"
+              }
+            }
+          ],
+          "failures": [
+            "No operation: engine.process_no_op.",
+            "Tokenize without a text column: engine.tokenize_no_column.",
+            "An unknown operation/param value: the executor refuses with analysis.bad_option and the allowed values."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_process_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/process.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
+      "id": "python",
+      "digest": "e00f4653a79360ea230a81c8f186e3266af20fd7d2369cff1db49185a6d38b5c",
+      "manifest": {
+        "identity": {
+          "id": "python",
+          "kind": "node",
+          "version": "1.0.0",
+          "title_key": "nodeType.python",
+          "category": "process",
+          "order": 6,
+          "description": "Run a saved Python script over the upstream rows (local/desktop only).",
+          "when_to_use": "When a transformation is not one of the built-in operations and should be reused as a script."
+        },
+        "params": [
+          {
+            "name": "script_id",
+            "type": "string",
+            "default": "",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "select",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "args",
+            "type": "string",
+            "default": "{}",
+            "required": false,
+            "enum": [],
+            "minimum": null,
+            "maximum": null,
+            "widget": "json",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "timeout",
+            "type": "integer",
+            "default": 120,
+            "required": false,
+            "enum": [],
+            "minimum": 1,
+            "maximum": 3600,
+            "widget": "number",
+            "placeholder": "",
+            "description_key": ""
+          },
+          {
+            "name": "max_rows",
+            "type": "integer",
+            "default": 200000,
+            "required": false,
+            "enum": [],
+            "minimum": 1,
+            "maximum": null,
+            "widget": "number",
+            "placeholder": "",
+            "description_key": ""
+          }
+        ],
+        "ports": {
+          "rows": "table",
+          "inputs": 1,
+          "emit_columns": "",
+          "read_columns": ""
+        },
+        "execution": {
+          "handler": "nodes.executors.python_node:run",
+          "quiet": false
+        },
+        "rules": [],
+        "validators": [],
+        "ui": {
+          "form": "schema",
+          "custom_renderer": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "Python 节点 runs one saved script from the account’s script library over the upstream rows. The script reads CIXI_INPUT and writes CIXI_OUTPUT (JSON Lines); the node stores its id, not code.",
+          "steps": [
+            "Save or pick a script in the Python panel.",
+            "Wire the rows in and set args (a JSON object the script reads from CIXI_ARGS).",
+            "Keep timeout/max_rows within the script’s needs; the runtime caps the output rows."
+          ],
+          "examples": [
+            {
+              "type": "python",
+              "params": {
+                "script_id": "clean_links",
+                "args": "{\"drop_empty\": true}",
+                "timeout": 120,
+                "max_rows": 200000
+              }
+            }
+          ],
+          "failures": [
+            "Cloud mode: refused by name (ai.pythonCloud).",
+            "No/unknown script: refused with ai.pythonUnknown.",
+            "Bad args JSON: ai.pythonArgs; bad timeout/max_rows: ai.pythonBadNumber."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_python_manifest.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/nodes/python.md",
+          "skill": "",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "node",
       "id": "tokenize",
       "digest": "726441e502656a4053d2d6857d846e8e0aed2fd5ae2eb869ddec2853b73fd17c",
       "manifest": {
@@ -560,6 +924,57 @@
         "tests/unit/capabilities/test_upload_manifest.py"
       ],
       "docs": "docs/capabilities/nodes/upload.md"
+    },
+    {
+      "kind": "node",
+      "id": "resume",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_resume_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/resume.md"
+    },
+    {
+      "kind": "node",
+      "id": "process",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_process_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/process.md"
+    },
+    {
+      "kind": "node",
+      "id": "python",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_python_manifest.py"
+      ],
+      "docs": "docs/capabilities/nodes/python.md"
     },
     {
       "kind": "node",

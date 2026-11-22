@@ -93,6 +93,165 @@
       "read_columns": ""
     },
     {
+      "capability": "node:resume",
+      "tool": "",
+      "summary": "断点续采 adopts rows an earlier run already stored. Blank ids mean “newest unfinished run of this workflow shape, fullest node”; a limit truncates the adopted table.",
+      "steps": [
+        "Pick a resumable run and node, or leave both blank for the automatic choice.",
+        "Optionally set a row limit.",
+        "Wire the adopted rows into the rest of the chain."
+      ],
+      "examples": [
+        {
+          "type": "resume",
+          "params": {
+            "resume_run_id": "",
+            "resume_node_id": "",
+            "resume_limit": 0
+          }
+        }
+      ],
+      "failures": [
+        "No resumable run: the executor logs resume.no_run and returns no rows.",
+        "The picked node holds nothing and no node has rows: resume.empty."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "resume_run_id": {
+            "type": "string",
+            "default": ""
+          },
+          "resume_node_id": {
+            "type": "string",
+            "default": ""
+          },
+          "resume_limit": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "node:process",
+      "tool": "",
+      "summary": "处理 runs one operation over the upstream text column: cleaning, tokenize, word frequency, TF-IDF/TextRank, sentiment/emotion/tendency, NER, clustering, correlation and the qualitative coding operations. The operation selects both the result columns and the required inputs.",
+      "steps": [
+        "Pick the operation; the panel shows only that operation’s fields.",
+        "Pick the text column (正文 is the usual crawl column).",
+        "For BERT operations choose one model, or several for the comparison table."
+      ],
+      "examples": [
+        {
+          "type": "process",
+          "params": {
+            "operation": "clean",
+            "text_column": "正文",
+            "format": "csv"
+          }
+        },
+        {
+          "type": "process",
+          "params": {
+            "operation": "tokenize",
+            "text_column": "正文",
+            "output_mode": "word_freq"
+          }
+        }
+      ],
+      "failures": [
+        "No operation: engine.process_no_op.",
+        "Tokenize without a text column: engine.tokenize_no_column.",
+        "An unknown operation/param value: the executor refuses with analysis.bad_option and the allowed values."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "clean"
+          },
+          "text_column": {
+            "type": "string",
+            "default": "正文"
+          },
+          "topic": {
+            "type": "string",
+            "default": ""
+          },
+          "live_export": {
+            "type": "boolean",
+            "default": false
+          },
+          "format": {
+            "type": "string",
+            "default": "csv"
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "nodes.executors.process:emit_columns",
+      "read_columns": "nodes.executors.process:read_columns"
+    },
+    {
+      "capability": "node:python",
+      "tool": "",
+      "summary": "Python 节点 runs one saved script from the account’s script library over the upstream rows. The script reads CIXI_INPUT and writes CIXI_OUTPUT (JSON Lines); the node stores its id, not code.",
+      "steps": [
+        "Save or pick a script in the Python panel.",
+        "Wire the rows in and set args (a JSON object the script reads from CIXI_ARGS).",
+        "Keep timeout/max_rows within the script’s needs; the runtime caps the output rows."
+      ],
+      "examples": [
+        {
+          "type": "python",
+          "params": {
+            "script_id": "clean_links",
+            "args": "{\"drop_empty\": true}",
+            "timeout": 120,
+            "max_rows": 200000
+          }
+        }
+      ],
+      "failures": [
+        "Cloud mode: refused by name (ai.pythonCloud).",
+        "No/unknown script: refused with ai.pythonUnknown.",
+        "Bad args JSON: ai.pythonArgs; bad timeout/max_rows: ai.pythonBadNumber."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "script_id": {
+            "type": "string",
+            "default": ""
+          },
+          "args": {
+            "type": "string",
+            "default": "{}"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120,
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "max_rows": {
+            "type": "integer",
+            "default": 200000,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
       "capability": "node:tokenize",
       "tool": "",
       "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",

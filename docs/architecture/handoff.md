@@ -91,6 +91,16 @@
 - 未做（P2 后续）：`source`/`resume`/`comment`/`process`/`python`/`analysis`/`biblio`/`verify`/`fuse`/
   `accumulate`/`visualize` 的清单；schema 表单渲染器；删除 `canvas.js`/`runs.js` 的第二套规则；executor 搬进能力目录。
 
+## P2 第二批：resume / process / python（2026-11-22）
+
+- `process` 用 `validators=('nodes.executors.process:validate_node',)` 保留 `process_no_op` 与
+  `tokenize_no_column`；节点对象上的 `operation` 与 params 里的都接受。`engine/workflow.py` 删除这两条 if。
+- `python` 只声明脚本 id/args/timeout/max_rows 与“本地可运行”的契约；云模式/空脚本/坏 args 仍由 executor 按名拒绝。
+- `resume` 刻意没有必填规则：空 run/node 是“自动选择最新可恢复运行/最满节点”的合法路径。
+- 三个节点的 catalogue 槽位（3/5/6）与默认参数不变；`nodes/catalog.py` 剩 8 个未迁移类型。
+- 本片验证：`156 passed`（capabilities + node plugins/schema + executors）、`585 passed`
+  （workflow/node-types API + runs + capabilities）；ruff 全绿；product/tests pylint 10.00/10；生成物 --check 通过。
+
 ## 测试基线（H11-H16 收口，2026-11-22）
 
 - 全量快测：`10646 passed, 7 skipped, 384 deselected, 1 warning in 846.06s (14:06)`。
@@ -112,8 +122,8 @@
 
 ## 下一步（按顺序）
 
-1. **P2 续**：迁移其余 11 个节点（先 `process`/`python`/`resume`，再 `analysis`/`biblio`/`fuse`/`accumulate`/`verify`，
-   最后 `source`/`comment`/`visualize`）；然后 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
+1. **P2 续**：迁移其余 8 个节点（先 `analysis`/`biblio`/`fuse`/`accumulate`/`verify`，再
+   `source`/`comment`/`visualize`）；然后 schema 表单渲染器 + 删除 `canvas.js`/`runs.js` 的第二套规则。
 2. 后续按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）

@@ -17,10 +17,6 @@ from services.biblio.schema import DEFAULTS as BIBLIO_DEFAULTS
 #: the first is capability-shaped, the second carries a template snapshot chosen at creation.
 _DECLARED: dict[str, dict] = {
     'accumulate': {'lineage_name': '', 'identity': 'row', 'key_columns': ''},
-    'process': {'operation': 'clean', 'text_column': '正文', 'topic': '', 'live_export': False, 'format': 'csv'},
-    # 扩展: `script_id` names a row in services.python_scripts; `args` is a JSON object the script
-    # reads from CIXI_ARGS. Empty script = the node refuses by name instead of running nothing.
-    'python': {'script_id': '', 'args': '{}', 'timeout': 120, 'max_rows': 200000},
     'analysis': {
         'operation': 'drop_null',
         'columns': '',
@@ -71,7 +67,6 @@ _DECLARED: dict[str, dict] = {
         'keep_undated': True,
         'export_files': False,
     },
-    'resume': {'resume_run_id': '', 'resume_node_id': '', 'resume_limit': 0},
     'comment': {
         'urls': '',
         'comment_limit': 0,

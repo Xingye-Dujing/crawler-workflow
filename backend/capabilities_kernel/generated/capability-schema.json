@@ -125,6 +125,195 @@
       }
     },
     {
+      "type": "resume",
+      "labelKey": "nodeType.resume",
+      "category": "data",
+      "order": 3,
+      "params": [
+        {
+          "name": "resume_run_id",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "resume_node_id",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "resume_limit",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 0,
+        "emitColumns": "",
+        "readColumns": ""
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
+      "type": "process",
+      "labelKey": "nodeType.process",
+      "category": "process",
+      "order": 5,
+      "params": [
+        {
+          "name": "operation",
+          "type": "string",
+          "default": "clean",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "text_column",
+          "type": "string",
+          "default": "正文",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column",
+          "placeholder": ""
+        },
+        {
+          "name": "topic",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        },
+        {
+          "name": "live_export",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch",
+          "placeholder": ""
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "default": "csv",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 1,
+        "emitColumns": "nodes.executors.process:emit_columns",
+        "readColumns": "nodes.executors.process:read_columns"
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
+      "type": "python",
+      "labelKey": "nodeType.python",
+      "category": "process",
+      "order": 6,
+      "params": [
+        {
+          "name": "script_id",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select",
+          "placeholder": ""
+        },
+        {
+          "name": "args",
+          "type": "string",
+          "default": "{}",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "json",
+          "placeholder": ""
+        },
+        {
+          "name": "timeout",
+          "type": "integer",
+          "default": 120,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": 3600,
+          "widget": "number",
+          "placeholder": ""
+        },
+        {
+          "name": "max_rows",
+          "type": "integer",
+          "default": 200000,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": "number",
+          "placeholder": ""
+        }
+      ],
+      "rules": [],
+      "ports": {
+        "rows": "table",
+        "inputs": 1,
+        "emitColumns": "",
+        "readColumns": ""
+      },
+      "ui": {
+        "form": "schema",
+        "customRenderer": ""
+      }
+    },
+    {
       "type": "tokenize",
       "labelKey": "nodeType.tokenize",
       "category": "process",

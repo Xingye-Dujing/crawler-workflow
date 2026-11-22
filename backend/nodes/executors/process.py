@@ -60,6 +60,18 @@ from services.coding import codebooks
 NODE_TYPE = 'process'
 
 
+def validate_node(node: dict, _context) -> list[dict]:
+    """The operation and the tokenize column, named before any analyzer or model is paid for."""
+    params = node_params(node)
+    operation = node_operation(node)
+    problems: list[dict] = []
+    if not operation:
+        problems.append({'code': 'engine.process_no_op', 'message_key': 'engine.process_no_op'})
+    elif operation == 'tokenize' and not str(params.get('text_column') or '').strip():
+        problems.append({'code': 'engine.tokenize_no_column', 'message_key': 'engine.tokenize_no_column'})
+    return problems
+
+
 # ─── Multi-model BERT comparison ──────────────────────────────
 #: The label/score columns each analyzer writes in bert mode. A multi-model run stacks
 #: several models into ONE tidy table and the 模型对比 charts read these names, so this

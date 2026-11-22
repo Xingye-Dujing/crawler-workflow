@@ -124,6 +124,76 @@
           "dataset_id"
         ]
       },
+      "NodeParams.resume": {
+        "type": "object",
+        "properties": {
+          "resume_run_id": {
+            "type": "string",
+            "default": ""
+          },
+          "resume_node_id": {
+            "type": "string",
+            "default": ""
+          },
+          "resume_limit": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.process": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "default": "clean"
+          },
+          "text_column": {
+            "type": "string",
+            "default": "正文"
+          },
+          "topic": {
+            "type": "string",
+            "default": ""
+          },
+          "live_export": {
+            "type": "boolean",
+            "default": false
+          },
+          "format": {
+            "type": "string",
+            "default": "csv"
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.python": {
+        "type": "object",
+        "properties": {
+          "script_id": {
+            "type": "string",
+            "default": ""
+          },
+          "args": {
+            "type": "string",
+            "default": "{}"
+          },
+          "timeout": {
+            "type": "integer",
+            "default": 120,
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "max_rows": {
+            "type": "integer",
+            "default": 200000,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
       "NodeParams.tokenize": {
         "type": "object",
         "properties": {
