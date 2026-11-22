@@ -2,7 +2,7 @@
 
 - 日期：2026-11-22
 - 分支：`main`
-- 最后提交：`d59d65b 功能更新：迁移 visualize/fuse 节点清单`
+- 最后提交：`45dd0be 功能更新：迁移 comment 节点清单，会话检查移入 preflight`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -38,6 +38,7 @@
 | `77731f2` | P2 第二批：resume/process/python 迁移；process 的 operation/tokenize 检查移到 validator |
 | `68b8f49` | P2 第三批：analysis/accumulate/verify 迁移；engine 不再导入行形状集合 |
 | `d59d65b` | P2 第四批：visualize/fuse 迁移；fuse 参数错误改为 code/message_key 数据 |
+| `45dd0be` | P2 第五批：comment 迁移；账号会话检查从 engine 移到 `sessions/preflight.py` |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
