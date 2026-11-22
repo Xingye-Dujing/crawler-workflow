@@ -199,6 +199,10 @@
 - **一个 provider 目录，因为一次运行不能谎报它的传输。** 目录拥有端点、模型表、能力清单与云端/本地拒绝；浏览器只渲染
   `/api/ai/providers` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
 - **能力是承诺。** 传输不支持 `thinking`/`web_search` 就得按名拒绝，不能发一个 provider 会静默忽略的字段。
+- **附件不是 `file_id` 的同义词。** `files` 是供应商服务端解析文档，`vision` 是模型能看图，`inline_images` 是这个传输能把
+  图片字节放进请求；三者互相独立。旧代码用一个 `files` 判断把它们绑在一起：本地模型连 `.txt` 都收不了，只有 `vision`
+  的网关被以缺 `files` 为由拒绝。现在文档没有 `files` 就在服务端抽取成文本（按附件缓存，`ai_attachment_text_chars`
+  只负责截断并报告），图片只问 `vision`，能把字节内联的传输声明 `inline_images`，不能的就按名拒绝而不是静默丢掉附件。
 - **密钥在浏览器，转录在服务器。** 服务器只为那一次请求持有 key；重载后的回答行没有 key，所以 `ai.noKey`，不是重放旧密钥。
 - **一轮是好几行。** 每个 `tool_use` 都要有立即的工具结果；合并轮次会产生 provider 拒绝的非法历史。`ask_user_question` 的答案是
   工具结果，不是新用户消息。

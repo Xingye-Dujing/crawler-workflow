@@ -29,10 +29,11 @@ from ai.errors import AIProviderError
 from ai.providers.base import Provider, event, stream_lines
 from ai.types import ModelSpec, ProviderSpec
 
-#: What this transport implements. ``tools`` and ``thinking`` are per-model (asked of the daemon);
-#: ``files``/``web_search`` are NOT declared — Ollama has no file-id or server-side search API, and
-#: a promise the transport cannot keep must be refused by name instead of silently ignored.
-OLLAMA_CAPABILITIES = frozenset({'tools', 'thinking'})
+#: What this transport implements. ``tools``/``thinking``/``vision`` are per-model (asked of the
+#: daemon, which lists ``vision`` only for a model built with a projector); ``files``/``web_search``
+#: are NOT declared — Ollama has no file-id or server-side search API, and a promise the transport
+#: cannot keep must be refused by name instead of silently ignored.
+OLLAMA_CAPABILITIES = frozenset({'tools', 'thinking', 'vision', 'inline_images'})
 
 #: Ollama's ``num_ctx`` default is 4096 and it does NOT grow with the model. A harness turn carries
 #: a vocabulary-heavy system prompt plus tool results, so the window is raised to the model's own
@@ -234,7 +235,19 @@ class OllamaProvider(Provider):
                 # which told the model the answer was something the person said.
                 out.append({'role': 'tool', 'content': str(message.get('content') or '')})
                 continue
-            out.append({'role': 'user', 'content': str(message.get('content') or '')})
+            item = {'role': 'user', 'content': str(message.get('content') or '')}
+            images = [
+                row
+                for row in (message.get('meta') or {}).get('attachments') or ()
+                if str(row.get('kind') or '') == 'image'
+            ]
+            if images:
+                # Ollama's vision models read ``images`` as bare base64, not a data URL. The agent
+                # already asked the daemon whether THIS model has a projector.
+                from ai import file_text
+
+                item['images'] = [file_text.image_payload(row)[1] for row in images]
+            out.append(item)
         return out
 
     def _payload(self, request: dict) -> dict:

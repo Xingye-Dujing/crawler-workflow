@@ -259,6 +259,38 @@ workspace._renderAttachments = realRenderAttachments;
 workspace._toast = savedToast;
 sandbox.fetch = realWorkspaceFetch;
 
+/* Capability gate: a document no longer needs a provider Files API (the server extracts its
+   words), an image needs the model to SEE, and a keyless local provider may still attach. */
+sandbox.AISettings.save({ provider: 'localish', models: { localish: 'm' }, keys: { localish: '' } });
+workspace._bootstrap.providers = [{ id: 'localish', requires_key: false, capabilities: [] }];
+workspace._provider = 'localish';
+workspace._model = 'm';
+workspace._renderToggles = () => {};
+const realStreamForGate = workspace._stream;
+let lastSentBody = null;
+workspace._stream = async (_url, body) => {
+    lastSentBody = body;
+};
+const gateToasts = [];
+workspace._toast = (message) => gateToasts.push(message);
+out.capabilityGate = { localAttachKey: workspace._attachKey() === '' };
+
+workspace._sending = false;
+workspace._attachments = [{ id: 'att_txt', name: 'note.txt', mime: 'text/plain' }];
+workspace._refs = [];
+workspace._dom.input.value = 'read this';
+out.capabilityGate.documentSent = await workspace._sendText(workspace._dom.input.value, {});
+out.capabilityGate.sentAttachments = lastSentBody ? lastSentBody.attachments : null;
+
+workspace._sending = false;
+workspace._attachments = [{ id: 'att_img', name: 'shot.png', mime: 'image/png' }];
+workspace._dom.input.value = 'look';
+out.capabilityGate.imageSent = await workspace._sendText(workspace._dom.input.value, {});
+out.capabilityGate.imageToast = gateToasts.some((message) => /vision|视觉|看图/i.test(String(message)));
+workspace._attachments = [];
+workspace._stream = realStreamForGate;
+workspace._toast = savedToast;
+
 /* The skill editor's two lists are the server's answer. */
 workspace._bootstrap.context_sources = ['project', 'run'];
 workspace._bootstrap.tools = [

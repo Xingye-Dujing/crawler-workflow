@@ -40,6 +40,9 @@ pandas==3.0.3
 numpy==2.4.6
 matplotlib==3.11.0
 openpyxl==3.1.5
+# ai/file_text.py reads a PDF attachment's text for a model with no Files API. Pure Python and
+# small, so it is not optional: without it a packaged app could attach a PDF but never read it.
+pypdf==6.1.1
 ollama==0.6.2
 joblib==1.5.3
 jieba==0.42.1

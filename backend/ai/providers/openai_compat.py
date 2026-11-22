@@ -45,6 +45,29 @@ def _assistant_message(message: dict) -> dict:
     return payload
 
 
+def _user_content(message: dict):
+    """Text, plus any image the user attached, as OpenAI ``image_url`` content parts.
+
+    This transport has no Files API, but it may still declare ``vision``. The agent hands an image
+    row its local copy's path; without this branch the capability was a promise the wire did not
+    keep (the attachment was silently dropped from the request).
+    """
+    text = str(message.get('content') or '')
+    attachments = (message.get('meta') or {}).get('attachments') or ()
+    images = [row for row in attachments if str(row.get('kind') or '') == 'image']
+    if not images:
+        return text
+    from ai import file_text
+
+    parts = []
+    for row in images:
+        mime, encoded = file_text.image_payload(row)
+        parts.append({'type': 'image_url', 'image_url': {'url': f'data:{mime};base64,{encoded}'}})
+    if text:
+        parts.append({'type': 'text', 'text': text})
+    return parts
+
+
 def to_messages(system: str, messages: list) -> list:
     out = []
     if system:
@@ -62,7 +85,7 @@ def to_messages(system: str, messages: list) -> list:
                 }
             )
         else:
-            out.append({'role': 'user', 'content': str(message.get('content') or '')})
+            out.append({'role': 'user', 'content': _user_content(message)})
     return out
 
 

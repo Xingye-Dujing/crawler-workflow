@@ -34,7 +34,7 @@
 | `agent_runs`/`agent_steps` | 框架或 host | 通用 run/step 记录；采析绘的 console 读取保持 |
 | 代码插件 / HTTP 工具插件 / UI commands | host | 框架只做声明式；本地代码插件只在桌面/管理员 |
 | 监控目录/自动分析/`monitor_events` | host 域层 | 框架只做投递；采析绘保留自己的 monitor catalog |
-| Files API / workspace 浏览 / 文件夹选择 | host | 采析绘工具；框架提供 attachment hook |
+| Files API / 附件文本抽取 / 图片内联 / workspace 浏览 / 文件夹选择 | host + 框架 attachment hook | 采析绘 host 侧做本地抽取（pdf/docx/pptx/xlsx/csv/txt/html）并把 `files`/`vision`/`inline_images` 拆成三个独立能力；框架的 attachment hook 必须能接收“已提取文本”，不能只认 file_id |
 | 账号级 Python workspace（解释器安装/文件） | host | 采析绘 `services/python_runtime.py` |
 | 68 条 HTTP 路由 | host | 采析绘 Flask blueprint；框架 adapter 只做通用 41 条 |
 | 前端 210KB + 6 个 `ai/*.js` | 框架 UI 包 | 抽成零构建 custom elements；host 注册预览器 |

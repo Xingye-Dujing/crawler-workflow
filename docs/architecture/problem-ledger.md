@@ -16,6 +16,7 @@
 | H8 | Python 节点卡片空白、标题显示 Node | D | `getNodeSummary('python')` 显示脚本/参数；标题 map 补 `python`/`fuse` | `canvas.js`、`tests/unit/frontend/test_frontend_fuse_panel_js.py` |
 | H9 | AI 输出/工具结果/回合/表格读取限制过小 | D | 输出 32768 且可配；工具结果/重放 0=不限；回合默认 0；表格单页 2000；问题 10；引用/记忆放大 | `agent.py`、`settings_schema.py`、`context.py`、`tools.py`、`tests/unit/ai/` |
 | H10 | LLM 行任务没有可用的并发设置 | D | 设置面板新增 `workers`（1-8）；API 供应商并行；Ollama 强制串行 | `llm-settings.js`、`index.html`、`llm_client.py`、`tests/integration/test_llm_client_mock.py` |
+| H11 | 无文件 API 的模型不能收附件 | D | 服务端抽取 pdf/docx/pptx/xlsx/csv/txt/html 并缓存；`files`/`vision`/`inline_images` 三能力拆分；图片可内联；旧 `.doc/.ppt` 按名拒绝 | `ai/file_text.py`、`ai/agent.py`、`ai/providers/`、`api/ai.py`、`tests/unit/ai/test_file_text.py`、`tests/api/test_ai_workflow.py` |
 
 ## 待办（热修列车，按优先级）
 

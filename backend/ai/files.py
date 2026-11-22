@@ -210,6 +210,42 @@ def upload_file(
     return row
 
 
+def save_attachment(
+    conversation_id: str,
+    name: str,
+    mime: str,
+    data: bytes,
+    *,
+    api_key: str = '',
+    purpose: str = '',
+    provider: str = 'deepseek',
+) -> dict:
+    """Store one attachment for this account, natively parsed only when the provider can.
+
+    DeepSeek gets the bytes through its Files API (its parser handles layout and scans better than
+    a local text pass). Every other provider gets a local copy plus an extracted-text cache: the
+    upload no longer refuses a file just because the selected model has no ``files`` capability.
+    """
+    if str(provider or 'deepseek') == 'deepseek':
+        return upload_file(conversation_id, name, mime, data, api_key, purpose=purpose, provider=provider)
+    chosen_purpose = str(purpose or purpose_for(name, mime)).strip()
+    if chosen_purpose not in ('user_data', 'text_recognition', 'rich_layout_recognition'):
+        raise AIError('ai.fileUnsupported', kind='bad_request')
+    if len(data) > MAX_FILE_BYTES:
+        raise AIError('ai.fileTooLarge', kind='bad_request', mb=MAX_FILE_BYTES // (1024 * 1024))
+    local_path, digest = save_local(data, name)
+    return store.add_attachment(
+        conversation_id,
+        str(name or 'file'),
+        _guess_mime(name, mime),
+        len(data),
+        digest,
+        chosen_purpose,
+        '',
+        local_path,
+    )
+
+
 def delete_file(file_id: str, api_key: str) -> bool:
     key = _check_key(api_key)
     try:

@@ -22,6 +22,9 @@ pandas==3.0.3
 numpy==2.4.6
 matplotlib==3.11.0
 openpyxl==3.1.5
+# Directly imported by ai/file_text.py to read a PDF attachment's words for providers that have no
+# server-side document parser. Pure Python, no native build, so it ships on every OS.
+pypdf==6.1.1
 tabulate==0.10.0
 ollama==0.6.2
 webdriver-manager==4.1.2
@@ -54,8 +57,9 @@ tokenizers==0.22.2
 xlrd==2.0.2
 # tools/build_icon.py regenerates backend/static/icon.ico from the source art: PyInstaller stamps
 # that ICO into CaiXiHui.exe and Inno Setup refuses one that is not really an ICO, so the file is
-# generated rather than renamed. Already present transitively through matplotlib, declared here
-# because the tool imports PIL directly.
+# generated rather than renamed. ai/file_text.py also imports PIL to downscale an oversized image
+# for a vision model that has no Files API. Already present transitively through matplotlib,
+# declared here because both modules import PIL directly.
 Pillow==12.3.0
 # The IANA zone database, which ``zoneinfo.ZoneInfo`` needs a PROVIDER for. Windows has no system
 # zoneinfo directory at all, and a slim Linux container image usually does not either, so without this

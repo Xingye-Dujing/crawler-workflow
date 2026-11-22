@@ -228,8 +228,16 @@ ZH = {
     ),
     'ai.cancelled': '已停止生成。',
     'ai.streamFailed': 'AI 流式连接失败（{kind}）。',
-    'ai.fileUnsupported': '这个供应商不能解析该文件；请改用 DeepSeek，或上传纯文本/表格。',
+    'ai.fileUnsupported': '这个文件不能作为附件发送；请确认它属于当前会话，或换一个文件。',
     'ai.fileTooLarge': '文件超过 {mb} MB 上限。',
+    'ai.attachEmpty': '文件“{name}”是空的，没有可读内容。',
+    'ai.attachConvert': '旧版 {format} 文件无法直接读取文字；请另存为 .docx/.pptx 或 PDF 后再上传。',
+    'ai.attachTableTooBig': '表格“{name}”有 {mb} MB，超过本地解析上限 {limit} MB；请先拆小或改用数据集上传。',
+    'ai.attachUnreadable': '文件“{name}”读不出文字（可能已损坏或格式不受支持）。',
+    'ai.attachNoText': '文件“{name}”里没有可提取的文字（可能是扫描版 PDF）；请先转成可复制文字的 PDF。',
+    'ai.attachLocked': '这个 PDF 有密码保护，无法提取文字。',
+    'ai.imageNeedsUpload': '图片“{name}”不属于 {provider} 的上传记录，无法直接发送；请在这个会话里重新上传一次。',
+    'ai.imageTooLarge': '图片“{name}”压缩后仍有 {mb} MB，超过 {limit} MB 的内联上限。',
     'ai.searchQuery': '搜索词必须是 1～128 个字符。',
     'ai.fetchUrl': '抓取地址必须是带 host 的 HTTP/HTTPS URL，且不能带用户名或密码。',
     'ai.fetchBlocked': 'Fetch 被安全策略拒绝。',
@@ -510,8 +518,26 @@ EN = {
     ),
     'ai.cancelled': 'Generation stopped.',
     'ai.streamFailed': 'The AI stream failed ({kind}).',
-    'ai.fileUnsupported': 'This provider cannot parse that file; use DeepSeek, or upload plain text/tables.',
+    'ai.fileUnsupported': (
+        'That file cannot be sent as an attachment; use one from this conversation or pick another file.'
+    ),
     'ai.fileTooLarge': 'The file exceeds the {mb} MB limit.',
+    'ai.attachEmpty': 'The file “{name}” is empty; there is nothing to read.',
+    'ai.attachConvert': (
+        'A legacy {format} file cannot be read as text; save it as .docx/.pptx or PDF and upload again.'
+    ),
+    'ai.attachTableTooBig': (
+        'The table “{name}” is {mb} MB, over the {limit} MB local parsing limit; split it or upload it as a dataset.'
+    ),
+    'ai.attachUnreadable': 'The file “{name}” could not be read as text (it may be corrupt or unsupported).',
+    'ai.attachNoText': (
+        'The file “{name}” contains no extractable text (possibly a scanned PDF); convert it to a text PDF first.'
+    ),
+    'ai.attachLocked': 'This PDF is password-protected, so its text cannot be extracted.',
+    'ai.imageNeedsUpload': (
+        'The image “{name}” was not uploaded through {provider}, so it cannot be sent inline; upload it again here.'
+    ),
+    'ai.imageTooLarge': 'The image “{name}” is still {mb} MB after compression, over the {limit} MB inline limit.',
     'ai.searchQuery': 'The search query must be 1–128 characters.',
     'ai.fetchUrl': 'The fetch URL must be an HTTP/HTTPS URL with a host and no credentials.',
     'ai.fetchBlocked': 'Fetch was refused by the safety policy.',

@@ -578,6 +578,104 @@ def test_asking_web_search_of_go_refuses_by_name(client, monkeypatch):
     assert body['key'] == 'ai.capabilityRefused'
 
 
+def test_a_document_reaches_a_provider_without_files_as_extracted_text(client, fake_ai, clean_ai):
+    """A local model has no Files API. The server extracts the document's words, and the turn
+    carries them as context — the attachment used to be refused by a `files` check instead."""
+    from ai import files, store
+    from ai.providers import PROVIDERS
+
+    conversation = store.create_conversation('fake_record', 'fake-model', 'auto')
+    body = '附件正文：今天讨论的是采析绘的断点续跑。'.encode()
+    path, digest = files.save_local(body, 'note.txt')
+    row = store.add_attachment(conversation['id'], 'note.txt', 'text/plain', len(body), digest, 'user_data', '', path)
+    response = _chat(
+        client,
+        provider='fake_record',
+        model='fake-model',
+        skill='project',
+        conversation_id=conversation['id'],
+        attachments=[row['id']],
+    )
+    assert response.status_code == 200, response.get_json()
+    sent = json.dumps(
+        [request.get('messages') for request in PROVIDERS['fake_record'].requests],
+        ensure_ascii=False,
+        default=str,
+    )
+    assert '今天讨论的是采析绘的断点续跑' in sent
+    assert not _turn_errors(response.get_json())
+
+
+def test_an_image_is_refused_by_the_vision_capability_not_files(client, fake_ai, clean_ai, tmp_path):
+    from ai import store
+
+    conversation = store.create_conversation('fake_ai', 'fake-model', 'auto')
+    image = tmp_path / 'shot.png'
+    image.write_bytes(b'\x89PNG\r\n\x1a\n')
+    row = store.add_attachment(
+        conversation['id'], 'shot.png', 'image/png', image.stat().st_size, 'digest', 'user_data', '', str(image)
+    )
+    response = _chat(
+        client,
+        provider='fake_ai',
+        model='fake-model',
+        skill='project',
+        conversation_id=conversation['id'],
+        attachments=[row['id']],
+    )
+    assert response.status_code == 400
+    body = response.get_json()
+    assert body['key'] == 'ai.capabilityRefused'
+    assert 'vision' in body['error']
+
+
+def test_upload_accepts_a_provider_without_a_files_api_and_extracts_text(client, clean_ai):
+    """The upload route used to answer `ai.fileUnsupported` for anything but DeepSeek."""
+    import io
+
+    from ai import store
+
+    conversation = store.create_conversation('ollama', 'qwen3.5:9b', 'auto')
+    response = client.post(
+        '/api/ai/files',
+        data={
+            'conversation_id': conversation['id'],
+            'provider': 'ollama',
+            'file': (io.BytesIO('本地模型也能读的正文'.encode()), 'note.txt'),
+        },
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200, response.get_json()
+    attachment = response.get_json()['attachment']
+    assert attachment['file_id'] == ''
+    # Eager extraction ran at upload; a later turn reads the cache.
+    from ai import file_text
+    from ai import store as ai_store
+
+    extracted = file_text.extract_attachment(ai_store.get_attachment(attachment['id']))
+    assert '本地模型也能读的正文' in extracted['text']
+
+
+def test_upload_refuses_a_legacy_doc_at_upload_time(client, clean_ai):
+    import io
+
+    from ai import store
+
+    conversation = store.create_conversation('ollama', 'qwen3.5:9b', 'auto')
+    response = client.post(
+        '/api/ai/files',
+        data={
+            'conversation_id': conversation['id'],
+            'provider': 'ollama',
+            'file': (io.BytesIO(b'\xd0\xcf\x11\xe0binary'), 'old.doc'),
+        },
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 400
+    assert response.get_json()['key'] == 'ai.attachConvert'
+    assert store.list_attachments(conversation['id']) == []
+
+
 def test_skill_studio_crud_and_plugin_install(client, fake_ai, clean_ai):
     skill = {
         'id': 'demo.skill',

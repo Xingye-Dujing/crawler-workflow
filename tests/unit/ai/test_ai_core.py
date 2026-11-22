@@ -30,14 +30,16 @@ def test_deepseek_has_the_full_suite_and_go_does_not_pretend():
 
 def test_go_carries_the_free_hy4_flash_model():
     """The free Hy4 flash tier is a model on the existing Go endpoint, so it inherits the Go
-    capabilities (thinking, tools, ask_user, vision) and must not claim DeepSeek's server tools."""
+    capabilities (thinking, tools, ask_user, vision, inline_images) and must not claim DeepSeek's
+    server tools. ``inline_images`` is the wire promise behind ``vision``: this transport carries
+    the bytes itself, which is why it can see an image without a Files API."""
     from ai.providers import get_provider
     from ai.providers.registry import public_catalog
 
     go = get_provider('opencode_go')
     model = go.spec.model('hy4-flash-free')
     assert model is not None
-    assert model.capabilities == frozenset({'thinking', 'tools', 'ask_user', 'vision'})
+    assert model.capabilities == frozenset({'thinking', 'tools', 'ask_user', 'vision', 'inline_images'})
     assert go.context_window('hy4-flash-free') == 1048576
     assert go.supports('thinking', 'hy4-flash-free')
     assert go.supports('vision', 'hy4-flash-free')

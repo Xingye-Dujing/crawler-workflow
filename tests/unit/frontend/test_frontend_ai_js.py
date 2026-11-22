@@ -287,6 +287,16 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['dropCleared'] is True, 'the drop highlight stayed after the drop'
         assert out['pasted'] is True, 'a pasted screenshot did not enter the upload path'
 
+    def test_a_document_needs_no_files_api_and_an_image_needs_vision(self):
+        """The send gate asked every attachment for `files`. That refused a .txt on a local model
+        (and the upload button required a key that local provider does not have)."""
+        gate = _run_workspace()['capabilityGate']
+        assert gate['localAttachKey'] is True, 'a keyless local provider must still be able to attach'
+        assert gate['documentSent'] is True, gate
+        assert gate['sentAttachments'] == ['att_txt'], gate['sentAttachments']
+        assert gate['imageSent'] is False, 'an image reached a model with no vision'
+        assert gate['imageToast'] is True, 'the refusal did not name the missing vision capability'
+
     def test_opening_the_studio_from_outside_opens_the_panel(self):
         """The Python node's 管理脚本 lives outside the aside; opening the studio used to leave the
         panel hidden, so the button looked dead. `_mode` alone is not "open"."""

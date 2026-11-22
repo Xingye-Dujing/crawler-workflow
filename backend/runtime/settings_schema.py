@@ -953,6 +953,17 @@ SETTINGS = (
         consumer='server',
     ),
     Setting(
+        'ai_attachment_text_chars',
+        'int',
+        0,
+        'ai',
+        'set.aiAttachmentTextChars',
+        hint='set.aiAttachmentTextCharsHint',
+        minimum=0,
+        maximum=10000000,
+        consumer='server',
+    ),
+    Setting(
         'ai_reasoning_effort',
         'enum',
         'high',

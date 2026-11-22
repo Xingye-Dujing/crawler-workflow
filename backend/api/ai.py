@@ -525,8 +525,6 @@ def ai_file_upload():
     if not conversation_id or store.get_conversation(conversation_id) is None:
         return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
     provider = str(request.form.get('provider') or 'deepseek')
-    if provider != 'deepseek':
-        return _error(AIError('ai.fileUnsupported', kind='capability'))
     data = upload.read()
     name = upload.filename or 'file'
     # Token budget: a big table becomes a dataset the assistant reads in slices, and an oversized
@@ -545,15 +543,26 @@ def ai_file_upload():
             )
         )
     try:
-        row = files.upload_file(
+        row = files.save_attachment(
             conversation_id,
             name,
             upload.mimetype or '',
             data,
-            str(request.form.get('api_key') or ''),
+            api_key=str(request.form.get('api_key') or ''),
             purpose=str(request.form.get('purpose') or ''),
             provider=provider,
         )
+        # A provider without a Files API never sees the bytes: the server extracts the words. Do it
+        # now, while the user is still looking at the attachment, so a scanned PDF is refused by
+        # name at upload instead of failing the whole turn later.
+        from ai import file_text
+
+        if provider != 'deepseek' and not file_text.is_image(row):
+            try:
+                file_text.extract_attachment(row)
+            except AIError:
+                store.delete_attachment(row['id'])
+                raise
     except AIError as exc:
         return _error(exc)
     return jsonify({'ok': True, 'attachment': _public_attachment(row)})

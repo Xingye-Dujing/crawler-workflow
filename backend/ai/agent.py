@@ -23,6 +23,7 @@ from ai import (
     approvals,
     costs,
     environment,
+    file_text,
     references,
     skills,
     store,
@@ -228,6 +229,93 @@ def _note_redaction(meta: dict, source: str, count: int) -> dict:
     return result
 
 
+def _attachment_plan(rows: list, provider, model: str) -> tuple[list, str, dict]:
+    """Split attachments into native provider parts and text the turn carries itself.
+
+    ``files`` and ``vision`` are independent promises. ``files`` is a server-side document
+    parser (DeepSeek); ``vision`` is the model's ability to see an image. They used to be one
+    gate, so a model with no Files API could not read a plain .txt, and an image sent to a
+    vision-only gateway was refused with "files" as the missing capability. Here a document a
+    provider cannot parse is extracted locally, and only an image the model cannot SEE is
+    refused — by the capability that is actually missing.
+    """
+    native: list = []
+    blocks: list = []
+    meta = {'attachment_text_chars': 0, 'attachments_extracted': 0, 'attachment_texts': []}
+    seen: set[str] = set()
+    for row in rows or ():
+        ident = str(row.get('id') or '')
+        if ident in seen:
+            continue
+        seen.add(ident)
+        name = str(row.get('name') or 'file')
+        mime = str(row.get('mime') or '')
+        if file_text.is_image(row):
+            if not provider.supports('vision', model):
+                raise AIError(
+                    'ai.capabilityRefused',
+                    kind='capability',
+                    provider=provider.spec.id,
+                    model=model,
+                    capability='vision',
+                )
+            if not row.get('file_id') and not provider.supports('inline_images', model):
+                # The provider reads images only from its own upload store, and this row was never
+                # uploaded there (it came from another provider's conversation).
+                raise AIError(
+                    'ai.imageNeedsUpload',
+                    kind='bad_request',
+                    name=name,
+                    provider=provider.spec.id,
+                )
+            native.append(
+                {
+                    'id': ident,
+                    'file_id': row.get('file_id') or '',
+                    'kind': 'image',
+                    'name': name,
+                    'purpose': row.get('purpose') or '',
+                    'path': row.get('path') or '',
+                    'mime': mime,
+                }
+            )
+            meta['attachment_texts'].append({'name': name, 'kind': 'image', 'chars': 0, 'native': True})
+            continue
+        if provider.supports('files', model) and row.get('file_id'):
+            native.append(
+                {
+                    'id': ident,
+                    'file_id': row['file_id'],
+                    'kind': 'document',
+                    'name': name,
+                    'purpose': row.get('purpose') or '',
+                    'path': row.get('path') or '',
+                    'mime': mime,
+                }
+            )
+            meta['attachment_texts'].append({'name': name, 'kind': 'document', 'chars': 0, 'native': True})
+            continue
+        extracted = file_text.extract_attachment(row)
+        pages = int(extracted.get('pages') or 0)
+        header = f'【附件：{name}｜{extracted.get("kind") or "text"}'
+        if pages:
+            header += f'｜{pages} 页'
+        header += f'｜{int(extracted.get("chars") or 0)} 字符'
+        if extracted.get('truncated'):
+            header += '｜已按 ai_attachment_text_chars 截断'
+        header += '】'
+        blocks.append(header + '\n' + str(extracted.get('text') or ''))
+        meta['attachment_text_chars'] += int(extracted.get('chars') or 0)
+        meta['attachments_extracted'] += 1
+        meta['attachment_texts'].append(
+            {'name': name, 'kind': extracted.get('kind') or 'text', 'chars': int(extracted.get('chars') or 0)}
+        )
+    text = ''
+    if blocks:
+        text = '<cai_xi_hui_attachments>\n' + '\n\n'.join(blocks) + '\n</cai_xi_hui_attachments>'
+    return native, text, meta
+
+
 class AgentService:
     """One turn, with its provider rounds, tools and pending question."""
 
@@ -307,10 +395,27 @@ class AgentService:
             # stored replay block) verbatim. Redact before concatenating, never after.
             references_text, redacted_refs = context_builder.redact_with_count(references_text)
             context_text = f'{context_text}\n\n{references_text}'.strip()
+        # A file named with `@` lives in a conversation of its own; the caller picked it from a
+        # list this account owns, so that row is allowed through the same check as a fresh upload.
+        referenced_ids = {str(row.get('id') or '') for row in reference_files}
+        allowed_rows = []
+        for attachment_id in payload.get('attachments') or ():
+            row = store.get_attachment(str(attachment_id))
+            if row is None or (row.get('conversation_id') != conversation['id'] and row['id'] not in referenced_ids):
+                raise AIError('ai.fileUnsupported', kind='bad_request')
+            allowed_rows.append(row)
+        allowed_rows.extend(reference_files)
+        attachments, attachments_text, attachments_meta = _attachment_plan(allowed_rows, provider, model)
+        if attachments_text:
+            # The local pass runs AFTER build_context, like references: a token inside an attached
+            # document must not reach the provider (or the stored replay block) verbatim.
+            attachments_text, redacted_attachments = context_builder.redact_with_count(attachments_text)
+            redacted_refs += redacted_attachments
+            context_text = f'{context_text}\n\n{attachments_text}'.strip()
         # The block is stored on this turn's user row and replayed with it forever, so its size is
         # decided ONCE, here, and reported in `context_meta` (see `ai.context.for_replay`).
         context_text, replay_meta = context_builder.for_replay(context_text)
-        context_meta = _note_redaction({**context_meta, **replay_meta}, '引用', redacted_refs)
+        context_meta = _note_redaction({**context_meta, **replay_meta, **attachments_meta}, '引用', redacted_refs)
         skill_meta = {
             'skill': skill.id,
             'skill_reason': requested_skill,
@@ -325,43 +430,6 @@ class AgentService:
             'context_meta': context_meta,
             'latest_reminder': reminder,
         }
-        attachments = []
-        # A file named with `@` lives in a conversation of its own; the caller picked it from a
-        # list this account owns, so that row is allowed through the same check as a fresh upload.
-        referenced_ids = {str(row.get('id') or '') for row in reference_files}
-        for attachment_id in payload.get('attachments') or ():
-            row = store.get_attachment(str(attachment_id))
-            if row is None or (row.get('conversation_id') != conversation['id'] and row['id'] not in referenced_ids):
-                raise AIError('ai.fileUnsupported', kind='bad_request')
-            if not provider.supports('files', model):
-                raise AIError(
-                    'ai.capabilityRefused',
-                    kind='capability',
-                    provider=provider.spec.id,
-                    model=model,
-                    capability='files',
-                )
-            attachments.append(
-                {
-                    'id': row['id'],
-                    'file_id': row.get('file_id') or '',
-                    'kind': 'image' if str(row.get('mime') or '').startswith('image/') else 'document',
-                    'name': row.get('name') or 'file',
-                    'purpose': row.get('purpose') or '',
-                }
-            )
-        for row in reference_files:
-            if not provider.supports('files', model) or not row.get('file_id'):
-                continue
-            attachments.append(
-                {
-                    'id': str(row.get('id') or ''),
-                    'file_id': row.get('file_id') or '',
-                    'kind': 'image' if str(row.get('mime') or '').startswith('image/') else 'document',
-                    'name': row.get('name') or 'file',
-                    'purpose': row.get('purpose') or '',
-                }
-            )
         if attachments:
             skill_meta['attachments'] = attachments
         # An automatic turn started by a run monitor is marked so the transcript can say so —

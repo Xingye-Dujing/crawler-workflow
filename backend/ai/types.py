@@ -24,6 +24,9 @@ CAPABILITIES = (
     'tools',
     'ask_user',
     'vision',
+    # The transport can put an image's bytes in the request itself (base64 data URL, or Ollama's
+    # `images` field). A vision provider without it only reads images it already holds server-side.
+    'inline_images',
     'tts',
     'asr',
     'ocr',

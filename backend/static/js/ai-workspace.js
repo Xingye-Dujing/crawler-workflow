@@ -2766,12 +2766,12 @@ const AIWorkspace = {
             this._toast(I18n.t('ai.modelMissing'));
             return false;
         }
-        if (pendingAttachments.length && !(provider?.capabilities || []).includes('files')) {
-            this._toast(I18n.t('ai.fileUnsupported'));
-            return false;
-        }
-        if (pendingRefs.some((row) => row.kind === 'file') && !(provider?.capabilities || []).includes('files')) {
-            this._toast(I18n.t('ai.fileUnsupported'));
+        /* Documents no longer need a provider Files API: the server extracts their words. Only an
+           image needs the model to SEE — `vision` is a different promise from `files`, and asking
+           for the wrong one refused a .txt on a local model. The server re-checks this. */
+        const imageAttached = pendingAttachments.some((row) => String(row.mime || '').startsWith('image/'));
+        if (imageAttached && !(provider?.capabilities || []).includes('vision')) {
+            this._toast(I18n.t('ai.imageUnsupported'));
             return false;
         }
         const context = opts.monitor ? {} : AIContext.collect();
@@ -4060,26 +4060,23 @@ const AIWorkspace = {
         this._renderToggles();
     },
 
-    /* The attach button, a drop and a paste all need the same two answers first: does this provider
-       take files, and is a key present. One place decides, so a drop cannot bypass the refusal. */
+    /* The attach button, a drop and a paste all need the same answer first: is a key present when
+       the provider requires one. `null` means "refused", `''` means "this provider needs no key" —
+       a local model used to be unable to attach anything because the empty key read as missing. */
     _attachKey() {
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
-        if (!(provider?.capabilities || []).includes('files')) {
-            this._toast(I18n.t('ai.fileUnsupported'));
-            return '';
-        }
         const key = AISettings.keyFor(this._provider);
-        if (!key) {
+        if (provider?.requires_key && !key) {
             this._toast(I18n.t('ai.keyMissing'));
             this.openSettings();
-            return '';
+            return null;
         }
         return key;
     },
 
     async attach() {
         const key = this._attachKey();
-        if (!key) return;
+        if (key === null) return;
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
@@ -4094,11 +4091,11 @@ const AIWorkspace = {
     /* One attachment per request (the endpoint takes one), so a multi-file pick is a loop that
        keeps going: a refused file must not throw away the ones that already uploaded. Failures are
        collected and reported together — a toast per file would replace the previous one. */
-    async _uploadFiles(files, key = '') {
+    async _uploadFiles(files, key) {
         const rows = Array.from(files || []).filter(Boolean);
         if (!rows.length) return;
-        const apiKey = key || this._attachKey();
-        if (!apiKey) return;
+        const apiKey = key === undefined ? this._attachKey() : key;
+        if (apiKey === null) return;
         this._uploading = true;
         this._renderToggles();
         let added = 0;

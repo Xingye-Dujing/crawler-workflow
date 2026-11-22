@@ -568,10 +568,14 @@ def find_attachment_by_digest(sha256: str) -> dict | None:
 
 
 def list_attachments_everywhere(limit: int = 60) -> list:
-    """The newest file uploads across every conversation, one row per distinct content."""
+    """The newest file uploads across every conversation, one row per distinct content.
+
+    Local-only uploads (a provider with no Files API) are included: the picker used to hide them,
+    so a file the user had just attached could not be named with ``@`` in the next turn.
+    """
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM attachments WHERE file_id != '' GROUP BY sha256 ORDER BY MAX(created_at) DESC LIMIT ?",
+            "SELECT * FROM attachments WHERE sha256 != '' GROUP BY sha256 ORDER BY MAX(created_at) DESC LIMIT ?",
             (int(limit),),
         ).fetchall()
     return [_row(row) for row in rows]

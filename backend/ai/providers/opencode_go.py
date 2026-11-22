@@ -10,7 +10,7 @@ without it.
 from ai.providers.openai_compat import OpenAICompatibleProvider
 from ai.types import ModelSpec, ProviderSpec
 
-GO_CAPABILITIES = frozenset({'thinking', 'tools', 'ask_user', 'vision'})
+GO_CAPABILITIES = frozenset({'thinking', 'tools', 'ask_user', 'vision', 'inline_images'})
 
 SPEC = ProviderSpec(
     id='opencode_go',

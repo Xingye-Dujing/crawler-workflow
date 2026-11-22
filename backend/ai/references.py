@@ -211,11 +211,12 @@ def resolve(refs: list) -> tuple[str, list[dict]]:
             text = _run_text(ident)
         else:
             row = store.get_attachment(ident)
-            if row is None or not row.get('file_id'):
+            if row is None:
                 parts.append(f'文件 {ident}：找不到。')
                 continue
             files.append(row)
-            text = f'文件 {row.get("name") or ident}（已上传，随本轮一起发送）'
+            # A local-only upload has no provider file id; the agent sends its extracted text.
+            text = f'文件 {row.get("name") or ident}（随本轮一起发送）'
         text = text[:MAX_CHARS]
         if used + len(text) > TOTAL_CHARS:
             parts.append('（其余引用因长度上限未展开）')
