@@ -74,6 +74,13 @@ def _not_found(kind: str, reason: str):
     return jsonify({'ok': False, 'error': kind, 'key': kind, 'reason': reason}), 404
 
 
+def _host_refusal(exc, status: int = 400):
+    """The host's own AIError as the envelope the panel parses."""
+    payload = exc.as_dict() if hasattr(exc, 'as_dict') else {'ok': False, 'error': str(exc)}
+    payload['ok'] = False
+    return jsonify(payload), status
+
+
 def create_blueprint(manager):
     blueprint = Blueprint('ai_workspace', __name__, url_prefix='/api/ai/ws')
 
@@ -507,6 +514,252 @@ def create_blueprint(manager):
             return jsonify({'ok': True, **result})
         except WorkspaceError as exc:
             return _error(exc)
+
+    # ── host domain: workspace folder, previews, chart, rerun ─────────────────
+
+    @blueprint.get('/workspace')
+    def workspace_get():
+        from ai import workspace
+
+        return jsonify({'ok': True, 'workspace': workspace.describe()})
+
+    @blueprint.post('/workspace')
+    def workspace_set():
+        from ai import workspace
+        from ai.errors import AIError as HostError
+
+        try:
+            state = workspace.set_folder(str(body().get('path') or ''))
+        except HostError as exc:
+            return _host_refusal(exc)
+        return jsonify({'ok': True, 'workspace': state})
+
+    @blueprint.get('/workspace/browse')
+    def workspace_browse():
+        from ai import workspace
+        from ai.errors import AIError as HostError
+
+        try:
+            listing = workspace.browse(str(request.args.get('path') or ''))
+        except HostError as exc:
+            return _host_refusal(exc)
+        return jsonify({'ok': True, **listing})
+
+    @blueprint.post('/workspace/pick')
+    def workspace_pick():
+        from ai import workspace
+        from ai.errors import AIError as HostError
+
+        try:
+            picked = workspace.pick_folder(str(body().get('start') or ''))
+        except HostError as exc:
+            return _host_refusal(exc)
+        return jsonify({'ok': True, **picked})
+
+    @blueprint.post('/artifacts/preview')
+    def artifact_preview():
+        from ai import previews, validators
+        from ai.errors import AIError as HostError
+
+        payload = body()
+        kind = str(payload.get('kind') or '').strip()
+        artifact = payload.get('payload') if isinstance(payload.get('payload'), dict) else {}
+        current = payload.get('current') if isinstance(payload.get('current'), dict) else None
+        try:
+            validation = validators.check(kind, artifact)
+            if validation is not None and not validation.ok:
+                raise HostError('ai.preview.refused', kind='bad_request', detail=validation.message)
+            effective = validation.payload if validation is not None and validation.payload is not None else artifact
+            result = previews.preview(kind, effective, current)
+            if result is None:
+                raise HostError('ai.preview.unknown', kind='bad_request', kind_name=kind)
+        except HostError as exc:
+            return _host_refusal(exc)
+        return jsonify({'ok': True, 'preview': result.to_dict()})
+
+    @blueprint.post('/chart/preview')
+    def chart_preview():
+        from ai.errors import AIError as HostError
+        from runtime.stores import get_dataset_store
+
+        from services.charts.registry import spec_for
+
+        payload = body()
+        spec = payload.get('spec') if isinstance(payload.get('spec'), dict) else None
+        if not spec:
+            return _host_refusal(HostError('ai.chartSpecRefused', kind='bad_request', reason='spec is missing'))
+        chart_type = str(spec.get('chart_type') or spec.get('chart') or spec.get('key') or '').strip()
+        definition = spec_for(chart_type)
+        if definition is None:
+            return _host_refusal(
+                HostError(
+                    'ai.chartSpecRefused', kind='bad_request', reason=f'unknown chart type {chart_type or "(empty)"}'
+                )
+            )
+        dataset_id = str(spec.get('dataset_id') or '').strip()
+        if not dataset_id:
+            return _host_refusal(HostError('ai.chartSpecRefused', kind='bad_request', reason='dataset_id is missing'))
+        try:
+            frame = get_dataset_store().get(dataset_id)
+        except Exception as exc:
+            return _host_refusal(HostError('ai.chartSpecRefused', kind='error', reason=str(exc)[:160]))
+        if frame is None:
+            return _host_refusal(HostError('ai.chartSpecRefused', kind='not_found', reason=f'no dataset {dataset_id}'))
+        columns = {str(column) for column in frame.columns}
+
+        def field(*names, limit: int = 120) -> str:
+            for name in names:
+                value = spec.get(name)
+                if value is not None and str(value).strip():
+                    return str(value).strip()[:limit]
+            return ''
+
+        render_request = {
+            'dataset_id': dataset_id,
+            'chart_type': chart_type,
+            'x_field': field('x_field', 'x'),
+            'y_field': field('y_field', 'y'),
+            'value_field': field('value_field', 'value'),
+            'agg': field('agg') or 'sum',
+            'y2_field': field('y2_field', 'y2'),
+            'agg2': field('agg2', 'agg2_field'),
+            'label_field': field('label_field', 'label'),
+            'center_node': field('center_node'),
+            'model_field': field('model_field'),
+            'agreement_label_field': field('agreement_label_field'),
+            'id_field': field('id_field'),
+            'title': field('title', limit=200),
+            'engine': field('engine') or 'echarts',
+            'tokenize': bool(spec.get('tokenize')),
+        }
+        stack = spec.get('stack_fields') if spec.get('stack_fields') is not None else spec.get('series')
+        if isinstance(stack, str):
+            stack = [stack]
+        if isinstance(stack, list):
+            render_request['stack_fields'] = [str(item)[:120] for item in stack[:20]]
+        annotations = spec.get('annotations')
+        if isinstance(annotations, list):
+            render_request['annotations'] = annotations[:20]
+        wordcloud_style = spec.get('wordcloud_style')
+        if isinstance(wordcloud_style, dict):
+            render_request['wordcloud_style'] = {
+                str(key)[:60]: str(value)[:200] for key, value in list(wordcloud_style.items())[:20]
+            }
+        missing = [name for name in definition.reads if name not in columns]
+        chosen = [
+            render_request[key]
+            for key in (
+                'x_field',
+                'y_field',
+                'value_field',
+                'y2_field',
+                'label_field',
+                'center_node',
+                'model_field',
+                'agreement_label_field',
+                'id_field',
+            )
+            if render_request.get(key)
+        ]
+        chosen += render_request.get('stack_fields') or []
+        unknown = [name for name in chosen if name not in columns]
+        if missing or unknown:
+            reasons = []
+            if missing:
+                reasons.append('missing required columns: ' + ', '.join(missing))
+            if unknown:
+                reasons.append('no such columns: ' + ', '.join(unknown))
+            return _host_refusal(HostError('ai.chartSpecRefused', kind='bad_request', reason='; '.join(reasons)))
+        if (
+            definition.family != 'biblio'
+            and not definition.no_x
+            and not (render_request['x_field'] or render_request['y_field'])
+        ):
+            return _host_refusal(
+                HostError('ai.chartSpecRefused', kind='bad_request', reason='x and y encoding are missing')
+            )
+        return jsonify(
+            {'ok': True, 'chart': chart_type, 'request': render_request, 'required_columns': list(definition.reads)}
+        )
+
+    @blueprint.post('/workflow/validate')
+    def workflow_validate():
+        from ai import workflow_draft
+        from ai.errors import AIError as HostError
+
+        payload = body()
+        candidate = payload.get('workflow') if isinstance(payload.get('workflow'), dict) else payload
+        if not isinstance(candidate, dict):
+            return _host_refusal(HostError('ai.workflowDraftInvalid', kind='bad_request', detail='workflow is missing'))
+        return jsonify({'ok': True, 'report': workflow_draft.validate(candidate)})
+
+    @blueprint.post('/rerun')
+    def rerun():
+        from ai.errors import AIError as HostError
+        from runtime.stores import get_workflow_manager
+
+        from engine.workflow_rerun import RerunRefusalError, rerun_node
+        from i18n import get_lang, t
+
+        payload = body()
+        conversation_id = str(payload.get('conversation_id') or '')
+        if not manager.workspace(account()).store.get_conversation(conversation_id, account()):
+            return _not_found('conversation.unknown', conversation_id)
+        run_id = str(payload.get('run_id') or '').strip()
+        workflow_name = str(payload.get('workflow_name') or '').strip()
+        node_id = str(payload.get('node_id') or '').strip()
+        if not run_id or not node_id:
+            return _host_refusal(HostError('ai.rerunArgs', kind='bad_request'))
+        if not workflow_name:
+            return _host_refusal(HostError('ai.rerunUnsaved', kind='bad_request'))
+        try:
+            workflow = get_workflow_manager().load(workflow_name)
+        except OSError:
+            return _host_refusal(HostError('ai.rerunNoWorkflow', kind='not_found', name=workflow_name), 404)
+        if not workflow:
+            return _host_refusal(HostError('ai.rerunNoWorkflow', kind='not_found', name=workflow_name), 404)
+        try:
+            answer = rerun_node(workflow, node_id, run_id, workflow_name=workflow_name, lang=get_lang())
+        except RerunRefusalError as exc:
+            return jsonify({'ok': False, 'key': exc.key, 'error': str(exc)}), getattr(exc, 'status', 400)
+        result = answer.get('body') or {}
+        if not result.get('ok'):
+            return jsonify({'ok': False, 'error': result.get('error') or t('ai.rerunNoRun')}), answer.get(
+                'status'
+            ) or 409
+        return jsonify(
+            {
+                'ok': True,
+                'run_id': run_id,
+                'node_id': node_id,
+                'workflow_name': workflow_name,
+                'invalidated': list(result.get('invalidated') or []),
+                'queued': bool(result.get('queued')),
+                'message': t('ai.rerunStarted', node=node_id),
+            }
+        )
+
+    @blueprint.get('/monitors/catalog')
+    def monitor_catalog():
+        from ai.monitors import public_catalog
+
+        return jsonify({'ok': True, 'catalog': public_catalog()})
+
+    @blueprint.post('/python/install')
+    def python_install():
+        from runtime import policy
+
+        from services import python_runtime as host_python_runtime
+
+        if not policy.may_administer_machine():
+            return jsonify(
+                {'ok': False, 'error': 'this machine is administered elsewhere', 'key': 'machine.refused'}
+            ), 403
+        try:
+            result = host_python_runtime.install_interpreter(bool(body().get('allow_download')))
+        except Exception as exc:
+            return _host_refusal(exc)
+        return jsonify({'ok': True, 'result': result})
 
     # ── commands ──────────────────────────────────────────────────────────────
 

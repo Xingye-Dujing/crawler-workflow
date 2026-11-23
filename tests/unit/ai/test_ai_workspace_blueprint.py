@@ -126,6 +126,20 @@ class TestTheSurface:
         skill = client.get('/api/ai/ws/skills/general').get_json()
         assert skill['ok'] is True and skill['skill']['id'] == 'general'
 
+    def test_host_domain_endpoints_smoke(self, client):
+        workspace = client.get('/api/ai/ws/workspace').get_json()
+        assert workspace['ok'] is True and 'workspace' in workspace
+        catalog = client.get('/api/ai/ws/monitors/catalog').get_json()
+        assert catalog['ok'] is True and catalog['catalog']['events']
+        report = client.post('/api/ai/ws/workflow/validate', json={'nodes': [], 'connections': []}).get_json()
+        assert report['ok'] is True and 'report' in report
+        unknown = client.post('/api/ai/ws/artifacts/preview', json={'kind': 'moonbase', 'payload': {}})
+        assert unknown.status_code == 400 and unknown.get_json()['key'] == 'ai.preview.unknown'
+        chart = client.post('/api/ai/ws/chart/preview', json={'spec': {'chart_type': 'nope'}})
+        assert chart.status_code == 400 and chart.get_json()['key'] == 'ai.chartSpecRefused'
+        rerun = client.post('/api/ai/ws/rerun', json={'conversation_id': 'nope', 'run_id': 'r', 'node_id': 'n'})
+        assert rerun.status_code == 404
+
     def test_conversations_memories_artifacts_settings_and_usage(self, client):
         created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
         conversation_id = created['conversation']['id']
