@@ -144,7 +144,8 @@
   拒绝；技能白名单仍过滤工具（框架 0.1.8）
 - [x] **F8 多问题卡**：`ask_user_question` 接受 `questions[]`（1–5），一张卡一次答复；答案按同一 `call_id`
   回填并与问题对齐；畸形/超限返回 `badArgs` 且写入结果；单问题旧形状兼容（框架 0.1.9）
-- [ ] **F9 plan/build 模式**：通用字段 + 工具遮罩，host 只提供模式文案——框架
+- [x] **F9 plan/build 模式**：`context_payload.agent_mode`；plan 把写入/`always_ask` 工具从 schema 与允许列表一起
+  移除（执行处再次拒绝），meta 带 `mode`；未知模式按 `mode.unknown` 拒绝（框架 0.1.10）
 - [ ] **F10 attachment 接缝**：接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 三个能力位——框架
   （**抽取实现留在 host**，见 P4 接入）
 - [ ] **F11 产物 validator/preview 注册**：通用注册表；preview 由 Host UI adapter 实现——框架

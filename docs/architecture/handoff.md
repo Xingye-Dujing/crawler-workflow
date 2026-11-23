@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`c23175bf 功能更新：框架 0.1.9（多问题卡）`；框架仓库 `61d8952`
+- 最后提交：`cd7eda6 功能更新：plan/build 模式与工具遮罩`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -61,6 +61,7 @@
 | `f0283b8` | 框架 0.1.7（F12）：`agent_steps` 工具步骤 + 幂等重放；崩溃遗留 `running` 标 `interrupted` 且不再执行；`/turns/<id>/steps` |
 | `f21b5e8` | 框架 0.1.8（F13）：`HostAdapter.tools()` 构造时注册；重名按 `tool.builtinConflict` 拒绝 |
 | `61d8952` | 框架 0.1.9（F8）：多问题卡 `questions[]`（1–5），一张卡一次答复，答案按 `call_id` 对齐 |
+| `cd7eda6` | 框架 0.1.10（F9）：`agent_mode=plan` 遮罩写入工具（schema + 允许列表 + 执行处），meta 带 mode |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
 | `06aa5735` | wheel 0.1.8（含 F12/F13）；rewrite-plan 勾选 F12/F13；handoff/README 记录第六片 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
@@ -405,6 +406,14 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第八片：plan/build 模式（2026-11-23，框架 0.1.10）
+
+- `context_payload['agent_mode']` = `plan` / `build` / 空；未知词按 `mode.unknown` 拒绝，meta 事件带 `mode`。
+- plan 模式把 `mutating`/`always_ask` 工具从 **schema 与 allowed 列表**一起移除；`_dispatch` 的“未提供即拒绝”
+  再挡一次，回放的历史也绕不过去。
+- 测试：plan 隐藏/拒绝写入、build 默认、未知模式；框架 191 条全绿。
+- 下一片：F3（retry 还原原轮），随后 F10 → F11 → F14 → F15 → F16 → F18。
+
 ## P4.0 第七片：多问题卡（2026-11-23，框架 0.1.9）
 
 - `ask_user_question` 接受 `questions[]`（1–5）；单问题仍走旧的 `question`/`options` 形状。
@@ -535,7 +544,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第八片**：F9（plan/build 模式）→ F10 → F11 → F14 → F15 → F16 → F18 → F3。
+8. **下一步：P4.0 第九片**：F3（retry 还原原轮）→ F10 → F11 → F14 → F15 → F16 → F18。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 
