@@ -7,7 +7,7 @@
 
 | 项 | 值 |
 |---|---|
-| 节点类型 | 16（`nodes/catalog.py`） |
+| 节点类型 | 16（`capabilities_kernel/nodes/` 的清单；`nodes/catalog.py` 是投影，不是第二张表） |
 | 分析算子 | 38（`services/analysis/ops/`） |
 | 图表类型 | 30（`services/charts/registry.py`） |
 | 采集平台 | 11 个模块（9 个社交平台 + CNKI + 红果；instagram 仅 cookie-capture） |
@@ -56,6 +56,18 @@
   `/api/workflow/status` 全部 200；进程已停，5057 已释放。
 - **未跑**：`live_quick` / `live_site`（会花用户账号，需用户指定 `live_cn`/`live_os` 网络并明确同意）；
   打包桌面 GUI、真实云端启动、真实登录爬取也不在本机冒烟范围内。
+
+## P3 收口（2026-11-23，第四片之后）
+
+| 项 | 值 |
+|---|---|
+| 快速测试 | `11173 passed, 7 skipped, 386 deselected`（13 分 57 秒） |
+| 设备层 | `215 passed, 5 skipped`（6 分 01 秒） |
+| lint | ruff check/format 全绿；product / tests pylint `10.00/10` |
+| 能力门禁 | `gen_capabilities.py --check`、`doctor.py --all` 全绿 |
+
+与 P0 基线相比：快测 +595 条，总时长反而少约 34 秒（机器状态与波动，不作为性能承诺）；设备层 +2 条、慢约
+7 秒。增长来自能力内核/契约/preflight/postcheck 测试，不是重试或随机等待。P8 的 ≤8 分钟目标仍以本表为起点。
 
 ## 这条基线保护什么
 
