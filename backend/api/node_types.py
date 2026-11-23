@@ -12,6 +12,8 @@ from flask import Blueprint, jsonify
 from nodes.defaults import NODE_DEFAULTS
 from runtime.settings import get_setting
 
+from services.charts.registry import chart_profiles
+
 bp = Blueprint('node_types', __name__)
 
 
@@ -47,4 +49,6 @@ def node_types():
         served = dict(entry)
         served['defaults'] = _defaults_for(entry['type'])
         types.append(served)
-    return jsonify({'ok': True, 'types': types})
+    # The chart types are the visualize node's parameter domain: the settings panel renders one
+    # field box per declaration, so the browser never keeps a second map of which chart reads x/y.
+    return jsonify({'ok': True, 'types': types, 'charts': chart_profiles()})

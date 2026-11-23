@@ -472,6 +472,51 @@ function outputColumnsHtml(nodeId) {
           text + '</div>';
 }
 
+/* ── The node's own problems, with a one-click fix where the server names one ──
+   `Diagnostics._validation.entries` is the run gate's own answer (id/code/message/param/fix), so
+   this panel and the console cannot disagree about what is wrong. A fix is a mechanical edit of
+   top-level parameters the declaration itself provides (a removed chart type back to the manifest
+   default, a save node's format to the one its parents can produce) — never a guessed column. */
+function validationEntriesFor(nodeId) {
+    var validation = typeof Diagnostics !== 'undefined' ? Diagnostics._validation : null;
+    var entries = (validation && validation.entries) || [];
+    var mine = [];
+    for (var i = 0; i < entries.length; i += 1) {
+        if (String(entries[i].id) === String(nodeId)) mine.push(entries[i]);
+    }
+    return mine;
+}
+
+function validationProblemsHtml(nodeId) {
+    var entries = validationEntriesFor(nodeId);
+    if (!entries.length) return '';
+    var html = '<div class="settings-group settings-problems">';
+    for (var i = 0; i < entries.length; i += 1) {
+        var entry = entries[i];
+        html += '<div class="settings-problem" style="font-size:11px;color:#d9705a;padding:2px 0;">' +
+            escapeHtml(entry.message);
+        if (entry.fix && entry.fix.set) {
+            html += ' <button class="menu-btn" onclick="applyValidationFix(\'' + attrJsArg(nodeId) + '\',' + i + ')">' +
+                escapeHtml(I18n.t('btn.applyFix')) + '</button>';
+        }
+        html += '</div>';
+    }
+    return html + '</div>';
+}
+
+function applyValidationFix(nodeId, index) {
+    var entry = validationEntriesFor(nodeId)[index];
+    if (!entry || !entry.fix || !entry.fix.set) return;
+    var changes = entry.fix.set;
+    Object.keys(changes).forEach(function (param) {
+        updateParam(nodeId, param, changes[param]);
+    });
+    /* Repaint now, then ask the server again: the gate's next answer clears the badge (or names
+       the next problem) without waiting for an unrelated edit to arm the debounce. */
+    if (canvas._settingsNodeId === nodeId) openSettings(nodeId);
+    if (typeof Diagnostics !== 'undefined' && Diagnostics.refresh) Diagnostics.refresh();
+}
+
 function outputColumnsText(nodeId) {
     var node = canvas.nodes[nodeId];
     if (!node || OUTPUT_COLUMN_NODE_TYPES.indexOf(node.type) < 0 || typeof Diagnostics === 'undefined') return null;
@@ -628,6 +673,10 @@ function openSettings(nodeId) {
        the server can see lists them; a crawl/comment/resume says so plainly rather than
        guessing. `outputColumnsHtml` is shared with the in-place repaint below. */
     html += outputColumnsHtml(nodeId);
+    /* What the server's validation says about THIS node, with a button where the repair is
+       mechanical. The badge title carries the same sentences; the panel is where a fix can be
+       applied without hunting for the box it names. */
+    html += validationProblemsHtml(nodeId);
     var renderer = settingsRenderer(node.type);
     if (renderer) html += renderer.html(nodeId, node);
     else html += settingsRendererRefusal(node.type);

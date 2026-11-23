@@ -2461,5 +2461,796 @@
         "hintKey": ""
       }
     }
+  ],
+  "charts": [
+    {
+      "key": "bar",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": true,
+      "labelKey": "chart.bar",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderValue",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": [
+        "annotations"
+      ]
+    },
+    {
+      "key": "line",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.line",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderValue",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": [
+        "annotations"
+      ]
+    },
+    {
+      "key": "dual_line",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.dual_line",
+      "hintKey": "hint.dualLine",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderValue",
+          "hintKey": "",
+          "control": "agg"
+        },
+        {
+          "name": "y2_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.y2Field",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderRightAxis",
+          "hintKey": "",
+          "control": "agg2"
+        }
+      ],
+      "controls": [
+        "annotations"
+      ]
+    },
+    {
+      "key": "stack_pct",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.stack_pct",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "stack_fields",
+          "role": "list",
+          "required": true,
+          "labelKey": "settings.stackFields",
+          "placeholder": "积极占比, 中性占比, 消极占比",
+          "placeholderKey": "",
+          "hintKey": "hint.stackFields",
+          "control": ""
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "topic_map",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.topic_map",
+      "hintKey": "",
+      "defaults": {
+        "x_field": "pc1",
+        "y_field": "pc2",
+        "label_field": "topic",
+        "value_field": "prevalence_pct"
+      },
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "coordinate",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "coordinate",
+          "required": true,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "label_field",
+          "role": "label",
+          "required": false,
+          "labelKey": "settings.labelField",
+          "placeholder": "",
+          "placeholderKey": "",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "topic_terms",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.topic_terms",
+      "hintKey": "",
+      "defaults": {
+        "x_field": "term",
+        "y_field": "overall_freq",
+        "y2_field": "within_freq"
+      },
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y2_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.y2Field",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderRightAxis",
+          "hintKey": "",
+          "control": "agg2"
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "pie",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": true,
+      "labelKey": "chart.pie",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderValue",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "scatter",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.scatter",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "histogram",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.histogram",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "value",
+          "required": true,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderNumeric",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "box",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.box",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category",
+          "required": false,
+          "labelKey": "settings.xField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.yField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderValue",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "heatmap",
+      "family": "console",
+      "echartsOnly": false,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.heatmap",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "category2",
+          "required": true,
+          "labelKey": "settings.xFieldCat1",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "category2",
+          "required": true,
+          "labelKey": "settings.yFieldCat2",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderCategory",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "model_agreement",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": false,
+      "tokenize": false,
+      "labelKey": "chart.model_agreement",
+      "hintKey": "hint.modelAgreement",
+      "defaults": {
+        "model_field": "模型",
+        "id_field": "原行"
+      },
+      "fields": [
+        {
+          "name": "model_field",
+          "role": "column",
+          "required": true,
+          "labelKey": "settings.modelField",
+          "placeholder": "",
+          "placeholderKey": "",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "agreement_label_field",
+          "role": "column",
+          "required": false,
+          "labelKey": "settings.agreementLabelField",
+          "placeholder": "emotion / tendency / sentiment",
+          "placeholderKey": "",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "id_field",
+          "role": "column",
+          "required": true,
+          "labelKey": "settings.idField",
+          "placeholder": "",
+          "placeholderKey": "",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "sankey",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.sankey",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "source",
+          "required": true,
+          "labelKey": "settings.sourceField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderSource",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "target",
+          "required": true,
+          "labelKey": "settings.targetField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderTarget",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": []
+    },
+    {
+      "key": "network",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.network",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "source",
+          "required": true,
+          "labelKey": "settings.sourceField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderSource",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "y_field",
+          "role": "target",
+          "required": true,
+          "labelKey": "settings.targetField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderTarget",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": "agg"
+        }
+      ],
+      "controls": [
+        "center_node"
+      ]
+    },
+    {
+      "key": "knowledge_graph",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.knowledge_graph",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "cluster_timeline",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.cluster_timeline",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "burst",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.burst",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "timezone",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.timezone",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "circular",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.circular",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "landscape",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.landscape",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "biblio_heatmap",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.biblio_heatmap",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "graph3d",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.graph3d",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "variation",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.variation",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "dual_map",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.dual_map",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "geo_map",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.geo_map",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "sentiment_overlay",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.sentiment_overlay",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "topic_overlay",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.topic_overlay",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "concentric",
+      "family": "biblio",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.concentric",
+      "hintKey": "biblio.ui.chartHint",
+      "defaults": {},
+      "fields": [],
+      "controls": []
+    },
+    {
+      "key": "wordcloud",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": true,
+      "labelKey": "chart.wordcloud",
+      "hintKey": "",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "text",
+          "required": true,
+          "labelKey": "settings.textField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderText",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": [
+        "tokenize",
+        "wordcloud_style"
+      ]
+    },
+    {
+      "key": "map",
+      "family": "console",
+      "echartsOnly": true,
+      "latexBuildable": true,
+      "tokenize": false,
+      "labelKey": "chart.map",
+      "hintKey": "hint.mapRegionNames",
+      "defaults": {},
+      "fields": [
+        {
+          "name": "x_field",
+          "role": "geo",
+          "required": true,
+          "labelKey": "settings.regionField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderGeo",
+          "hintKey": "",
+          "control": ""
+        },
+        {
+          "name": "value_field",
+          "role": "value",
+          "required": false,
+          "labelKey": "settings.valueField",
+          "placeholder": "",
+          "placeholderKey": "settings.fieldPlaceholderWeight",
+          "hintKey": "",
+          "control": ""
+        }
+      ],
+      "controls": []
+    }
   ]
 }

@@ -20,6 +20,6 @@
 | verify | `nodeType.verify` | process | [docs/capabilities/nodes/verify.md](../capabilities/nodes/verify.md) | `tests/unit/capabilities/test_verify_manifest.py` | `2506b0ff98d0` |
 | fuse | `nodeType.fuse` | biblio | [docs/capabilities/nodes/fuse.md](../capabilities/nodes/fuse.md) | `tests/unit/capabilities/test_fuse_manifest.py` | `8be419349419` |
 | accumulate | `nodeType.accumulate` | data | [docs/capabilities/nodes/accumulate.md](../capabilities/nodes/accumulate.md) | `tests/unit/capabilities/test_accumulate_manifest.py` | `f38419276e5a` |
-| visualize | `nodeType.visualize` | visualize | [docs/capabilities/nodes/visualize.md](../capabilities/nodes/visualize.md) | `tests/unit/capabilities/test_visualize_manifest.py` | `8706084feae8` |
+| visualize | `nodeType.visualize` | visualize | [docs/capabilities/nodes/visualize.md](../capabilities/nodes/visualize.md) | `tests/unit/capabilities/test_visualize_manifest.py` | `43cbb59e220c` |
 | compile | `nodeType.compile` | visualize | [docs/capabilities/nodes/compile.md](../capabilities/nodes/compile.md) | `tests/unit/capabilities/test_compile_manifest.py` | `44f1a0605d4e` |
 | output | `nodeType.output` | output | [docs/capabilities/nodes/output.md](../capabilities/nodes/output.md) | `tests/unit/capabilities/test_output_manifest.py` | `9bc4f88a2bef` |

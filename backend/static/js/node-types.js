@@ -12,6 +12,7 @@
    Keeping the first instance makes that harmless (one object, never a redeclaration). */
 var NodeTypes = window.NodeTypes || {
     _types: null,
+    _charts: null,
     _failure: '',
 
     /* The generated fallback is a separate script; read it lazily so the load order of the two
@@ -20,6 +21,7 @@ var NodeTypes = window.NodeTypes || {
         if (!this._types && typeof NODE_TYPE_CATALOGUE !== 'undefined' && NODE_TYPE_CATALOGUE
             && Array.isArray(NODE_TYPE_CATALOGUE.types)) {
             this._types = NODE_TYPE_CATALOGUE.types.slice();
+            this._charts = Array.isArray(NODE_TYPE_CATALOGUE.charts) ? NODE_TYPE_CATALOGUE.charts.slice() : [];
         }
         return this._types;
     },
@@ -34,6 +36,11 @@ var NodeTypes = window.NodeTypes || {
                 const types = (body && Array.isArray(body.types)) ? body.types : [];
                 if (!types.length) throw new Error('the catalogue answered with no types');
                 NodeTypes._types = types;
+                /* The chart profiles are the same declaration the fallback carries; a page whose
+                   answer omits them keeps the generated copy rather than emptying the chart form. */
+                if (body && Array.isArray(body.charts) && body.charts.length) {
+                    NodeTypes._charts = body.charts;
+                }
                 NodeTypes._failure = '';
                 NodeTypes._announce('node-types-loaded');
             })
@@ -101,6 +108,22 @@ var NodeTypes = window.NodeTypes || {
     ui(type) {
         const entry = this.entry(type);
         return entry && entry.ui ? JSON.parse(JSON.stringify(entry.ui)) : null;
+    },
+
+    /* Every chart type the visualize node can draw, in panel order. The same declaration decides
+       which fields its form shows and which of them validation requires. */
+    charts() {
+        this._seed();
+        return (this._charts || []).slice();
+    },
+
+    chart(key) {
+        this._seed();
+        const list = this._charts || [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].key === key) return JSON.parse(JSON.stringify(list[i]));
+        }
+        return null;
     },
 
     labelKey(type) {

@@ -70,7 +70,16 @@ for (const sc of scenarios) {
         ready: sandbox.__NodeTypes.ready(),
         paramsProcess: sandbox.__NodeTypes.params('process'),
         uiProcess: sandbox.__NodeTypes.ui('process'),
+        chartKeys: sandbox.__NodeTypes.charts().map((chart) => chart.key),
+        scatterFields: (sandbox.__NodeTypes.chart('scatter') || { fields: [] }).fields.map((field) => field.name),
+        scatterRequired: (sandbox.__NodeTypes.chart('scatter') || { fields: [] }).fields.map((field) => field.required),
+        unknownChart: sandbox.__NodeTypes.chart('moonbase'),
     };
+    /* Same deep-copy rule as a node's seeds: a field box that edits its profile must not reach
+       the payload another chart reads. */
+    const profile = sandbox.__NodeTypes.chart('scatter');
+    profile.fields[0].labelKey = 'mutated';
+    result.before.scatterLabelAfterMutate = (sandbox.__NodeTypes.chart('scatter') || { fields: [] }).fields[0].labelKey;
     for (const type of types) {
         if (type === 'source') continue; // derived from the crawl matrix, not a static table
         result.fallback[type] = canvas.getDefaultParams(type);
@@ -84,6 +93,7 @@ for (const sc of scenarios) {
             labelKey: sandbox.__NodeTypes.labelKey('process'),
             category: sandbox.__NodeTypes.category('process'),
             defaultsProcess: sandbox.__NodeTypes.defaults('process'),
+            chartKeys: sandbox.__NodeTypes.charts().map((chart) => chart.key),
         };
         /* A mutation of the returned object must not reach the payload: two nodes of one type
            share nothing. */

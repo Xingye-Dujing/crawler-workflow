@@ -21,6 +21,12 @@ from core import machine
 from i18n import t
 from services.charts.contracts import ChartConfigError
 
+#: Chart types that can carry dated event markers (a vertical line at one category) — DERIVED
+#: from the chart registry's ``controls`` declaration, so the box the settings panel offers and
+#: the refusal the builder makes read one table. Any other type handed an annotation is refused
+#: rather than ignored: an annotation the figure does not show is worse than none.
+from services.charts.registry import ANNOTATED_TYPES as ANNOTATED_TYPES
+
 logger = logging.getLogger(__name__)
 
 
@@ -433,11 +439,6 @@ WORDCLOUD_STYLES = {
         },
     },
 }
-
-#: Chart types that can carry dated event markers (a vertical line at one category). Any other
-#: type that is handed the box is refused rather than ignored: an annotation the figure does not
-#: show is worse than no annotation, because the user believes it is there.
-ANNOTATED_TYPES = ('bar', 'line', 'dual_line')
 
 
 def _boxplot(ax, data, labels):

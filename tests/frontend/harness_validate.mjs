@@ -121,7 +121,7 @@ const selectSourcePlatform = sandbox.__wf.selectSourcePlatform;
 const openSettings = sandbox.__wf.openSettings;
 const nodeNeedsLlm = sandbox.__wf.nodeNeedsLlm;
 
-const out = { url: [], placeholder: {}, settings: {}, needsLlm: {}, badges: {} };
+const out = { url: [], placeholder: {}, settings: {}, needsLlm: {}, badges: {}, fixes: {} };
 
 for (const sc of scenarios) {
     I18n.lang = sc.lang || 'en';
@@ -134,6 +134,9 @@ for (const sc of scenarios) {
        them, while workflow.validateDetailed itself stays the unchanged run gate. Declared
        per scenario so a case without one proves no second copy lives in workflow.js. */
     if (sandbox.Diagnostics) sandbox.Diagnostics._paramProblems = sc.paramProblems || {};
+    if (sandbox.Diagnostics) {
+        sandbox.Diagnostics._validation = sc.validation || { messages: [], perNode: {}, entries: [] };
+    }
     if (sc.needsLlm !== undefined) {
         // One params dict (+ the node-level operation the wire also carries) in,
         // one boolean out — the Python side compares the same table against
@@ -163,6 +166,13 @@ for (const sc of scenarios) {
         sandbox.__byId('settings-content').innerHTML = '';
         openSettings(n.id);
         out.settings[sc.id] = sandbox.__byId('settings-content').innerHTML;
+        if (sc.applyFix) {
+            /* The one-click repair: the panel offers a button for each entry carrying a fix, and
+               this applies the entry the scenario names (its index in the node's own list). */
+            const before = JSON.parse(JSON.stringify(sandbox.canvas.nodes[n.id].params));
+            sandbox.applyValidationFix(n.id, sc.applyFix.index || 0);
+            out.fixes[sc.id] = { before, after: sandbox.canvas.nodes[n.id].params };
+        }
         continue;
     }
     for (const n of sc.nodes) {

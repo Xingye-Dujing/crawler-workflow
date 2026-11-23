@@ -500,7 +500,7 @@ class TestValidate:
             (_node('node-1', 'output', operation=''), 'output node has no operation'),
             (_node('node-1', 'analysis', params={}), 'analysis node has no operation/steps configured'),
             (_node('node-1', 'tokenize', params={}), 'tokenize node is missing its text column'),
-            (_node('node-1', 'visualize', params={}), 'visualize node has no chart type'),
+            (_node('node-1', 'visualize', params={}), 'the bar is missing the required field "x_field"'),
             (_node('node-1', 'name', params={'workflow_name': ' '}), 'the name node needs a workflow name'),
         ],
     )
@@ -538,10 +538,17 @@ class TestValidate:
         node = _node('node-1', 'analysis', params={'steps': [{'op': 'drop_null'}]})
         assert WorkflowEngine(_wf([node], [])).validate() == []
 
-    def test_visualize_needs_chart_and_x_field(self, en):
+    def test_visualize_needs_x_field(self, en):
         node = _node('node-1', 'visualize', params={'chart_type': 'bar'})
         errors = WorkflowEngine(_wf([node], [])).validate()
-        assert errors == ['Node Visualize #node-1: visualize node is missing the x field']
+        assert errors == ['Node Visualize #node-1: the bar is missing the required field "x_field"']
+
+    def test_visualize_without_a_chart_type_draws_the_declared_default(self, en):
+        """A blank ``chart_type`` is the manifest's default (bar), which the executor has always
+        used; the only refusal left is the box that default still needs."""
+        node = _node('node-1', 'visualize', params={})
+        errors = WorkflowEngine(_wf([node], [])).validate()
+        assert errors == ['Node Visualize #node-1: the bar is missing the required field "x_field"']
 
     def test_a_known_type_with_no_field_to_check_passes_silently(self, en):
         # ``resume`` is a real node type but validate() has no per-field rule for it; the gate must

@@ -170,6 +170,33 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P3 第一片：图表契约与一键修复（2026-11-23）
+
+- `services/charts/registry.py` 的 `ChartSpec` 新增 `fields`（`FieldSpec`：参数名、角色、是否必填、表单标签/占位/提示键、
+  挂在其下的聚合控件）、`any_of`（箱线图 x 或 y 至少一个）、`controls`（字段之外的控件）、`hint_key`、
+  `tokenize_compatible`；`no_x` 改为从 `fields` 派生，`required_params`（H16 的临时规则）删除。
+- 30 种图型全部声明字段：柱/折线的 x+y、双轴的 y2、占比堆叠的 `stack_fields`、主题图的 pc1/pc2、散点/直方图的数值列、
+  热力图的双分类、桑基/关系图的来源目标、词云的文本列、地图的地区列、模型一致率的三列、文献计量的固定 reads。
+- 同一张表派生三个表面：
+  - `chart_profiles()` → `/api/node-types` 的 `charts` + 冷启动 `node-types-fallback.js` + `capability-schema.json`；
+    `node-types.js` 新增 `charts()`/`chart(key)`（深拷贝）。`panels/node-chart.js` 删除 `CHART_TYPES`/`BIBLIO_CHARTS`/
+    `CHARTS_NO_Y`/`CHARTS_WITH_Y2`/`CHART_X_LABEL_KEY` 等 11 个手写数组与标签映射，按 profile 画框、控件与提示。
+  - `chart_problems()` → `nodes.executors.visualize:validate_node` 只调用它；未知图型 `engine.chart_unknown`（声明默认
+    值作为 fix）、缺字段 `engine.chart_field_missing`（带 `param`）、至少一个 `engine.chart_field_group_missing`；
+    `engine.visualize_no_chart`/`engine.visualize_no_x` 删除（空白图型就是清单默认的 `bar`，执行器一直如此）。
+  - `read_columns()` 从同一 `fields` 派生（模型一致率的三列现在也参与缺列检查）。
+- 验证条目新增 `severity`/`param`/`fix`；`fix` 形如 `{'set': {参数: 值}}`，只允许顶级参数。首个真实修复：
+  `engine.chart_unknown` → 声明默认图型、`engine.output_needs_pdf` → `format=pdf`；清单 `enum_param` 越界且有默认值时也
+  自动带 fix。设置面板在节点问题列表里为带 fix 的条目画“一键修复”按钮（`applyValidationFix` 走 `updateParam` 再重问服务端），
+  并把被点名的字段框描红。
+- 测试：`TestRequiredFieldsReachValidation` 遍历 30 种图型（填满契约→无问题；逐个清空必填→按名报告；有默认值→不报；
+  未知图型→带 fix）；面板场景新增 scatter/heatmap/stack/dual/未知图型/文献图/一键修复；冷启动目录带图表 profile 且深拷贝；
+  `engine.visualize_no_*` 从后端目录与测试清单删除。
+- 本片验证：全量快测 `11066 passed, 7 skipped, 386 deselected`；设备层 `215 passed, 5 skipped`；ruff 全绿；
+  product/tests pylint `10.00/10`；`gen_capabilities.py --check`、`doctor.py --all` 全绿；隔离 data root 冒烟
+  10 个 GET 全 200，`/api/node-types` 30 个图表 profile，`POST /api/workflow/validate` 对 heatmap 缺列与未知图型
+  返回带 `param`/`severity`/`fix` 的条目。
+
 ## P2 前端第四片：表单由清单选择（2026-11-23）
 
 - `Ui` 新增 `hint_key`；`ParamSpec` 新增 `label_key`/`placeholder_key`，并把 `description_key` 接到通用表单。
@@ -286,9 +313,15 @@
 
 ## 下一步（按顺序）
 
-1. **P2 前端/表单收尾已完成**：schema 表单渲染器 + custom renderer 注册表已替换 `panels/settings.js::openSettings`
-   的逐类型分支（见“P2 前端第四片”）。P2 清单里剩下的技能骨架、`emit`/`read` 契约与 Asset 分别随 P6/P3/P4 推进。
-2. 下一步按 `docs/architecture/rewrite-plan.md` 推进 P3-P9；每个切片结束更新本文件。
+1. **P3 第一片已完成**：图表契约（`ChartSpec.fields`）成为面板/校验/血缘/`read_columns`/AI 目录的单一来源；
+   验证条目带 `param`/`severity`/`fix`，设置面板有一键修复。见“P3 第一片”。
+2. **P3 第二片（下一步）**：样本 preflight。给 `Manifest` 加可选的 `preflight='module:function'`（形如 `validators`），
+   实现 `nodes.executors.visualize:preflight(node, sample)` 读 `ChartSpec.fields` 的 role（数值列/空数据/饼图负值/
+   矩阵格数），样本来自运行库最近一次该上游节点的 ≤200 行（`run_store` 加分页/`LIMIT` 读取 + 缓存），接到
+   `/api/workflow/diagnostics` 与 `/api/workflow/validate`；`chart_profiles` 增加 `requiredWhen` 一类的展示字段按需。
+   然后补“每个图表 × 错类型/空数据”的矩阵与 `stack_pct` 的数值校验。
+3. 之后按 `docs/architecture/rewrite-plan.md`：`schema_hash` 数据契约、运行后质量断言、P4 Asset/AI 框架；
+   每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 
@@ -308,8 +341,8 @@
   `engine.run.stop_run` 是 HTTP 与工具共用的停止实现（旧的 route 主体已移走）。
 - **H14 覆盖**：`backend/ai/coverage.py`；入口集合是 `agent.UNIVERSAL_TOOLS` + `agent.FILE_TOOLS` + 技能 `tools`；
   插件工具 `ToolSpec.builtin=False`，不计入；门禁 `tests/unit/gates/test_ai_coverage.py` 可反向失败。
-- **H16 图表**：`ChartSpec.required_params` 是唯一声明；`WorkflowEngine.validate_detailed` 的 visualize 分支读它，
-  先 `with_chart_defaults`；stack_pct 缺失时整张画布在运行前被 rejected，控制台按名给出 `stack_fields`。
+- **H16 图表**：`ChartSpec.fields` 是唯一声明（P3 起含字段角色/必填/表单标签）；`WorkflowEngine.validate_detailed`
+  经 `chart_problems` 读它，先 `with_chart_defaults`；stack_pct 缺失时整张画布在运行前被 rejected，控制台按名给出 `stack_fields`。
 
 ## H17/H18 的关键落点（避免重复调查）
 

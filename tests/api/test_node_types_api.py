@@ -35,6 +35,17 @@ class TestTheNodeTypeCatalogue:
         assert set(listed) == set(NODE_TYPES)
         assert len(listed) == len(set(listed)), f'a type is served twice: {listed}'
 
+    def test_the_chart_profiles_are_served_with_the_types(self, client):
+        """The visualize panel's chart types and their fields come from the chart registry; the
+        browser holds no list of its own, so the payload carries the whole declaration."""
+        from services.charts.registry import CHART_TYPES
+
+        body = _payload(client)
+        assert [chart['key'] for chart in body['charts']] == list(CHART_TYPES)
+        scatter = next(chart for chart in body['charts'] if chart['key'] == 'scatter')
+        assert [field['name'] for field in scatter['fields']] == ['x_field', 'y_field']
+        assert all(field['required'] for field in scatter['fields'])
+
     @pytest.mark.parametrize('plugin', _plugins(), ids=lambda p: p.type)
     def test_each_entry_carries_its_word_group_shape_and_quietness(self, client, plugin):
         entry = next(e for e in _payload(client)['types'] if e['type'] == plugin.type)

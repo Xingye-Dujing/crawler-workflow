@@ -8,8 +8,9 @@ sentence: the console and the canvas badge word it from ``i18n``.
 
 A validator that raises or returns a malformed problem becomes a named
 ``engine.validator_failed`` problem instead of a 500 from ``/api/workflow/diagnostics``: the plugin
-bug stays visible, and the canvas keeps its other badges. Preflight (a sample of upstream rows),
-``fix`` suggestions and data-contract checks join this engine in P3 as additional rule kinds.
+bug stays visible, and the canvas keeps its other badges. A problem may carry a mechanical ``fix``
+(``{'set': {param: value}}``) that the settings panel applies in one click; preflight (a sample of
+upstream rows) and data-contract checks build on the same entry shape.
 """
 
 from __future__ import annotations
@@ -55,13 +56,30 @@ def _blank(value) -> bool:
 
 
 def _problem(rule, *, param: str = '', context: dict | None = None) -> dict:
-    return {
+    found = {
         'code': rule.code,
         'message_key': rule.message_key,
         'severity': rule.severity,
         'param': param or rule.param,
         'context': dict(context or {}),
     }
+    return found
+
+
+def _default_fix(manifest, rule) -> dict | None:
+    """A declared default is the fix for an off-list value — never a guessed option.
+
+    Only a rule whose parameter has a non-blank default offers one: resetting a select to the
+    value the manifest itself starts a node with is mechanical, while inventing an option the
+    table does not name is exactly the guess this project refuses.
+    """
+    if rule.kind != 'enum_param':
+        return None
+    spec = manifest.param(rule.param)
+    default = getattr(spec, 'default', None)
+    if _blank(default):
+        return None
+    return {'set': {rule.param: default}}
 
 
 def _failed(reference: str, reason: Exception) -> dict:
@@ -71,6 +89,7 @@ def _failed(reference: str, reason: Exception) -> dict:
         'severity': 'error',
         'param': '',
         'context': {'ref': reference, 'err': str(reason)[:300]},
+        'fix': None,
     }
 
 
@@ -87,13 +106,36 @@ def _normalize(item, reference: str) -> tuple[dict | None, str]:
     context = item.get('context') or {}
     if not isinstance(context, dict):
         return None, f'{reference} returned a non-object context'
+    fix, reason = _normalize_fix(item.get('fix'), reference)
+    if reason:
+        return None, reason
     return {
         'code': code,
         'message_key': message_key,
         'severity': severity,
         'param': str(item.get('param') or ''),
         'context': dict(context),
+        'fix': fix,
     }, ''
+
+
+def _normalize_fix(fix, reference: str) -> tuple[dict | None, str]:
+    """``{'set': {param: value}}`` or nothing; a malformed fix is a named plugin failure.
+
+    A fix is a mechanical edit the settings panel may apply in one click. It may only set TOP-LEVEL
+    node parameters (the panel's ``updateParam`` writes those), and it must name at least one: a
+    button that changes nothing is worse than no button.
+    """
+    if fix is None:
+        return None, ''
+    if not isinstance(fix, dict):
+        return None, f'{reference} returned a {type(fix).__name__} fix, not an object'
+    changes = fix.get('set')
+    if not isinstance(changes, dict) or not changes:
+        return None, f'{reference} returned a fix without a non-empty "set"'
+    if not all(isinstance(key, str) and key.strip() for key in changes):
+        return None, f'{reference} returned a fix whose parameter name is not a non-empty string'
+    return {'set': dict(changes)}, ''
 
 
 def static_problems(
@@ -128,6 +170,9 @@ def static_problems(
                 found.append(
                     _problem(rule, context={'value': value, 'allowed': ', '.join(str(item) for item in allowed)}),
                 )
+                fix = _default_fix(manifest, rule)
+                if fix:
+                    found[-1]['fix'] = fix
         elif rule.kind in ('upstream_required', 'no_input', 'requires_output'):
             triggered = (
                 (rule.kind == 'upstream_required' and not has_input)

@@ -1,7 +1,9 @@
 """The visualize capability: build a chart spec from the upstream table.
 
-One node type serves every chart (bar/line/pie/word cloud/topic map/…). The chart type selects the
-fields and the required parameters; ``ChartSpec.required_params`` is checked before a run.
+One node type serves every chart (bar/line/pie/word cloud/topic map/…). The chart TYPE's own
+contract — which fields it reads, which are required, what each must hold — is declared once in
+``services.charts.registry``; this manifest only says the node exists and hands the registry the
+node's parameters.
 """
 
 from capabilities_kernel.manifest import (
@@ -46,8 +48,8 @@ MANIFEST = Manifest(
     ai=Ai(
         summary=(
             '可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus '
-            'optional LaTeX figure/table. Chart type decides the fields; ChartSpec.required_params decides '
-            'what must be filled before a run.'
+            'optional LaTeX figure/table. The chart type decides which fields it reads; the fields it '
+            'requires are refused before a run.'
         ),
         steps=(
             'Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).',
@@ -61,9 +63,9 @@ MANIFEST = Manifest(
             },
         ),
         failures=(
-            'No chart type: engine.visualize_no_chart.',
-            'No x field for a chart that needs one: engine.visualize_no_x.',
-            'A chart-specific field missing (e.g. stack_fields): engine.chart_field_missing names the chart and field.',
+            'A required field is blank: engine.chart_field_missing names the chart and the box.',
+            'A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).',
+            'A box plot with neither x nor y: engine.chart_field_group_missing.',
         ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_visualize_manifest.py',)),

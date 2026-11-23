@@ -37,6 +37,16 @@ backend/capabilities_kernel/
 
 `Ui.form='schema'` 的节点由前端通用渲染器按 `params` 逐个画控件；这类清单的每个参数必须声明 `label_key`（`problems()` 按名拒绝），可选 `placeholder_key`/`description_key`，`Ui.hint_key` 是表头说明。`Ui.form='custom'` 必须声明 `custom_renderer`，实现该表单的模块用 `registerSettingsRenderer('<id>', {html, mounted})` 注册；`openSettings()` 只做一次 `settingsRenderer(node.type)` 分派，不含节点类型 if 链。清单点名了没人注册的渲染器、目录未加载、或目录不认识该类型，面板都按名拒绝（`settings.noRenderer`/`noCatalogue`/`unknownType`），不画空表单。`reusable` 不是能力（表单来自模板快照），以自身类型名注册。
 
+## 图表：一个 ChartSpec 管三种表面
+
+30 种图表类型都声明在 `services/charts/registry.py` 的 `SPECS` 里。每个 `ChartSpec` 除 builder/LaTeX/家族之外，还声明 `fields`：这个图从上游表读哪些参数、每个字段的角色（分类/数值/坐标/来源/目标/文本/地区/多列列表/标签）、是否必填、表单标签与提示键、以及挂在它下面的聚合控件；`controls` 是字段之外的独立控件（事件标注、关系图中心词、词云分词与样式），`defaults` 是空白框的运行期默认列。`any_of` 表达“至少填一个”（箱线图 x 或 y）。
+
+同一张表派生三个表面，没有第二份：
+
+- **设置面板**：`/api/node-types` 的 `charts` 与冷启动 `node-types-fallback.js` 由 `chart_profiles()` 生成；`panels/node-chart.js` 按 profile 画框，`NodeTypes.charts()` 之外没有图型/字段数组。
+- **运行前校验**：`chart_problems(chart, params)` 先并入 `defaults` 再逐个检查必填字段；未知图型给出 `engine.chart_unknown` 与声明默认值的 `fix`，`nodes.executors.visualize:validate_node` 只调用它。
+- **血缘**：`nodes.executors.visualize:read_columns` 从同一 `fields` 读出这个节点要读的列（含模型一致率的三列），所以面板显示的框与缺列徽章问的是同一份声明。
+
 ## 生成物（freshness gate）
 
 `python tools/gen_capabilities.py` 从清单渲染六个产物；`--check` 只比较字节：

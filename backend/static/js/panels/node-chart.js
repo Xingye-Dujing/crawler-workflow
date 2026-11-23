@@ -4,46 +4,147 @@
  * so every name here is still a page global and inline `onclick="…"` handlers keep calling it by
  * name. index.html loads it right after `panels/settings.js`; `tests/frontend/splits.json` declares
  * it a companion of that file, so a harness naming one receives both.
+ *
+ * The chart types, and which field each one reads, come from the server's chart registry through
+ * `NodeTypes.charts()`. This file used to keep eight parallel arrays (which chart shows y, which
+ * takes a source/target pair, which accepts annotations…); every one of them was a second opinion
+ * about a fact the Python registry already declares, and a new chart type had to be added here as
+ * well. A field box is now drawn because the profile names it, with the label and hint the
+ * declaration carries.
  */
 /* ── Visualize node settings ── */
-var CHART_TYPES = ['bar', 'line', 'dual_line', 'stack_pct', 'topic_map', 'topic_terms', 'pie', 'scatter', 'histogram', 'box', 'heatmap', 'model_agreement', 'sankey', 'network', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map', 'sentiment_overlay', 'topic_overlay', 'concentric', 'wordcloud', 'map'];
-var BIBLIO_CHARTS = ['knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map', 'sentiment_overlay', 'topic_overlay', 'concentric'];
-
 // The two renderers, kept equal to app.py's `_CHART_ENGINES` by the contract test.
 var ENGINES = [
     { value: 'echarts', label: 'ECharts' },
     { value: 'matplotlib', label: 'Matplotlib' },
 ];
 
-/* Field labels change meaning per chart type (e.g. x/y are two category
-   dimensions for heatmap/sankey, not "category + value" like bar/line). */
-var CHART_X_LABEL_KEY = {
-    heatmap: 'settings.xFieldCat1', sankey: 'settings.sourceField', network: 'settings.sourceField',
-    wordcloud: 'settings.textField', map: 'settings.regionField',
-};
-var CHART_Y_LABEL_KEY = { heatmap: 'settings.yFieldCat2', sankey: 'settings.targetField', network: 'settings.targetField' };
-var CHARTS_WITH_Y_AS_CATEGORY = ['heatmap', 'sankey', 'network'];
-var CHARTS_WITH_VALUE_FIELD = ['heatmap', 'sankey', 'network', 'wordcloud', 'map', 'topic_map'];
-var CHARTS_NO_Y = ['histogram', 'wordcloud', 'map', 'stack_pct', 'model_agreement'].concat(BIBLIO_CHARTS).concat(CHARTS_WITH_Y_AS_CATEGORY);
-// The right-hand scale, which only 双轴折线 asks for. Kept equal to the backend's
-// ECHARTS_ONLY_TYPES by tests/unit/test_visualization.py, because the renderer that cannot
-// draw two axes refuses by name and the panel must not offer it silently.
-// 显著词图 asks for y2 too, but as a SECOND BAR SERIES on the same scale, not as a second
-// axis — the two counts are in the same unit, and splitting them across scales would let a
-// rare word look bigger than a common one.
-var CHARTS_WITH_Y2 = ['dual_line', 'topic_terms'];
-var CHARTS_WITH_LABEL = ['topic_map'];
-var ECHARTS_ONLY_CHARTS = ['wordcloud', 'sankey', 'map', 'dual_line', 'topic_map', 'topic_terms', 'network', 'model_agreement', 'knowledge_graph', 'cluster_timeline', 'burst', 'timezone', 'circular', 'landscape', 'biblio_heatmap', 'graph3d', 'variation', 'dual_map', 'geo_map', 'sentiment_overlay', 'topic_overlay', 'concentric'];
-// The types that draw a vertical line at one x-axis label, so an event ("5/19 公安通报") sits
-// on the curve it explains. Kept equal to the backend's ANNOTATED_TYPES by
-// tests/unit/test_visualization.py: a box the figure cannot honour would drop the date in
-// silence, which is the one outcome a reader of the figure must not be left with.
-var CHARTS_WITH_ANNOTATIONS = ['bar', 'line', 'dual_line'];
+//: The word-cloud palettes. Keys are the localized `wordcloudStyle.*` entries; the drawing side
+//: declares the same names in `services/charts/style.WORDCLOUD_STYLES`, pinned by a contract test.
+var WORDCLOUD_STYLES = ['vibrant', 'monoBlue', 'monoOrange', 'pastel', 'ocean', 'sunset', 'forest'];
+
+//: The aggregations the panel offers. The engine accepts more (every pandas reduction), but a
+//: figure a reader has to interpret offers these five.
+var CHART_AGGREGATIONS = ['sum', 'mean', 'count', 'max', 'min'];
+
+/* ── Widgets a chart's declaration can attach ──
+   Each chart profile lists its free-standing controls by name (`annotations`, `center_node`, …),
+   and a field may name one to render directly under itself (`agg` under the value it aggregates).
+   A name nobody registered renders nothing rather than guessing at a control. */
+var CHART_CONTROLS = {};
+function registerChartControl(id, renderer) {
+    CHART_CONTROLS[id] = renderer;
+}
+
+function _chartSelect(nodeId, param, items, stored, defVal) {
+    return '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'' + param + '\',this.value)">' +
+        selectOptionTags(items, stored, defVal) +
+        '</select>';
+}
+
+function _aggOptions() {
+    return CHART_AGGREGATIONS.map(function (a) {
+        return { value: a, label: a };
+    });
+}
+
+registerChartControl('agg', function (nodeId, p) {
+    return '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg') + '</label>' +
+        _chartSelect(nodeId, 'agg', _aggOptions(), p.agg, 'sum') + '</div>';
+});
+registerChartControl('agg2', function (nodeId, p) {
+    return '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg2') + '</label>' +
+        _chartSelect(nodeId, 'agg2', _aggOptions(), p.agg2, 'sum') + '</div>';
+});
+registerChartControl('center_node', function (nodeId, p) {
+    // A co-occurrence graph over the whole candidate set is unreadable past ~20 words, and its
+    // detail only surfaces on hover — which cannot be saved. Naming one word renders that word's
+    // ego-network instead: a persistent figure that exports exactly as it previews. Blank leaves
+    // the full graph.
+    return '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.networkCenter') + '</label>' +
+        '<input class="settings-input" value="' + escapeHtml(p.center_node || '') + '" placeholder="' +
+        I18n.t('settings.networkCenterPlaceholder') + '" onchange="updateParam(\'' + nodeId + '\',\'center_node\',this.value)"></div>' +
+        '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+        I18n.t('hint.networkCenter') + '</div>';
+});
+registerChartControl('annotations', function (nodeId, p) {
+    return '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartAnnotations') + '</label>' +
+        '<input class="settings-input" value="' + escapeHtml(p.annotations || '') + '" ' +
+        'placeholder="2024-05-19=公安通报; 2024-04-23=遗体打捞" ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'annotations\',this.value)"></div>' +
+        '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+        I18n.t('hint.annotations') + '</div>';
+});
+registerChartControl('tokenize', function (nodeId, p) {
+    return '<div class="settings-group"><label class="settings-checkbox-label">' +
+        '<input type="checkbox" ' + (boolParam(p.tokenize, false) ? 'checked' : '') + ' ' +
+        'onchange="updateParam(\'' + nodeId + '\',\'tokenize\',this.checked)"> ' +
+        I18n.t('settings.tokenize') + '</label></div>';
+});
+registerChartControl('wordcloud_style', function (nodeId, p) {
+    return '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.wordcloudStyle') + '</label>' +
+        _chartSelect(
+            nodeId,
+            'wordcloud_style',
+            WORDCLOUD_STYLES.map(function (s) {
+                return { value: s, label: I18n.t('wordcloudStyle.' + s) };
+            }),
+            p.wordcloud_style,
+            'vibrant'
+        ) + '</div>';
+});
+
+/* The chart a blank `chart_type` means — read from the visualize manifest's parameter default,
+   the same declaration a new node starts from, never a literal here. */
+function _defaultChartType() {
+    var specs = typeof NodeTypes !== 'undefined' && NodeTypes.ready() ? NodeTypes.params('visualize') : [];
+    for (var i = 0; i < specs.length; i += 1) {
+        if (specs[i].name === 'chart_type') return String(specs[i].default || '');
+    }
+    return '';
+}
+
+function _chartProfile(key) {
+    if (typeof NodeTypes === 'undefined' || !NodeTypes.ready()) return null;
+    return NodeTypes.chart(key);
+}
+
+/* One box per field the chart declares. A blank box shows the contract's default as its value
+   without storing it: an untouched 主题距离图 node already reads pc1/pc2 at run time, so the panel
+   may show what will happen — but opening a panel is not an edit and must not stamp a draft.
+   A field the server's validation names (its ``param``) is outlined, so the raw parameter name in
+   the problem sentence points at a box instead of asking the user to decode it. */
+function renderChartField(nodeId, p, profile, field) {
+    var stored = p[field.name];
+    var fallback = (profile.defaults || {})[field.name];
+    var value = stored === undefined || stored === null || String(stored) === '' ? fallback || '' : stored;
+    var placeholder = field.placeholderKey ? I18n.t(field.placeholderKey) : field.placeholder || '';
+    var bad = validationEntriesFor(nodeId).some(function (entry) {
+        return entry.param === field.name;
+    });
+    var html = '<div class="settings-group"><label class="settings-label">' + I18n.t(field.labelKey) + '</label>' +
+        '<input class="settings-input"' + (bad ? ' style="border-color:#d9705a"' : '') + ' value="' +
+        escapeHtml(String(value)) + '" placeholder="' + escapeHtml(placeholder) +
+        '" onchange="updateParam(\'' + nodeId + '\',\'' + field.name + '\',this.value)"></div>';
+    if (field.hintKey) {
+        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+            I18n.t(field.hintKey) + '</div>';
+    }
+    if (field.control && CHART_CONTROLS[field.control]) {
+        html += CHART_CONTROLS[field.control](nodeId, p, profile);
+    }
+    return html;
+}
+
+function _chartControl(nodeId, p, profile, name) {
+    return CHART_CONTROLS[name] ? CHART_CONTROLS[name](nodeId, p, profile) : '';
+}
 
 function renderVisualizeSettings(nodeId, p) {
     var upstream = canvas.getUpstreamNodeId(nodeId);
     var upstreamNode = upstream ? canvas.nodes[upstream] : null;
-    /* 分词 is Reachable both as a legacy node type and as a 处理 operation; this panel is
+    var charts = (typeof NodeTypes !== 'undefined' && NodeTypes.ready()) ? NodeTypes.charts() : [];
+    /* 分词 is reachable both as a legacy node type and as a 处理 operation; this panel is
        loaded without canvas.js in some harnesses, so the rule stays local. */
     var isTokenizeUpstream = !!upstreamNode && (
         upstreamNode.type === 'tokenize' ||
@@ -62,8 +163,11 @@ function renderVisualizeSettings(nodeId, p) {
         if (!p.y_field) p.y_field = 'frequency';
         if (!p.value_field) p.value_field = 'frequency';
 
-        var ct = p.chart_type || 'bar';
-        var TOKENIZE_CHART_TYPES = ['bar', 'pie', 'wordcloud'];
+        var defaultType = _defaultChartType();
+        var ct = p.chart_type || defaultType;
+        var tokenizeCharts = charts.filter(function (chart) {
+            return chart.tokenize;
+        });
 
         // Wordcloud only supports ECharts engine. Corrected in the params (not saved), because a
         // stored 'matplotlib' would fail the run — but a mere panel open still earns no undo step.
@@ -74,25 +178,19 @@ function renderVisualizeSettings(nodeId, p) {
             '<span style="font-size:11px;color:var(--accent);">' + I18n.t('settings.tokenizeUpstream') + '</span></div>' +
             (isWordcloud ? '' :
                 '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.engine') + '</label>' +
-                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'engine\',this.value)">' +
-                selectOptionTags(ENGINES, p.engine, 'echarts') +
-                '</select></div>') +
+                _chartSelect(nodeId, 'engine', ENGINES, p.engine, 'echarts') + '</div>') +
             '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartType') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'chart_type\',this.value)">' +
-            selectOptionTags(
-                TOKENIZE_CHART_TYPES.map(function (c) {
-                    return { value: c, label: I18n.t('chart.' + c) };
+            _chartSelect(
+                nodeId,
+                'chart_type',
+                tokenizeCharts.map(function (chart) {
+                    return { value: chart.key, label: I18n.t(chart.labelKey) };
                 }),
                 ct,
-                'bar'
-            ) +
-            '</select></div>';
+                defaultType
+            ) + '</div>';
         if (isWordcloud) {
-            html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.wordcloudStyle') + '</label>' +
-                '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'wordcloud_style\',this.value)">' +
-                ['vibrant', 'monoBlue', 'monoOrange', 'pastel', 'ocean', 'sunset', 'forest']
-                    .map(function (s) { return '<option value="' + s + '"' + ((p.wordcloud_style || 'vibrant') === s ? ' selected' : '') + '>' + I18n.t('wordcloudStyle.' + s) + '</option>'; }).join('') +
-                '</select></div>';
+            html += _chartControl(nodeId, p, _chartProfile('wordcloud'), 'wordcloud_style');
         }
         html += '<div class="settings-group" style="display:flex;gap:8px;">' +
             '<button class="menu-btn toggle-on" onclick="dataNodes.previewVisualize(\'' + nodeId + '\')">' + I18n.t('btn.preview') + '</button>' +
@@ -101,128 +199,47 @@ function renderVisualizeSettings(nodeId, p) {
         return html;
     }
 
-    var ct = p.chart_type || 'bar';
+    var ct = p.chart_type || _defaultChartType();
+    var profile = _chartProfile(ct);
     var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartType') + '</label>' +
-        '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'chart_type\',this.value)">' +
-        selectOptionTags(
-            CHART_TYPES.map(function (c) {
-                return { value: c, label: I18n.t('chart.' + c) };
+        _chartSelect(
+            nodeId,
+            'chart_type',
+            charts.map(function (chart) {
+                return { value: chart.key, label: I18n.t(chart.labelKey) };
             }),
             ct,
-            'bar'
-        ) +
-        '</select></div>' +
+            _defaultChartType()
+        ) + '</div>' +
         '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.engine') + '</label>' +
-        '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'engine\',this.value)">' +
-        selectOptionTags(ENGINES, p.engine, 'echarts') +
-        '</select></div>';
-    if (p.engine === 'matplotlib' && ECHARTS_ONLY_CHARTS.indexOf(ct) >= 0) {
-        html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' + I18n.t('warn.echartsOnly') + '</div>';
-    }
-    if (BIBLIO_CHARTS.indexOf(ct) >= 0) {
-        /* These four read the fixed columns a Bibliometrics node emits, so x/y boxes would
-           promise a choice the builder never reads. */
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('biblio.ui.chartHint') + '</div>';
-    } else if (ct === 'model_agreement') {
-        // 模型一致率 reads the tidy multi-model table by three columns, not x/y: which names a
-        // model, which holds its label, which aligns the same text across models. Defaults match
-        // what the analysis step writes, so a fresh chart needs no typing.
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.modelField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.model_field || '模型') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'model_field\',this.value)"></div>';
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agreementLabelField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.agreement_label_field || '') + '" placeholder="emotion / tendency / sentiment" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'agreement_label_field\',this.value)"></div>';
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.idField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.id_field || '原行') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'id_field\',this.value)"></div>';
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.modelAgreement') + '</div>';
+        _chartSelect(nodeId, 'engine', ENGINES, p.engine, 'echarts') + '</div>';
+    if (!profile) {
+        /* A stored type the catalogue no longer serves: say so by name. A silent fall-through to
+           the bar form would draw a chart nobody asked for, and validation refuses it too. */
+        html += '<div class="settings-group settings-renderer-refusal">' +
+            escapeHtml(I18n.t('settings.unknownChart', { chart: String(ct) })) + '</div>';
     } else {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_X_LABEL_KEY[ct] || 'settings.xField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.x_field || '') + '" placeholder="category / numeric column" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'x_field\',this.value)"></div>';
-    }
-    if (ct === 'stack_pct') {
-        // A 100%-stacked share takes its segments from a LIST of columns, not one y: each period
-        // is normalised to 100%, so the box wants the positive/neutral/negative (or tendency,
-        // emotion, …) columns that the analysis step just wrote.
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.stackFields') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.stack_fields || '') + '" placeholder="积极占比, 中性占比, 消极占比" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'stack_fields\',this.value)"></div>' +
-            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.stackFields') + '</div>';
-    }
-    if (CHARTS_WITH_Y_AS_CATEGORY.indexOf(ct) >= 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t(CHART_Y_LABEL_KEY[ct]) + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.y_field || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'y_field\',this.value)"></div>';
-    } else if (CHARTS_NO_Y.indexOf(ct) < 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.yField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.y_field || '') + '" placeholder="optional: value column" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'y_field\',this.value)"></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
-            ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
-            '</select></div>';
-    }
-    if (CHARTS_WITH_VALUE_FIELD.indexOf(ct) >= 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.valueField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.value_field || '') + '" placeholder="optional: weight column (default = count)" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'value_field\',this.value)"></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg\',this.value)">' +
-            ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
-            '</select></div>';
-    }
-    if (ct === 'network') {
-        // A co-occurrence graph over the whole candidate set is unreadable past ~20 words, and
-        // its detail only surfaces on hover — which cannot be saved. Naming one word renders
-        // that word's ego-network instead (it + the words directly co-occurring with it): a
-        // persistent figure that exports exactly as it previews. Blank leaves the full graph.
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.networkCenter') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.center_node || '') + '" placeholder="' + I18n.t('settings.networkCenterPlaceholder') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'center_node\',this.value)"></div>' +
-            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.networkCenter') + '</div>';
-    }
-    if (CHARTS_WITH_LABEL.indexOf(ct) >= 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.labelField') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.label_field || 'topic') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'label_field\',this.value)"></div>';
-    }
-    if (CHARTS_WITH_Y2.indexOf(ct) >= 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.y2Field') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.y2_field || '') + '" placeholder="right-axis value column" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'y2_field\',this.value)"></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.agg2') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'agg2\',this.value)">' +
-            ['sum', 'mean', 'count', 'max', 'min'].map(function (a) { return '<option value="' + a + '"' + (p.agg2 === a ? ' selected' : '') + '>' + a + '</option>'; }).join('') +
-            '</select></div>' +
-            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.dualLine') + '</div>';
-    }
-    if (CHARTS_WITH_ANNOTATIONS.indexOf(ct) >= 0) {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.chartAnnotations') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.annotations || '') + '" ' +
-            'placeholder="2024-05-19=公安通报; 2024-04-23=遗体打捞" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'annotations\',this.value)"></div>' +
-            '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.annotations') + '</div>';
-    }
-    if (ct === 'wordcloud') {
-        html += '<div class="settings-group"><label class="settings-checkbox-label">' +
-            '<input type="checkbox" ' + (boolParam(p.tokenize, false) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'tokenize\',this.checked)"> ' +
-            I18n.t('settings.tokenize') + '</label></div>' +
-            '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.wordcloudStyle') + '</label>' +
-            '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'wordcloud_style\',this.value)">' +
-            ['vibrant', 'monoBlue', 'monoOrange', 'pastel', 'ocean', 'sunset', 'forest']
-                .map(function (s) { return '<option value="' + s + '"' + ((p.wordcloud_style || 'vibrant') === s ? ' selected' : '') + '>' + I18n.t('wordcloudStyle.' + s) + '</option>'; }).join('') +
-            '</select></div>';
-    }
-    if (ct === 'map') {
-        html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' + I18n.t('hint.mapRegionNames') + '</div>';
+        if (p.engine === 'matplotlib' && profile.echartsOnly) {
+            html += '<div class="settings-group" style="color:#e67e22;font-size:11px;">' +
+                I18n.t('warn.echartsOnly') + '</div>';
+        }
+        /* Fields in declaration order: which box a chart shows is the registry's answer, and its
+           role is what the preflight checks the named column against. */
+        for (var i = 0; i < profile.fields.length; i += 1) {
+            html += renderChartField(nodeId, p, profile, profile.fields[i]);
+        }
+        for (var j = 0; j < profile.controls.length; j += 1) {
+            html += _chartControl(nodeId, p, profile, profile.controls[j]);
+        }
+        if (profile.hintKey) {
+            html += '<div class="settings-group" style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t(profile.hintKey) + '</div>';
+        }
     }
     // LaTeX export is orthogonal to the renderer: the node still draws its chart, and these add a
     // compilable figure source / a booktabs three-line table as .txt next to it. Bibliometric views
     // have paper twins too; only model_agreement remains an on-screen-only matrix.
-    if (ct !== 'model_agreement') {
+    if (!profile || profile.latexBuildable) {
         html += '<div class="settings-group"><label class="settings-checkbox-label">' +
             '<input type="checkbox" ' + (boolParam(p.emit_latex, true) ? 'checked' : '') + ' onchange="updateParam(\'' + nodeId + '\',\'emit_latex\',this.checked)"> ' +
             I18n.t('settings.emitLatex') + '</label>' +
@@ -247,4 +264,3 @@ registerSettingsRenderer('visualize', {
         return renderVisualizeSettings(nodeId, node.params);
     },
 });
-

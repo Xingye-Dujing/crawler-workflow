@@ -22,9 +22,13 @@ def _manifest():
     return manifest
 
 
-def _codes(params):
+def _entries(params):
     workflow = {'nodes': [{'id': 'v', 'type': 'visualize', 'params': params}], 'connections': []}
-    return [entry['code'] for entry in WorkflowEngine(workflow).validate_detailed() if entry['id'] == 'v']
+    return [entry for entry in WorkflowEngine(workflow).validate_detailed() if entry['id'] == 'v']
+
+
+def _codes(params):
+    return [entry['code'] for entry in _entries(params)]
 
 
 class TestTheDeclaration:
@@ -51,13 +55,28 @@ class TestTheDeclaration:
         for path in manifest.tests.contracts:
             assert (REPO / path).is_file()
 
+    def test_a_blank_chart_type_means_the_manifests_default(self):
+        """``DEFAULT_CHART`` is a link to this declaration, not a second opinion: the executor and
+        the chart contract pair a blank box with the value a new node starts from."""
+        from services.charts.registry import DEFAULT_CHART
+
+        spec = _manifest().param('chart_type')
+        assert spec is not None
+        assert spec.default == DEFAULT_CHART
+
 
 class TestValidation:
-    def test_no_chart_type_is_named(self):
-        assert 'engine.visualize_no_chart' in _codes({})
+    def test_a_blank_chart_type_is_the_declared_default(self):
+        """A blank box draws the manifest's default (bar), so it is not refused; only a value the
+        registry does not serve is."""
+        assert 'engine.chart_unknown' not in _codes({})
+        assert 'engine.chart_field_missing' in _codes({})
 
     def test_a_bar_chart_without_x_is_named(self):
-        assert 'engine.visualize_no_x' in _codes({'chart_type': 'bar'})
+        entry = next(
+            entry for entry in _entries({'chart_type': 'bar'}) if entry['code'] == 'engine.chart_field_missing'
+        )
+        assert entry['param'] == 'x_field'
 
     def test_a_bar_chart_with_x_is_clean(self):
         assert _codes({'chart_type': 'bar', 'x_field': 'word'}) == []
@@ -65,7 +84,14 @@ class TestValidation:
     def test_a_chart_that_needs_no_x_is_not_asked_for_one(self):
         assert NO_X_TYPES, 'the chart registry declares no no-x chart; this guard measures nothing'
         chart = sorted(NO_X_TYPES)[0]
-        assert 'engine.visualize_no_x' not in _codes({'chart_type': chart})
+        assert 'engine.chart_field_missing' not in _codes({'chart_type': chart})
 
     def test_a_chart_specific_required_field_is_named(self):
-        assert 'engine.chart_field_missing' in _codes({'chart_type': 'stack_pct', 'x_field': 'word'})
+        entries = [entry for entry in _entries({'chart_type': 'stack_pct', 'x_field': 'word'})]
+        missing = [entry for entry in entries if entry['code'] == 'engine.chart_field_missing']
+        assert [entry['param'] for entry in missing] == ['stack_fields']
+
+    def test_an_off_list_chart_type_is_named_with_the_default_as_its_fix(self):
+        entries = _entries({'chart_type': 'moonbase'})
+        unknown = [entry for entry in entries if entry['code'] == 'engine.chart_unknown']
+        assert unknown and unknown[0]['fix'] == {'set': {'chart_type': 'bar'}}

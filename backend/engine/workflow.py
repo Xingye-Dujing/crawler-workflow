@@ -291,18 +291,21 @@ class WorkflowEngine:
         return [entry['message'] for entry in self.validate_detailed()]
 
     def validate_detailed(self) -> list[dict]:
-        """Everything that would make a node produce nothing, as ``{id, code, message}``.
+        """Everything that would make a node produce nothing, as one entry per problem.
 
         ``id`` is the node the problem belongs to (``None`` for a canvas-wide one —
         an empty canvas, a dangling wire, a cycle), so the frontend can put a badge on
         the right box; ``code`` is the ``engine.*`` key (or ``engine.source`` for the
         matrix-driven source rules, whose message already names the field); ``message``
-        is the localised text. Order and text are identical to ``validate``.
+        is the localised text. ``severity``/``param``/``fix`` travel with it so a panel can
+        point at the box and apply a mechanical fix without re-deriving either. Order and text
+        are identical to ``validate``.
         """
         entries: list[dict] = []
 
-        def add(nid, code, message):
-            entries.append({'id': nid, 'code': code, 'message': message})
+        def add(nid, code, message, *, severity='error', param='', fix=None):
+            entry = {'id': nid, 'code': code, 'message': message, 'severity': severity, 'param': param, 'fix': fix}
+            entries.append(entry)
 
         if not self.nodes:
             # An empty canvas has no cycle, no missing parameter and no node to
@@ -358,6 +361,9 @@ class WorkflowEngine:
                         nid,
                         problem['code'],
                         t(problem['message_key'], nid=label, **problem['context']),
+                        severity=problem['severity'],
+                        param=problem.get('param') or '',
+                        fix=problem.get('fix'),
                     )
         try:
             self.topological_sort()

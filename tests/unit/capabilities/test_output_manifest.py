@@ -74,7 +74,18 @@ class TestTheTableShape:
         assert _codes(_save(), [dict(UPLOAD)]) == []
 
     def test_a_pdf_parent_in_a_table_save_needs_pdf(self):
-        assert _codes(_save(format='csv'), [dict(COMPILE)]) == ['engine.output_needs_pdf']
+        workflow = {
+            'nodes': [_save(format='csv'), dict(COMPILE)],
+            'connections': [{'from': 'c', 'to': 'o'}],
+        }
+        entry = next(
+            entry
+            for entry in WorkflowEngine(workflow).validate_detailed()
+            if entry['code'] == 'engine.output_needs_pdf'
+        )
+        # The parents can only produce a PDF, so the format has one legal value and the entry
+        # offers it as a one-click fix instead of making the user hunt the dropdown.
+        assert entry['fix'] == {'set': {'format': 'pdf'}}
 
     def test_a_metadata_parent_is_not_a_table(self):
         assert _codes(_save(format='csv'), [dict(NAME)]) == ['engine.output_no_table']

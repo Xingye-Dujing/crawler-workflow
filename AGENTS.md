@@ -49,8 +49,11 @@ a defect, not a shortcut.
   renderer is refused by name in the panel.
 - **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same
   change (`contracts.py`, `validate_step`, the gate tests).
-- **Chart types**: one builder in `services/charts/options/` registered in `BUILDERS`; there is no
-  `if chart_type == …` chain and must not become one.
+- **Chart types**: one `ChartSpec` in `services/charts/registry.py` (fields, roles, required boxes, own
+  `controls`) + one builder in `services/charts/options/` registered in `BUILDERS`; there is no
+  `if chart_type == …` chain and must not become one. The settings panel renders the chart profile the
+  catalogue serves (`NodeTypes.charts()`), and `chart_problems` is the run gate's data-free half — a new chart
+  edits neither the panel nor validation.
 - **Bibliographic sources/formats**: `services/biblio/sources.py` + `services/biblio/formats/`; a format's readable
   columns are its own module's answer.
 - **AI extensions**: typed contributions through `extensions/` (`ExtensionRegistry`), providers in

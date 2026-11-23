@@ -28,6 +28,8 @@ HARNESS = REPO / 'tests' / 'frontend' / 'harness_node_types.mjs'
 
 
 def _catalogue() -> dict:
+    from services.charts.registry import chart_profiles
+
     types = []
     for plugin in PLUGINS.values():
         types.append(
@@ -41,7 +43,7 @@ def _catalogue() -> dict:
                 'defaultsFrom': 'capabilities' if plugin.type == 'source' else '',
             }
         )
-    return {'ok': True, 'types': types}
+    return {'ok': True, 'types': types, 'charts': chart_profiles()}
 
 
 def _run(tmp_path: Path, scenarios: list) -> dict:
@@ -97,6 +99,23 @@ class TestTheServedCatalogue:
         assert result['before']['uiProcess']['customRenderer'] == 'process'
         names = {spec['name'] for spec in result['before']['paramsProcess']}
         assert 'operation' in names and 'text_column' in names
+
+    def test_the_cold_page_carries_the_chart_profiles(self, tmp_path):
+        """The visualize panel draws its boxes from the same declaration; a page whose fetch has not
+        answered yet already knows every chart type and which fields a scatter reads."""
+        from services.charts.registry import CHART_TYPES
+
+        result = _run(
+            tmp_path,
+            [{'id': 'cold', 'fetch': {'status': 500, 'body': {}}, 'types': ['visualize']}],
+        )['cold']
+        assert result['before']['chartKeys'] == list(CHART_TYPES)
+        assert result['before']['scatterFields'] == ['x_field', 'y_field']
+        assert result['before']['scatterRequired'] == [True, True]
+        assert result['before']['unknownChart'] is None
+        assert result['before']['scatterLabelAfterMutate'] == 'settings.xField', (
+            'a returned chart profile is a deep copy, not the payload object'
+        )
 
     def test_the_fallback_table_equals_the_python_defaults(self, tmp_path):
         """Every type the server seeds must start from the same parameters on a cold page.

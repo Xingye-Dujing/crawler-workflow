@@ -50,8 +50,19 @@ def validate_node(node: dict, context) -> list[dict]:
         if 'visualize' in ptypes and 'compile' in ptypes:
             problems.append({'code': 'engine.output_pdf_two_sources', 'message_key': 'engine.output_pdf_two_sources'})
     elif not (ptypes & TABLE_NODE_TYPES):
-        code = 'engine.output_needs_pdf' if ptypes & PDF_SOURCE_NODE_TYPES else 'engine.output_no_table'
-        problems.append({'code': code, 'message_key': code})
+        if ptypes & PDF_SOURCE_NODE_TYPES:
+            problems.append(
+                {
+                    'code': 'engine.output_needs_pdf',
+                    'message_key': 'engine.output_needs_pdf',
+                    # The parents can only produce a PDF, so the format is not a preference: the
+                    # one value the contract allows is the fix. The extension is enforced
+                    # server-side, so a filename ending .csv is not in the way.
+                    'fix': {'set': {'format': 'pdf'}},
+                },
+            )
+        else:
+            problems.append({'code': 'engine.output_no_table', 'message_key': 'engine.output_no_table'})
     return problems
 
 

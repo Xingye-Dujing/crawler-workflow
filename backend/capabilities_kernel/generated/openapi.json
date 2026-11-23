@@ -68,11 +68,112 @@
           }
         }
       },
+      "ChartField": {
+        "type": "object",
+        "required": [
+          "name",
+          "role",
+          "required"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "category",
+              "category2",
+              "value",
+              "coordinate",
+              "source",
+              "target",
+              "text",
+              "geo",
+              "list",
+              "label",
+              "column"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "labelKey": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "placeholderKey": {
+            "type": "string"
+          },
+          "hintKey": {
+            "type": "string"
+          },
+          "control": {
+            "type": "string"
+          }
+        }
+      },
+      "ChartProfile": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenize": {
+            "type": "boolean"
+          },
+          "labelKey": {
+            "type": "string"
+          },
+          "hintKey": {
+            "type": "string"
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartField"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "NodeTypesResponse": {
         "type": "object",
         "required": [
           "ok",
-          "types"
+          "types",
+          "charts"
         ],
         "properties": {
           "ok": {
@@ -82,6 +183,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NodeType"
+            }
+          },
+          "charts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartProfile"
             }
           }
         }

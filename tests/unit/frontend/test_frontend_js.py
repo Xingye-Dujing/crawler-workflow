@@ -122,6 +122,16 @@ _PANELS = [
         {'chart_type': 'model_agreement', 'agreement_label_field': 'emotion'},
     ),
     ('panel_visualize_wordcloud', 'visualize', {'chart_type': 'wordcloud', 'value_field': '权重'}),
+    ('panel_visualize_scatter', 'visualize', {'chart_type': 'scatter', 'x_field': '甲', 'y_field': '乙'}),
+    ('panel_visualize_heatmap', 'visualize', {'chart_type': 'heatmap', 'x_field': '平台', 'y_field': '阶段'}),
+    (
+        'panel_visualize_stack',
+        'visualize',
+        {'chart_type': 'stack_pct', 'x_field': '阶段', 'stack_fields': '积极占比,中性占比'},
+    ),
+    ('panel_visualize_dual', 'visualize', {'chart_type': 'dual_line', 'x_field': '日期', 'y2_field': '强度'}),
+    ('panel_visualize_unknown', 'visualize', {'chart_type': 'moonbase'}),
+    ('panel_visualize_biblio', 'visualize', {'chart_type': 'knowledge_graph'}),
     ('panel_output_csv', 'output', {'operation': 'save_csv', 'filename': 'export.csv', 'text_column': '正文'}),
     ('panel_output_stamped', 'output', {'operation': 'save', 'filename': 'stamped.csv', 'filename_timestamp': True}),
     (
@@ -217,6 +227,27 @@ def results(tmp_path_factory, capabilities_matrix):
         # …and the same panels again with a hostile value in every text field, which
         # is how the escaping rule below is asserted per panel rather than per guess.
         *({'id': 'hostile_' + pid, 'node': _node('n1', ntype, _poison(params))} for pid, ntype, params in _PANELS),
+        # One problem, one mechanical repair: a stored chart type the catalogue no longer serves
+        # is reset to the manifest's default by the button the panel renders for it.
+        {
+            'id': 'panel_fix_unknown_chart',
+            'node': _node('n1', 'visualize', {'chart_type': 'moonbase'}),
+            'validation': {
+                'messages': [],
+                'perNode': {},
+                'entries': [
+                    {
+                        'id': 'n1',
+                        'code': 'engine.chart_unknown',
+                        'message': 'Node n1: "moonbase" is not a chart type this build serves',
+                        'severity': 'error',
+                        'param': 'chart_type',
+                        'fix': {'set': {'chart_type': 'bar'}},
+                    }
+                ],
+            },
+            'applyFix': {'index': 0},
+        },
     ]
     return _run_validate(tmp, scenarios, capabilities_matrix)
 
@@ -1195,6 +1226,55 @@ class TestModelAgreementChart:
         for label in ('settings.modelField', 'settings.agreementLabelField', 'settings.idField'):
             assert label in html, (label, html)
         assert 'settings.xField' not in html, 'a chart with no x/y must not render an x field box'
+
+
+class TestChartFormIsTheDeclaration:
+    """Which boxes the chart panel shows is the chart registry's answer, rendered by the real
+    panel: a scatter gets two value axes and no aggregation, a heatmap two category axes plus the
+    aggregate, a stacked-share chart its column list, and a type the build no longer serves is
+    named instead of silently drawing the bar form."""
+
+    def test_a_scatter_gets_two_value_fields_and_no_aggregation(self, results):
+        html = results['settings']['panel_visualize_scatter']
+        assert 'settings.xField' in html and 'settings.yField' in html
+        assert 'settings.agg' not in html, 'a scatter never aggregates its axes'
+
+    def test_a_heatmap_gets_its_two_category_axes_and_the_aggregate(self, results):
+        html = results['settings']['panel_visualize_heatmap']
+        assert 'settings.xFieldCat1' in html and 'settings.yFieldCat2' in html
+        assert "'x_field'" in html and "'y_field'" in html
+        assert 'settings.agg' in html
+
+    def test_a_stacked_share_chart_gets_its_column_list(self, results):
+        html = results['settings']['panel_visualize_stack']
+        assert 'settings.stackFields' in html and 'hint.stackFields' in html
+        assert "updateParam('n1','stack_fields',this.value)" in html
+
+    def test_a_dual_axis_chart_gets_the_right_axis_field_and_hint(self, results):
+        html = results['settings']['panel_visualize_dual']
+        assert 'settings.y2Field' in html and 'hint.dualLine' in html
+        assert 'settings.agg2' in html
+
+    def test_a_type_the_catalogue_does_not_serve_is_named(self, results):
+        html = results['settings']['panel_visualize_unknown']
+        assert 'settings.unknownChart' in html
+        assert 'settings-renderer-refusal' in html
+        assert 'settings.xField' not in html, 'no field form may be painted for an unknown type'
+
+    def test_a_bibliometric_view_states_where_its_columns_come_from(self, results):
+        html = results['settings']['panel_visualize_biblio']
+        assert 'biblio.ui.chartHint' in html
+        assert 'settings.xField' not in html, 'a biblio view reads fixed columns, not user boxes'
+
+    def test_a_named_problem_offers_its_mechanical_fix_and_the_button_applies_it(self, results):
+        """``engine.chart_unknown`` carries ``{'set': {'chart_type': 'bar'}}``: the panel renders a
+        button for it and pressing it writes the declared default through ``updateParam``."""
+        html = results['settings']['panel_fix_unknown_chart']
+        assert 'btn.applyFix' in html
+        assert 'applyValidationFix' in html
+        fix = results['fixes']['panel_fix_unknown_chart']
+        assert fix['before']['chart_type'] == 'moonbase'
+        assert fix['after']['chart_type'] == 'bar'
 
 
 #: A parameter whose field writes it through a dedicated handler instead of the generic

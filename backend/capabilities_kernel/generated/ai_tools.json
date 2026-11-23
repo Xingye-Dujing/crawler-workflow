@@ -1043,7 +1043,7 @@
     {
       "capability": "node:visualize",
       "tool": "",
-      "summary": "可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus optional LaTeX figure/table. Chart type decides the fields; ChartSpec.required_params decides what must be filled before a run.",
+      "summary": "可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus optional LaTeX figure/table. The chart type decides which fields it reads; the fields it requires are refused before a run.",
       "steps": [
         "Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).",
         "Pick the x/y/value/label fields; a chart that needs no x says so.",
@@ -1061,9 +1061,9 @@
         }
       ],
       "failures": [
-        "No chart type: engine.visualize_no_chart.",
-        "No x field for a chart that needs one: engine.visualize_no_x.",
-        "A chart-specific field missing (e.g. stack_fields): engine.chart_field_missing names the chart and field."
+        "A required field is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A box plot with neither x nor y: engine.chart_field_group_missing."
       ],
       "params": {
         "type": "object",

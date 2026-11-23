@@ -11,51 +11,54 @@ from core.refs import as_bool
 from runtime.state import add_log
 
 from i18n import t
-from nodes.context import NodeCall, columns_from_params, node_params, split_panel_columns
-from services.charts.contracts import BIBLIO_CHART_READS, NO_X_TYPES
+from nodes.context import NodeCall, node_params
 from services.charts.outputs import build_latex_outputs
-from services.charts.registry import spec_for, with_chart_defaults
+from services.charts.registry import (
+    BIBLIO_CHART_READS,
+    chart_problems,
+    effective_chart_key,
+    spec_for,
+    with_chart_defaults,
+)
 from services.charts.visualizer import ChartConfigError, VisualizationService, chart_engine
 from services.runs.files import record_file
 
 
 def validate_node(node: dict, _context) -> list[dict]:
-    """The chart type, its x field and the chart spec's own required parameters."""
+    """The chart type and the fields its contract requires, read from the chart registry.
+
+    The registry is the one declaration of which boxes a type reads and which are required; this
+    hook only hands it the node's parameters. The FIELD'S TYPE (a scatter needs numbers) is the
+    preflight's question, because it needs a sample of the rows.
+    """
     params = node_params(node)
-    chart_type = str(params.get('chart_type') or '')
-    problems: list[dict] = []
-    if not chart_type:
-        problems.append({'code': 'engine.visualize_no_chart', 'message_key': 'engine.visualize_no_chart'})
-    if not params.get('x_field') and chart_type not in NO_X_TYPES:
-        problems.append({'code': 'engine.visualize_no_x', 'message_key': 'engine.visualize_no_x'})
-    spec = spec_for(chart_type)
-    if spec is not None:
-        effective = with_chart_defaults(chart_type, params)
-        for field in spec.required_params:
-            if not str(effective.get(field) or '').strip():
-                problems.append(
-                    {
-                        'code': 'engine.chart_field_missing',
-                        'message_key': 'engine.chart_field_missing',
-                        'context': {'chart': chart_type, 'field': field},
-                    },
-                )
-    return problems
-
-
-#: The columns a chart reads from its upstream table (``stack_fields`` is split like a list by
-#: the lineage model; a biblio chart adds its own contract through ``chart_contracts``).
-READ_PARAMS = ('x_field', 'y_field', 'y2_field', 'label_field', 'value_field')
+    return chart_problems(params.get('chart_type'), params)
 
 
 def read_columns(node: dict) -> list[str]:
-    """The fields this chart reads from its input table, plus the biblio view's fixed columns."""
+    """The fields this chart reads from its input table, plus the biblio view's fixed columns.
+
+    Derived from the chart registry's field table, so a box the panel shows is a column the
+    lineage view checks — including the model/label/id columns of 模型一致率, which is why the
+    table declares them as fields instead of the panel holding a second list.
+    """
     params = node_params(node)
-    found = columns_from_params(params, READ_PARAMS)
-    found += split_panel_columns(params.get('stack_fields'))
-    chart = str(params.get('chart_type') or '')
-    found += list(BIBLIO_CHART_READS.get(chart, ()))
-    return [c for c in found if c]
+    chart = effective_chart_key(params.get('chart_type'))
+    spec = spec_for(chart)
+    if spec is None:
+        return []
+    effective = with_chart_defaults(chart, params)
+    found: list[str] = []
+    for field in spec.fields:
+        value = str(effective.get(field.name) or '').strip()
+        if not value:
+            continue
+        if field.role == 'list':
+            found += [name.strip() for name in value.replace('，', ',').split(',') if name.strip()]
+        else:
+            found.append(value)
+    found += [column for column in BIBLIO_CHART_READS.get(chart, ()) if column]
+    return found
 
 
 def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
@@ -68,7 +71,7 @@ def execute_visualize_node(node: dict, current_input: list, ctx: dict = None):
     produced", crawl or file alike.
     """
     params = node.get('params', {})
-    chart_type = params.get('chart_type', 'bar')
+    chart_type = effective_chart_key(params.get('chart_type'))
     params = with_chart_defaults(chart_type, params)
     x_field = params.get('x_field')
     y_field = params.get('y_field')

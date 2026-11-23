@@ -82,9 +82,9 @@ ZH = {
     'engine.verify_two_inputs': (
         '节点 {nid}：采集校验需要正好两条数据上游（第 1 条=清单，第 2 条=结果），现在有 {n} 条'
     ),
-    'engine.visualize_no_chart': '节点 {nid}：可视化节点没有选择图表类型',
-    'engine.visualize_no_x': '节点 {nid}：可视化节点缺少 X 字段',
-    'engine.chart_field_missing': '节点 {nid}：{chart} 图表缺少必填字段 {field}',
+    'engine.chart_field_missing': '节点 {nid}：{chart}缺少必填字段“{field}”',
+    'engine.chart_field_group_missing': '节点 {nid}：{chart}至少需要填写 {fields} 之一',
+    'engine.chart_unknown': '节点 {nid}：不支持图表类型“{chart}”',
     'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与“重新采集”不能同时开启',
     'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
     'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
@@ -551,9 +551,9 @@ EN = {
     'engine.verify_two_inputs': (
         'Node {nid}: an audit needs exactly two data upstreams (1st = list, 2nd = result), and this has {n}'
     ),
-    'engine.visualize_no_chart': 'Node {nid}: visualize node has no chart type',
-    'engine.visualize_no_x': 'Node {nid}: visualize node is missing the x field',
-    'engine.chart_field_missing': 'Node {nid}: the {chart} chart is missing the required field {field}',
+    'engine.chart_field_missing': 'Node {nid}: the {chart} is missing the required field "{field}"',
+    'engine.chart_field_group_missing': 'Node {nid}: the {chart} needs at least one of {fields}',
+    'engine.chart_unknown': 'Node {nid}: "{chart}" is not a chart type this build serves',
     'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
     'engine.watermarkUnsupported': 'Node {nid}: cross-run watermark supports only Bilibili author uploads',
     'housekeeping.datasetStoreFailed': 'Automatic orphan-file cleanup failed (the run itself is unaffected)',

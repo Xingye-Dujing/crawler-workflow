@@ -67,6 +67,7 @@ class TestAValidValidator:
                 'severity': 'error',
                 'param': '',
                 'context': {'n': 1},
+                'fix': None,
             },
         ]
 
@@ -123,3 +124,60 @@ class TestTheEngineStillReportsIt:
         entries = WorkflowEngine(workflow).validate_detailed()
         names = [entry['code'] for entry in entries if entry['id'] == 'c']
         assert 'engine.validator_failed' in names
+
+
+class TestAFixIsADeclaredRepair:
+    """A problem may carry a mechanical repair the settings panel applies in one click.
+
+    The shape is ``{'set': {param: value}}`` and it may only name top-level node parameters. The
+    engine refuses a malformed fix by name rather than letting a broken button reach the panel.
+    """
+
+    def _enum_manifest(self, default='csv'):
+        from capabilities_kernel.manifest import ParamSpec, Rule
+
+        return replace(
+            _manifest(),
+            validators=(),
+            params=(ParamSpec(name='format', type='string', default=default, enum=('csv', 'json'), widget='select'),),
+            rules=(Rule(kind='enum_param', code='x.bad_option', message_key='x.bad_option', param='format'),),
+        )
+
+    def test_an_off_list_enum_offers_the_declared_default(self):
+        found = engine.static_problems(self._enum_manifest(), {'params': {'format': 'xlsx'}})
+        assert [problem['code'] for problem in found] == ['x.bad_option']
+        assert found[0]['fix'] == {'set': {'format': 'csv'}}
+
+    def test_a_blank_default_has_no_fix(self):
+        found = engine.static_problems(self._enum_manifest(default=''), {'params': {'format': 'xlsx'}})
+        assert found and 'fix' not in found[0]
+
+    def test_a_malformed_fix_is_a_named_plugin_failure(self, monkeypatch):
+        found = _run(
+            lambda _node, _context: [{'code': 'x', 'message_key': 'x', 'fix': {'set': {}}}],
+            monkeypatch,
+        )
+        assert [problem['code'] for problem in found] == ['engine.validator_failed']
+
+    def test_a_fix_for_a_non_parameter_value_is_refused(self, monkeypatch):
+        found = _run(
+            lambda _node, _context: [{'code': 'x', 'message_key': 'x', 'fix': {'set': {'': 1}}}],
+            monkeypatch,
+        )
+        assert [problem['code'] for problem in found] == ['engine.validator_failed']
+
+    def test_the_entry_carries_the_box_and_the_fix(self, monkeypatch):
+        monkeypatch.setattr(
+            registry,
+            'resolve',
+            lambda _reference: (
+                lambda _node, _context: [
+                    {'code': 'x.blank', 'message_key': 'x.blank', 'param': 'x_field', 'fix': {'set': {'x_field': '��'}}}
+                ]
+            ),
+        )
+        workflow = {'nodes': [{'id': 'c', 'type': 'compile', 'params': {}}], 'connections': []}
+        entry = next(entry for entry in WorkflowEngine(workflow).validate_detailed() if entry['code'] == 'x.blank')
+        assert entry['param'] == 'x_field'
+        assert entry['severity'] == 'error'
+        assert entry['fix'] == {'set': {'x_field': '��'}}

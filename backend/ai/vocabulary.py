@@ -145,6 +145,9 @@ def chart_catalog() -> list[dict]:
             'family': spec.family,
             'required_columns': list(spec.reads),
             'no_x_axis': spec.no_x,
+            # The boxes this chart wants, so the AI can name a chart's fields instead of
+            # guessing at x/y for a heatmap or a sangley. Derived from the one declaration.
+            'fields': [{'name': field.name, 'role': field.role, 'required': field.required} for field in spec.fields],
         }
         for spec in SPECS
     ]
