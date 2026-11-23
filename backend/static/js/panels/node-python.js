@@ -55,7 +55,7 @@ registerSettingsRenderer('python', {
 /* Async fill: the option list and the interpreter verdict both come from the server, so the panel
    never keeps a second script table or guesses whether Python exists. */
 function loadPythonNodePanel(nodeId, current) {
-    fetch('/api/ai/python/scripts').then(function (response) { return response.json(); }).then(function (data) {
+    fetch('/api/ai/ws/python/scripts').then(function (response) { return response.json(); }).then(function (data) {
         if (!data.ok) return;
         var select = document.getElementById('python-script-' + nodeId);
         if (select) {
@@ -63,7 +63,7 @@ function loadPythonNodePanel(nodeId, current) {
                 _pythonSelectOptions(data.scripts || [], current || select.value);
         }
     }).catch(function () { /* the panel still works; the server refuses at run time by name */ });
-    fetch('/api/ai/python/status').then(function (response) { return response.json(); }).then(function (data) {
+    fetch('/api/ai/ws/python/status').then(function (response) { return response.json(); }).then(function (data) {
         var hint = document.getElementById('python-status-' + nodeId);
         if (!hint) return;
         var report = data.report || {};

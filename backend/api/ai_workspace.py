@@ -137,6 +137,23 @@ def _host_refusal(exc, status: int = 400):
     return jsonify(payload), status
 
 
+def _machine_refusal():
+    """The Python extension is one machine-level library; a non-admin account may only run stored scripts."""
+    from runtime import policy
+
+    if not policy.may_administer_machine():
+        return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': 'machine.refused'}), 403
+    return None
+
+
+def _int_arg(value, default: int, low: int, high: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, number))
+
+
 def create_blueprint(manager):
     blueprint = Blueprint('ai_workspace', __name__, url_prefix='/api/ai/ws')
 
@@ -589,50 +606,120 @@ def create_blueprint(manager):
 
     @blueprint.get('/python/status')
     def python_status():
-        from agent_workspace import python_runtime
+        from runtime.settings import get_setting
 
-        return jsonify({'ok': True, 'status': python_runtime.status(manager.workspace(account()).settings)})
+        from services import python_runtime as host_runtime
+
+        report = host_runtime.interpreter(refresh=str(request.args.get('refresh') or '') in ('1', 'true'))
+        report = {key: value for key, value in report.items() if key != 'command'}
+        plan = host_runtime.install_plan()
+        plan.pop('target', None)
+        environment = manager.workspace(account()).host.environment().capabilities()
+        return jsonify(
+            {
+                'ok': True,
+                'enabled': bool(get_setting('ai_allow_python')),
+                'allowed': bool(environment.get('code_plugins')),
+                'report': report,
+                'install': plan,
+            }
+        )
 
     @blueprint.route('/python/scripts', methods=['GET', 'POST'])
     def python_scripts():
-        workspace = manager.workspace(account())
-        try:
-            if request.method == 'POST':
-                return jsonify({'ok': True, 'script': workspace.save_script(account(), body())})
-            return jsonify({'ok': True, 'scripts': workspace.scripts(account())})
-        except WorkspaceError as exc:
-            return _error(exc)
+        from services import python_scripts as host_scripts
+
+        if request.method == 'POST':
+            refusal = _machine_refusal()
+            if refusal is not None:
+                return refusal
+            try:
+                return jsonify({'ok': True, 'script': host_scripts.save_script(body())})
+            except Exception as exc:
+                return _host_refusal(exc)
+        return jsonify({'ok': True, 'scripts': host_scripts.all_scripts()})
 
     @blueprint.get('/python/scripts/<script_id>')
     def python_script(script_id):
-        row = manager.workspace(account()).get_script(account(), script_id)
+        from services import python_scripts as host_scripts
+
+        row = host_scripts.get_script(script_id)
         if not row:
-            return jsonify({'ok': False, 'error': 'not found'}), 404
+            return jsonify({'ok': False, 'error': 'not found', 'key': 'ai.pythonUnknown'}), 404
         return jsonify({'ok': True, 'script': row})
 
     @blueprint.post('/python/scripts/<script_id>/fork')
     def fork_script(script_id):
+        from services import python_scripts as host_scripts
+
+        refusal = _machine_refusal()
+        if refusal is not None:
+            return refusal
+        payload = body()
         try:
-            return jsonify({'ok': True, 'script': manager.workspace(account()).fork_script(account(), script_id)})
-        except WorkspaceError as exc:
-            return _error(exc)
+            return jsonify(
+                {
+                    'ok': True,
+                    'script': host_scripts.fork_script(
+                        script_id, str(payload.get('id') or ''), bool(payload.get('overwrite'))
+                    ),
+                }
+            )
+        except Exception as exc:
+            return _host_refusal(exc)
 
     @blueprint.delete('/python/scripts/<script_id>')
     def delete_script(script_id):
-        return jsonify({'ok': manager.workspace(account()).delete_script(account(), script_id)})
+        from services import python_scripts as host_scripts
+
+        refusal = _machine_refusal()
+        if refusal is not None:
+            return refusal
+        try:
+            return jsonify({'ok': True, 'deleted': host_scripts.delete_script(script_id)})
+        except Exception as exc:
+            return _host_refusal(exc)
 
     @blueprint.post('/python/run')
     def python_run():
+        from services import python_runtime as host_runtime
+        from services import python_scripts as host_scripts
+
         payload = body()
+        script = host_scripts.get_script(str(payload.get('script_id') or '')) if payload.get('script_id') else None
+        inline = str(payload.get('code') or '').strip()
+        if inline:
+            refusal = _machine_refusal()
+            if refusal is not None:
+                return refusal
+        code = str(inline or (script or {}).get('code') or '')
+        if not code:
+            return jsonify({'ok': False, 'error': 'no script/code', 'key': 'ai.pythonUnknown'}), 400
         try:
-            result = manager.workspace(account()).tools.execute(
-                'python_run',
-                payload,
-                {'account': account(), 'conversation_id': str(payload.get('conversation_id') or '')},
+            result = host_runtime.run_code(
+                code,
+                payload.get('rows') if isinstance(payload.get('rows'), list) else [],
+                payload.get('args') if isinstance(payload.get('args'), dict) else {},
+                timeout=_int_arg(payload.get('timeout'), 120, 1, 3600),
+                max_rows=_int_arg(payload.get('max_rows'), 1000, 1, host_runtime.MAX_OUTPUT_ROWS),
+                label=str((script or {}).get('name') or 'inline'),
             )
-            return jsonify({'ok': True, **result})
-        except WorkspaceError as exc:
-            return _error(exc)
+        except Exception as exc:
+            return _host_refusal(exc)
+        if not result['wrote_output']:
+            return jsonify({'ok': False, 'error': 'script wrote no output', 'key': 'ai.pythonNoOutput'}), 400
+        return jsonify(
+            {
+                'ok': True,
+                'rows': len(result['rows']),
+                'sample': result['rows'][:20],
+                'stdout': result['stdout'],
+                'stderr': result['stderr'],
+                'duration_ms': result['duration_ms'],
+                'interpreter': result['interpreter'],
+                'truncated': result['truncated'],
+            }
+        )
 
     # ── host domain: workspace folder, previews, chart, rerun ─────────────────
 

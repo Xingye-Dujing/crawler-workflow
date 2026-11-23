@@ -282,7 +282,7 @@ async function refreshAPIProviderModels() {
     if (btn) btn.disabled = true;
     try {
         const key = (LLMSettings.load()[provider] || {}).api_key || '';
-        const resp = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/models', {
+        const resp = await fetch('/api/ai/ws/providers/' + encodeURIComponent(provider) + '/models', {
             headers: { 'X-Provider-Key': key },
         });
         const result = await resp.json();
