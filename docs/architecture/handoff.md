@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`c6d392d7 功能更新：框架 0.1.14（OTel trace）`；框架仓库 `5f99f6a`
+- 最后提交：`13d9937 功能更新：结构化输出能力声明`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -66,6 +66,7 @@
 | `2511b09` | 框架 0.1.12（F10）：附件接缝（宿主抽取文本/内联图片，框架按能力路由）；修复用户消息在每次 provider 请求中被重复追加 |
 | `e2a60b3` | 框架 0.1.13（F11）：`ArtifactRegistry` + HostAdapter 校验/预览声明；提案与 apply 各校验一次，未声明 kind 标 `unvalidated` |
 | `5f99f6a` | 框架 0.1.14（F14）：`agent_traces` OTel GenAI span + trace 树；best-effort、无正文 |
+| `13d9937` | 框架 0.1.15（F15）：`structured_output` 能力 + `output_schema`；OpenAI 兼容映射 `response_format`，未声明按名拒绝 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
 | `3708da31` | wheel 0.1.13；rewrite-plan 勾选 F11；handoff/README 记录第十一片，下一步 F14 |
 | `aa8bb1af` | wheel 0.1.12；rewrite-plan 勾选 F10；handoff/README 记录第十片，下一步 F11 |
@@ -414,6 +415,14 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第十三片：结构化输出能力（2026-11-23，框架 0.1.15）
+
+- `ChatRequest.output_schema`：只有声明 `structured_output` 的供应商会收到；OpenAI 兼容传输映射为
+  `response_format={'type':'json_schema', …}`，未声明的按 `capability.refused` 拒绝（不拿散文冒充结构化结果）。
+- `thinking` 继续同一规则；Ollama 不声明 `structured_output`，其 `think:false` 行为保持不变。
+- 测试：声明者收到 schema、未声明者按名拒绝、OpenAI 传输映射、thinking 拒绝、Ollama 不声明；210 条全绿。
+- 下一片：F16 并发 → F18 命令/压缩。
+
 ## P4.0 第十二片：OTel GenAI trace（2026-11-23，框架 0.1.14）
 
 - `agent_traces`：每次 provider 调用与每次工具调用一行；属性用 `gen_ai.system`/`gen_ai.request.model`/
@@ -593,7 +602,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第十三片**：F15（供应商能力）→ F16（并发）→ F18（命令/压缩）。
+8. **下一步：P4.0 第十四片**：F16（并发）→ F18（命令/压缩）。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 

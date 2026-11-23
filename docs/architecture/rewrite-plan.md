@@ -152,7 +152,8 @@
   校验一次，失败按 `artifact.invalid` 拒绝；未声明 kind 标记 `unvalidated`；预览失败不影响呈现（框架 0.1.13）
 - [x] **F14 OTel GenAI trace**：`agent_traces`（provider/工具 span，`gen_ai.*` 属性、状态、耗时）；工具挂在发起它的
   provider span 下；`traces`/`trace_tree`/`/turns/<id>/trace`；写入 best-effort，无正文（框架 0.1.14）
-- [ ] **F15 结构化输出 / thinking 控制**：能力声明 + 不支持按名拒绝；Ollama `think:false` 保持——框架
+- [x] **F15 供应商能力**：`structured_output` 能力 + `ChatRequest.output_schema`；OpenAI 兼容传输映射
+  `response_format`，未声明按 `capability.refused` 拒绝；`thinking` 同规则；Ollama 的 `think:false` 保持（框架 0.1.15）
 - [ ] **F16 LLM 行任务并发与限流**：一轮内工具调用仍有序——框架
 - [ ] **F18 命令与压缩**：通用命令注册表；框架提供 `/status` `/skills` `/mode` `/compact`（上下文压缩）；
   **`/init` 等认识宿主项目的命令由 host 注册**——框架
