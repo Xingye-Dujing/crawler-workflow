@@ -55,6 +55,18 @@ backend/capabilities_kernel/
 
 调用方与样本相同：诊断路由、`/api/workflow/validate` 与运行门；`WorkflowEngine` 不打开数据库。读 store 失败只丢“记录的形状”，声明契约仍然生效（`run.schemaReadFailed`）。前端不再持有 `reads` 或做差集：它只渲染 `validation.perNode`，缺列徽章因此只有一个来源。
 
+## 运行后数据质量断言
+
+`Manifest.postcheck='module:function'` 是 `preflight` 的对侧：它在节点**结算为 DONE 之后**收到
+`postcheck(node, rows, inputs)`——本次真正产出的行、以及它真正收到的上游表。适合静态契约看不到的事实（“这次输出真的非空”“写出的列不是整列空白”）。
+
+- 运行循环在打印“节点完成”之后调用 `engine.run._postcheck_node`；每条 finding 都经 `t(message_key, nid, **context)` 打一行控制台（`add_log`），并随运行日志持久化。
+- **只上控制台，不改状态**：行已经产出并存好，质量结论不能让一个完成的节点变成失败；下游该跳过仍跳过。钩子抛错/返回畸形报 `engine.postcheck_failed`，不打断运行。
+- 目前唯一的使用者是 `analysis`：非空输入产出 0 行时报 `engine.empty_output`（warning）；含
+  `filter_rows`/`join_tables`/`anti_join` 的流水线豁免——0 行就是用户要的答案；输入为空由运行循环按“跳过”处理。
+- 与 `preflight` 一样，`problems()` 拒绝不是 `module:function` 的引用，`doctor.py` 打一行 `postcheck`，
+  生成矩阵与完整性门禁同步枚举。
+
 ## 表单：清单选择渲染器，不选择分支
 
 `Ui.form='schema'` 的节点由前端通用渲染器按 `params` 逐个画控件；这类清单的每个参数必须声明 `label_key`（`problems()` 按名拒绝），可选 `placeholder_key`/`description_key`，`Ui.hint_key` 是表头说明。`Ui.form='custom'` 必须声明 `custom_renderer`，实现该表单的模块用 `registerSettingsRenderer('<id>', {html, mounted})` 注册；`openSettings()` 只做一次 `settingsRenderer(node.type)` 分派，不含节点类型 if 链。清单点名了没人注册的渲染器、目录未加载、或目录不认识该类型，面板都按名拒绝（`settings.noRenderer`/`noCatalogue`/`unknownType`），不画空表单。`reusable` 不是能力（表单来自模板快照），以自身类型名注册。

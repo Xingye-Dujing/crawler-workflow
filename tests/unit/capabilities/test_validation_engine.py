@@ -319,3 +319,35 @@ class TestTheColumnContract:
             self._with_reads(''), {'id': 'c', 'type': 'compile'}, _context(), columns={'p': []}
         )
         assert found == []
+
+
+class TestThePostcheck:
+    """The optional after-run hook: findings are data, and a broken hook is its own named line."""
+
+    @staticmethod
+    def _with_hook(reference='fake.postcheck:check'):
+        return replace(_manifest(), validators=(), postcheck=reference)
+
+    def test_no_hook_means_no_check(self):
+        assert engine.postcheck_problems(_manifest(), {'id': 'c'}, [], [{'x': 1}]) == []
+
+    def test_findings_are_normalised(self, monkeypatch):
+        def handler(_node, _rows, _inputs):
+            return [{'code': 'x.empty', 'message_key': 'x.empty', 'severity': 'warning', 'context': {'n': 0}}]
+
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: handler)
+        found = engine.postcheck_problems(self._with_hook(), {'id': 'c'}, [], [{'x': 1}])
+        assert [(problem['code'], problem['severity'], problem['context']) for problem in found] == [
+            ('x.empty', 'warning', {'n': 0})
+        ]
+
+    def test_a_raising_hook_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: (_ for _ in ()).throw(RuntimeError('boom')))
+        found = engine.postcheck_problems(self._with_hook(), {'id': 'c'}, [], [{'x': 1}])
+        assert [problem['code'] for problem in found] == ['engine.postcheck_failed']
+        assert found[0]['context']['ref'] == 'fake.postcheck:check'
+
+    def test_a_malformed_finding_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: lambda _node, _rows, _inputs: [{'code': 'x'}])
+        found = engine.postcheck_problems(self._with_hook(), {'id': 'c'}, [], [])
+        assert [problem['code'] for problem in found] == ['engine.postcheck_failed']

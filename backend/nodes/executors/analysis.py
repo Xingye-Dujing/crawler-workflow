@@ -201,6 +201,36 @@ def read_columns(node: dict) -> list[str]:
     return [c for c in found if c]
 
 
+#: Steps that may legitimately empty a table: a filter that matches nothing, a join/anti-join
+#: whose keys match nothing. The run's data check stays silent for a chain containing one of them —
+#: zero rows there is the answer the user asked for, not an anomaly.
+EMPTY_BY_DESIGN = frozenset({'filter_rows', 'join_tables', 'anti_join'})
+
+
+def postcheck(node: dict, rows: list, inputs: list) -> list[dict]:
+    """The run's own data check: a pipeline that produced nothing from a non-empty table.
+
+    The preflight has to judge a SAMPLE of the upstream; this hook runs once the node has actually
+    produced its rows. Zero rows from a non-empty input is the silent-empty failure — the node
+    settles DONE, the console says completed, and everything downstream skips as “upstream empty”.
+    A pipeline that filters or joins is exempt (zero rows there is the answer, not an anomaly), and
+    an empty input is already reported by the run loop as skipped.
+    """
+    if rows or not inputs:
+        return []
+    ops = [str(step.get('op') or '') for step in _steps_of(node_params(node))]
+    if any(op in EMPTY_BY_DESIGN for op in ops):
+        return []
+    return [
+        {
+            'code': 'engine.empty_output',
+            'message_key': 'engine.empty_output',
+            'severity': 'warning',
+            'context': {'rows': len(inputs), 'op': ops[-1] if ops else str(node.get('type') or '')},
+        },
+    ]
+
+
 def _param_steps(params: dict) -> list[tuple[str, dict]]:
     """The (op, canonical kwargs) pairs the parameter check asks, one per step.
 

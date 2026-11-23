@@ -10,7 +10,7 @@ A validator that raises or returns a malformed problem becomes a named
 ``engine.validator_failed`` problem instead of a 500 from ``/api/workflow/diagnostics``: the plugin
 bug stays visible, and the canvas keeps its other badges. A problem may carry a mechanical ``fix``
 (``{'set': {param: value}}``) that the settings panel applies in one click; preflight (a sample of
-upstream rows) and data-contract checks build on the same entry shape.
+upstream rows), the column contract and the after-run ``postcheck`` build on the same entry shape.
 """
 
 from __future__ import annotations
@@ -212,6 +212,20 @@ def _hook_problems(reference: str, *args, failure_code: str = 'engine.validator_
         else:
             found.append(normalized)
     return found
+
+
+def postcheck_problems(manifest, node: dict, rows: list, inputs: list) -> list[dict]:
+    """The capability's own after-run data check (optional), or the named failure that stopped it.
+
+    Runs once a node settles DONE, on the rows it really produced and the table it really received —
+    the counterpart of ``preflight``, which has to judge a sample before the run. A finding is
+    advisory (the console words it; the node's status is not touched), so a broken hook can only
+    cost its own line: it is reported as ``engine.postcheck_failed`` rather than raising into the
+    run loop.
+    """
+    if not manifest.postcheck:
+        return []
+    return _hook_problems(manifest.postcheck, node, rows, inputs, failure_code='engine.postcheck_failed')
 
 
 def validation_problems(

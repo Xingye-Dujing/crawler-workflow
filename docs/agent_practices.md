@@ -214,6 +214,10 @@
   `services.validation.contracts` 记录优先、`emit_columns` 兜底，引擎按清单的 `ports.read_columns` 报
   `engine.missing_column`；任一上游未知就沉默。前端只渲染 `validation.perNode`——一份 `reads × columns` 的 JS 差集
   会在服务端已经有答案时再造一个会漂移的判官。
+  **运行后才知道的质量事实由能力的 `postcheck` 说出来，而且不能改状态**：`postcheck(node, rows, inputs)` 在节点
+  DONE 之后运行，只打一行控制台（`engine.empty_output` 这类 warning）；行已经产出并存好，把完成节点改成失败既救不回
+  数据，又会让 继续 重跑一遍。哪些 0 行是用户要的答案（`filter_rows`/`join_tables`/`anti_join`）必须写在能力自己的
+  钩子里，共享层不猜。
 - **能力必须有入口，入口必须是注册表算出来的。** `ai.coverage` 不手写清单：节点来自 `nodes.catalog`，平台模式来自
   `capabilities.registry`，算子/图表来自各自的 `OPS`/`SPECS`，工具来自 `TOOLS` 与技能/通用集合的交集。新加一个节点或算子
   却没有任何 AI 入口时，`tests/unit/gates/test_ai_coverage.py` 直接红；这条门禁还能反向失败（测试里清空技能列表会报

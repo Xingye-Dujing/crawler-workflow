@@ -209,6 +209,32 @@ class TestRefusalsFailTheNode:
         assert '根本没这列' in (nodes['node-2']['error'] or '')
 
 
+class TestTheAfterRunDataCheck:
+    """A completed node whose data quality is suspicious says so, without changing its status.
+
+    Zero rows from a non-empty input is the silent-empty failure: the node settles DONE, the
+    console says completed, and every downstream node complains “上游没有数据” about itself.
+    """
+
+    def test_a_pipeline_that_empties_a_non_empty_table_is_named(self, client, app_module, paste):
+        ds = paste([{'正文': ''}, {'正文': ''}], name='blank.csv')
+        workflow = _wf(
+            [
+                _node('node-1', 'upload', {'dataset_id': ds, 'row_count': 2}),
+                _node('node-2', 'analysis', {'operation': 'drop_null', 'columns': '正文'}),
+            ],
+            [{'from': 'node-1', 'to': 'node-2'}],
+        )
+        started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'emptied'})
+        assert started.get_json()['ok'] is True
+        assert _wait(app_module)
+        nodes = app_module._RUN_STORE.node_statuses(started.get_json()['run_id'])
+        assert nodes['node-2']['status'] == 'done', 'a quality finding never changes the status'
+        assert int(nodes['node-2']['row_count'] or 0) == 0
+        logs = client.get('/api/workflow/status').get_json()['logs']
+        assert any('drop_null' in line for line in logs), f'the empty output was never named: {logs}'
+
+
 class TestABrowserThatWasRefused:
     """A browser the machine could not bring up is a failed node with that sentence.
 

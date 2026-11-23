@@ -46,6 +46,7 @@ MANIFEST = Manifest(
     ),
     execution=Execution(handler='nodes.executors.analysis:run'),
     validators=('nodes.executors.analysis:validate_node',),
+    postcheck='nodes.executors.analysis:postcheck',
     ui=Ui(form='custom', custom_renderer='analysis'),
     ai=Ai(
         summary=(

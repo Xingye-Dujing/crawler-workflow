@@ -44,6 +44,7 @@ class TestTheDeclaration:
         assert registry.resolve(manifest.ports.read_columns) is executor.read_columns
         assert registry.resolve(manifest.execution.handler) is executor.run
         assert registry.resolve(manifest.validators[0]) is executor.validate_node
+        assert registry.resolve(manifest.postcheck) is executor.postcheck
 
     def test_the_page_and_contract_exist(self):
         manifest = _manifest()

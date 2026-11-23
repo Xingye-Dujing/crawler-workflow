@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "ebac43fd0f92849843a3cf33c0d263e8f733b16623aedfe65257cc0e2a371fcf",
+      "digest": "8a9b336329eab3f9e2374df9c4fd18597904410b288f1af1c37ff1149329105c",
       "manifest": {
         "identity": {
           "id": "name",
@@ -82,6 +82,7 @@
         ],
         "validators": [],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "schema",
           "custom_renderer": "",
@@ -127,7 +128,7 @@
     {
       "kind": "node",
       "id": "source",
-      "digest": "c69c952bc49ebf60b25012d8594dbc94f0dc9b2ac5082a6334ec0b05c2c95ee4",
+      "digest": "730c2fd582d30da555703a87581146813a1a0e64328ab08657fa3e5fc9a16645",
       "manifest": {
         "identity": {
           "id": "source",
@@ -155,6 +156,7 @@
           "nodes.executors.source:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "source",
@@ -204,7 +206,7 @@
     {
       "kind": "node",
       "id": "upload",
-      "digest": "b019d1ad5bc6212cf42f1cf1c412a63ebe238fab073a3afdf5c9dba9950b6b8d",
+      "digest": "f442fa6eb986157defbe28dd298c0d6511964f74cc34c175a7ef4b72f4196dda",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -281,6 +283,7 @@
         ],
         "validators": [],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "upload",
@@ -326,7 +329,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "d14875d5035a2aeb58f5562773c6ddcf455dee32df8cfde70bacdc0a4e900bba",
+      "digest": "8b31d1809719e8b48d1798e73f80b3beaae08d7570fa079577f2b69c7d0a6ace",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -395,6 +398,7 @@
         "rules": [],
         "validators": [],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "resume",
@@ -440,7 +444,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "c107cabc199318ddab56040f0a56a93cb87b36abf89c6aa5874b621bd6ad8564",
+      "digest": "f03a3798872df25f816121f0d3fd02fdb6b5280f373d7d5b82d5aee79e634e02",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -578,6 +582,7 @@
           "nodes.executors.comment:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "comment",
@@ -629,7 +634,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "68f960d82fa0ebf8ce29c06a3502f17d392f74cd4e7f205cf5bb3f5240bb3058",
+      "digest": "dd7cc96af8ec15d66e68275f60cd4a7ed7dae4bf1a289e90f3879732fea6332c",
       "manifest": {
         "identity": {
           "id": "process",
@@ -745,6 +750,7 @@
           "nodes.executors.process:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "process",
@@ -799,7 +805,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "9cf3ae19a167e8e8508de4ca11aece2cff33d4259079b95b0e54b6c92b5587c3",
+      "digest": "8c7f74e8e77e8ef9a3904b11fe7582abaed60db4ca5adabe11ede817cb1f14ce",
       "manifest": {
         "identity": {
           "id": "python",
@@ -882,6 +888,7 @@
         "rules": [],
         "validators": [],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "python",
@@ -929,7 +936,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "f0cfdb562ac757b875633e2c0ef3ed09bb2ff5ec3d426f05202ce01c7800615f",
+      "digest": "773537859aa10895f5196bde8ad1618470e0b798c3bc42e7acd04f96298d401c",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -1070,6 +1077,7 @@
           "nodes.executors.analysis:validate_node"
         ],
         "preflight": "",
+        "postcheck": "nodes.executors.analysis:postcheck",
         "ui": {
           "form": "custom",
           "custom_renderer": "analysis",
@@ -1115,7 +1123,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "60cec6b9ed1c3698d9a8b885189a9134cae08805e01548e7e2a937c43317ccee",
+      "digest": "7dcaf4f2f4374b930c820849663ba251f65d20b12dd6fa6e7196dc82aaaf8409",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1196,6 +1204,7 @@
         ],
         "validators": [],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "tokenize",
@@ -1242,7 +1251,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "61969179a3f231fa2a63aebb64f2f5d79151596ff15da88199d7965c8697bd64",
+      "digest": "569c5954fe3502cee8c38d4f00c325db8c6486d01d871327c5396cd7d7bf134f",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -2114,6 +2123,7 @@
           "nodes.executors.biblio:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "biblio",
@@ -2170,7 +2180,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "408073068d1430d36f8cc1f6a4bd3ac3d61cf58e75e4a0961a6e0e2f628260fa",
+      "digest": "1b9b1fa7f51d727025499dc79437ee6d944ba55a3d399297333f3248fa73cd50",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -2328,6 +2338,7 @@
           "nodes.executors.verify:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "verify",
@@ -2375,7 +2386,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "f8ebebb85d676807e626745d7f4cd6093bcd7dd364e0d6f384ae37acf3068920",
+      "digest": "8a88cd42884c1c0d9984478488ed52cd51e3da552377325fb9ee0e435174e588",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2566,6 +2577,7 @@
           "nodes.executors.fuse:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "fuse",
@@ -2612,7 +2624,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "64f8ed065601115869149519244e2ae7bf457e57d9772971a6756719f9daef95",
+      "digest": "fdd2c0506c84c8f0b4e1339d8b94e5d74cff03909bbac9534af63b0bc86cd0bc",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2686,6 +2698,7 @@
           "nodes.executors.accumulate:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "accumulate",
@@ -2732,7 +2745,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "a63879d3c9c1e8c1f926118934324c4e11122e960297f1436f26110d639bb0a0",
+      "digest": "35934eeabbdc6c05bf6052108e76d08bcc904c85cf0357e0b8324e0b783b50ed",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -2901,6 +2914,7 @@
           "nodes.executors.visualize:validate_node"
         ],
         "preflight": "nodes.executors.visualize:preflight",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "visualize",
@@ -2948,7 +2962,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "b2ade0789296e2c80d470768e14077ea589c748d37d052764bbe42959d378f01",
+      "digest": "bd52190386f5f21a6b3fcf5c4befbfbd0c9e1dc907d01e6bc3d2699452df6271",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -2976,6 +2990,7 @@
           "nodes.executors.compile:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "schema",
           "custom_renderer": "",
@@ -3018,7 +3033,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "d86e1bc07a01a0a4ba505eda7dee096b9f03e0c30418456d3d1073dade303c12",
+      "digest": "bfcbfc57ebce95f6d3964175cb8ce4835a237039aa43b1a10eaaafa77db56e34",
       "manifest": {
         "identity": {
           "id": "output",
@@ -3089,6 +3104,7 @@
           "nodes.executors.output:validate_node"
         ],
         "preflight": "",
+        "postcheck": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "output",
@@ -3145,6 +3161,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3163,6 +3180,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3181,6 +3199,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3199,6 +3218,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3217,6 +3237,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3235,6 +3256,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3253,6 +3275,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3271,6 +3294,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3289,6 +3313,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3307,6 +3332,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3325,6 +3351,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3343,6 +3370,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3361,6 +3389,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3379,6 +3408,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3397,6 +3427,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"
@@ -3415,6 +3446,7 @@
         "port_hooks",
         "validators",
         "preflight",
+        "postcheck",
         "docs",
         "contracts",
         "title_keys"

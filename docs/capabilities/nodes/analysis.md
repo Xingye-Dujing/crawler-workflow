@@ -26,6 +26,9 @@
 - `engine.analysis_no_op`：既没有 `steps` 也没有 `operation`。
 - `emit_columns`/`read_columns`：由执行器按 `steps` 回答；未枚举的算子回答“未知”，不猜形状。
 - 缺失的输入列会在 `validate_step` 阶段按名拒绝。
+- **运行后数据检查**（`postcheck`）：流水线从非空输入产出 **0 行**时，控制台按名报
+  `engine.empty_output`（warning，不改变节点状态）。含 `filter_rows`/`join_tables`/`anti_join` 的流水线豁免——
+  这些步骤产出 0 行就是用户要的答案。输入本身为空时由运行循环按“跳过”处理，不在这里重复。
 
 ## 典型画布
 

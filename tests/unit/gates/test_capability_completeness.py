@@ -61,6 +61,11 @@ class TestAManifestIsWhole:
         if manifest.preflight:
             assert callable(registry.resolve(manifest.preflight)), manifest.preflight
 
+    def test_the_declared_postcheck_resolves(self, manifest):
+        """The after-run check is optional too, and the same typo would silence it."""
+        if manifest.postcheck:
+            assert callable(registry.resolve(manifest.postcheck)), manifest.postcheck
+
     def test_the_documented_page_and_contract_tests_exist(self, manifest):
         if manifest.docs.page:
             assert (REPO / manifest.docs.page).is_file(), manifest.docs.page

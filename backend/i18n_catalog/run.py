@@ -88,6 +88,8 @@ ZH = {
     'engine.missing_column': '节点 {nid}：输入表没有它要读的列：{columns}',
     'engine.chart_column_not_numeric': '节点 {nid}：{chart}把“{column}”当数值列，但样本里这一列没有任何数值',
     'engine.preflight_failed': '节点 {nid}：数据预检“{ref}”失败（{err}）',
+    'engine.postcheck_failed': '节点 {nid}：数据质量检查“{ref}”失败（{err}）',
+    'engine.empty_output': '节点 {nid}：步骤链（最后一步 {op}）从 {rows} 行输入产出了 0 行',
     'engine.read_columns_failed': '节点 {nid}：读取列契约“{ref}”失败（{err}）',
     'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与“重新采集”不能同时开启',
     'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
@@ -565,6 +567,8 @@ EN = {
         'Node {nid}: the {chart} reads "{column}" as numbers, but the sample holds no number in it'
     ),
     'engine.preflight_failed': 'Node {nid}: the data preflight "{ref}" failed ({err})',
+    'engine.postcheck_failed': 'Node {nid}: the data-quality check "{ref}" failed ({err})',
+    'engine.empty_output': 'Node {nid}: the step chain (last step {op}) produced 0 rows from {rows} input row(s)',
     'engine.read_columns_failed': 'Node {nid}: reading the column contract "{ref}" failed ({err})',
     'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
     'engine.watermarkUnsupported': 'Node {nid}: cross-run watermark supports only Bilibili author uploads',

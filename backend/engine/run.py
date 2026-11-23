@@ -669,6 +669,7 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
                     t('wf.node_completed', wf=wf_name, nid=label, done=done, total=planned),
                     wf_idx=wf_idx,
                 )
+            _postcheck_node(node, result, primary, label, wf_idx)
     return results
 
 
@@ -1073,6 +1074,30 @@ def _contract_columns(workflow: dict) -> dict:
     except Exception:  # the contract is evidence; the run gate keeps its static verdicts
         logger.exception(t('run.schemaReadFailed'))
         return {}
+
+
+def _postcheck_node(node: dict, rows, inputs, label: str, wf_idx: int):
+    """Run the capability's optional after-run data check and print one line per finding.
+
+    Advisory by design: the node's rows are already produced and stored, so a quality finding never
+    changes its status — it turns a silent empty output into a named console line. A broken hook is
+    its own named line, never an exception into the run loop.
+    """
+    from capabilities_kernel.registry import manifest_for_node
+
+    from services.validation.engine import postcheck_problems
+
+    manifest = manifest_for_node(str(node.get('type') or ''))
+    if manifest is None or not manifest.postcheck:
+        return
+    found = postcheck_problems(
+        manifest,
+        node,
+        rows if isinstance(rows, list) else [],
+        inputs if isinstance(inputs, list) else [],
+    )
+    for problem in found:
+        add_log(t(problem['message_key'], nid=label, **problem['context']), wf_idx=wf_idx)
 
 
 def _run_worker(

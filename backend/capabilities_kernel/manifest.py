@@ -196,6 +196,11 @@ class Manifest:
     #: ``preflight(node, sample)``). One ``module:function``, optional: a capability whose contract
     #: cannot be proved from rows declares none, and a node with no stored sample is never called.
     preflight: str = ''
+    #: An after-run data check, optional: ``module:function`` called as ``postcheck(node, rows,
+    #: inputs)`` once the node settles DONE. It answers what only this run's output can: it really
+    #: produced rows, and the columns it wrote are not blank everywhere. Findings are advisory (a
+    #: warning line on the console); they never change the node's status.
+    postcheck: str = ''
     ui: Ui = field(default_factory=Ui)
     ai: Ai = field(default_factory=Ai)
     tests: Tests = field(default_factory=Tests)
@@ -296,6 +301,9 @@ class Manifest:
 
         if self.preflight and ':' not in self.preflight:
             found.append(f'preflight: {self.preflight!r} is not module:function')
+
+        if self.postcheck and ':' not in self.postcheck:
+            found.append(f'postcheck: {self.postcheck!r} is not module:function')
 
         if self.ui.form not in _UI_FORMS:
             found.append(f'ui.form: {self.ui.form!r} is not one of {", ".join(_UI_FORMS)}')

@@ -203,6 +203,26 @@
 - 第三片把缺列判定移到数据契约（`engine.missing_column`），`engine.chart_column_missing` 已删除；样本只保留
   “数值列没有数字”的值检查。
 
+## P3 第四片：运行后数据质量断言（2026-11-23）
+
+- `Manifest.postcheck='module:function'`（可选）：节点结算为 DONE 后调用 `postcheck(node, rows, inputs)`——
+  本次真正产出的行 + 真正收到的上游表。`problems()` 拒绝非 `module:function` 引用；`doctor.py` 增一行
+  `postcheck`，`generate.MATRIX_CHECKS` 与完整性门禁同步枚举。
+- `services.validation.engine.postcheck_problems` 复用 validator 的归一化与坏钩子处理；钩子抛错报
+  `engine.postcheck_failed`。运行循环在“节点完成”之后调用 `engine.run._postcheck_node`，每条 finding 走
+  `add_log(t(message_key, nid, **context))`，随运行日志持久化。
+- **只上控制台，不改状态**：行已经产出并存好，质量结论不能让完成节点变失败；下游该跳过仍跳过。
+- 第一个使用者 `analysis`：非空输入产出 **0 行**报 `engine.empty_output`（warning）；含
+  `filter_rows`/`join_tables`/`anti_join` 的流水线豁免（0 行是用户要的答案），输入为空由运行循环按“跳过”处理。
+- 测试：`tests/unit/analysis/test_analysis_postcheck.py`（0 行/扁平与 steps 形状/豁免/非空/空输入）；
+  `tests/unit/runs/test_run_postcheck.py`（每个 finding 一行、无钩子不打印、未知类型、dict 结果按无行）；
+  `tests/unit/capabilities/test_validation_engine.py::TestThePostcheck`（归一化/坏钩子/畸形结果）；
+  `test_analysis_manifest.py` 钉钩子身份；`tests/api/test_nodes_execution.py::TestTheAfterRunDataCheck`
+  端到端：`drop_null` 把全空列清成 0 行，节点仍 done、控制台出现 `drop_null` 的警告行。
+- 本片验证：全量快测 `11173 passed, 7 skipped, 386 deselected`；设备层 `215 passed, 5 skipped`；ruff 全绿；
+  product/tests pylint `10.00/10`；`gen_capabilities.py --check`、`doctor.py --all` 全绿；端到端 API 用例
+  （`drop_null` 清空全空列）证明节点仍 done、控制台出现警告行。
+
 ## P3 第三片：数据契约（2026-11-23）
 
 - 生产者结算时记录真实输出形状：`run_store.finish_node(..., schema=rows)` 把列并集写进新表 `node_schema`

@@ -71,6 +71,17 @@ def capability_rows(manifest, root: Path = ROOT) -> list[dict]:
             preflight_detail = f'{manifest.preflight}: {exc}'
     rows.append(_row('preflight', preflight_ok, preflight_detail))
 
+    postcheck_ok = True
+    postcheck_detail = 'not declared'
+    if manifest.postcheck:
+        try:
+            postcheck_ok = callable(registry.resolve(manifest.postcheck))
+            postcheck_detail = '' if postcheck_ok else f'{manifest.postcheck} is not callable'
+        except Exception as exc:
+            postcheck_ok = False
+            postcheck_detail = f'{manifest.postcheck}: {exc}'
+    rows.append(_row('postcheck', postcheck_ok, postcheck_detail))
+
     page = manifest.docs.page
     page_ok = bool(page) and (root / page).is_file()
     rows.append(_row('docs', page_ok, page or 'no docs.page'))
