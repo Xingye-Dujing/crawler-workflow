@@ -138,8 +138,10 @@
 - [x] **F6 权限/审批策略引擎**：`ToolSpec.always_ask` + `policy.PolicyEngine`；`mutating` 在 auto 关闭时确认，
   `always_ask`（删除/覆盖/资源授权）永远确认且不接受 session 授权（框架 0.1.6）
 - [ ] **F7 限制语义 0=不限 + usage meter**：跟随模型窗口与用户设置；真实占用可读——框架
-- [ ] **F12 run/step 记录 + 崩溃恢复幂等**：`agent_runs`/`agent_steps`；同一 `tool_use` 不重复执行——框架
-- [ ] **F13 注册收口**：`host.tools()` 初始化即注册；id 冲突按名拒绝；技能白名单过滤——框架
+- [x] **F12 工具步骤记录 + 幂等**：`agent_steps`（调用前 `running`、结束 `done`/`error` + 结果）；同一
+  `(turn_id, call_id)` 重放不重跑；崩溃遗留的 `running` 启动时标 `interrupted` 且不再执行（框架 0.1.7）
+- [x] **F13 注册收口**：`HostAdapter.tools()` 在构造时注册；与内置/控制/宿主工具重名按 `tool.builtinConflict`
+  拒绝；技能白名单仍过滤工具（框架 0.1.8）
 - [ ] **F8 多问题卡**：`questions[]`（≤5）通用 schema，答案按 `call_id` 回填——框架
 - [ ] **F9 plan/build 模式**：通用字段 + 工具遮罩，host 只提供模式文案——框架
 - [ ] **F10 attachment 接缝**：接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 三个能力位——框架

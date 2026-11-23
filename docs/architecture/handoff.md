@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`82a4a081 功能更新：框架 0.1.6（审批策略引擎）`；框架仓库 `57dd1c9`
+- 最后提交：`f21b5e8 功能更新：宿主工具启动即注册`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -58,6 +58,8 @@
 | `4c506e0` | 框架 0.1.5（ADR-003 第四片）：`steer` 安全边界插入指引；最后边界之后的指引进邮箱；`/steer` 路由 |
 | `57dd1c9` | 框架 0.1.6（F6）：`policy.PolicyEngine` + `ToolSpec.always_ask`；删除/覆盖/资源授权永远人批且不接受 session 授权 |
 | `82a4a081` | wheel 0.1.6；rewrite-plan 勾选 F6；handoff/README 记录第五片，下一步 F12 |
+| `f0283b8` | 框架 0.1.7（F12）：`agent_steps` 工具步骤 + 幂等重放；崩溃遗留 `running` 标 `interrupted` 且不再执行；`/turns/<id>/steps` |
+| `f21b5e8` | 框架 0.1.8（F13）：`HostAdapter.tools()` 构造时注册；重名按 `tool.builtinConflict` 拒绝 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
@@ -400,6 +402,17 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第六片：步骤幂等与注册收口（2026-11-23，框架 0.1.7/0.1.8）
+
+- **F12**：`agent_steps` 每次工具调用一行（`running` → `done`/`error` + 结果），覆盖普通工具与审批后的执行；
+  同一 `(turn_id, call_id)` 再次出现时重放记录，**不再执行**；启动把遗留 `running` 标为 `interrupted`
+  （`{'error': 'step.interrupted'}`），下一次同样不重跑。`steps(turn_id)` 与 `/turns/<id>/steps` 可读。
+  说明：框架的“run”就是 `turns` 行（一个生命周期对象，不新增第二张 run 表）；工作流 Run 仍是 host 域。
+- **F13**：`HostAdapter.tools()` 在 `AgentWorkspace` 构造时注册一次；与内置/控制工具或另一个宿主工具重名按
+  `tool.builtinConflict` 拒绝；技能白名单仍过滤工具。
+- 测试：步骤记录/重放/崩溃恢复、宿主工具注册/重名拒绝；框架 182 条全绿。
+- 下一片：F8 多问题卡 → F9 → F10 → F11 → F14 → F15 → F16 → F18 → F3。
+
 ## P4.0 第五片：审批策略（2026-11-23，框架 0.1.6）
 
 - `agent_workspace/policy.py` 的 `PolicyEngine.decide(spec, auto=)` 是唯一判断点：读工具不询问；`mutating`
@@ -510,7 +523,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第六片**：F12（`agent_runs`/`agent_steps` + 崩溃恢复幂等）→ F13（注册收口）→ F8/F9/F10/F11/F14/F15/F16/F18/F3。
+8. **下一步：P4.0 第七片**：F8（多问题卡）→ F9 → F10 → F11 → F14 → F15 → F16 → F18 → F3。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 
