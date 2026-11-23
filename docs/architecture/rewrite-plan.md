@@ -142,7 +142,8 @@
   `(turn_id, call_id)` 重放不重跑；崩溃遗留的 `running` 启动时标 `interrupted` 且不再执行（框架 0.1.7）
 - [x] **F13 注册收口**：`HostAdapter.tools()` 在构造时注册；与内置/控制/宿主工具重名按 `tool.builtinConflict`
   拒绝；技能白名单仍过滤工具（框架 0.1.8）
-- [ ] **F8 多问题卡**：`questions[]`（≤5）通用 schema，答案按 `call_id` 回填——框架
+- [x] **F8 多问题卡**：`ask_user_question` 接受 `questions[]`（1–5），一张卡一次答复；答案按同一 `call_id`
+  回填并与问题对齐；畸形/超限返回 `badArgs` 且写入结果；单问题旧形状兼容（框架 0.1.9）
 - [ ] **F9 plan/build 模式**：通用字段 + 工具遮罩，host 只提供模式文案——框架
 - [ ] **F10 attachment 接缝**：接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 三个能力位——框架
   （**抽取实现留在 host**，见 P4 接入）

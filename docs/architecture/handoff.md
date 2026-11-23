@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`06aa5735 功能更新：框架 0.1.8（步骤幂等、宿主工具注册）`；框架仓库 `f21b5e8`
+- 最后提交：`61d8952 功能更新：多问题卡（<=5）`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -60,6 +60,7 @@
 | `82a4a081` | wheel 0.1.6；rewrite-plan 勾选 F6；handoff/README 记录第五片，下一步 F12 |
 | `f0283b8` | 框架 0.1.7（F12）：`agent_steps` 工具步骤 + 幂等重放；崩溃遗留 `running` 标 `interrupted` 且不再执行；`/turns/<id>/steps` |
 | `f21b5e8` | 框架 0.1.8（F13）：`HostAdapter.tools()` 构造时注册；重名按 `tool.builtinConflict` 拒绝 |
+| `61d8952` | 框架 0.1.9（F8）：多问题卡 `questions[]`（1–5），一张卡一次答复，答案按 `call_id` 对齐 |
 | `06aa5735` | wheel 0.1.8（含 F12/F13）；rewrite-plan 勾选 F12/F13；handoff/README 记录第六片 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
@@ -403,6 +404,15 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第七片：多问题卡（2026-11-23，框架 0.1.9）
+
+- `ask_user_question` 接受 `questions[]`（1–5）；单问题仍走旧的 `question`/`options` 形状。
+- 多问题事件只带 `questions`（不伪装成单问题）；答案以与问题对齐的列表按同一 `call_id` 回填；长度不符报
+  `question.answersExpected`。
+- 畸形/超过 5 个返回 `badArgs`，并把错误结果写进转录——此前不写，会留下孤立 `tool_use`，现在由同一修复覆盖。
+- 测试：schema、单卡两问、成组回答、长度不符、六个问题；框架 187 条全绿。
+- 下一片：F9 plan/build → F10 → F11 → F14 → F15 → F16 → F18 → F3。
+
 ## P4.0 第六片：步骤幂等与注册收口（2026-11-23，框架 0.1.7/0.1.8）
 
 - **F12**：`agent_steps` 每次工具调用一行（`running` → `done`/`error` + 结果），覆盖普通工具与审批后的执行；
@@ -524,7 +534,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第七片**：F8（多问题卡）→ F9 → F10 → F11 → F14 → F15 → F16 → F18 → F3。
+8. **下一步：P4.0 第八片**：F9（plan/build 模式）→ F10 → F11 → F14 → F15 → F16 → F18 → F3。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 
