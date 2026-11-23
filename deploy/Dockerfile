@@ -49,14 +49,21 @@ ENV PYTHONUTF8=1
 ENV LANG=C.UTF-8
 
 WORKDIR /app
-COPY requirements.txt /app/backend/requirements.txt
+# The requirements file names the vendored agent-workspace wheel by a path RELATIVE TO THE
+# REPOSITORY ROOT (pip resolves such a path against the working directory), so the tree is copied
+# in that shape and the install runs from /app. Keeping only `requirements.txt` in the image is
+# enough for the runtime; the wheel has to travel with it.
+COPY requirements.txt /app/requirements.txt
+COPY vendor/ /app/vendor/
 COPY backend/ /app/backend/
-WORKDIR /app/backend
 
 # 项目 venv（AGENTS.md 强制要求 .venv，且不可使用系统 Python）
-RUN python -m venv .venv \
- && .venv/bin/pip install --no-cache-dir --upgrade pip \
- && .venv/bin/pip install --no-cache-dir --timeout 120 --retries 10 -i ${PIP_INDEX} -r requirements.txt
+RUN python -m venv /app/backend/.venv \
+ && cd /app \
+ && backend/.venv/bin/pip install --no-cache-dir --upgrade pip \
+ && backend/.venv/bin/pip install --no-cache-dir --timeout 120 --retries 10 -i ${PIP_INDEX} -r requirements.txt
+
+WORKDIR /app/backend
 
 ENV PATH="/app/backend/.venv/bin:$PATH"
 

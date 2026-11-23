@@ -10,6 +10,16 @@ flask==3.1.0
 werkzeug==3.1.8
 flask-cors==6.0.5
 requests==2.34.2
+# The agent-workspace framework (provider catalog, agent loop, tools, skills, plugins, approvals,
+# monitors) the AI workspace is being migrated onto. It has no index release, so the committed
+# wheel under vendor/ IS the pin: built from the framework checkout with
+#   python -m pip wheel --no-deps -w dist .
+# and committed byte-for-byte. A local checkout may be used instead with
+#   pip install -e <framework checkout>
+# which shadows the wheel in that venv. Install from the REPOSITORY ROOT: a relative path in a
+# requirements file resolves against the working directory, and
+# tests/unit/gates/test_requirements_pinned.py refuses a wheel whose file, name or metadata drifts.
+vendor/agent_workspace-0.1.0-py3-none-any.whl
 # Directly imported by tools/record_demo.py to close ONLY the browser processes the recorder opened.
 psutil==7.2.2
 websocket-client==1.9.0

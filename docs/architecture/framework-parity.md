@@ -48,6 +48,17 @@
 | codebooks / traces | host | 采析绘服务与路由 |
 | 对话区与设置/工作室共用一个列 | host（P5 迁移到框架 UI） | 采析绘现在是 `#ai-chat` 里的两个同级面：`#ai-transcript`（按 turn id 复用）与 `#ai-panel`；框架 UI 必须保留“面板不覆盖转录、转录按 turn_id 复用”的约定，不能回到整段重建 |
 
+## 依赖与钉版
+
+- 框架没有 index 发布：`vendor/agent_workspace-<version>-py3-none-any.whl` 是钉版产物，`requirements.txt`
+  用仓库根相对路径引用它。相对路径按**工作目录**解析，所以 `pip install -r requirements.txt` 必须从仓库根运行；
+  CI 如此，`deploy/Dockerfile` 也把 `requirements.txt` 和 `vendor/` 一起复制到 `/app` 后从那里安装。
+- 开发用框架检出：`pip install -e <framework checkout>` 在该 venv 里盖过 wheel；提交前以 wheel 为准。
+- 升版流程：框架改动 → 框架测试全绿 → 重建 wheel → **替换**同一文件（不新增第二个）→ 更新
+  `vendor/README.md` 的 sha256 → 本仓库重跑 AI 相关测试 → 提交。
+- 门禁 `tests/unit/gates/test_requirements_pinned.py` 保证文件名、METADATA 与声明三者一致，拒绝目录里未声明的
+  wheel，也拒绝同一发行版再被 `name==version` 钉一次。
+
 ## 迁移顺序
 
 1. 框架通用修复（pending 持久化、retry、event 协议、validator 接口、host.tools、max_tokens）。
