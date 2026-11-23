@@ -423,6 +423,20 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P5 前端切换已完成，旧蓝图删除待办（2026-11-23）
+
+- `ai-workspace.js` 引入 `AI_BASE='/api/ai/ws'`（47 处调用），`ai/studio.js`、`ai/watch.js`、`workflow.js`、
+  `llm-settings.js`、`panels/node-python.js` 全部改到新表面；前端不再调用旧 `/api/ai`。
+- 新表面在 host 边缘做 wire 映射：`text_delta→text`、`thinking_delta→thinking`、`tool_*` 的 id/ok、`citation`/
+  `server_tool` 的字段；`skill='auto'` 映射为框架默认。
+- Python 路由改走 `services.python_scripts` + `services.python_runtime`（画布与 AI 共用同一脚本库）。
+- 框架 0.1.21：bootstrap 用清单模型、不实时拉 `/models`（否则每次开面板都阻塞/离线不可用）。
+- 验证：frontend/AI/API **1971 passed**；实机 AI 面板用例 2 passed（本地模型真实回答 + 停止）。
+- **仍待（删除旧路径）**：`api/ai.py` 与 `backend/ai` 的 agent/store/costs/approvals/files/monitors 等已无前端调用，
+  但它们仍被自身测试覆盖（13 个 `tests/api/test_ai_*.py`）。删除前需把 host 域测试（validators/previews/
+  workflow_draft/vocabulary）改写成直接单测，引擎测试随模块一起删除；然后删蓝图、引擎与 `ai_workspace` 开关，
+  最后处理旧 `ai.db` 历史。
+
 ## P4 接入第五片：node trace 迁到框架 store（2026-11-23）
 
 - `services/llm_trace.py` 不再写旧 `ai.db`：会话、intro、追问、流式行、样本、结果全部进 `AgentWorkspace`
