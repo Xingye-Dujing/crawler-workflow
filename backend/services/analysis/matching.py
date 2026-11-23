@@ -29,27 +29,33 @@ import unicodedata
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import pandas as pd
+from capabilities_kernel import registry
+from capabilities_kernel.operator import enum_of
 
 from i18n import t
 from services.analysis.kernels import UnknownOperationError
 
-#: How two values are decided to be the same content. Ordered from strictest to loosest;
-#: ``trim`` is the default because it never merges two values a user would call different.
-MATCH_MODES = ('exact', 'trim', 'url', 'text', 'similar')
+#: How two values are decided to be the same content, declared by ``anti_join``'s manifest and
+#: shared with ``filter_rows``; ordered from strictest to loosest. ``trim`` is the default because it
+#: never merges two values a user would call different.
+MATCH_MODES = enum_of('anti_join', 'mode')
 
 #: The modes that answer a per-key COUNT as well as a yes/no. ``similar`` groups
 #: near-duplicates transitively, so it can say "covered" but cannot say "this article has
 #: N comments"; a step that must count (the verify node) refuses it by name.
-COUNT_MODES = ('exact', 'trim', 'url', 'text')
+COUNT_MODES = tuple(mode for mode in MATCH_MODES if mode != 'similar')
 
 #: What an anti-join keeps. ``exclude`` is the content de-dup (drop rows already present in
 #: the other table); ``keep`` is its mirror (semi-join).
-KEEP_MODES = ('exclude', 'keep')
+KEEP_MODES = enum_of('anti_join', 'keep')
 
-#: The two-table steps. They read the node's SECOND incoming connection as the other table,
-#: and a blank form cannot run them (there is nothing else to read) — which is why the
-#: blank-form safety sweep in the test suite must skip them rather than call them inert.
-STEP_TWO_TABLE = frozenset({'anti_join', 'join_tables'})
+#: The two-table steps, declared by their manifests. They read the node's SECOND incoming
+#: connection as the other table, and a blank form cannot run them (there is nothing else to read) —
+#: which is why the blank-form safety sweep in the test suite must skip them rather than call them
+#: inert.
+STEP_TWO_TABLE = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.reads.two_table_keys
+)
 
 #: Separator of a composite key (several columns compared as one). U+001F cannot occur in a
 #: crawled cell, so two different tuples can never join into the same key text.

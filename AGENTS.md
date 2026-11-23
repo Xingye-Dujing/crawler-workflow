@@ -53,7 +53,9 @@ a defect, not a shortcut.
   type's facts go in its manifest — never back into the shared tables. A manifest imports only the standard library
   and the kernel: `nodes.catalog` reads manifests while parsing a DAG, so pandas/Selenium here cost every start.
   All node types are migrated; `capabilities_kernel/nodes/tokenize/manifest.py` was the pilot (see
-  `docs/architecture/capabilities-kernel.md`).
+  `docs/architecture/capabilities-kernel.md`). Analysis operators are their own kind:
+  `capabilities_kernel/operators/<id>/manifest.py` declares the step's reads/writes/policy and the
+  analysis layer's tables (`STEP_PARAMS`, the write tables, `OPS`, `LLM_OPS`) are its projections.
   `tools/gen_capabilities.py` renders the five artifacts and `tools/doctor.py` prints the same checks; a manifest change
   without a re-render is a red freshness gate, never a stale catalog.
 - **Node types**: one capability manifest (`capabilities_kernel/nodes/<type>/manifest.py`, including its settings form)

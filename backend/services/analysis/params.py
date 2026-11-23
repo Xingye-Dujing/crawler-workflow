@@ -7,6 +7,7 @@ a step consumes, so a new field is declared once instead of in two shapes.
 """
 
 from api.http import _float_with_default, _optional_float, _optional_int
+from capabilities_kernel import registry
 from core.refs import as_bool
 from core.refs import split_columns as _split_columns
 
@@ -33,60 +34,19 @@ def apply_topic_method(result: dict, params: dict) -> dict:
 
 
 # ─── Column contract (what each step writes, what it reads) ───
-#: Steps that emit a NEW table with a fixed column set (the chart contracts live here:
-#: topic_map / topic_salience are what the 主题距离图 / 显著词图 read).
+#: Every table below is projected from the operator manifests: a step declares once how it shapes
+#: the table (``capabilities_kernel/operators/<op>/manifest.py``), and the lineage view reads that
+#: answer. ``STEP_REPLACE`` keeps the fixed column tuples a chart's input contract names.
 STEP_REPLACE: dict[str, tuple[str, ...]] = {
-    'topic_model': ('topic', 'rank', 'keyword', 'weight'),
-    'topic_by_stage': (
-        'stage',
-        'stage_order',
-        'topic',
-        'feature_words',
-        'weights',
-        'doc_n',
-        'perplexity',
-        'sample_texts',
-    ),
-    'topic_map': ('topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words'),
-    'topic_salience': ('topic', 'rank', 'term', 'overall_freq', 'within_freq', 'relevance'),
-    'suggest_stages': ('序号', '起点', '终点', '天数', '行数', '峰值日', '峰值计数', '依据'),
-    'forecast': ('period', 'actual', 'predicted', 'lower', 'upper', 'horizon'),
-    'alert': ('period', 'signal', 'value', 'threshold', 'reason'),
-    'cooccur': ('source', 'target', 'value'),
-    'reply_graph': ('src_author', 'dst_author', 'weight'),
-    # Similarity search returns a fixed four-column result, not the input table.
-    'similar_to': ('rank', 'row_index', 'text', 'similarity'),
-    'topic_timeline': (
-        'topic',
-        'topic_words',
-        'first_stage',
-        'peak_stage',
-        'last_stage',
-        'stages_present',
-        'stage_path',
-        'size_total',
-        'peak_size',
-        'is_secondary',
-    ),
-    'topic_flow': (
-        'source',
-        'target',
-        'source_topic',
-        'target_topic',
-        'similarity',
-        'divergence',
-        'from_stage',
-        'to_stage',
-        'source_words',
-        'target_words',
-    ),
-    # ``compare_platform`` and ``sentiment_evolution`` also replace the table, but name a
-    # column after what the user typed into a box — they are modelled in
-    # :func:`replaced_columns`, never as a fixed tuple here.
+    manifest.identity.id: tuple(manifest.writes.columns)
+    for manifest in registry.manifests('operator')
+    if manifest.writes.mode == 'replace'
 }
 
 #: Steps whose whole output is a fresh table whose names come from the node's own parameters.
-STEP_DYNAMIC_REPLACE = ('compare_platform', 'sentiment_evolution', 'cluster_label')
+STEP_DYNAMIC_REPLACE = tuple(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.writes.mode == 'dynamic'
+)
 
 
 def replaced_columns(op: str, step: dict) -> list[str] | None:
@@ -136,11 +96,9 @@ def replaced_columns(op: str, step: dict) -> list[str] | None:
 #: to them by the lineage model through this module's own normalizer, so one rule lives in
 #: one place and a renamed box can no longer hide the column it writes.
 STEP_ADD_ONE: dict[str, tuple[str, str]] = {
-    'bin_column': ('new_col', ''),  # blank answers f"{column}_bin", the executor's own rule
-    'extract_time': ('new_col', '日期'),
-    'bin_time': ('new_col', '阶段'),
-    'column_calc': ('new_col', ''),
-    'topic_label': ('summary_col', '主题概括'),
+    manifest.identity.id: tuple(manifest.writes.add[0])
+    for manifest in registry.manifests('operator')
+    if manifest.writes.add
 }
 
 #: Steps that may ALSO add a further column, only when its box is filled.
@@ -149,23 +107,25 @@ STEP_ADD_ONE: dict[str, tuple[str, str]] = {
 #: names one has to show it in the lineage — declared otherwise the panel hid the very
 #: column its own downstream steps read, and an unselected box still stayed honest.
 STEP_ADD_MAYBE: dict[str, tuple[tuple[str, str], ...]] = {
-    'bin_time': (('order_new_col', ''),),
+    manifest.identity.id: tuple(manifest.writes.add_maybe)
+    for manifest in registry.manifests('operator')
+    if manifest.writes.add_maybe
 }
 
+#: A step whose blank new-column box answers ``f'{column}_bin'`` (its own naming rule).
+STEP_ADD_FROM_COLUMN = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.writes.add_from_column
+)
+
+#: Steps that hand on only the columns the step names (``select_columns``).
+STEP_SELECT = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.writes.mode == 'select'
+)
+
 #: Steps that pass the upstream columns through unchanged.
-STEP_PASSTHROUGH = {
-    'drop_null',
-    'fill_null',
-    'drop_duplicates',
-    'dedupe_similar',
-    # A semantic dedupe drops whole rows, exactly like its SimHash sibling.
-    'semantic_dedupe',
-    'strip_whitespace',
-    'filter_rows',
-    'sort_rows',
-    'sample_rows',
-    'convert_type',
-}
+STEP_PASSTHROUGH = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.writes.mode == 'passthrough'
+)
 
 #: Steps whose output the server cannot enumerate without the data (unknown).
 #: ``cluster_review`` is here on purpose: its 年份跨度 cell only exists when the table carries
@@ -173,7 +133,16 @@ STEP_PASSTHROUGH = {
 #: ``join_tables`` here for the same structural reason: its output IS the kept table's
 #: columns, and the static model is handed the union of BOTH parents — promising the right
 #: table's columns would announce names the node never emits.
-STEP_UNKNOWN = {'groupby_agg', 'join_tables', 'anti_join', 'rename_columns', 'topic_coherence', 'cluster_review'}
+STEP_UNKNOWN = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.writes.mode == 'unknown'
+)
+
+#: Steps whose zero-row result is the answer the user asked for, not a silent empty: a filter that
+#: matches nothing, a join/anti-join whose keys match nothing. The run's data check stays silent for
+#: a chain containing one of them.
+STEP_EMPTY_BY_DESIGN = frozenset(
+    manifest.identity.id for manifest in registry.manifests('operator') if manifest.empty_by_design
+)
 
 
 def normalize_analysis_params(op: str, params: dict) -> dict:

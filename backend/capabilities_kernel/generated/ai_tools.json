@@ -1188,6 +1188,2060 @@
       },
       "emit_columns": "",
       "read_columns": ""
+    },
+    {
+      "capability": "operator:drop_null",
+      "tool": "",
+      "summary": "删除所选列中含空值的行（任一为空或全部为空）。",
+      "steps": [
+        "Put a step `{\"op\": \"drop_null\", …}` in the analysis node’s `steps`, or set `operation` to `drop_null`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "drop_null",
+            "steps": "[{\"op\": \"drop_null\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "how": {
+            "type": "string",
+            "default": "any",
+            "enum": [
+              "any",
+              "all"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:fill_null",
+      "tool": "",
+      "summary": "用固定值或上/下一行的值填补所选列的空单元格。",
+      "steps": [
+        "Put a step `{\"op\": \"fill_null\", …}` in the analysis node’s `steps`, or set `operation` to `fill_null`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "fill_null",
+            "steps": "[{\"op\": \"fill_null\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "method": {
+            "type": "string",
+            "default": null,
+            "enum": [
+              "ffill",
+              "pad",
+              "bfill",
+              "backfill"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:drop_duplicates",
+      "tool": "",
+      "summary": "按所选列删除重复行；exact 逐字比较，normalized 先做全半角/空白归一。",
+      "steps": [
+        "Put a step `{\"op\": \"drop_duplicates\", …}` in the analysis node’s `steps`, or set `operation` to `drop_duplicates`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "drop_duplicates",
+            "steps": "[{\"op\": \"drop_duplicates\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "keep": {
+            "type": "string",
+            "default": "first"
+          },
+          "mode": {
+            "type": "string",
+            "default": "exact",
+            "enum": [
+              "exact",
+              "normalized"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:dedupe_similar",
+      "tool": "",
+      "summary": "按一列文本的 SimHash 距离删除近似重复行（改写、加表情、换标点）。",
+      "steps": [
+        "Put a step `{\"op\": \"dedupe_similar\", …}` in the analysis node’s `steps`, or set `operation` to `dedupe_similar`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "dedupe_similar",
+            "steps": "[{\"op\": \"dedupe_similar\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "max_distance": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:semantic_dedupe",
+      "tool": "",
+      "summary": "用本地句向量比较一列文本，删掉语义重复的行（同义改写也算）。",
+      "steps": [
+        "Put a step `{\"op\": \"semantic_dedupe\", …}` in the analysis node’s `steps`, or set `operation` to `semantic_dedupe`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "semantic_dedupe",
+            "steps": "[{\"op\": \"semantic_dedupe\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "type": "string",
+            "default": "BAAI/bge-small-zh-v1.5"
+          },
+          "threshold": {
+            "type": "number",
+            "default": 0.92,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "batch_size": {
+            "type": "integer",
+            "default": 64,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:similar_to",
+      "tool": "",
+      "summary": "用本地句向量找出与给定文字最相似的前 K 行，输出新的相似度表。",
+      "steps": [
+        "Put a step `{\"op\": \"similar_to\", …}` in the analysis node’s `steps`, or set `operation` to `similar_to`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `rank`, `row_index`, `text`, `similarity`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "similar_to",
+            "steps": "[{\"op\": \"similar_to\", \"params\": {\"column\": \"正文\", \"query\": \"关键词\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "query": {
+            "type": "string",
+            "default": ""
+          },
+          "top_k": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "model": {
+            "type": "string",
+            "default": "BAAI/bge-small-zh-v1.5"
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:filter_rows",
+      "tool": "",
+      "summary": "按一列与给定值的比较（等于/包含/大于/为空…）保留或删除行。",
+      "steps": [
+        "Put a step `{\"op\": \"filter_rows\", …}` in the analysis node’s `steps`, or set `operation` to `filter_rows`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "filter_rows",
+            "steps": "[{\"op\": \"filter_rows\", \"params\": {\"column\": \"正文\", \"op\": \"eq\", \"value\": \"示例\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "op": {
+            "type": "string",
+            "default": "",
+            "enum": [
+              "eq",
+              "ne",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "contains",
+              "not_contains",
+              "in",
+              "not_in",
+              "is_null",
+              "not_null"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "keep": {
+            "type": "string",
+            "default": "keep",
+            "enum": [
+              "keep",
+              "exclude"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "op"
+        ]
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:select_columns",
+      "tool": "",
+      "summary": "只保留列出的列（按此顺序），其余列丢弃。",
+      "steps": [
+        "Put a step `{\"op\": \"select_columns\", …}` in the analysis node’s `steps`, or set `operation` to `select_columns`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "select_columns",
+            "steps": "[{\"op\": \"select_columns\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:rename_columns",
+      "tool": "",
+      "summary": "把一列改名为另一个名字（旧列 -> 新列）。",
+      "steps": [
+        "Put a step `{\"op\": \"rename_columns\", …}` in the analysis node’s `steps`, or set `operation` to `rename_columns`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "rename_columns",
+            "steps": "[{\"op\": \"rename_columns\", \"params\": {\"mapping\": {\"正文\": \"文本\"}}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "mapping": {
+            "type": "object",
+            "default": {}
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:strip_whitespace",
+      "tool": "",
+      "summary": "去掉所选列文本首尾的空白（含全角空格），行数不变。",
+      "steps": [
+        "Put a step `{\"op\": \"strip_whitespace\", …}` in the analysis node’s `steps`, or set `operation` to `strip_whitespace`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "strip_whitespace",
+            "steps": "[{\"op\": \"strip_whitespace\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:convert_type",
+      "tool": "",
+      "summary": "把一列转换为文本/整数/小数/布尔/日期时间类型。",
+      "steps": [
+        "Put a step `{\"op\": \"convert_type\", …}` in the analysis node’s `steps`, or set `operation` to `convert_type`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "convert_type",
+            "steps": "[{\"op\": \"convert_type\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "dtype": {
+            "type": "string",
+            "default": "str",
+            "enum": [
+              "str",
+              "int",
+              "float",
+              "bool",
+              "datetime"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:sort_rows",
+      "tool": "",
+      "summary": "按一列升序或降序重排行（行集合不变）。",
+      "steps": [
+        "Put a step `{\"op\": \"sort_rows\", …}` in the analysis node’s `steps`, or set `operation` to `sort_rows`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "sort_rows",
+            "steps": "[{\"op\": \"sort_rows\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "ascending": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:sample_rows",
+      "tool": "",
+      "summary": "随机抽取 n 行或比例的样本（可固定随机种子）。",
+      "steps": [
+        "Put a step `{\"op\": \"sample_rows\", …}` in the analysis node’s `steps`, or set `operation` to `sample_rows`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "sample_rows",
+            "steps": "[{\"op\": \"sample_rows\", \"params\": {}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer",
+            "default": null,
+            "minimum": 1
+          },
+          "frac": {
+            "type": "number",
+            "default": null,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "seed": {
+            "type": "integer",
+            "default": null
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:groupby_agg",
+      "tool": "",
+      "summary": "按一列分组，对另一列求和/均值/计数等，输出每组一行。",
+      "steps": [
+        "Put a step `{\"op\": \"groupby_agg\", …}` in the analysis node’s `steps`, or set `operation` to `groupby_agg`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "groupby_agg",
+            "steps": "[{\"op\": \"groupby_agg\", \"params\": {\"group_col\": \"正文\", \"agg_col\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_func": {
+            "type": "string",
+            "default": "sum",
+            "enum": [
+              "sum",
+              "mean",
+              "median",
+              "min",
+              "max",
+              "count",
+              "nunique",
+              "std",
+              "var"
+            ]
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_metrics": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:join_tables",
+      "tool": "",
+      "summary": "把第二条输入的表格按连接键拼到第一条上（left/right/inner/outer/cross）。",
+      "steps": [
+        "Put a step `{\"op\": \"join_tables\", …}` in the analysis node’s `steps`, or set `operation` to `join_tables`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "join_tables",
+            "steps": "[{\"op\": \"join_tables\", \"params\": {\"left_on\": \"正文\", \"right_on\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "how": {
+            "type": "string",
+            "default": "left",
+            "enum": [
+              "left",
+              "right",
+              "inner",
+              "outer",
+              "cross"
+            ]
+          },
+          "left_on": {
+            "type": "string",
+            "default": ""
+          },
+          "right_on": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:anti_join",
+      "tool": "",
+      "summary": "按连接键排除已出现在第二张表里的行（内容去重），可只保留交集。",
+      "steps": [
+        "Put a step `{\"op\": \"anti_join\", …}` in the analysis node’s `steps`, or set `operation` to `anti_join`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "anti_join",
+            "steps": "[{\"op\": \"anti_join\", \"params\": {\"left_on\": \"正文\", \"right_on\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "left_on": {
+            "type": "string",
+            "default": ""
+          },
+          "right_on": {
+            "type": "string",
+            "default": ""
+          },
+          "mode": {
+            "type": "string",
+            "default": "trim",
+            "enum": [
+              "exact",
+              "trim",
+              "url",
+              "text",
+              "similar"
+            ]
+          },
+          "keep": {
+            "type": "string",
+            "default": "exclude",
+            "enum": [
+              "exclude",
+              "keep"
+            ]
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "default": false
+          },
+          "max_distance": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 0,
+            "maximum": 10
+          },
+          "swap_tables": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:column_calc",
+      "tool": "",
+      "summary": "用一列或多列的算式派生新列（如 点赞 / 评论）。",
+      "steps": [
+        "Put a step `{\"op\": \"column_calc\", …}` in the analysis node’s `steps`, or set `operation` to `column_calc`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step keeps the upstream columns and appends the column(s) it names."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "column_calc",
+            "steps": "[{\"op\": \"column_calc\", \"params\": {\"new_col\": \"新列\", \"expr\": \"1\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "new_col": {
+            "type": "string",
+            "default": ""
+          },
+          "expr": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:bin_column",
+      "tool": "",
+      "summary": "把数值列分成若干区间或给定边界，并写成一列分箱标签。",
+      "steps": [
+        "Put a step `{\"op\": \"bin_column\", …}` in the analysis node’s `steps`, or set `operation` to `bin_column`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step keeps the upstream columns and appends the column(s) it names."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "bin_column",
+            "steps": "[{\"op\": \"bin_column\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "bins": {
+            "type": "array",
+            "default": []
+          },
+          "labels": {
+            "type": "array",
+            "default": []
+          },
+          "new_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:extract_time",
+      "tool": "",
+      "summary": "从时间列派生日期、小时、星期、月或年，写成新列。",
+      "steps": [
+        "Put a step `{\"op\": \"extract_time\", …}` in the analysis node’s `steps`, or set `operation` to `extract_time`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step keeps the upstream columns and appends the column(s) it names."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "extract_time",
+            "steps": "[{\"op\": \"extract_time\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "new_col": {
+            "type": "string",
+            "default": "日期"
+          },
+          "part": {
+            "type": "string",
+            "default": "date",
+            "enum": [
+              "date",
+              "hour",
+              "weekday",
+              "month",
+              "year"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:bin_time",
+      "tool": "",
+      "summary": "按给定时间边界把行切成阶段，并写入阶段名与可选的阶段序号。",
+      "steps": [
+        "Put a step `{\"op\": \"bin_time\", …}` in the analysis node’s `steps`, or set `operation` to `bin_time`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step keeps the upstream columns and appends the column(s) it names."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "bin_time",
+            "steps": "[{\"op\": \"bin_time\", \"params\": {\"column\": \"正文\", \"edges\": [\"2022-01-01\", \"2022-02-01\"], \"labels\": [\"发酵\"]}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "edges": {
+            "type": "array",
+            "default": []
+          },
+          "labels": {
+            "type": "array",
+            "default": []
+          },
+          "new_col": {
+            "type": "string",
+            "default": "阶段"
+          },
+          "order_new_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:suggest_stages",
+      "tool": "",
+      "summary": "按时间列的每日/每窗行数曲线，提议若干个阶段边界（起点、终点、峰值）。",
+      "steps": [
+        "Put a step `{\"op\": \"suggest_stages\", …}` in the analysis node’s `steps`, or set `operation` to `suggest_stages`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `序号`, `起点`, `终点`, `天数`, `行数`, `峰值日`, `峰值计数`, `依据`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "suggest_stages",
+            "steps": "[{\"op\": \"suggest_stages\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "min_days": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "max_windows": {
+            "type": "integer",
+            "default": 6,
+            "minimum": 1
+          },
+          "peak_ratio": {
+            "type": "number",
+            "default": 2.0,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_model",
+      "tool": "",
+      "summary": "对一列文本做主题建模（LDA 或句向量聚类），输出主题号、排名、特征词与权重。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_model\", …}` in the analysis node’s `steps`, or set `operation` to `topic_model`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `topic`, `rank`, `keyword`, `weight`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_model",
+            "steps": "[{\"op\": \"topic_model\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_by_stage",
+      "tool": "",
+      "summary": "按阶段列分别做主题建模，输出阶段、主题、特征词、权重、文档数与困惑度。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_by_stage\", …}` in the analysis node’s `steps`, or set `operation` to `topic_by_stage`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `stage`, `stage_order`, `topic`, `feature_words`, `weights`, `doc_n`, `perplexity`, `sample_texts`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_by_stage",
+            "steps": "[{\"op\": \"topic_by_stage\", \"params\": {\"column\": \"正文\", \"stage_col\": \"阶段\", \"topics\": []}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "stage_col": {
+            "type": "string",
+            "default": "阶段"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "topics": {
+            "type": "array",
+            "default": []
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "word_source": {
+            "type": "string",
+            "default": "tfidf",
+            "enum": [
+              "tfidf",
+              "lda"
+            ]
+          },
+          "sample_n": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_label",
+      "tool": "",
+      "summary": "让本地模型读每主题的特征词与样本文本，写出一句主题概括。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_label\", …}` in the analysis node’s `steps`, or set `operation` to `topic_label`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step keeps the upstream columns and appends the column(s) it names."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_label",
+            "steps": "[{\"op\": \"topic_label\", \"params\": {\"words_col\": \"feature_words\", \"summary_col\": \"主题概括\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "samples_col": {
+            "type": "string",
+            "default": "sample_texts"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "主题概括"
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_topics": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:cluster_label",
+      "tool": "",
+      "summary": "按聚类列分组，让本地模型为每个簇写摘要，输出每簇一行。",
+      "steps": [
+        "Put a step `{\"op\": \"cluster_label\", …}` in the analysis node’s `steps`, or set `operation` to `cluster_label`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a fresh table whose column names come from the step’s own parameters."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "cluster_label",
+            "steps": "[{\"op\": \"cluster_label\", \"params\": {\"group_col\": \"cluster\", \"text_col\": \"正文\", \"summary_col\": \"摘要\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": "cluster"
+          },
+          "text_col": {
+            "type": "string",
+            "default": "正文"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "摘要"
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_groups": {
+            "type": "integer",
+            "default": 60,
+            "minimum": 1
+          },
+          "sample_n": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:cluster_review",
+      "tool": "",
+      "summary": "按文献聚类分组，汇总成员、频次与年份跨度，并让模型写簇综述。",
+      "steps": [
+        "Put a step `{\"op\": \"cluster_review\", …}` in the analysis node’s `steps`, or set `operation` to `cluster_review`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "cluster_review",
+            "steps": "[{\"op\": \"cluster_review\", \"params\": {\"group_col\": \"聚类\", \"name_col\": \"节点\", \"summary_col\": \"簇综述\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": "聚类"
+          },
+          "label_col": {
+            "type": "string",
+            "default": "聚类标签"
+          },
+          "name_col": {
+            "type": "string",
+            "default": "节点"
+          },
+          "freq_col": {
+            "type": "string",
+            "default": "频次"
+          },
+          "first_col": {
+            "type": "string",
+            "default": "首年"
+          },
+          "last_col": {
+            "type": "string",
+            "default": "末年"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "簇综述"
+          },
+          "members": {
+            "type": "integer",
+            "default": 12,
+            "minimum": 1
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_groups": {
+            "type": "integer",
+            "default": 60,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:reply_graph",
+      "tool": "",
+      "summary": "按评论者、楼层与父楼层还原“谁回复谁”的关系，输出带权重的边表。",
+      "steps": [
+        "Put a step `{\"op\": \"reply_graph\", …}` in the analysis node’s `steps`, or set `operation` to `reply_graph`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `src_author`, `dst_author`, `weight`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "reply_graph",
+            "steps": "[{\"op\": \"reply_graph\", \"params\": {\"author_col\": \"评论者\", \"floor_col\": \"楼层\", \"parent_floor_col\": \"父楼层\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "author_col": {
+            "type": "string",
+            "default": "评论者"
+          },
+          "floor_col": {
+            "type": "string",
+            "default": "楼层"
+          },
+          "parent_floor_col": {
+            "type": "string",
+            "default": "父楼层"
+          },
+          "article_col": {
+            "type": "string",
+            "default": "文章URL"
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:compare_platform",
+      "tool": "",
+      "summary": "按平台列（或任意分组列）统计行数，并可对一列数值求均值/求和。",
+      "steps": [
+        "Put a step `{\"op\": \"compare_platform\", …}` in the analysis node’s `steps`, or set `operation` to `compare_platform`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a fresh table whose column names come from the step’s own parameters."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "compare_platform",
+            "steps": "[{\"op\": \"compare_platform\", \"params\": {\"platform_col\": \"platform\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "platform_col": {
+            "type": "string",
+            "default": "platform"
+          },
+          "value_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg": {
+            "type": "string",
+            "default": "mean",
+            "enum": [
+              "mean",
+              "sum",
+              "median",
+              "min",
+              "max",
+              "count"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_map",
+      "tool": "",
+      "summary": "把主题投射到二维平面（pc1/pc2），并给出每主题的占比与特征词。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_map\", …}` in the analysis node’s `steps`, or set `operation` to `topic_map`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `topic`, `pc1`, `pc2`, `prevalence_pct`, `doc_n`, `feature_words`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_map",
+            "steps": "[{\"op\": \"topic_map\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "topn": {
+            "type": "integer",
+            "default": 6,
+            "minimum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_salience",
+      "tool": "",
+      "summary": "为每主题的词按“总体频率 + 主题内频率”的加权相关度排序，输出显著词表。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_salience\", …}` in the analysis node’s `steps`, or set `operation` to `topic_salience`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `topic`, `rank`, `term`, `overall_freq`, `within_freq`, `relevance`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_salience",
+            "steps": "[{\"op\": \"topic_salience\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "topn": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 1
+          },
+          "relevance": {
+            "type": "number",
+            "default": 1.0,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_timeline",
+      "tool": "",
+      "summary": "跨阶段追踪主题：首次出现、峰值、最后出现的阶段与规模，识别二次爆发。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_timeline\", …}` in the analysis node’s `steps`, or set `operation` to `topic_timeline`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `topic`, `topic_words`, `first_stage`, `peak_stage`, `last_stage`, `stages_present`, `stage_path`, `size_total`, `peak_size`, `is_secondary`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_timeline",
+            "steps": "[{\"op\": \"topic_timeline\", \"params\": {\"stage_col\": \"stage\", \"words_col\": \"feature_words\", \"size_col\": \"doc_n\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "stage_col": {
+            "type": "string",
+            "default": "stage"
+          },
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "size_col": {
+            "type": "string",
+            "default": "doc_n"
+          },
+          "topic_col": {
+            "type": "string",
+            "default": "topic"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "min_overlap": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_flow",
+      "tool": "",
+      "summary": "按特征词相似度把相邻阶段的主题配对，输出来源/目标、相似度与分歧度的流向边。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_flow\", …}` in the analysis node’s `steps`, or set `operation` to `topic_flow`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `source`, `target`, `source_topic`, `target_topic`, `similarity`, `divergence`, `from_stage`, `to_stage`, `source_words`, `target_words`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_flow",
+            "steps": "[{\"op\": \"topic_flow\", \"params\": {\"stage_col\": \"stage\", \"topic_col\": \"topic\", \"weights_col\": \"weights\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "stage_col": {
+            "type": "string",
+            "default": "stage"
+          },
+          "topic_col": {
+            "type": "string",
+            "default": "topic"
+          },
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "weights_col": {
+            "type": "string",
+            "default": "weights"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "min_similarity": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "label_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:topic_coherence",
+      "tool": "",
+      "summary": "在给定主题数区间上扫一遍 LDA，输出每个主题数的连贯度，帮助选择主题数。",
+      "steps": [
+        "Put a step `{\"op\": \"topic_coherence\", …}` in the analysis node’s `steps`, or set `operation` to `topic_coherence`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The output columns depend on the data; read them from the node’s result."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "topic_coherence",
+            "steps": "[{\"op\": \"topic_coherence\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`.",
+        "The lineage cannot name this step’s columns without the data; a chart fed by it is unprovable."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "min_topics": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 2
+          },
+          "max_topics": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 2
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "max_documents": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:cooccur",
+      "tool": "",
+      "summary": "统计同一文本窗口内共同出现的词对，输出 source/target/value 边表。",
+      "steps": [
+        "Put a step `{\"op\": \"cooccur\", …}` in the analysis node’s `steps`, or set `operation` to `cooccur`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `source`, `target`, `value`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "cooccur",
+            "steps": "[{\"op\": \"cooccur\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "topn": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 2
+          },
+          "min_count": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 1
+          },
+          "window": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:sentiment_evolution",
+      "tool": "",
+      "summary": "按时间列聚合情感标签，输出每期正/中/负占比、总量与可选的情感指数。",
+      "steps": [
+        "Put a step `{\"op\": \"sentiment_evolution\", …}` in the analysis node’s `steps`, or set `operation` to `sentiment_evolution`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a fresh table whose column names come from the step’s own parameters."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "sentiment_evolution",
+            "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "label_col": {
+            "type": "string",
+            "default": "sentiment"
+          },
+          "positive": {
+            "type": "string",
+            "default": "positive"
+          },
+          "neutral": {
+            "type": "string",
+            "default": "neutral"
+          },
+          "negative": {
+            "type": "string",
+            "default": "negative"
+          },
+          "new_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "score_col": {
+            "type": "string",
+            "default": ""
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:forecast",
+      "tool": "",
+      "summary": "用移动平均、Holt 或 Holt-Winters 对一条曲线外推若干期，并给出区间。",
+      "steps": [
+        "Put a step `{\"op\": \"forecast\", …}` in the analysis node’s `steps`, or set `operation` to `forecast`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `period`, `actual`, `predicted`, `lower`, `upper`, `horizon`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "forecast",
+            "steps": "[{\"op\": \"forecast\", \"params\": {\"column\": \"period\", \"value_col\": \"sentiment_index\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": "period"
+          },
+          "value_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "method": {
+            "type": "string",
+            "default": "moving_average",
+            "enum": [
+              "moving_average",
+              "holt",
+              "seasonal_naive",
+              "holt_winters"
+            ]
+          },
+          "horizon": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "window": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "alpha": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "beta": {
+            "type": "number",
+            "default": 0.3,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "min_periods": {
+            "type": "integer",
+            "default": 4,
+            "minimum": 2
+          },
+          "season": {
+            "type": "integer",
+            "default": 7,
+            "minimum": 2
+          },
+          "gamma": {
+            "type": "number",
+            "default": 0.35,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "operator:alert",
+      "tool": "",
+      "summary": "按连续涨跌、摆动幅度、升温与量能规则，在曲线上标出二次爆发预警点。",
+      "steps": [
+        "Put a step `{\"op\": \"alert\", …}` in the analysis node’s `steps`, or set `operation` to `alert`.",
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a NEW table with columns `period`, `signal`, `value`, `threshold`, `reason`."
+      ],
+      "examples": [
+        {
+          "type": "analysis",
+          "params": {
+            "operation": "alert",
+            "steps": "[{\"op\": \"alert\", \"params\": {\"column\": \"period\", \"index_col\": \"sentiment_index\"}}]"
+          }
+        }
+      ],
+      "failures": [
+        "A named column the table does not hold: `analysis.step_col_missing`.",
+        "A blank required parameter: `analysis.need_param`.",
+        "A value outside a declared select: `analysis.bad_option`."
+      ],
+      "params": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": "period"
+          },
+          "index_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "intensity_col": {
+            "type": "string",
+            "default": ""
+          },
+          "volume_col": {
+            "type": "string",
+            "default": ""
+          },
+          "streak": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 1
+          },
+          "swing": {
+            "type": "number",
+            "default": 0.2,
+            "minimum": 0
+          },
+          "heating": {
+            "type": "number",
+            "default": 0.15,
+            "minimum": 0
+          },
+          "volume_floor": {
+            "type": "number",
+            "default": 0.6,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "emit_columns": "",
+      "read_columns": ""
     }
   ]
 }

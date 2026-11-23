@@ -10,6 +10,7 @@ import hashlib
 import re
 
 import pandas as pd
+from capabilities_kernel.operator import enum_of
 
 # Values that mean false when a text column is converted to bool. Without this
 # map ``astype(bool)`` turns the *string* 'False' — and '0' — into True.
@@ -80,39 +81,25 @@ class UnknownOperationError(ValueError):
     pass
 
 
-#: The select-shaped parameters of each cleaning step. A step reads these the way the
-#: crawl matrix reads a ``select`` Field: only the listed spellings mean something,
-#: and anything else is refused by name instead of being guessed into a different
-#: operation. Before this table, ``convert_type(dtype='number')`` silently produced
-#: text, ``fill_null(method='mean')`` silently filled a literal value, and
-#: ``drop_null(how='none')`` died inside pandas with a stack trace.
-FILTER_OPS = (
-    'eq',
-    'ne',
-    'gt',
-    'gte',
-    'lt',
-    'lte',
-    'contains',
-    'not_contains',
-    'in',
-    'not_in',
-    'is_null',
-    'not_null',
-)
-CONVERT_TYPES = ('str', 'int', 'float', 'bool', 'datetime')
-DROP_HOW = ('any', 'all')
+#: The select-shaped parameters of each cleaning step, read from that operator's manifest
+#: (``capabilities_kernel/operators/<op>/manifest.py``). The manifest is the ONE declaration; these
+#: names stay importable because the operations have always read them from here. A step reads a
+#: select the way the crawl matrix reads a ``select`` Field: only the listed spellings mean
+#: something, and anything else is refused by name instead of guessed into a different operation.
+FILTER_OPS = enum_of('filter_rows', 'op')
+CONVERT_TYPES = enum_of('convert_type', 'dtype')
+DROP_HOW = enum_of('drop_null', 'how')
 #: ``fill_null`` accepts pandas' own aliases, so both spellings of each pair are named
 #: rather than mapped: the value that reaches the step has to be one the step honours.
-FILL_METHODS = ('ffill', 'pad', 'bfill', 'backfill')
+FILL_METHODS = enum_of('fill_null', 'method')
 #: How ``drop_duplicates`` decides two rows are the same row. ``exact`` is pandas'
 #: equality over the selected columns; ``normalized`` compares the identity form
 #: that :mod:`services.datasets.dedupe` computes, so a comment farm's extra emoji code, a
 #: fresh tracking link or a re-pasted forward chain no longer makes a row unique.
-DEDUPE_MODES = ('exact', 'normalized')
+DEDUPE_MODES = enum_of('drop_duplicates', 'mode')
 #: Which calendar part :meth:`DataAnalysisService.extract_time` can derive. ``date`` is the
 #: one an event study is built on — a day is the unit every phase boundary is drawn in.
-TIME_PARTS = ('date', 'hour', 'weekday', 'month', 'year')
+TIME_PARTS = enum_of('extract_time', 'part')
 
 
 def _blank(value) -> bool:

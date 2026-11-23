@@ -924,6 +924,1103 @@
           }
         },
         "additionalProperties": true
+      },
+      "NodeParams.drop_null": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "how": {
+            "type": "string",
+            "default": "any",
+            "enum": [
+              "any",
+              "all"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.fill_null": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "method": {
+            "type": "string",
+            "default": null,
+            "enum": [
+              "ffill",
+              "pad",
+              "bfill",
+              "backfill"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.drop_duplicates": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          },
+          "keep": {
+            "type": "string",
+            "default": "first"
+          },
+          "mode": {
+            "type": "string",
+            "default": "exact",
+            "enum": [
+              "exact",
+              "normalized"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.dedupe_similar": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "max_distance": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 0,
+            "maximum": 10
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.semantic_dedupe": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "model": {
+            "type": "string",
+            "default": "BAAI/bge-small-zh-v1.5"
+          },
+          "threshold": {
+            "type": "number",
+            "default": 0.92,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "batch_size": {
+            "type": "integer",
+            "default": 64,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.similar_to": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "query": {
+            "type": "string",
+            "default": ""
+          },
+          "top_k": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "model": {
+            "type": "string",
+            "default": "BAAI/bge-small-zh-v1.5"
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.filter_rows": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "op": {
+            "type": "string",
+            "default": "",
+            "enum": [
+              "eq",
+              "ne",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "contains",
+              "not_contains",
+              "in",
+              "not_in",
+              "is_null",
+              "not_null"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "default": ""
+          },
+          "keep": {
+            "type": "string",
+            "default": "keep",
+            "enum": [
+              "keep",
+              "exclude"
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "op"
+        ]
+      },
+      "NodeParams.select_columns": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.rename_columns": {
+        "type": "object",
+        "properties": {
+          "mapping": {
+            "type": "object",
+            "default": {}
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.strip_whitespace": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.convert_type": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "dtype": {
+            "type": "string",
+            "default": "str",
+            "enum": [
+              "str",
+              "int",
+              "float",
+              "bool",
+              "datetime"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.sort_rows": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "ascending": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.sample_rows": {
+        "type": "object",
+        "properties": {
+          "n": {
+            "type": "integer",
+            "default": null,
+            "minimum": 1
+          },
+          "frac": {
+            "type": "number",
+            "default": null,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "seed": {
+            "type": "integer",
+            "default": null
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.groupby_agg": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_func": {
+            "type": "string",
+            "default": "sum",
+            "enum": [
+              "sum",
+              "mean",
+              "median",
+              "min",
+              "max",
+              "count",
+              "nunique",
+              "std",
+              "var"
+            ]
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg_metrics": {
+            "type": "array",
+            "default": []
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.join_tables": {
+        "type": "object",
+        "properties": {
+          "how": {
+            "type": "string",
+            "default": "left",
+            "enum": [
+              "left",
+              "right",
+              "inner",
+              "outer",
+              "cross"
+            ]
+          },
+          "left_on": {
+            "type": "string",
+            "default": ""
+          },
+          "right_on": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.anti_join": {
+        "type": "object",
+        "properties": {
+          "left_on": {
+            "type": "string",
+            "default": ""
+          },
+          "right_on": {
+            "type": "string",
+            "default": ""
+          },
+          "mode": {
+            "type": "string",
+            "default": "trim",
+            "enum": [
+              "exact",
+              "trim",
+              "url",
+              "text",
+              "similar"
+            ]
+          },
+          "keep": {
+            "type": "string",
+            "default": "exclude",
+            "enum": [
+              "exclude",
+              "keep"
+            ]
+          },
+          "ignore_case": {
+            "type": "boolean",
+            "default": false
+          },
+          "max_distance": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 0,
+            "maximum": 10
+          },
+          "swap_tables": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.column_calc": {
+        "type": "object",
+        "properties": {
+          "new_col": {
+            "type": "string",
+            "default": ""
+          },
+          "expr": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.bin_column": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "bins": {
+            "type": "array",
+            "default": []
+          },
+          "labels": {
+            "type": "array",
+            "default": []
+          },
+          "new_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.extract_time": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "new_col": {
+            "type": "string",
+            "default": "日期"
+          },
+          "part": {
+            "type": "string",
+            "default": "date",
+            "enum": [
+              "date",
+              "hour",
+              "weekday",
+              "month",
+              "year"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.bin_time": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "edges": {
+            "type": "array",
+            "default": []
+          },
+          "labels": {
+            "type": "array",
+            "default": []
+          },
+          "new_col": {
+            "type": "string",
+            "default": "阶段"
+          },
+          "order_new_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.suggest_stages": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "min_days": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "max_windows": {
+            "type": "integer",
+            "default": 6,
+            "minimum": 1
+          },
+          "peak_ratio": {
+            "type": "number",
+            "default": 2.0,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_model": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_by_stage": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "stage_col": {
+            "type": "string",
+            "default": "阶段"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "topics": {
+            "type": "array",
+            "default": []
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "word_source": {
+            "type": "string",
+            "default": "tfidf",
+            "enum": [
+              "tfidf",
+              "lda"
+            ]
+          },
+          "sample_n": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_label": {
+        "type": "object",
+        "properties": {
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "samples_col": {
+            "type": "string",
+            "default": "sample_texts"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "主题概括"
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_topics": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.cluster_label": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": "cluster"
+          },
+          "text_col": {
+            "type": "string",
+            "default": "正文"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "摘要"
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_groups": {
+            "type": "integer",
+            "default": 60,
+            "minimum": 1
+          },
+          "sample_n": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.cluster_review": {
+        "type": "object",
+        "properties": {
+          "group_col": {
+            "type": "string",
+            "default": "聚类"
+          },
+          "label_col": {
+            "type": "string",
+            "default": "聚类标签"
+          },
+          "name_col": {
+            "type": "string",
+            "default": "节点"
+          },
+          "freq_col": {
+            "type": "string",
+            "default": "频次"
+          },
+          "first_col": {
+            "type": "string",
+            "default": "首年"
+          },
+          "last_col": {
+            "type": "string",
+            "default": "末年"
+          },
+          "summary_col": {
+            "type": "string",
+            "default": "簇综述"
+          },
+          "members": {
+            "type": "integer",
+            "default": 12,
+            "minimum": 1
+          },
+          "on_fail": {
+            "type": "string",
+            "default": "abort",
+            "enum": [
+              "abort",
+              "blank",
+              "fallback"
+            ]
+          },
+          "max_groups": {
+            "type": "integer",
+            "default": 60,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.reply_graph": {
+        "type": "object",
+        "properties": {
+          "author_col": {
+            "type": "string",
+            "default": "评论者"
+          },
+          "floor_col": {
+            "type": "string",
+            "default": "楼层"
+          },
+          "parent_floor_col": {
+            "type": "string",
+            "default": "父楼层"
+          },
+          "article_col": {
+            "type": "string",
+            "default": "文章URL"
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.compare_platform": {
+        "type": "object",
+        "properties": {
+          "platform_col": {
+            "type": "string",
+            "default": "platform"
+          },
+          "value_col": {
+            "type": "string",
+            "default": ""
+          },
+          "agg": {
+            "type": "string",
+            "default": "mean",
+            "enum": [
+              "mean",
+              "sum",
+              "median",
+              "min",
+              "max",
+              "count"
+            ]
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_map": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "topn": {
+            "type": "integer",
+            "default": 6,
+            "minimum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_salience": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "n_topics": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 2
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "topn": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 1
+          },
+          "relevance": {
+            "type": "number",
+            "default": 1.0,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "method": {
+            "type": "string",
+            "default": "auto",
+            "enum": [
+              "lda",
+              "embedding",
+              "auto"
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_timeline": {
+        "type": "object",
+        "properties": {
+          "stage_col": {
+            "type": "string",
+            "default": "stage"
+          },
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "size_col": {
+            "type": "string",
+            "default": "doc_n"
+          },
+          "topic_col": {
+            "type": "string",
+            "default": "topic"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "min_overlap": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_flow": {
+        "type": "object",
+        "properties": {
+          "stage_col": {
+            "type": "string",
+            "default": "stage"
+          },
+          "topic_col": {
+            "type": "string",
+            "default": "topic"
+          },
+          "words_col": {
+            "type": "string",
+            "default": "feature_words"
+          },
+          "weights_col": {
+            "type": "string",
+            "default": "weights"
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          },
+          "min_similarity": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "label_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.topic_coherence": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "min_topics": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 2
+          },
+          "max_topics": {
+            "type": "integer",
+            "default": 8,
+            "minimum": 2
+          },
+          "topn": {
+            "type": "integer",
+            "default": 10,
+            "minimum": 1
+          },
+          "max_features": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 10
+          },
+          "max_documents": {
+            "type": "integer",
+            "default": 2000,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.cooccur": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "topn": {
+            "type": "integer",
+            "default": 30,
+            "minimum": 2
+          },
+          "min_count": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 1
+          },
+          "window": {
+            "type": "integer",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.sentiment_evolution": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": ""
+          },
+          "label_col": {
+            "type": "string",
+            "default": "sentiment"
+          },
+          "positive": {
+            "type": "string",
+            "default": "positive"
+          },
+          "neutral": {
+            "type": "string",
+            "default": "neutral"
+          },
+          "negative": {
+            "type": "string",
+            "default": "negative"
+          },
+          "new_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "score_col": {
+            "type": "string",
+            "default": ""
+          },
+          "order_col": {
+            "type": "string",
+            "default": ""
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.forecast": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": "period"
+          },
+          "value_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "method": {
+            "type": "string",
+            "default": "moving_average",
+            "enum": [
+              "moving_average",
+              "holt",
+              "seasonal_naive",
+              "holt_winters"
+            ]
+          },
+          "horizon": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "window": {
+            "type": "integer",
+            "default": 3,
+            "minimum": 1
+          },
+          "alpha": {
+            "type": "number",
+            "default": 0.5,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "beta": {
+            "type": "number",
+            "default": 0.3,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "min_periods": {
+            "type": "integer",
+            "default": 4,
+            "minimum": 2
+          },
+          "season": {
+            "type": "integer",
+            "default": 7,
+            "minimum": 2
+          },
+          "gamma": {
+            "type": "number",
+            "default": 0.35,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
+      },
+      "NodeParams.alert": {
+        "type": "object",
+        "properties": {
+          "column": {
+            "type": "string",
+            "default": "period"
+          },
+          "index_col": {
+            "type": "string",
+            "default": "sentiment_index"
+          },
+          "intensity_col": {
+            "type": "string",
+            "default": ""
+          },
+          "volume_col": {
+            "type": "string",
+            "default": ""
+          },
+          "streak": {
+            "type": "integer",
+            "default": 2,
+            "minimum": 1
+          },
+          "swing": {
+            "type": "number",
+            "default": 0.2,
+            "minimum": 0
+          },
+          "heating": {
+            "type": "number",
+            "default": 0.15,
+            "minimum": 0
+          },
+          "volume_floor": {
+            "type": "number",
+            "default": 0.6,
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "additionalProperties": true
       }
     }
   }

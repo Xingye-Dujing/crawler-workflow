@@ -16,6 +16,11 @@ import importlib
 from pathlib import Path
 
 from capabilities_kernel.manifest import API_VERSION, KINDS, Manifest
+from capabilities_kernel.operator import OperatorManifest
+
+#: The manifest types a kind may declare. ``node``/``chart``/``platform`` … are the nine-section
+#: ``Manifest``; ``operator`` adds the analysis-specific sections in ``capabilities_kernel.operator``.
+MANIFEST_TYPES = (Manifest, OperatorManifest)
 
 #: The capability tree. Tests point this at a temporary directory to prove duplicate/id/version
 #: refusals without writing into the checkout.
@@ -77,11 +82,11 @@ def describe(kind: str) -> dict[str, tuple[str, str]]:
     return found
 
 
-def _import(module: str) -> Manifest:
+def _import(module: str) -> Manifest | OperatorManifest:
     imported = importlib.import_module(module)
     manifest = getattr(imported, 'MANIFEST', None)
-    if not isinstance(manifest, Manifest):
-        raise ManifestError(f'{module} does not declare a capabilities_kernel.manifest.Manifest as MANIFEST')
+    if not isinstance(manifest, MANIFEST_TYPES):
+        raise ManifestError(f'{module} does not declare a capabilities_kernel manifest as MANIFEST')
     return manifest
 
 

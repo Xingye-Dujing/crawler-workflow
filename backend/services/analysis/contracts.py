@@ -7,185 +7,68 @@ importing the service that dispatches it. ``pipeline`` imports these names back,
 """
 
 import pandas as pd
+from capabilities_kernel import registry
+from capabilities_kernel.operator import NO_DEFAULT, enum_of
 from core.refs import split_names
 
 from i18n import t
-from services.analysis.kernels import (
-    CONVERT_TYPES,
-    DEDUPE_MODES,
-    DROP_HOW,
-    FILL_METHODS,
-    FILTER_OPS,
-    UnknownOperationError,
-    _blank,
-)
-from services.analysis.matching import KEEP_MODES, MATCH_MODES
+from services.analysis.kernels import UnknownOperationError, _blank
 
-JOIN_HOW = ('left', 'right', 'inner', 'outer', 'cross')
+#: The join styles ``join_tables`` accepts, declared by that operator's manifest.
+JOIN_HOW = enum_of('join_tables', 'how')
 
 #: Where a topic's 特征词 come from. ``tfidf`` is what the study says it used (TF-IDF over the
 #: words LDA put in a document), and it inherits jieba's candidate rule of two characters or
 #: more — so a single-character word like 捞, which is in the paper's own table, can only come
 #: out of ``lda`` (the topic-word distribution reads the vectoriser's vocabulary directly).
 #: That difference is why the switch is visible on the panel instead of being one behaviour.
-WORD_SOURCES = ('tfidf', 'lda')
+WORD_SOURCES = enum_of('topic_by_stage', 'word_source')
 
 #: What :meth:`DataAnalysisService.topic_label` does when the model refuses one topic.
 #: ``abort`` is the default: a table whose 主题概括 column is quietly half empty is the paper's
 #: table with holes in it, and the export cannot tell an empty cell from a topic the model
 #: was never asked about. ``blank`` is the opt-in for a long run the user does not want to
 #: restart, and it logs one line per topic it gave up on.
-ON_FAIL = ('abort', 'blank', 'fallback')
+ON_FAIL = enum_of('topic_label', 'on_fail')
 
 #: Steps that need the run's LLM client, and so are handed it by :func:`run_pipeline`.
 #: Kept out of the step's own ``params`` because the pipeline report — which the console
 #: prints and the run record keeps — echoes every parameter it is given.
-LLM_OPS = frozenset({'topic_label', 'cluster_label', 'cluster_review'})
+LLM_OPS = frozenset(manifest.identity.id for manifest in registry.manifests('operator') if manifest.needs_llm)
 
-#: What :meth:`DataAnalysisService.forecast` extrapolates with. Both are computed in this
-#: module: statsmodels is not a dependency of this project, and a two-parameter smoothing
-#: written out is short enough to read next to the numbers it produced.
-FORECAST_METHODS = ('moving_average', 'holt', 'seasonal_naive', 'holt_winters')
+#: What :meth:`DataAnalysisService.forecast` extrapolates with, declared by its manifest. Both are
+#: computed in this project: statsmodels is not a dependency, and a two-parameter smoothing written
+#: out is short enough to read next to the numbers it produced.
+FORECAST_METHODS = enum_of('forecast', 'method')
 
 #: The stage part of a topic id: 表 1 numbers its topics TopicⅠ-1 … TopicⅤ-4, and the numeral
 #: is the stage's POSITION in the lifecycle — which is why the order has to be declared rather
 #: than read off the code points of Chinese names ('二次爆发期' sorts before '发酵期').
 STAGE_NUMERALS = ('Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ', 'Ⅺ', 'Ⅻ')
 
-#: Sentinel for a select with no fallback: leaving it blank is a missing choice, and
-#: guessing one is the bug this table exists to stop. ``filter_rows`` uses it — defaulting
-#: a blank comparison to ``eq`` would answer a mistyped filter with "the data was already
-#: clean", which is the sentence this repo refuses to print.
-NO_DEFAULT = object()
-
+#: Sentinel for a select with no fallback: leaving it blank is a missing choice, and guessing one is
+#: the bug this contract exists to stop. ``filter_rows`` uses it — defaulting a blank comparison to
+#: ``eq`` would answer a mistyped filter with "the data was already clean", which is the sentence
+#: this repo refuses to print. It is declared once, in ``capabilities_kernel.operator``.
+#
 #: What each step needs from the table it is handed, checked before it runs.
 #:
-#: ``one`` names exactly one column, so a blank or an absent name is a mistake the user
-#: can fix — it is NOT read as "every column". ``some`` names a subset where an empty
-#: list legitimately means "every column" (the panel's 留空=全部 behaviour, which several
-#: saved pipelines rely on). ``enums`` maps each select to ``(its fallback, the names it
-#: accepts)``, the fallback being :data:`NO_DEFAULT` when a blank has to be refused.
-#: ``nonblank`` is a parameter that names a *new* column or an expression: writing it
-#: blank used to "succeed" by adding a header the CSV export shows as an empty cell.
+#: ``one`` names exactly one column, so a blank or an absent name is a mistake the user can fix — it
+#: is NOT read as "every column". ``some`` names a subset where an empty list legitimately means
+#: "every column" (the panel's 留空=全部 behaviour, which several saved pipelines rely on). ``enums``
+#: maps each select to ``(its fallback, the names it accepts)``, the fallback being
+#: :data:`NO_DEFAULT` when a blank has to be refused. ``nonblank`` is a parameter that names a *new*
+#: column or an expression: writing it blank used to "succeed" by adding a header the CSV export
+#: shows as an empty cell.
+#:
+#: Projected from the operator manifests (``capabilities_kernel/operators/<op>/manifest.py``): one
+#: declaration per step, so a new operator or a changed column contract never edits this file.
 #:
 #: Applied in :meth:`DataAnalysisService.run_pipeline`, which both the analysis node and
 #: ``/api/analysis/run`` go through, so one table guards every entry point — and after
-#: :func:`normalize_step_params`, which is what makes each check a question about the
-#: value the operation really receives.
-STEP_PARAMS: dict = {
-    'drop_null': {'some': ('columns',), 'enums': {'how': ('any', DROP_HOW)}},
-    'fill_null': {'some': ('columns',), 'enums': {'method': (None, FILL_METHODS)}},
-    'drop_duplicates': {'some': ('columns',), 'enums': {'mode': ('exact', DEDUPE_MODES)}},
-    # SimHash near-duplicates read ONE column: the fingerprint is over a text, so a
-    # multi-column ask would have to invent a concatenation order nobody chose.
-    'dedupe_similar': {'one': ('column',)},
-    # Both model-backed steps name ONE text column. ``query`` is the literal text to compare with,
-    # not a column name, so it is nonblank instead of gated as a column. A blank model falls back
-    # to the declared small Chinese encoder; an explicit unavailable model refuses by name.
-    'semantic_dedupe': {'one': ('column',)},
-    'similar_to': {'one': ('column',), 'nonblank': ('query',)},
-    'select_columns': {'some': ('columns',)},
-    'strip_whitespace': {'some': ('columns',)},
-    'filter_rows': {
-        'one': ('column',),
-        # ``keep`` is how "删除匹配的行" is asked for: the same twelve comparisons, read
-        # as the complement. It shares ``matching.KEEP_MODES`` with anti_join so "排除"
-        # means one thing across both filters.
-        'enums': {'op': (NO_DEFAULT, FILTER_OPS), 'keep': ('keep', KEEP_MODES)},
-    },
-    'rename_columns': {'mapping': True},
-    'convert_type': {'one': ('column',), 'enums': {'dtype': ('str', CONVERT_TYPES)}},
-    'sort_rows': {'one': ('column',)},
-    'groupby_agg': {'one': ('group_col', 'agg_col')},
-    'join_tables': {'enums': {'how': ('left', JOIN_HOW)}},
-    # 内容去重 (anti-join). The two column names may be comma-separated COMPOSITE keys, so
-    # neither goes in ``one``/``some`` — the left name is not a column of the right table and
-    # ``some`` would refuse it. The step itself names a column it cannot find.
-    'anti_join': {'enums': {'mode': ('trim', MATCH_MODES), 'keep': ('exclude', KEEP_MODES)}},
-    'column_calc': {'nonblank': ('new_col', 'expr')},
-    'bin_column': {'one': ('column',)},
-    'sample_rows': {},
-    # ── the event-study steps ──
-    # All four name ONE column: an unnamed timestamp is not "every timestamp", and a topic
-    # model over a column nobody named has no corpus to read. A blank is refused by name
-    # rather than defaulted to 正文, because comment crawls file their text under 评论内容 —
-    # a default there would model the wrong column and report it as a result.
-    'extract_time': {'one': ('column',)},
-    'bin_time': {'one': ('column',)},
-    # The boundary proposal reads one timestamp column and writes a table of its own, so a
-    # column it cannot find is a refusal, not an empty suggestion.
-    'suggest_stages': {'one': ('column',)},
-    # Every topic step defaults to ``auto``: the encoder is used when its optional stack imports and
-    # LDA otherwise, and :func:`_resolve_topic_method` PRINTS which one actually ran, so an auto result
-    # is never mislabeled. An EXPLICIT ``embedding`` on a machine without the encoder still refuses BY
-    # NAME (a model you asked for is never substituted); explicit ``lda`` runs LDA. The op signatures
-    # keep ``method='lda'`` as the floor for a caller that bypasses this normalization (a direct unit
-    # call) — which is why the default lives HERE, not in the signature.
-    'topic_model': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
-    # The staged model needs BOTH columns named: a phase column it has to guess would decide
-    # the paper's table by dict order. ``topics`` is nonblank because a blank stage-topic count
-    # has no defensible default — 5 would be this project's choice, not the user's.
-    'topic_by_stage': {
-        'one': ('column', 'stage_col'),
-        'nonblank': ('topics',),
-        'enums': {'word_source': ('tfidf', WORD_SOURCES), 'method': ('auto', ('lda', 'embedding', 'auto'))},
-    },
-    # The two figure steps read a text column and fit their own model, so the column is the one
-    # thing they cannot do without. Their topic count keeps the declared default the panel
-    # shows, exactly as ``topic_model`` does.
-    'topic_map': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
-    'topic_salience': {'one': ('column',), 'enums': {'method': ('auto', ('lda', 'embedding', 'auto'))}},
-    # The labelling step reads the word cell and writes the summary cell; both are named, and
-    # an unnamed 概括 column would "succeed" by adding a header the export shows as empty.
-    'topic_label': {
-        'one': ('words_col',),
-        'nonblank': ('summary_col',),
-        'enums': {'on_fail': ('abort', ON_FAIL)},
-    },
-    # The cluster summariser reads the cluster LABEL column the `cluster` op wrote and the raw
-    # TEXT column beside it; both must exist, so each goes in ``one``. ``summary_col`` is the
-    # column it writes — nonblank because an unnamed output column would "succeed" invisibly.
-    'cluster_label': {
-        'one': ('group_col', 'text_col'),
-        'nonblank': ('summary_col',),
-        'enums': {'on_fail': ('abort', ON_FAIL)},
-    },
-    # The frontier reviewer groups on the cluster column and names members through the node
-    # column, so both are hard reads: a guessed "whichever column looks like a name" would write
-    # a paragraph about the wrong set of entities and still print a full table.
-    'cluster_review': {
-        'one': ('group_col', 'name_col'),
-        'nonblank': ('summary_col',),
-        'enums': {'on_fail': ('abort', ON_FAIL)},
-    },
-    # ``label_col`` is deliberately NOT gated here: its signature default is the polarity
-    # column the polarity node writes, and the step itself refuses a named column the table
-    # does not hold. Listing it in ``one`` refused the very default the operation declares.
-    'sentiment_evolution': {'one': ('column',)},
-    # The three reads that follow the staged model all name the columns 分阶段 LDA writes: a
-    # lifecycle built on a guessed word column is a story about the wrong cell, and these steps
-    # would still print a complete-looking table. ``size_col`` for the timeline is gated for the
-    # same reason — a peak taken from a column that holds text is a peak measured from zeros.
-    'topic_timeline': {'one': ('stage_col', 'words_col', 'size_col')},
-    'topic_flow': {'one': ('stage_col', 'topic_col', 'weights_col')},
-    # The sweep and the co-occurrence graph both read one text column, exactly as the topic
-    # steps do: neither has a defensible fallback corpus to pick.
-    'topic_coherence': {'one': ('column',)},
-    'cooccur': {'one': ('column',)},
-    # The reply graph names all three columns it joins on; each must exist, so all go in ``one``.
-    'reply_graph': {'one': ('author_col', 'floor_col', 'parent_floor_col')},
-    # The comparison groups on ONE named column (the platform the merge stamped); the optional
-    # value column is checked by the method itself (it is "" when the user asked for counts only).
-    'compare_platform': {'one': ('platform_col',)},
-    # Both look-forward steps read a CURVE, so the period column and the value column are each
-    # named: a forecast of whichever numeric column was nearest in the table would put a line on
-    # a chart nobody asked for and label it 预测情感走向.
-    'forecast': {
-        'one': ('column', 'value_col'),
-        'enums': {'method': ('moving_average', FORECAST_METHODS)},
-    },
-    'alert': {'one': ('column', 'index_col')},
-}
+#: :func:`normalize_step_params`, which is what makes each check a question about the value the
+#: operation really receives.
+STEP_PARAMS: dict = {manifest.identity.id: manifest.contract() for manifest in registry.manifests('operator')}
 
 
 #: The timestamp shape THIS PROJECT'S OWN weibo crawler writes is handled by

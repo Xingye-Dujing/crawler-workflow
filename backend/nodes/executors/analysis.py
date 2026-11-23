@@ -24,11 +24,14 @@ from nodes.labels import node_label, parent_label
 from services.analysis.llm import build_llm_run_ctx
 from services.analysis.matching import STEP_TWO_TABLE
 from services.analysis.params import (
+    STEP_ADD_FROM_COLUMN,
     STEP_ADD_MAYBE,
     STEP_ADD_ONE,
     STEP_DYNAMIC_REPLACE,
+    STEP_EMPTY_BY_DESIGN,
     STEP_PASSTHROUGH,
     STEP_REPLACE,
+    STEP_SELECT,
     STEP_UNKNOWN,
     normalize_analysis_params,
     replaced_columns,
@@ -145,7 +148,7 @@ def _output_of(params: dict, upstream: list[str] | None) -> list[str] | None:
         if op in STEP_REPLACE:
             cols = list(STEP_REPLACE[op])
             continue
-        if op == 'select_columns':
+        if op in STEP_SELECT:
             chosen = split_panel_columns(step.get('columns'))
             cols = chosen or cols
             continue
@@ -154,7 +157,7 @@ def _output_of(params: dict, upstream: list[str] | None) -> list[str] | None:
                 return None
             param, default = STEP_ADD_ONE[op]
             new_col = str(step.get(param) or default or '').strip()
-            if not new_col and op == 'bin_column':
+            if not new_col and op in STEP_ADD_FROM_COLUMN:
                 # The executor writes f"{column}_bin" when the name box is blank, so the
                 # lineage has to say the same thing rather than drop the column entirely.
                 column = str(step.get('column') or '').strip()
@@ -201,10 +204,10 @@ def read_columns(node: dict) -> list[str]:
     return [c for c in found if c]
 
 
-#: Steps that may legitimately empty a table: a filter that matches nothing, a join/anti-join
-#: whose keys match nothing. The run's data check stays silent for a chain containing one of them —
-#: zero rows there is the answer the user asked for, not an anomaly.
-EMPTY_BY_DESIGN = frozenset({'filter_rows', 'join_tables', 'anti_join'})
+#: Steps that may legitimately empty a table (declared by their manifests): a filter that matches
+#: nothing, a join/anti-join whose keys match nothing. Zero rows there is the answer the user asked
+#: for, not an anomaly.
+EMPTY_BY_DESIGN = STEP_EMPTY_BY_DESIGN
 
 
 def postcheck(node: dict, rows: list, inputs: list) -> list[dict]:

@@ -25,6 +25,8 @@ from capabilities_kernel.manifest import KINDS, Manifest
 #: vocabulary, not a per-capability fact.
 KIND_TOOLS = {
     'node': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
+    # An operator is reached through the analysis node's steps, so the same three verbs teach it.
+    'operator': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
 }
 
 _WORD = re.compile(r'[A-Za-z0-9_]{3,}')
@@ -145,10 +147,16 @@ def catalog(kind: str = '', query: str = '', limit: int = 0) -> list[dict]:
     return found
 
 
+#: The kinds whose L1 lines ride in EVERY system prompt. Operator skills are reached through the
+#: analysis node's step vocabulary (already in ``ai.vocabulary``) and through ``skill_catalog``, so
+#: repeating 37 step summaries in the prefix would spend the tokens the strict-mode budget saves.
+PROMPT_KINDS = ('node',)
+
+
 def prompt_lines(limit: int = 40) -> list[str]:
     """One line per skill for the project context: the L1 catalogue, bounded and stable."""
     lines = []
-    for kind in KINDS:
+    for kind in PROMPT_KINDS:
         for manifest in registry.manifests(kind)[:limit]:
             lines.append(f'- {skill_id(manifest)}: {manifest.ai.summary or manifest.identity.description}')
     return lines

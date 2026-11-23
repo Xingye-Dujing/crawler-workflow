@@ -21,8 +21,14 @@ compares the manifest's declared reads with the producer's recorded or declared 
 ``validate_step`` still refuses a missing column by name at run time.
 """
 
+from capabilities_kernel import registry
+
 from services.analysis.contracts import NO_DEFAULT, STEP_PARAMS
 from services.analysis.kernels import _blank
+
+#: The operator manifests, read once: a two-table key, a per-op box label and a shape check are
+#: declared there, never here.
+_OPERATOR_MANIFESTS = registry.manifests('operator')
 
 #: The words the analysis panel puts on each canonical parameter, as label keys the browser
 #: catalogue declares. A badge that printed ``words_col`` would name a box the user has never
@@ -60,36 +66,17 @@ PARAM_LABELS = {
 }
 
 _OP_PARAM_LABELS = {
-    ('drop_duplicates', 'mode'): 'settings.dedupeMode',
-    ('anti_join', 'mode'): 'settings.matchMode',
-    ('drop_null', 'how'): 'settings.dropHow',
-    ('join_tables', 'how'): 'settings.joinHow',
-    ('fill_null', 'method'): 'settings.fillMethod',
-    ('forecast', 'method'): 'settings.forecastMethod',
-    ('filter_rows', 'op'): 'settings.filterOp',
-    ('convert_type', 'dtype'): 'settings.dtype',
-    ('topic_by_stage', 'word_source'): 'settings.topicWordSource',
-    ('topic_label', 'on_fail'): 'settings.labelOnFail',
-    ('cluster_label', 'on_fail'): 'settings.clusterOnFail',
-    ('cluster_review', 'on_fail'): 'settings.clusterOnFail',
-    ('forecast', 'value_col'): 'settings.forecastValueColumn',
-    ('topic_timeline', 'stage_col'): 'settings.timelineStageColumn',
-    ('topic_timeline', 'words_col'): 'settings.timelineWordsColumn',
-    ('topic_timeline', 'topic_col'): 'settings.timelineTopicColumn',
-    ('topic_timeline', 'size_col'): 'settings.timelineSizeColumn',
-    ('topic_flow', 'stage_col'): 'settings.flowStageColumn',
-    ('topic_flow', 'topic_col'): 'settings.flowTopicColumn',
-    ('topic_flow', 'words_col'): 'settings.flowWordsColumn',
-    ('topic_flow', 'weights_col'): 'settings.flowWeightsColumn',
+    (manifest.identity.id, param): key for manifest in _OPERATOR_MANIFESTS for param, key in manifest.labels
 }
 
-#: The keys a two-table step joins on, per step. Shared by ``join_tables`` and ``anti_join``;
-#: ``anti_join``'s two sides may each be a comma-separated COMPOSITE key, which is exactly why
-#: neither name can live in ``STEP_PARAMS['one']`` (the left name is not a column of the right
-#: table).
+#: The keys a two-table step joins on, per step, from its manifest. Shared by ``join_tables`` and
+#: ``anti_join``; ``anti_join``'s two sides may each be a comma-separated COMPOSITE key, which is
+#: exactly why neither name can live in ``STEP_PARAMS['one']`` (the left name is not a column of the
+#: right table).
 TWO_TABLE_KEYS = {
-    'join_tables': ('left_on', 'right_on'),
-    'anti_join': ('left_on', 'right_on'),
+    manifest.identity.id: tuple(manifest.reads.two_table_keys)
+    for manifest in _OPERATOR_MANIFESTS
+    if manifest.reads.two_table_keys
 }
 
 
@@ -128,13 +115,23 @@ def _rename_problems(op: str, mapping) -> list[dict]:
 def _shape_problems(op: str, params: dict) -> list[dict]:
     """Requirements a step enforces itself because they are about SHAPE, not a column name.
 
-    ``bin_time`` cuts a timestamp at named boundaries: the edge list is required, and its N
-    edges describe exactly N-1 phases, so the name list has to hold that many. Neither box is
-    a column of the table, so ``STEP_PARAMS`` cannot express them — and leaving both to the
-    run would refuse the node only after the crawl above it was paid for.
+    A step declares its own checks in its manifest (``checks=(...)``); each is a
+    ``module:function`` called as ``(op, params) -> [{code, param, …}]``. The alternative was an
+    ``if op == …`` branch in this shared module, which silently left every other step unchecked.
     """
-    if op != 'bin_time':
-        return []
+    manifest = registry.get('operator', str(op))
+    found: list[dict] = []
+    for reference in getattr(manifest, 'checks', ()) or ():
+        found.extend(registry.resolve(reference)(op, params))
+    return found
+
+
+def bin_time_shape(op: str, params: dict) -> list[dict]:
+    """``bin_time`` cuts a timestamp at named boundaries: N edges describe exactly N-1 phases.
+
+    Neither box is a column of the table, so ``STEP_PARAMS`` cannot express them — and leaving both
+    to the run would refuse the node only after the crawl above it was paid for.
+    """
     edges = [edge for edge in (params.get('edges') or []) if not _blank(edge)]
     if not edges:
         return [_problem(op, 'need_param', 'edges')]

@@ -31,8 +31,11 @@ class TestTheTools:
         assert raised.value.params['kind_name'] == 'gadget'
 
     def test_the_catalogue_integer_field_is_clamped(self):
+        """9999 is clamped to the largest page, and the whole catalogue still fits in it."""
         answer = tools.tool_skill_catalog({'limit': 9999}, {})
-        assert answer['total'] == len(knowledge.catalog()['skills'])
+        assert answer['total'] == len(answer['skills'])
+        assert answer['total'] == len(knowledge.catalog(limit=200)['skills'])
+        assert answer['total'] >= len(knowledge.catalog()['skills']), 'the clamp must not cap below the default page'
 
     def test_loading_a_skill_returns_the_body_and_template(self):
         answer = tools.tool_skill_load({'skill_id': 'node.tokenize'}, {})

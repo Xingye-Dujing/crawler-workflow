@@ -125,8 +125,27 @@ backend/capabilities_kernel/
 - `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为任何节点类型写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
-- 六个固定生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）与能力技能页面（`docs/capabilities/skills/`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- 六个固定生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）与能力页面（技能 `docs/capabilities/skills/<kind>s/`、算子说明 `docs/capabilities/operators/`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
 - `tools/doctor.py`：同一组事实的逐项勾选（含 validator 可解析），`--capability node:<id>` 只看一个能力。
+
+## 算子清单（`operator` kind）
+
+分析算子是 P7 第一类清单化的能力，声明在 `backend/capabilities_kernel/operators/<id>/manifest.py`，用
+`capabilities_kernel.operator.OperatorManifest`：九段之外多三段。
+
+| 段 | 字段 | 回答什么 |
+|---|---|---|
+| 读 | `reads` | 哪些参数必须点名一列（`one`）、哪些是可选列子集（`some`）、哪些不可为空（`nonblank`）、是否要改名映射（`mapping`）、哪些键分属两张表（`two_table_keys`） |
+| 写 | `writes` | `replace`/`add`/`select`/`passthrough`/`dynamic`/`unknown` 与固定列名、追加列（含 `bin_time` 的第二个可选列、`bin_column` 的 `<列>_bin`） |
+| 策略 | `needs_llm` / `empty_by_design` / `checks` | 是否交给运行中的 LLM、零行是否本来就是答案、形状类检查的 `module:function` |
+
+`services.analysis` 的旧表全部改为投影，不再有第二份：`contracts.STEP_PARAMS`、`LLM_OPS`、`params` 的
+`STEP_REPLACE`/`STEP_ADD_ONE`/`STEP_ADD_MAYBE`/`STEP_PASSTHROUGH`/`STEP_UNKNOWN`/`STEP_DYNAMIC_REPLACE`/`STEP_SELECT`/
+`STEP_EMPTY_BY_DESIGN`、`matching.STEP_TWO_TABLE`/`MATCH_MODES`/`KEEP_MODES`、`kernels` 的 `FILTER_OPS`/`CONVERT_TYPES`/
+`DROP_HOW`/`FILL_METHODS`/`DEDUPE_MODES`/`TIME_PARTS`、`step_checks.TWO_TABLE_KEYS` 与徽章字段名、`ops.OPS`。
+七段技能由 `operator_manifest()` 生成（模板从“必填框”机械推导，必填列给占位符），因此新算子只写两句人类语言 +
+契约，就能被 `skill_catalog`/`skill_load` 检索和阅读。`tests/unit/capabilities/test_operator_manifests.py` 钉住
+“投影 == 清单”和“模板不会被按名拒绝”。
 
 ## 已迁移 / 还没迁移
 
@@ -136,6 +155,8 @@ backend/capabilities_kernel/
 （不再保留第二份）。`source` 的字段由平台矩阵决定，清单不声明参数，两类运行前检查（矩阵 + 增量水位）由
 `nodes.executors.source.validate_node` 回答。
 前端表单与 `canvas.js`/`runs.js` 的第二套规则在 P2 后续切片删除。
+
+P7 第一类：37 个分析算子已全部迁到 `capabilities_kernel/operators/<id>/`（见上一节）；还剩图表、平台两类。
 
 ## 已迁移的例子
 
