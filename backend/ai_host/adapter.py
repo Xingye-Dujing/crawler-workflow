@@ -13,6 +13,7 @@ from agent_workspace.tools import CONTROL_TOOLS, generic_specs
 from agent_workspace.types import SkillSpec, ToolSpec
 from ai import skills as legacy_skills
 from ai import tools as legacy_tools
+from ai import validators as legacy_validators
 from ai.context import project_facts
 
 #: Names the framework already serves itself (its own generic tools and control tools). The
@@ -66,3 +67,23 @@ class CaiXiHuiHost(DefaultHostAdapter):
 
     def skills(self) -> list[SkillSpec]:
         return [_convert_skill(spec) for spec in legacy_skills.BUILTIN.values()]
+
+    def artifact_validators(self) -> dict:
+        """The product's strict artifact validators, by kind.
+
+        The framework runs these before storing a proposal and again before applying it, so a
+        malformed workflow/memory draft is refused by name. They validate only; a validator that
+        normalizes its payload (the old agent's ``Validation.payload``) still does so on the product
+        side when applied.
+        """
+        return {kind: self._validator(kind) for kind in sorted(legacy_validators.registered_kinds())}
+
+    @staticmethod
+    def _validator(kind: str):
+        def validate(payload: dict) -> list[str]:
+            result = legacy_validators.check(kind, payload or {})
+            if result is None or result.ok:
+                return []
+            return list(result.problems or [result.message])
+
+        return validate

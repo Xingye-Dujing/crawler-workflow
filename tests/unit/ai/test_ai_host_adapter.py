@@ -10,6 +10,7 @@ import pytest
 from agent_workspace import AgentWorkspace
 from ai import skills as legacy_skills
 from ai import tools as legacy_tools
+from ai import validators as legacy_validators
 from ai_host import CaiXiHuiHost
 from ai_host.adapter import FRAMEWORK_TOOLS
 
@@ -59,5 +60,15 @@ class TestTheWorkspaceBoots:
             assert workspace.tools.get('project_facts') is not None
             assert workspace.skills.get('project', 'default') is not None
             assert workspace.commands.names() == ['compact', 'mode', 'skills', 'status']
+        finally:
+            workspace.close()
+
+    def test_the_old_artifact_validators_gate_the_framework(self, host):
+        workspace = AgentWorkspace(host)
+        try:
+            assert workspace.artifact_registry.kinds() == sorted(legacy_validators.registered_kinds())
+            problems = workspace.artifact_registry.problems('workflow', {})
+            assert problems and 'node list' in problems[0]
+            assert workspace.artifact_registry.problems('note', {}) == []
         finally:
             workspace.close()
