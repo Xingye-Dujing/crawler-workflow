@@ -87,6 +87,20 @@ class TestTheSurface:
         assert body['ok'] is True
         assert 'the attached words' in body['text']
 
+    def test_the_generic_surface_answers(self, client):
+        assert client.get('/api/ai/ws/health').get_json()['ok'] is True
+        assert client.get('/api/ai/ws/skills').get_json()['skills']
+        assert client.get('/api/ai/ws/files').get_json()['files'] == []
+        assert client.get('/api/ai/ws/monitors').get_json()['monitors'] == []
+        assert client.get('/api/ai/ws/python/status').get_json()['ok'] is True
+        assert client.get('/api/ai/ws/references', query_string={'q': 'x'}).get_json()['ok'] is True
+        assert isinstance(client.post('/api/ai/ws/context', json={'query': 'x'}).get_json(), dict)
+        assert client.get('/api/ai/ws/plugins').get_json()['ok'] is True
+        assert client.get('/api/ai/ws/bootstrap').get_json()['ok'] is not False
+        body = client.post('/api/ai/ws/command', json={'name': 'init'}).get_json()
+        assert body['result']['tools'] > 0
+        assert body['result']['skills'] > 0
+
     def test_a_known_host_command_runs_through_the_same_surface(self, client):
         body = client.post('/api/ai/ws/command', json={'name': 'init'}).get_json()
         assert body['result']['tools'] > 0

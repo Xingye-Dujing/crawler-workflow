@@ -249,6 +249,200 @@ def create_blueprint(manager):
         conversation_id = str(request.args.get('conversation_id') or '')
         return jsonify({'ok': True, 'usage': manager.workspace(account()).usage(conversation_id)})
 
+    # ── retry / context / references / health ────────────────────────────────
+
+    @blueprint.post('/retry')
+    def retry():
+        payload = body()
+        try:
+            events = manager.workspace(account()).retry(
+                str(payload.get('conversation_id') or ''), account(), provider_key()
+            )
+            if payload.get('stream') is False:
+                return jsonify({'ok': True, 'events': list(events)})
+            return Response(_sse(events), mimetype='text/event-stream')
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.get('/conversations/<conversation_id>/export')
+    def export_conversation(conversation_id):
+        fmt = str(request.args.get('format') or 'json')
+        data = manager.workspace(account()).store.export_conversation(conversation_id, account(), fmt)
+        if fmt == 'md':
+            return Response(data, mimetype='text/markdown')
+        return jsonify({'ok': True, 'data': data})
+
+    @blueprint.post('/context')
+    def context():
+        payload = body()
+        return jsonify(
+            manager.workspace(account()).context_preview(
+                str(payload.get('query') or ''), account(), payload.get('context') or {}
+            )
+        )
+
+    @blueprint.get('/references')
+    def references():
+        return jsonify(
+            {
+                'ok': True,
+                'candidates': manager.workspace(account()).reference_candidates(account(), request.args.get('q', '')),
+            }
+        )
+
+    @blueprint.get('/health')
+    def health():
+        return jsonify({'ok': True, 'service': 'agent-workspace'})
+
+    # ── skills / plugins / monitors / files / python ─────────────────────────
+
+    @blueprint.route('/skills', methods=['GET', 'POST'])
+    def skills():
+        workspace = manager.workspace(account())
+        if request.method == 'POST':
+            try:
+                return jsonify({'ok': True, 'skill': workspace.save_skill(account(), body())})
+            except WorkspaceError as exc:
+                return _error(exc)
+        return jsonify({'ok': True, 'skills': workspace.skills.list(account())})
+
+    @blueprint.delete('/skills/<skill_id>')
+    def delete_skill(skill_id):
+        return jsonify({'ok': manager.workspace(account()).delete_skill(account(), skill_id)})
+
+    @blueprint.post('/skills/<skill_id>/fork')
+    def fork_skill(skill_id):
+        try:
+            return jsonify({'ok': True, 'skill': manager.workspace(account()).fork_skill(account(), skill_id)})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.route('/plugins', methods=['GET', 'POST'])
+    def plugins():
+        workspace = manager.workspace(account())
+        if request.method == 'POST':
+            try:
+                result = workspace.install_plugin(body(), account(), admin=bool(body().get('admin')))
+                return jsonify({'ok': True, **result})
+            except WorkspaceError as exc:
+                return _error(exc)
+        return jsonify({'ok': True, 'plugins': workspace.plugins_list()})
+
+    @blueprint.post('/plugins/<plugin_id>/enable')
+    def toggle_plugin(plugin_id):
+        try:
+            result = manager.workspace(account()).toggle_plugin(plugin_id, account(), bool(body().get('enabled')))
+            return jsonify({'ok': True, **result})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.delete('/plugins/<plugin_id>')
+    def uninstall_plugin(plugin_id):
+        try:
+            return jsonify({'ok': manager.workspace(account()).uninstall_plugin(plugin_id, account())})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.route('/monitors', methods=['GET', 'POST'])
+    def monitors():
+        workspace = manager.workspace(account())
+        if request.method == 'POST':
+            payload = body()
+            try:
+                return jsonify(
+                    {
+                        'ok': True,
+                        'monitor': workspace.arm_monitor(
+                            account(), str(payload.get('conversation_id') or ''), payload.get('conditions') or {}
+                        ),
+                    }
+                )
+            except WorkspaceError as exc:
+                return _error(exc)
+        return jsonify({'ok': True, 'monitors': workspace.monitors_list(account())})
+
+    @blueprint.delete('/monitors/<monitor_id>')
+    def stop_monitor(monitor_id):
+        return jsonify({'ok': manager.workspace(account()).stop_monitor(account(), monitor_id)})
+
+    @blueprint.get('/monitors/events')
+    def monitor_events():
+        return jsonify({'ok': True, 'events': manager.workspace(account()).monitors.pending(account())})
+
+    @blueprint.post('/monitors/events/<delivery_id>/ack')
+    def ack_delivery(delivery_id):
+        return jsonify({'ok': manager.workspace(account()).monitors.ack(account(), delivery_id)})
+
+    @blueprint.route('/files', methods=['GET', 'POST'])
+    def files():
+        workspace = manager.workspace(account())
+        if request.method == 'POST':
+            payload = body()
+            return jsonify(
+                {
+                    'ok': True,
+                    'file': workspace.add_file(
+                        account(),
+                        str(payload.get('name') or ''),
+                        str(payload.get('path') or ''),
+                        int(payload.get('size') or 0),
+                        str(payload.get('conversation_id') or ''),
+                    ),
+                }
+            )
+        return jsonify({'ok': True, 'files': workspace.files(account(), request.args.get('conversation_id', ''))})
+
+    @blueprint.delete('/files/<file_id>')
+    def delete_file(file_id):
+        return jsonify({'ok': manager.workspace(account()).delete_file(account(), file_id)})
+
+    @blueprint.get('/python/status')
+    def python_status():
+        from agent_workspace import python_runtime
+
+        return jsonify({'ok': True, 'status': python_runtime.status(manager.workspace(account()).settings)})
+
+    @blueprint.route('/python/scripts', methods=['GET', 'POST'])
+    def python_scripts():
+        workspace = manager.workspace(account())
+        try:
+            if request.method == 'POST':
+                return jsonify({'ok': True, 'script': workspace.save_script(account(), body())})
+            return jsonify({'ok': True, 'scripts': workspace.scripts(account())})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.get('/python/scripts/<script_id>')
+    def python_script(script_id):
+        row = manager.workspace(account()).get_script(account(), script_id)
+        if not row:
+            return jsonify({'ok': False, 'error': 'not found'}), 404
+        return jsonify({'ok': True, 'script': row})
+
+    @blueprint.post('/python/scripts/<script_id>/fork')
+    def fork_script(script_id):
+        try:
+            return jsonify({'ok': True, 'script': manager.workspace(account()).fork_script(account(), script_id)})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.delete('/python/scripts/<script_id>')
+    def delete_script(script_id):
+        return jsonify({'ok': manager.workspace(account()).delete_script(account(), script_id)})
+
+    @blueprint.post('/python/run')
+    def python_run():
+        payload = body()
+        try:
+            result = manager.workspace(account()).tools.execute(
+                'python_run',
+                payload,
+                {'account': account(), 'conversation_id': str(payload.get('conversation_id') or '')},
+            )
+            return jsonify({'ok': True, **result})
+        except WorkspaceError as exc:
+            return _error(exc)
+
     # ── commands ──────────────────────────────────────────────────────────────
 
     @blueprint.post('/answer')
