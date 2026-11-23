@@ -288,6 +288,12 @@ class CaiXiHuiHost(DefaultHostAdapter):
         }.get(str(kind or ''))
         return str(reader(str(identifier or '')) if reader else '')
 
+    def recipes(self) -> list[dict]:
+        """The product's ordered plans; the framework owns the run, evidence and tool mask."""
+        from ai import recipes as product_recipes
+
+        return [dict(recipe) for recipe in product_recipes.RECIPES]
+
     def apply_artifact(self, kind: str, payload: dict) -> dict:
         """The product applies each artifact through its own typed endpoint (workflow/memory/chart).
 

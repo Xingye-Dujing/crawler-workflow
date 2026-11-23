@@ -82,6 +82,16 @@ def project_facts() -> str:
     except Exception:  # a partial install must not take the whole context down
         pass
     try:
+        from ai import recipes as product_recipes
+
+        lines.append('## 配方')
+        for recipe in product_recipes.catalog():
+            steps = ' → '.join(f'{step["id"]}:{step["tool"]}' for step in recipe['steps'])
+            lines.append(f'- {recipe["id"]}（{recipe["title"]}）：{steps}')
+        lines.append('用 recipe_start 开始，recipe_skip 只记录用户主动跳步。')
+    except Exception:  # a partial install must not take the whole context down
+        pass
+    try:
         import capabilities.registry as capabilities
 
         payload = capabilities.as_dict()

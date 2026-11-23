@@ -62,6 +62,8 @@ BODY_ROUTES = [
     '/api/ai/ws/python/run',
     '/api/ai/ws/python/scripts',
     '/api/ai/ws/python/scripts/<script_id>/fork',
+    '/api/ai/ws/recipes/skip',
+    '/api/ai/ws/recipes/start',
     '/api/ai/ws/rerun',
     '/api/ai/ws/retry',
     '/api/ai/ws/settings',

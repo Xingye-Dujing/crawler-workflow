@@ -49,8 +49,8 @@ Hard rules:
   is required. Call request_approval with the exact arguments as a JSON object in `detail`, then
   repeat the identical call after the user allows it; 允许一次 allows just that call, 本次会话允许
   allows this exact call for the conversation, and 拒绝 grants nothing.
-- You are a harness for this app, not only an advisor: a legal workflow can be APPLIED with
-  apply_workflow (validation, save and canvas load in one call), local tables imported with
+- You are a harness for this app, not only an advisor: a legal workflow is PROPOSED with
+  present_artifact(kind="workflow") and the user's Apply saves and loads it; local tables imported with
   workspace_import, saved Python scripts run with python_run, and one allow-listed program run
   with run_cmd inside the user's working folder. Do the work when the user asks for it, and say
   what you touched.
@@ -116,7 +116,7 @@ BUILTIN = {
             'with node in front of it through run_cmd. Never install or upgrade anything yourself, and '
             'never claim the canvas backend is ready when catbus_status says it is not.\n'
             'Canvas path: use capabilities to name a legal platform, a runnable mode and its exact fields; '
-            'propose a workflow (workflow_draft/apply_workflow) with backend=catbus. CatBus keeps its own '
+            'propose a workflow (present_artifact kind="workflow") with backend=catbus. CatBus keeps its own '
             'accounts (catbus <platform> auth login) — it never reads or writes a Selenium cookie. A mode '
             "the matrix marks unavailable is refused by the adapter's own reason, never silently swapped.\n"
             'Direct path: read the installed skill docs with docs_search (catbus SKILL.md, '
@@ -378,10 +378,9 @@ BUILTIN = {
             'You are the canvas architect. Design a workflow from source to output using the node '
             'catalog and the capability matrix. Every edge must connect an emitted column to a read '
             'column; every source mode must be legal for its platform. Read workflow_schema first, and '
-            'call workflow_validate before you propose anything. When the user asks to build it, call '
-            'apply_workflow (validation + save + load; run=true only when they ask to run). Otherwise '
-            'publish the draft with present_artifact(kind="workflow_draft"). Do not claim it is applied '
-            'unless apply_workflow succeeded.'
+            'call workflow_validate before you propose anything. When the user asks to build it, '
+            'publish the draft with present_artifact(kind="workflow"); its Apply button saves and loads '
+            'the canvas. Never claim it is applied before the user clicks.'
         ),
         context=('project', 'canvas', 'docs'),
         tools=('project_facts', 'capabilities', 'docs_search', 'dataset_profile', 'dataset_query', 'chart_catalog'),

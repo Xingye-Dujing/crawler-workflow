@@ -207,7 +207,7 @@
 - [x] L1/L2 分类 + 目录生成（16 个节点技能：清单第七段七段内容；`skill_catalog`/`skill_load`；生成页面有 freshness 门禁）
 - [ ] 每节点/算子/图表/平台技能七段内容（节点已完成；算子/图表/平台随 P7 清单化）
 - [x] catalog/search/load/read + @（`skill_catalog`/`skill_load` + `@` 引用：技能/数据集/运行/工作流/导出/文件/产物/会话）
-- [ ] 配方 FSM + 工具遮罩 + 证据勾选
+- [x] 配方 FSM + 工具遮罩 + 证据勾选（框架 0.1.24：`recipe_runs`/`recipe_evidence`、当前步遮罩、`recipe_start`/`recipe_skip`；产品两条通用配方与 `/recipes` API）
 - [ ] 严格/普通模式
 - [ ] 能力优先策略 + Python 缺口审批 + 审计
 - [ ] qwen3.5:4b/9b 评测集（20-30 个任务）

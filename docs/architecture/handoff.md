@@ -425,6 +425,29 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P6 第三片：配方 FSM 与工具遮罩（框架 0.1.24，2026-11-24）
+
+- **框架 `agent_workspace/recipes.py`**：宿主声明有序步骤（每步一个工具 + 前序 `requires` + `produces`），
+  框架持久化 `recipe_runs`/`recipe_evidence`；`mask()` 在运行中只下发**当前步骤工具 + 只读工具 +
+  永远要人批的工具**；步骤完成只认服务端拿到的工具结果，失败留步，`recipe_skip` 把用户主动跳步记为
+  `skipped`（最终报告可见）；未知配方/未知工具/前向依赖/重复 id 都在注册或开始时按名拒绝。
+- **回合接线**：`ChatRequest.recipe_id` 开始或续用配方；每轮按当前步重新计算工具集；越步调用返回
+  `recipe.stepTool`（带步骤名与应有工具）；工具成功即写证据并推进，事件 `recipe` 让前端重画进度；
+  `recipe_start`/`recipe_skip` 是控制工具（任何技能可用，没配方时按名拒绝）。
+- **产品配方**：`ai/recipes.py` 声明 `workflow_build`（读词汇 → 提交工作流产物卡 → 同一引擎校验）与
+  `dataset_answer`（列/类型 → 样本 → 精确聚合）；项目事实新增“配方”段，模型知道何时 `recipe_start`。
+  API：`GET /api/ai/ws/recipes`、`POST /recipes/start`、`POST /recipes/skip`。
+- **顺带修掉的回归**：上一轮删除“框架同名工具”时 `apply_workflow` 其实没有框架实现，导致提示词让模型调用
+  一个不存在的工具、`UNIVERSAL_TOOLS` 里留有悬空名字。现改回 `present_artifact(kind="workflow")`（卡片
+  Apply 保存并载入），提示词、配方、门禁同步；真正的 `apply_workflow` 工具要等产物应用端点统一后再恢复。
+- **测试**：框架新增 `tests/test_recipes.py`（目录/首步/遮罩/证据/失败留步/跳步/结束/未知/冲突/跨回合）；
+  产品 `tests/unit/ai/test_recipes.py` 与 `GET /recipes` API 用例；requirements 钉版随 0.1.24 更新。
+- **验证**：框架全量 + ruff 绿；产品 AI/API/i18n/requirements 子集 **298 passed**；产品 ruff 绿；本批全量 fast
+  **11019 passed / 1 failed**——唯一失败是新增的两个 POST 路由没有登记进 body 拒绝矩阵，已补 `recipes/start|skip`
+  并单跑 hardening **449 passed**（按新策略修复后只重跑受影响面）。
+- **未做（明确声明）**：配方前端面板（进度条/跳过按钮）与每节点配方（随 P7 清单化）；`apply_workflow`
+  作为独立产物应用端点恢复；工具分层路由（每轮 ≤12）与严格模式仍待做。
+
 ## P6 第二片：@ 引用接缝（框架 0.1.23，2026-11-24）
 
 - **修复两个静默断裂**：`/api/ai/ws/references` 曾返回 `candidates` 而浏览器读 `references`（`@` 菜单始终为空）；

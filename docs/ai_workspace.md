@@ -233,6 +233,12 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   `unresolved`。种类：数据集 / 运行 / 工作流文件 / 导出产物 / **能力技能** / 上传文件 / 产物 / 会话；工作流展开成
   节点图与连线，导出只读前 4000 字，技能正文与 `skill_load` 完全同一份渲染，运行是状态 + 节点判定 + 20 行控制台尾。
   宿主通过 `HostAdapter.reference_candidates()` / `resolve_reference()` 提供自己的种类，框架只做合并、去重与预算。
+- **配方（recipe）**：宿主声明有序步骤（每步一个工具、前序步骤证据、产物名），框架把运行存进
+  `recipe_runs`/`recipe_evidence`。运行中**只下发当前步工具 + 只读工具 + 永远要人批的工具**，模型越步调用按
+  `recipe.stepTool` 拒绝；步骤完成只认服务端拿到的工具结果，失败留步，用户主动跳步由 `recipe_skip` 记为
+  `skipped`。`ChatRequest.recipe_id` 开始配方（`recipe_start` 控制工具同效），事件 `recipe` 携带步骤进度。
+  产品当前两条：`workflow_build`（读词汇 → 工作流产物卡 → 同引擎校验）与 `dataset_answer`（列 → 样本 →
+  精确聚合）；API `GET /api/ai/ws/recipes`、`POST /recipes/start`、`POST /recipes/skip`。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
 
@@ -306,6 +312,8 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | DELETE | `/api/ai/ws/plugins/<id>` | 卸载 |
 | GET/POST | `/api/ai/ws/files` | 附件列表 / 上传（multipart；文本/图片进框架文件行） |
 | GET | `/api/ai/ws/references` | `@` 引用候选（`references` 键）：能力技能 / 数据集 / 运行 / 工作流文件 / 导出产物 / 上传文件 / 产物 / 会话 |
+| GET | `/api/ai/ws/recipes` | 已声明配方 + 该会话的活动运行 |
+| POST | `/api/ai/ws/recipes/start` · `/recipes/skip` | 开始配方 / 记录用户跳步 |
 | GET | `/api/ai/ws/conversations/<id>/files` | 会话附件 |
 | DELETE | `/api/ai/ws/files/<id>` | 删除附件行与本地副本 |
 | GET/POST | `/api/ai/ws/monitors` | 监控列表 / 开启（前端 `spec` 在 host 映射成框架 conditions） |

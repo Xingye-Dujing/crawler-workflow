@@ -127,12 +127,10 @@ F1–F5 是“不修就要带病迁移”的前置项；F6–F16、F18 在写 ho
 
 P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
 
-**进度（2026-11-24，框架 0.1.23）**：**P4.0 全部完成**（F1–F18）。P4 接入与 P5 前端切换已收口：
+**进度（2026-11-24，框架 0.1.24）**：**P4.0 全部完成**（F1–F18）。P4 接入与 P5 前端切换已收口：
 `/api/ai/ws` 覆盖框架通用路由，`ai_host` 委托工具/技能/事实/产物校验/设置映射、附件抽取与 `/init`；旧 `/api/ai`
-与旧引擎已删除（2026-11-23）。0.1.23 补齐 **`@` 引用接缝**：`HostAdapter.reference_candidates()` /
-`resolve_reference()` 让宿主提供自己的工作流/导出/技能种类，`References.resolve_rows()` 把 composer 的结构化
-chips 与正文 `@kind:id` 放进同一个预算，`answer(references=…)` 把回答框的引用作为工具结果的一部分交回同一回合。
-产品侧 `ai/reference_text.py` 负责每种对象的有界展开，`/references` 以浏览器读取的 `references` 键回答。
+与旧引擎已删除（2026-11-23）。0.1.23 补齐 **`@` 引用接缝**；0.1.24 补齐 **RecipeFSM**：宿主声明步骤，框架持久化
+`recipe_runs`/`recipe_evidence`、按当前步遮罩工具、以服务端证据推进并记录用户跳步。
 
 ### 前端端点对齐表（P5 切换前必须全绿）
 

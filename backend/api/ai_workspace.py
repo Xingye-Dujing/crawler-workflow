@@ -215,6 +215,7 @@ def create_blueprint(manager):
             web_search=payload.get('web_search'),
             max_tokens=int(payload.get('max_tokens') or 0),
             timeout=int(payload.get('timeout') or 120),
+            recipe_id=str(payload.get('recipe_id') or ''),
         )
         workspace = manager.workspace(account())
         try:
@@ -479,6 +480,47 @@ def create_blueprint(manager):
                 'references': manager.workspace(account()).reference_candidates(account(), request.args.get('q', '')),
             }
         )
+
+    # ── recipes ──────────────────────────────────────────────────────────────
+
+    @blueprint.get('/recipes')
+    def recipes():
+        """The declared recipes plus the conversation's live run, if any."""
+        conversation_id = str(request.args.get('conversation_id') or '')
+        workspace = manager.workspace(account())
+        return jsonify(
+            {
+                'ok': True,
+                'recipes': workspace.recipe_catalog(),
+                'active': workspace.recipe_state(conversation_id, account()) if conversation_id else {},
+            }
+        )
+
+    @blueprint.post('/recipes/start')
+    def start_recipe():
+        payload = body()
+        try:
+            state = manager.workspace(account()).start_recipe(
+                str(payload.get('conversation_id') or ''),
+                str(payload.get('recipe_id') or ''),
+                account(),
+            )
+            return jsonify({'ok': True, 'recipe': state})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.post('/recipes/skip')
+    def skip_recipe_step():
+        payload = body()
+        try:
+            state = manager.workspace(account()).skip_recipe_step(
+                str(payload.get('conversation_id') or ''),
+                str(payload.get('reason') or ''),
+                account(),
+            )
+            return jsonify({'ok': True, 'recipe': state})
+        except WorkspaceError as exc:
+            return _error(exc)
 
     @blueprint.get('/health')
     def health():

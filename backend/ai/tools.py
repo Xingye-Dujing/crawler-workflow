@@ -807,7 +807,6 @@ UNIVERSAL_TOOLS = frozenset(
     {
         'ai_coverage',
         'app_errors',
-        'apply_workflow',
         'export_delete',
         'export_list',
         'request_dataset_access',
