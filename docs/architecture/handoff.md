@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`57dd1c9 功能更新：审批策略引擎与 always_ask 工具`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`82a4a081 功能更新：框架 0.1.6（审批策略引擎）`；框架仓库 `57dd1c9`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -57,6 +57,7 @@
 | `30d1d5d` | 框架 0.1.4（ADR-003 第三片）：`turn_inbox` 邮箱——待答期间的新消息排队、`notice(turn.queued)`、带 `mailbox_id` 再发才执行 |
 | `4c506e0` | 框架 0.1.5（ADR-003 第四片）：`steer` 安全边界插入指引；最后边界之后的指引进邮箱；`/steer` 路由 |
 | `57dd1c9` | 框架 0.1.6（F6）：`policy.PolicyEngine` + `ToolSpec.always_ask`；删除/覆盖/资源授权永远人批且不接受 session 授权 |
+| `82a4a081` | wheel 0.1.6；rewrite-plan 勾选 F6；handoff/README 记录第五片，下一步 F12 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
