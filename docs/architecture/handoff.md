@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`6fdb5712 功能更新：框架 0.1.11（retry 还原原轮）`；框架仓库 `1df4f91`
+- 最后提交：`2511b09 功能更新：附件接缝（文本 + 内联图片）`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -63,6 +63,7 @@
 | `61d8952` | 框架 0.1.9（F8）：多问题卡 `questions[]`（1–5），一张卡一次答复，答案按 `call_id` 对齐 |
 | `cd7eda6` | 框架 0.1.10（F9）：`agent_mode=plan` 遮罩写入工具（schema + 允许列表 + 执行处），meta 带 mode |
 | `1df4f91` | 框架 0.1.11（F3）：`retry` 从 user 行所属 turn 恢复 provider/model/skill，复用已存上下文块，不新增 user 行 |
+| `2511b09` | 框架 0.1.12（F10）：附件接缝（宿主抽取文本/内联图片，框架按能力路由）；修复用户消息在每次 provider 请求中被重复追加 |
 | `6fdb5712` | wheel 0.1.11；rewrite-plan 勾选 F3；handoff/README 记录第九片，下一步 F10 |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
 | `06aa5735` | wheel 0.1.8（含 F12/F13）；rewrite-plan 勾选 F12/F13；handoff/README 记录第六片 |
@@ -408,6 +409,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第十片：附件接缝（2026-11-23，框架 0.1.12）
+
+- `attachments.prepare()`：宿主通过 `context_payload['attachments']` 交来 `{name, text, image, file_id}`；文本有界并
+  随 user 行持久化（块 + `meta.attachments`）；图片只在供应商同时声明 `vision` 与 `inline_images` 时以 OpenAI
+  兼容的 image part 送入，否则按 `attachment.visionRequired` / `attachment.inlineRequired` 拒绝（超限另报
+  `attachment.imageTooLarge`）。框架**不读文件、不解析文档**——抽取是 host 的事。
+- `provider_messages` 会把 user 行的图片块还原成 content parts；`replay_context` 不再把多模态 content 字符串化。
+- **顺带修掉一个真 bug**：user 消息在每次 provider 请求里被重复追加（存好的 user 行之后又拼了一遍）。现在只有
+  `retry` 需要补一次（历史以旧回答结尾），新 turn 与 resume 都不补；附件测试断言一个 turn 只有一条 user 消息。
+- 测试：文本附件、内联图片 + 重放、纯文本模型拒绝图片、有 vision 无 inline_images 拒绝、单一 user 消息；196 条全绿。
+- 下一片：F11 产物 validator/preview → F14 → F15 → F16 → F18。
+
 ## P4.0 第九片：retry 还原原轮（2026-11-23，框架 0.1.11）
 
 - `retry()` 用 user 行所属 turn 的 provider/model/skill 构造请求，而不是今天的默认值。
@@ -554,7 +567,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第十片**：F10（attachment 接缝）→ F11 → F14 → F15 → F16 → F18。
+8. **下一步：P4.0 第十一片**：F11（产物 validator/preview）→ F14 → F15 → F16 → F18。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 

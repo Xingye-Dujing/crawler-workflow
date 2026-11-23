@@ -146,8 +146,8 @@
   回填并与问题对齐；畸形/超限返回 `badArgs` 且写入结果；单问题旧形状兼容（框架 0.1.9）
 - [x] **F9 plan/build 模式**：`context_payload.agent_mode`；plan 把写入/`always_ask` 工具从 schema 与允许列表一起
   移除（执行处再次拒绝），meta 带 `mode`；未知模式按 `mode.unknown` 拒绝（框架 0.1.10）
-- [ ] **F10 attachment 接缝**：接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 三个能力位——框架
-  （**抽取实现留在 host**，见 P4 接入）
+- [x] **F10 attachment 接缝**：`context_payload['attachments']` 收“已抽取文本 + 内联图片”；文本随 user 行持久化，
+  图片仅在 `vision`+`inline_images` 时以内联部件发送，否则按名拒绝；host 负责抽取（框架 0.1.12）
 - [ ] **F11 产物 validator/preview 注册**：通用注册表；preview 由 Host UI adapter 实现——框架
 - [ ] **F14 OTel GenAI trace 表 + trace 树**：事件只含 id/状态/计数——框架
 - [ ] **F15 结构化输出 / thinking 控制**：能力声明 + 不支持按名拒绝；Ollama `think:false` 保持——框架

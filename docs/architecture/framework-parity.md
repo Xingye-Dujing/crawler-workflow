@@ -127,9 +127,8 @@ F1–F5 是“不修就要带病迁移”的前置项；F6–F16、F18 在写 ho
 
 P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
 
-**进度（2026-11-23，框架 0.1.11）**：F1、F2、F3、F4、F5、F6、F8、F9、F12、F13、F17 已完成。**下一片**是 F10
-（attachment 接缝）→ F11（产物 validator/preview）→ F14（trace）→ F15（供应商能力）→ F16（并发）→ F18（命令/压缩）；
-F10/F11 是 host adapter 的前置，其余可与 host 并行。
+**进度（2026-11-23，框架 0.1.12）**：F1、F2、F3、F4、F5、F6、F8、F9、F10、F12、F13、F17 已完成。**下一片**是 F11
+（产物 validator/preview）→ F14（trace）→ F15（供应商能力）→ F16（并发）→ F18（命令/压缩）；F11 是 host adapter 的前置。
 
 ## 依赖与钉版
 
