@@ -71,6 +71,7 @@
 | `cc589d3` | 框架 0.1.17（F18）：`CommandRegistry` + `/status` `/skills` `/mode` `/compact`；host 可注册 `/init`，重名拒绝 |
 | `aef340c` | 修复 trace 顺序：按 rowid 插入顺序，避免同一微秒的 span 排序漂移 |
 | `22f9ef51` | wheel 0.1.17；rewrite-plan 勾选 F18，P4.0 全部完成；handoff/README 记录第十五片与 P4 接入 |
+| `c8a1278f` | P4 接入第一片：`backend/ai_host` 的 `CaiXiHuiHost`（facts/tools/skills 委托旧注册表）；门禁加入 ai_host；运行库带 vendored wheel |
 | `6c894ccb` | wheel 0.1.16；rewrite-plan 勾选 F16；handoff/README 记录第十四片，P4.0 只剩 F18 |
 | `fa7d965d` | wheel 0.1.15；rewrite-plan 勾选 F15；handoff/README 记录第十三片，下一步 F16 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
@@ -420,6 +421,18 @@
 - 本片验证：2324 passed（capabilities/analysis/biblio/crawlers/charts/update/ai/node-types API），
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
+
+## P4 接入第一片：ai_host 宿主适配器（2026-11-23）
+
+- `backend/ai_host/`：`CaiXiHuiHost(DefaultHostAdapter)` 把领域事实/工具/技能以**委托**方式交给框架：
+  `facts()` ← `ai.context.project_facts()`；`tools()` 逐条转换 `ai.tools.TOOLS`（handler 原样保留，`mutating`/
+  `always_ask` 复用 `APPROVAL_TOOLS`/`ALWAYS_APPROVAL_TOOLS`）；`skills()` 转换 `ai.skills.BUILTIN`。
+- 框架自带的同名工具（`project_facts` 等）不重复声明——框架的版本读同一份宿主事实；`FRAMEWORK_TOOLS` 明确列出。
+- 门禁同步：`test_doc_paths._PROJECT_DIRS` 与本地包清单加入 `ai_host`；`desktop/requirements-runtime.txt` 声明
+  vendored wheel，requirements 门禁从 wheel METADATA 取发行版名。
+- 测试：全量工具/技能与旧注册表一一对应、审批标志来源、`AgentWorkspace(CaiXiHuiHost)` 能启动。
+- **仍待**：路由迁移到 `AgentWorkspace`（`/chat` 返回 turn_id、`/turns/<id>/events`）、本地附件抽取、设置映射、
+  `/init`、parity 矩阵、`runtime/flags.py` 双路径开关、薄门面与删旧引擎。
 
 ## P4.0 第十五片：命令与压缩（2026-11-23，框架 0.1.17 —— P4.0 收口）
 

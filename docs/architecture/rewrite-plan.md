@@ -170,6 +170,7 @@
 ### P4 接入（只做采析绘的领域翻译与注册）
 
 - [ ] `backend/ai_host/` HostAdapter：facts/sources/tools/skills/resolvers/artifacts/UI adapter
+  （进行中：facts/tools/skills 已委托；resolvers/artifacts/UI/命令仍待）
 - [ ] 领域技能与工具迁移（18 技能 / 47 工具）、工作流/产物工具、源码阅读工具
 - [ ] **本地附件抽取**（pdf/docx/pptx/xlsx/csv/txt/html）与图片内联数据；框架只收结果
 - [ ] **限制设置迁移**：把采析绘设置映射到框架的 0=不限语义（语义在框架，映射在 host）
