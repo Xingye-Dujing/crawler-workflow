@@ -44,9 +44,9 @@
 | H16 | 占比堆叠图运行才报错 | D/R | 临时验证规则 + P3 图表契约/preflight | validate 阶段命名 `stack_fields` |
 | H17 | 关技能面板后答案消失 | D/R | 设置/工作室不再覆盖 `#ai-chat`；回来重新拉 pending；live DOM 保留 | 关闭/打开后答案与卡片都在 |
 | H18 | 切会话又开一个消息区 | D/R | 单实例 + 按 `turn_id`/`id` 复用，不整段重建 | A→B→A 只有一个消息区 |
+| H21 | 只有 `@` 消息被拒 | D | 框架允许空正文 + 结构化 references；产品前端也按 refs 放行；展开文本进 user 行 | `@skill`/`@dataset` 可直接发送（`tests/test_references.py::test_a_message_may_carry_only_references`） |
 | H19 | 重试实时/刷新两种气泡 | D | 都按 `turn_id` 合并，不拼接两次回答 | 实时与刷新一致 |
 | H20 | 工具结果无限存进 SQLite | D | `agent_steps.result` 也走截断/分页 | 大结果不写满库 |
-| H21 | 只有 `@` 的消息被拒 | D | 服务端接受“只有 references”的消息 | `@dataset` 可直接发送 |
 | H22 | 非管理员改 scope 静默失败 | D | 前端显示“仅管理员可改”或改 per-conversation | 不再静默 |
 | H23 | 限制不可见 | D | dock 显示当前回合/结果/上下文上限，可跳设置 | 用户知道当前值 |
 

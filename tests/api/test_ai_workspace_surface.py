@@ -15,3 +15,12 @@ def test_the_workspace_bootstrap_answers_in_the_real_app(client):
     assert isinstance(data['providers'], list) and data['providers']
     assert isinstance(data['skills'], list)
     assert isinstance(data['conversations'], list)
+
+
+def test_the_reference_picker_answers_under_the_wire_key_the_panel_reads(client):
+    response = client.get('/api/ai/ws/references')
+    assert response.status_code == 200, response.get_data(as_text=True)
+    data = response.get_json()
+    assert data['ok'] is True
+    assert isinstance(data['references'], list)
+    assert any(row['kind'] == 'skill' for row in data['references'])

@@ -85,3 +85,31 @@ class TestTheWorkspaceBoots:
             assert workspace.artifact_registry.problems('note', {}) == []
         finally:
             workspace.close()
+
+
+class TestTheReferenceSeam:
+    def test_the_picker_offers_every_capability_skill(self, host):
+        rows = host.reference_candidates('default')
+        skills = {row['id']: row for row in rows if row['kind'] == 'skill'}
+        assert len(skills) >= 16
+        assert skills['node.tokenize']['detail'] == 'process'
+        assert skills['node.tokenize']['label'] == 'tokenize'
+
+    def test_a_skill_reference_is_the_body_skill_load_returns(self, host):
+        from ai import knowledge
+
+        assert host.resolve_reference('skill', 'node.tokenize') == knowledge.load('node.tokenize')['markdown']
+
+    def test_an_unknown_reference_kind_or_id_is_empty(self, host):
+        assert host.resolve_reference('skill', 'node.nope') == ''
+        assert host.resolve_reference('gadget', 'x') == ''
+        assert host.resolve_reference('workflow', 'no-such-file') == ''
+
+    def test_the_framework_merges_host_candidates_with_its_own(self, host):
+        workspace = AgentWorkspace(host)
+        try:
+            workspace.add_file('default', 'note.txt')
+            kinds = {row['kind'] for row in workspace.reference_candidates('default')}
+        finally:
+            workspace.close()
+        assert {'skill', 'file'} <= kinds

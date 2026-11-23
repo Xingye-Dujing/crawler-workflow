@@ -212,6 +212,82 @@ class CaiXiHuiHost(DefaultHostAdapter):
 
         return product_workspace.import_path(str(path or ''))
 
+    # ── @ references ─────────────────────────────────────────────────────────
+
+    def reference_candidates(self, account: str, query: str = '') -> list[dict]:
+        """The product's own picker rows: skills, saved workflows, exports, datasets and runs.
+
+        The framework merges these with its store-owned files/artifacts/conversations and applies
+        the query, so this method only describes product objects; it never filters or pages.
+        """
+        from ai import knowledge
+        from runtime import stores
+
+        rows: list[dict] = []
+        for skill in knowledge.catalog(limit=40)['skills']:
+            rows.append({'kind': 'skill', 'id': skill['id'], 'label': skill['title'], 'detail': skill['category']})
+        for dataset in stores.get_dataset_store().list_datasets(limit=60):
+            rows.append(
+                {
+                    'kind': 'dataset',
+                    'id': str(dataset.get('dataset_id') or ''),
+                    'label': str(dataset.get('name') or dataset.get('dataset_id') or ''),
+                    'detail': f'{int(dataset.get("row_count") or 0)} 行',
+                }
+            )
+        for saved in stores.get_workflow_manager().describe()[:40]:
+            rows.append(
+                {
+                    'kind': 'workflow',
+                    'id': str(saved.get('name') or ''),
+                    'label': str(saved.get('name') or ''),
+                    'detail': f'{int(saved.get("nodes") or 0)} 节点',
+                }
+            )
+        for run in stores.get_run_store().run_ledger()[:40]:
+            rows.append(
+                {
+                    'kind': 'run',
+                    'id': str(run.get('id') or ''),
+                    'label': str(run.get('workflow_name') or run.get('id') or ''),
+                    'detail': f'{run.get("status") or ""} · {run.get("row_count") or 0} 行',
+                }
+            )
+        from runtime import paths
+
+        from services.exports.browser import list_exports
+
+        for export in list_exports(paths.active().export_dir, limit=40):
+            rows.append(
+                {
+                    'kind': 'export',
+                    'id': str(export.get('name') or ''),
+                    'label': str(export.get('name') or ''),
+                    'detail': f'{int(export.get("size") or 0) // 1024} KB',
+                }
+            )
+        return rows
+
+    def resolve_dataset(self, dataset_id: str):
+        from ai import reference_text
+
+        return reference_text.dataset(str(dataset_id or ''))
+
+    def resolve_run(self, run_id: str):
+        from ai import reference_text
+
+        return reference_text.run(str(run_id or ''))
+
+    def resolve_reference(self, kind: str, identifier: str) -> str:
+        from ai import reference_text
+
+        reader = {
+            'workflow': reference_text.workflow,
+            'export': reference_text.export,
+            'skill': reference_text.skill,
+        }.get(str(kind or ''))
+        return str(reader(str(identifier or '')) if reader else '')
+
     def apply_artifact(self, kind: str, payload: dict) -> dict:
         """The product applies each artifact through its own typed endpoint (workflow/memory/chart).
 

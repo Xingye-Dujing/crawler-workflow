@@ -424,6 +424,26 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P6 第二片：@ 引用接缝（框架 0.1.23，2026-11-24）
+
+- **修复两个静默断裂**：`/api/ai/ws/references` 曾返回 `candidates` 而浏览器读 `references`（`@` 菜单始终为空）；
+  composer 挑中的 chips 只进 payload，框架只解析正文 token（挑中的引用从未到达模型）。现在路由用 `references` 键；
+  框架 `References.resolve_rows()` 展开 chips，`/chat` 把 chips 与正文 `@kind:id` 合并进同一预算（去重，不重复展开）。
+- **回答框的引用也成立**：`answer(references=…)` 把展开文本作为该次工具结果的 `reference_text` 交回同一回合；
+  空正文 + 只有引用的消息可发送（H21 已修）。
+- **宿主种类**：框架 0.1.23 增加 `HostAdapter.reference_candidates()` / `resolve_reference()`；`CaiXiHuiHost` 提供
+  能力技能 / 工作流 / 导出，并补上此前从未接的 `resolve_dataset()` / `resolve_run()`（旧 `@dataset`/`@run` 一直解析为空）。
+  `ai/reference_text.py` 负责每种对象的有界文本：数据集形状 + 3 行、运行 20 行控制台尾、工作流节点图与连线、
+  导出前 4000 字、技能正文与 `skill_load` 同一渲染。
+- **前端**：`ai.ref.skill`/`artifact`/`conversation` 双语标签；菜单仍按 kind 显示。
+- **框架**：wheel 0.1.23；新增 `tests/test_references.py`（候选合并/过滤、token 与 chips、重复不展开、未知项、
+  只有引用、回答引用）。**候选交错合并**：宿主返回很多技能/工作流时不再把用户自己的文件挤出 20 条上限（全量跑里
+  唯一的失败项，已用复现用例钉住）。
+- **产品测试**：`test_reference_text.py`、host 引用接缝、`/references` 路由形状、requirements 钉版。
+- **验证**：框架全量绿 + ruff 绿；产品 AI/API/i18n/frontend/requirements 子集 **371 passed**；本批全量 fast
+  **11012 passed / 1 failed**（即上面的排序缺陷），修复后仅重跑受影响子集（按新测试策略，不再重复全量）。
+- **未做（明确声明）**：算子/图表/平台技能要等 P7 清单化；配方 FSM、工具分层路由与严格模式仍是 P6 待办。
+
 ## P6 第一片：能力技能目录（L1/L2）与七段内容（2026-11-24）
 
 - **清单第七段成为技能的唯一家**：`Ai` 新增 `when_not_to_use`/`prerequisites`/`template`/`acceptance`；
@@ -445,8 +465,8 @@
   product/tests 两档 pylint **10.00/10**。本片按新策略没有跑全量 fast（留给下一批收口）。
 - **测试策略（同时写入 AGENTS/practices/testing-lanes）**：小改动只跑它碰到的域 + 命名它的门禁；全量 fast 只在
   大改动、跨域改动或一批（约 4 刀）收口时跑一次；已经证明过的文件不为文档换行重跑。
-- **未做（明确声明）**：算子/图表/平台技能要等 P7 把这三类清单化；`@技能` 强制加载、配方 FSM、工具分层路由
-  与严格模式仍是 P6 待办。
+- **未做（明确声明）**：算子/图表/平台技能要等 P7 把这三类清单化；配方 FSM、工具分层路由与严格模式仍是 P6 待办
+  （`@` 引用已在下一片完成）。
 
 ## P4/P5 收口：旧 AI 引擎与蓝图已删除（2026-11-23）
 

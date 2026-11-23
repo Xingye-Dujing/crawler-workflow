@@ -228,7 +228,11 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
 - **跨面板入口**：数据集列表、运行列表、节点设置里的“问 AI”调 `AIWorkspace.askAbout()`：打开工作区、
   新建会话、把该对象作为手动上下文（服务端自己重读），并把问题**预填不发送**。面板不持有 AI 的会话
   模型，也不会猜上下文该送什么。
-- **@ 运行记录**：`references.KINDS` 增加 `run`，展开为状态、节点错误与控制台尾部（20 行、整块受引用预算限制）。
+- **@ 引用（挑选与键入同一条路）**：框里打 `@` 时 `/references` 返回候选，前端挑中的是**结构化 chips**（不是把
+  `@kind:id` 写进正文）；服务端在写入 user 行前把 chips 和正文里的 token 一起展开成有界文本，未解析的按名列进
+  `unresolved`。种类：数据集 / 运行 / 工作流文件 / 导出产物 / **能力技能** / 上传文件 / 产物 / 会话；工作流展开成
+  节点图与连线，导出只读前 4000 字，技能正文与 `skill_load` 完全同一份渲染，运行是状态 + 节点判定 + 20 行控制台尾。
+  宿主通过 `HostAdapter.reference_candidates()` / `resolve_reference()` 提供自己的种类，框架只做合并、去重与预算。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
 
@@ -301,7 +305,7 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | POST | `/api/ai/ws/plugins/<id>/enable` · `/plugins/install` | 启用/禁用 / 安装 |
 | DELETE | `/api/ai/ws/plugins/<id>` | 卸载 |
 | GET/POST | `/api/ai/ws/files` | 附件列表 / 上传（multipart；文本/图片进框架文件行） |
-| GET | `/api/ai/ws/references` | `@` 引用候选：数据集 / 导出产物 / 工作流文件 / 之前上传的文件 |
+| GET | `/api/ai/ws/references` | `@` 引用候选（`references` 键）：能力技能 / 数据集 / 运行 / 工作流文件 / 导出产物 / 上传文件 / 产物 / 会话 |
 | GET | `/api/ai/ws/conversations/<id>/files` | 会话附件 |
 | DELETE | `/api/ai/ws/files/<id>` | 删除附件行与本地副本 |
 | GET/POST | `/api/ai/ws/monitors` | 监控列表 / 开启（前端 `spec` 在 host 映射成框架 conditions） |

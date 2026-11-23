@@ -472,10 +472,11 @@ def create_blueprint(manager):
 
     @blueprint.get('/references')
     def references():
+        """The composer's ``@`` picker: the wire key is ``references`` (what the browser reads)."""
         return jsonify(
             {
                 'ok': True,
-                'candidates': manager.workspace(account()).reference_candidates(account(), request.args.get('q', '')),
+                'references': manager.workspace(account()).reference_candidates(account(), request.args.get('q', '')),
             }
         )
 
@@ -1116,6 +1117,7 @@ def create_blueprint(manager):
                 account=account(),
                 custom=str(payload.get('custom') or ''),
                 api_key=provider_key(),
+                references=list(payload.get('references') or []),
             )
             if payload.get('stream') is False:
                 return jsonify({'ok': True, 'events': list(_legacy_events(events))})
