@@ -427,6 +427,21 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P6 第五片：严格模式与工具预算（框架 0.1.25，2026-11-24）
+
+- **问题**：37 个领域/通用工具平铺给任何模型，本地 4B/9B 一次要看全部 schema，选择准确率下降、
+  提示词也变贵。
+- **做法**：`ToolSpec` 目录新增 `HostAdapter.core_tools()`；`ToolRegistry.schemas()` 接受
+  `query`/`limit`/`required`，预算生效时**控制工具 + 核心工具 + 当前配方步骤工具**必留，其余按用户原话
+  与工具名/描述的关键词重合排序（中文二元组），截到 12 个。`tools.strict_local`（默认开）让
+  **本地供应商（`local_only`）自动严格**，强模型仍是完整列表——这是决策 9，不新增 UI 开关。
+- **产品**：`CaiXiHuiHost.core_tools()` 返回 `UNIVERSAL_TOOLS`（项目/工作流/文件夹/数据集授权/产物等
+  每轮都可能用到）；配方步骤工具通过 `required` 保证不被裁掉。
+- **测试**：框架 `tests/test_tool_budget.py`（默认设置、控制/核心/命中工具保留、无关工具被裁、
+  配方步骤保留、0=全量）；产品 `TestStrictMode`（核心工具集合与默认设置）。
+- **验证**：框架全量 + ruff 绿；产品 AI/API/requirements 子集 **177 passed**；ruff 绿。
+- **未做**：可调预算的设置项与 UI（当前固定 12）；每轮工具使用情况的可见面板（H23）。
+
 ## P6 第四片：配方进度条与跳过（前端，2026-11-24）
 
 - 输入框上方新增 `#ai-recipe` 步骤条：标题、`第 n/N 步`、每步记号（✓ 完成 / ● 当前 / ↷ 跳过 / 失败色）；

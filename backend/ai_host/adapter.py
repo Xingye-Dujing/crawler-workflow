@@ -318,6 +318,10 @@ class CaiXiHuiHost(DefaultHostAdapter):
         """
         return legacy_tools.UNIVERSAL_TOOLS
 
+    def core_tools(self) -> tuple[str, ...]:
+        """Strict mode keeps these even when the relevance cut trims the rest."""
+        return legacy_tools.UNIVERSAL_TOOLS
+
     # ── run monitors ────────────────────────────────────────────────────────
 
     def event_bus(self):

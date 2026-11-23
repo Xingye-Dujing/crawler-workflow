@@ -113,3 +113,11 @@ class TestTheReferenceSeam:
         finally:
             workspace.close()
         assert {'skill', 'file'} <= kinds
+
+
+class TestStrictMode:
+    def test_the_universal_verbs_survive_a_relevance_cut(self, host):
+        assert set(host.core_tools()) == set(legacy_tools.UNIVERSAL_TOOLS)
+
+    def test_strict_mode_is_on_by_default_and_can_be_read_from_settings(self, host):
+        assert host.settings().get('tools.strict_local') is True
