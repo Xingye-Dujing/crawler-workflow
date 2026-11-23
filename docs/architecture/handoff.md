@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`64dede4e 修改：设置面板按清单选择表单，删除逐类型分支`
+- 最后提交：`1be81060 修改：图表契约成为单一声明，面板按清单渲染并支持一键修复`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -46,6 +46,7 @@
 | `d72b0a62` | P2 前端第二片：`/api/workflow/validate` 成为唯一运行门；删除 `runs.js` 校验 if 链与 `sourceNodeErrors` |
 | `2f6e21cf` | P2 前端第三片：process/biblio 选项表改读清单枚举；`node-types.js` 幂等加载 |
 | `64dede4e` | P2 前端第四片：清单 `ui` 选择表单；`openSettings` 删除逐类型分支；通用 schema 渲染器 + 注册表；设备层禁用节点用例等待服务端诊断 |
+| `1be81060` | P3 第一片：`ChartSpec.fields` 成为面板/校验/血缘/AI 目录的单一来源；验证条目带 `param`/`severity`/`fix`；设置面板一键修复与字段描红 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
