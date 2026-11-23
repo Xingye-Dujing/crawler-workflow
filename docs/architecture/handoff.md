@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`47496d0 功能更新：TurnFSM、持久事件与中断恢复（ADR-003）`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`5b2281ff 功能更新：框架 0.1.2 与架构文档复核`；框架仓库 `47496d0`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -53,6 +53,7 @@
 | `8b6cc478` | P4 依赖：`vendor/agent_workspace-0.1.0-py3-none-any.whl` 钉版；`requirements.txt` 以仓库根相对路径引用；`deploy/Dockerfile` 复制 `vendor/` 并从 `/app` 安装；requirements 门禁校验 wheel 名/METADATA/唯一声明 |
 | `31b3c9ba` | 框架升到 0.1.1：`HostAdapter.turn_finished(summary)` 轮次完成通知（桌面弹窗/提示音的宿主接缝）；wheel 替换并更新 sha256；P4.0 增加 F17 |
 | `47496d0` | 框架 0.1.2（ADR-003 第一片）：`fsm.py` TurnFSM；`turns`/`turn_events`/`pending_calls`；answer 按 `call_id` 幂等并复用原 turn；重启保留待答问题、收尾半途 turn |
+| `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -416,7 +417,8 @@
   只写在 parity 文档的流程里，现已变成 rewrite-plan 的未勾选项，接入时必须在 `runtime/flags.py` 声明。
 - **ADR-002**：九段、注册表、六类生成物与 freshness 门禁都在；**缺的两个门禁已处理**——自定义表单 renderer 现在
   会被门禁核对（浏览器里没有人 `registerSettingsRenderer` 的 id 直接红）；“文档哈希”按“生成物携带清单 digest”
-  解释并写进 `capabilities-kernel.md`（写回清单是反向依赖）。技能七段属于 P6，保持未勾选。
+  解释并写进 `capabilities-kernel.md`（写回清单是反向依赖）。技能七段属于 P6，保持未勾选。另删掉了
+  `nodes/catalog.py` 里空置的旧字面表与合并函数——16 个节点全在清单里，旧表是残骸。
 - **ADR-003**：TurnFSM、事件 seq、pending 持久化、重启恢复已落地；runner、命令表、邮箱、事件版本号仍未勾选，
   顺序写在 rewrite-plan。
 - **R10**：`DataAsset` 仍只有骨架；`node_schema` 是形状半部，物化列入 P4 未勾选项，不能算 P3 已完成。

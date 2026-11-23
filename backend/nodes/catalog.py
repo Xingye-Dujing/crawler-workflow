@@ -13,10 +13,10 @@ catalogue by a contract test, so a new type cannot be half-registered. The brows
 server's answer too (:func:`api.node_types.node_types` → ``static/js/node-types.js``) rather than
 keeping a second list that can only be edited in parallel.
 
-**A migrated type is declared in ``capabilities_kernel/nodes/<id>/manifest.py``, not in the literal
-below.** This table is now the adapter for the types that have not moved yet: the kernel entries are
-merged into it at the declared slot, so the served order and every downstream reader stay the same.
-Adding a type to the kernel needs no edit here; adding one to the literal is the old way.
+**Every type is declared in ``capabilities_kernel/nodes/<id>/manifest.py``.** This module is the
+projection: the kernel entries are turned into ``NodePlugin`` values in the order their manifests
+declare, so the served order and every downstream reader stay the same. Adding a type needs no edit
+here.
 
 Each plugin's **behaviour** lives beside its declaration: one module per type under
 ``backend/nodes/executors/``, behind the same ``(node, call)`` signature the registry calls. The
@@ -52,37 +52,20 @@ class NodePlugin:
     defaults_from: str = ''
 
 
-#: Types still declared the old way. Empty: every node type now has a manifest, and the merge below
-#: keeps the served order the one the manifests declare.
-_DECLARED: dict[str, NodePlugin] = {}
-
-
-def _with_kernel_nodes(declared: dict[str, NodePlugin]) -> dict[str, NodePlugin]:
-    """Merge the migrated manifests at the slots they declare.
-
-    A duplicate is a hard error, not "the manifest wins": the literal and the manifest would be two
-    answers to the same question, and whichever reader imported first would silently decide.
-    """
-    items = list(declared.items())
-    for entry in capabilities.node_entries():
-        if entry['type'] in declared:
-            raise RuntimeError(
-                f'node type {entry["type"]} is declared both in nodes/catalog.py and in '
-                f'capabilities_kernel/nodes/{entry["type"]}/manifest.py',
-            )
-        plugin = NodePlugin(
-            entry['type'],
-            entry['label_key'],
-            entry['category'],
-            rows=entry['rows'],
-            quiet=entry['quiet'],
-            defaults_from=entry['defaults_from'],
-        )
-        items.insert(min(int(entry['order']), len(items)), (plugin.type, plugin))
-    return dict(items)
-
-
-PLUGINS: dict[str, NodePlugin] = _with_kernel_nodes(_DECLARED)
+#: The served catalogue: one entry per manifest, in the order the manifests declare. A duplicate id
+#: is refused by ``capabilities_kernel.registry`` at discovery, so there is no literal to merge with
+#: and no second answer to keep in step.
+PLUGINS: dict[str, NodePlugin] = {
+    entry['type']: NodePlugin(
+        entry['type'],
+        entry['label_key'],
+        entry['category'],
+        rows=entry['rows'],
+        quiet=entry['quiet'],
+        defaults_from=entry['defaults_from'],
+    )
+    for entry in capabilities.node_entries()
+}
 
 #: Every type the engine can execute. A hand-edited canvas can name a node anything; a type outside
 #: this set has no executor, so validation refuses it by name instead of falling through to an empty
