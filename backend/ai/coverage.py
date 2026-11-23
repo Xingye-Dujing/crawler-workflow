@@ -60,15 +60,18 @@ def audit() -> dict:
         'chart_types': _family('chart_catalog', {spec.key for spec in SPECS}, chart_types),
     }
 
-    from ai import skills
-    from ai.agent import FILE_TOOLS, UNIVERSAL_TOOLS
-    from ai.tools import TOOLS
+    from agent_workspace.tools import CONTROL_TOOLS
+    from ai_host.adapter import FRAMEWORK_TOOLS
 
-    reachable = set(UNIVERSAL_TOOLS) | set(FILE_TOOLS)
+    from ai import skills, tools
+
+    # The product's own declarations: a name the framework already serves is the framework's tool,
+    # not a product entry that needs a skill.
+    product = {name for name, spec in tools.TOOLS.items() if spec.builtin and name not in FRAMEWORK_TOOLS}
+    reachable = set(tools.UNIVERSAL_TOOLS) | set(CONTROL_TOOLS)
     for skill in skills.all_skills().values():
         reachable.update(skill.tools)
-    tool_names = {name for name, spec in TOOLS.items() if spec.builtin and not spec.control}
-    families['tools'] = _family('skill tools + universal', tool_names, reachable)
+    families['tools'] = _family('skill tools + universal', product, reachable)
 
     missing = {name: family['missing'] for name, family in families.items() if family['missing']}
     return {

@@ -12,11 +12,12 @@ pytestmark = pytest.mark.api
 
 @pytest.fixture(autouse=True)
 def clean_memories():
-    from ai import store
-
     def wipe():
-        for row in store.list_memories():
-            store.delete_memory(row['id'])
+        from ai_host.manager import WorkspaceManager
+
+        workspace = WorkspaceManager().workspace('default')
+        for row in workspace.store.list_memories('default'):
+            workspace.store.delete_memory('default', row['id'])
 
     wipe()
     yield
@@ -24,31 +25,29 @@ def clean_memories():
 
 
 def test_a_preview_describes_a_memory_without_writing_it(client):
-    from ai import store
-
-    response = client.post('/api/ai/artifacts/preview', json={'kind': 'memory', 'payload': {'text': 'preview me'}})
+    response = client.post('/api/ai/ws/artifacts/preview', json={'kind': 'memory', 'payload': {'text': 'preview me'}})
     assert response.status_code == 200
     data = response.get_json()
     assert data['ok'] is True
     assert 'preview me' in data['preview']['summary']
     assert data['preview']['selectable'] is False
-    assert store.list_memories() == [], 'a preview wrote a memory'
+    assert client.get('/api/ai/ws/memories').get_json()['memories'] == [], 'a preview wrote a memory'
 
 
 def test_an_illegal_draft_is_refused_with_the_validators_sentence(client):
-    from ai import store
+    from ai.validators.memory import MAX_MEMORY_CHARS
 
     from i18n import t
 
-    response = client.post('/api/ai/artifacts/preview', json={'kind': 'memory', 'payload': {'text': ''}})
+    response = client.post('/api/ai/ws/artifacts/preview', json={'kind': 'memory', 'payload': {'text': ''}})
     assert response.status_code == 400
     data = response.get_json()
     assert data['ok'] is False
-    assert t('ai.memoryDraftRefused', limit=store.MAX_MEMORY_CHARS) in data['error']
+    assert t('ai.memoryDraftRefused', limit=MAX_MEMORY_CHARS) in data['error']
 
 
 def test_an_unregistered_kind_is_refused_by_name(client):
-    response = client.post('/api/ai/artifacts/preview', json={'kind': 'plan', 'payload': {}})
+    response = client.post('/api/ai/ws/artifacts/preview', json={'kind': 'plan', 'payload': {}})
     assert response.status_code == 400
     data = response.get_json()
     assert data['ok'] is False
@@ -57,7 +56,7 @@ def test_an_unregistered_kind_is_refused_by_name(client):
 
 def test_a_workflow_preview_diffs_against_the_current_canvas(client):
     response = client.post(
-        '/api/ai/artifacts/preview',
+        '/api/ai/ws/artifacts/preview',
         json={
             'kind': 'workflow_draft',
             'payload': {

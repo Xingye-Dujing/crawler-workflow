@@ -115,7 +115,8 @@ def test_a_missing_column_is_refused_by_name(frame):
 
 
 def test_the_tool_is_offered_without_a_new_switch():
-    from ai import tools
+    from ai import skills, tools
 
-    assert 'dataset_query' in {row['name'] for row in tools.schemas()}
+    # Offered by the analysis skill, which is the framework's offer list — no extra switch.
+    assert 'dataset_query' in skills.BUILTIN['analysis'].tools
     assert tools.TOOLS['dataset_query'].permission == 'read:project'

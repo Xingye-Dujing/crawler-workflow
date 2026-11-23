@@ -146,12 +146,14 @@ def test_source_mode_reports_a_path_cli(monkeypatch):
 
 
 def test_catbus_is_a_registered_read_only_tool(monkeypatch):
-    from ai import tools
+    from ai import skills, tools
 
     spec = tools.TOOLS['catbus_status']
     assert spec.permission.startswith('read:'), 'detection may not need an approval'
     assert spec.handler is tools.tool_catbus_status
-    assert 'catbus_status' in [item['name'] for item in tools.schemas(allow_files=False)]
+    # Offered by the skill that owns it, with no new switch: the framework's offer list is the
+    # skill's tool list plus the universal set.
+    assert 'catbus_status' in skills.BUILTIN['catbus'].tools
 
     from ai.workspace import ALLOWED_COMMANDS
 

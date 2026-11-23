@@ -41,23 +41,17 @@ def test_an_ordinary_account_may_not_administer_the_machine(monkeypatch):
         assert policy.may_administer_machine() is False
 
 
-def test_the_workspace_picker_and_runner_refuse_an_ordinary_account(monkeypatch, tmp_path):
+def test_the_workspace_picker_refuses_an_ordinary_account(monkeypatch, tmp_path):
     _accounts_on(monkeypatch)
     with account_context.use(READER):
         for call in (
             lambda: workspace.browse(str(tmp_path)),
-            lambda: workspace.set_folder(str(tmp_path)),
             lambda: workspace.pick_folder(str(tmp_path)),
-            lambda: workspace.run_command('git status'),
-            lambda: workspace.list_dir('', kind='app'),
         ):
             with pytest.raises(AIError) as caught:
                 call()
             assert caught.value.key == policy.machine_refusal_key(), caught.value.key
-        described = workspace.describe()
-        assert described['admin_only'] is True
-        assert described['app_root'] == '', 'the checkout path is a host fingerprint'
-        assert described['allowed_commands'] == []
+        assert workspace.volumes() == [], 'the drive list is a host fingerprint'
 
 
 def test_an_admin_still_uses_the_workspace(monkeypatch, tmp_path):
@@ -67,9 +61,7 @@ def test_an_admin_still_uses_the_workspace(monkeypatch, tmp_path):
         browsed = workspace.browse(str(tmp_path))
         assert browsed['path'] == str(tmp_path)
         assert [row['name'] for row in browsed['entries']] == ['inner']
-        changed = workspace.set_folder(str(tmp_path))
-        assert changed['folder'] == str(tmp_path)
-        assert changed['admin_only'] is False
+        assert browsed['roots'] == workspace.volumes()
 
 
 @pytest.fixture()
@@ -86,17 +78,16 @@ def python_routes_client(client, monkeypatch):
 def test_an_ordinary_account_may_not_author_or_run_inline_python(python_routes_client):
     client, as_reader = python_routes_client
     with as_reader():
-        assert client.post('/api/ai/python/scripts', json={'name': 'x', 'code': 'print(1)'}).status_code == 403
-        assert client.post('/api/ai/python/run', json={'code': 'print(1)'}).status_code == 403
-        assert client.get('/api/ai/python/files').status_code == 403
+        assert client.post('/api/ai/ws/python/scripts', json={'name': 'x', 'code': 'print(1)'}).status_code == 403
+        assert client.post('/api/ai/ws/python/run', json={'code': 'print(1)'}).status_code == 403
     # The read-only capability answer stays available: the panel must be able to say why.
     with as_reader():
-        assert client.get('/api/ai/python/status').status_code == 200
+        assert client.get('/api/ai/ws/python/status').status_code == 200
 
 
 def test_the_python_gate_names_the_same_sentence_as_every_machine_route(python_routes_client):
     client, as_reader = python_routes_client
     with as_reader():
-        body = client.post('/api/ai/python/scripts', json={'name': 'x', 'code': 'print(1)'}).get_json()
+        body = client.post('/api/ai/ws/python/scripts', json={'name': 'x', 'code': 'print(1)'}).get_json()
     assert body['ok'] is False
     assert body['key'] == policy.machine_refusal_key()

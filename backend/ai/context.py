@@ -1,15 +1,9 @@
-"""What the model may read, and the one place that decides how much of it fits.
+"""The product facts and documentation search the AI workspace reads.
 
-Three layers, always in this order:
-
-1. **Project facts** — generated from the registries the app already trusts, never a second
-   hand-written list. Stable across turns, so DeepSeek's prefix cache can hit it.
-2. **Live context** — the saved canvas draft, dataset profile, run status and console tail. The
-   browser may send ids or an unsaved draft; the server re-reads every saved fact itself.
-3. **Conversation memory** — user-approved notes, retrieved docs and the current question.
-
-Everything is measured before it is sent. A budget cut is reported in ``meta`` and shown in the
-context inspector; the model is never quietly fed a different project.
+The framework's context builder owns the three layers (facts, live context, memories) and their
+budgets; this module supplies only the product half: the generated project map and a keyword search
+over the repository's own docs. Imports stay lazy so the AI page can boot even when a heavy optional
+module (torch, matplotlib) is unavailable.
 """
 
 import json
@@ -18,9 +12,6 @@ import re
 from pathlib import Path
 
 from core.config import Config
-from runtime.settings import get_setting
-
-from ai import store
 
 SECRET = re.compile(r'(sk-[A-Za-z0-9_-]{8,}|oc_sk_[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{8,})')
 CJK = re.compile(r'[\u3400-\u9fff]')
@@ -66,8 +57,7 @@ def _clip(text: str, limit: int) -> str:
 
 
 def project_facts() -> str:
-    """A compact, generated map of the product. Imports stay lazy so the AI page can boot even
-    when a heavy optional module (torch, matplotlib) is unavailable."""
+    """A compact, generated map of the product."""
     lines = [
         '# 采析绘项目事实',
         '产品：Flask + 无构建 vanilla JS；采集 9 个社交平台与 CNKI 导出；工作流画布；文本清洗、分析与可视化。',
@@ -183,234 +173,6 @@ def docs_search(query: str, limit: int = 3) -> list[dict]:
             scored.append((score, title, body))
     scored.sort(key=lambda item: (-item[0], item[1]))
     return [{'title': title, 'text': _clip(body, 2400)} for _score, title, body in scored[:limit]]
-
-
-def _canvas_context(canvas: dict) -> tuple[str, dict]:
-    """The canvas summary, plus how many nodes a long canvas left out of the list.
-
-    The heading always named the true node count while only 40 rows followed, and the inspector
-    reported the section as complete (its ``truncated`` is about the character budget). A model
-    reading “节点 80” and seeing 40 ids had no way to know which half it had.
-    """
-    nodes = canvas.get('nodes') or []
-    connections = canvas.get('connections') or canvas.get('edges') or []
-    if not isinstance(nodes, list) or not isinstance(connections, list):
-        return '', {}
-    lines = [
-        f'## 当前画布（{"未保存草稿" if canvas.get("unsaved") else "画布"}）',
-        f'节点 {len(nodes)}，连线 {len(connections)}',
-    ]
-    selected = canvas.get('selectedNode') or canvas.get('selected_node')
-    shown = 0
-    for node in nodes[:40]:
-        if not isinstance(node, dict):
-            continue
-        shown += 1
-        params = node.get('params') or {}
-        keys = ', '.join(sorted(params)[:12]) if isinstance(params, dict) else ''
-        mark = '*' if selected and node.get('id') == selected else '-'
-        lines.append(f'{mark} {node.get("type") or "?"} #{node.get("id") or "?"} {node.get("title") or ""} [{keys}]')
-    cut = {'shown': shown, 'total': len(nodes)} if shown < len(nodes) else {}
-    return '\n'.join(lines), cut
-
-
-def _dataset_context(dataset_id: str, scope: str) -> str:
-    if not dataset_id:
-        return ''
-    try:
-        from runtime.stores import get_dataset_store
-
-        frame = get_dataset_store().get(dataset_id)
-        meta = get_dataset_store().meta(dataset_id) or {}
-    except Exception:
-        return ''
-    if frame is None:
-        return ''
-    sample_n = 6 if scope == 'summary' else 20
-    lines = [
-        f'## 数据集 {dataset_id}',
-        f'名称：{meta.get("name") or ""}；行数：{len(frame)}；列数：{len(frame.columns)}',
-        '列：' + ', '.join(f'{column}（{frame[column].dtype}）' for column in frame.columns),
-        '缺失：'
-        + ', '.join(
-            f'{column}={int(frame[column].isna().sum())}' for column in frame.columns if frame[column].isna().any()
-        ),
-        '样本（前几行，值已截断）：',
-        _clip(frame.head(sample_n).to_json(orient='records', force_ascii=False), 5000),
-    ]
-    return '\n'.join(lines)
-
-
-def _run_context(run_id: str, scope: str) -> tuple[str, dict]:
-    if not run_id:
-        return '', {}
-    try:
-        from runtime.stores import get_run_store
-
-        run_store = get_run_store()
-        run = run_store.get_run(run_id)
-        statuses = run_store.node_statuses(run_id)
-        log = run_store.read_log(run_id, limit=50 if scope == 'summary' else 150)
-    except Exception:
-        return '', {}
-    if not run:
-        return '', {}
-    lines = [
-        f'## 运行 {run_id}',
-        f'状态：{run.get("status")}；工作流：{run.get("workflow_name") or ""}；'
-        f'模型：{run.get("llm_provider")}/{run.get("llm_model")}',
-        '节点：',
-    ]
-    listed = list(statuses.items())[:40]
-    for node_id, node in listed:
-        lines.append(
-            f'- {node_id}: {node.get("status")}，{node.get("row_count") or 0} 行'
-            + (f'，错误：{_clip(node.get("error") or "", 300)}' if node.get('error') else '')
-        )
-    cut = {'shown': len(listed), 'total': len(statuses)} if len(listed) < len(statuses) else {}
-    rows = log.get('rows') or []
-    if rows:
-        lines.append('控制台尾部：')
-        lines.extend(
-            f'{row.get("ts") or ""} {row.get("level") or ""} {_clip(row.get("line") or "", 240)}' for row in rows
-        )
-    return '\n'.join(lines), cut
-
-
-#: How many confirmed memories one turn carries. The rest stay visible in the studio; the count is
-#: reported in ``context_meta.memories`` so a cut is a fact, not a silence.
-MEMORY_CONTEXT_LIMIT = 20
-
-
-def _memory_context() -> tuple[str, dict]:
-    """The user-confirmed memories, newest first, plus how many did not fit.
-
-    The heading is added by ``build_context`` like every other section: returning one here produced
-    a second ``## 项目记忆`` inside the first, which read as two sections and made the inspector's
-    character count disagree with what the model saw.
-    """
-    try:
-        memories = store.list_memories()
-    except Exception:
-        return '', {'total': 0, 'shown': 0, 'omitted': 0}
-    shown = memories[:MEMORY_CONTEXT_LIMIT]
-    text = '\n'.join(f'- {item["text"]}' for item in shown)
-    return text, {'total': len(memories), 'shown': len(shown), 'omitted': max(0, len(memories) - len(shown))}
-
-
-def build_context(query: str, payload: dict | None = None) -> tuple[str, dict]:
-    """Return ``(context_text, meta)``. ``meta`` is what the inspector renders."""
-    payload = payload or {}
-    scope = str(get_setting('ai_context_scope') or 'summary')
-    if payload.get('scope') in ('off', 'summary', 'full'):
-        scope = str(payload['scope'])
-    if scope == 'off':
-        return '', {
-            'scope': 'off',
-            'items': [],
-            'chars': 0,
-            'tokens': 0,
-            'omitted': [],
-            'memories': {'total': 0, 'shown': 0, 'omitted': 0},
-            'redacted': {},
-        }
-    parts: list[tuple[str, str]] = []
-    section_cuts: dict[str, dict] = {}
-    memories_meta: dict = {'total': 0, 'shown': 0, 'omitted': 0}
-    if scope in ('summary', 'full'):
-        parts.append(('项目事实', project_facts()))
-        memory_text, memories_meta = _memory_context()
-        parts.append(('项目记忆', memory_text))
-    canvas = payload.get('canvas') if isinstance(payload.get('canvas'), dict) else None
-    if canvas:
-        canvas_text, section_cuts['画布'] = _canvas_context(canvas)
-        parts.append(('画布', canvas_text))
-    try:
-        from ai import workspace
-
-        folder = workspace.snapshot()
-    except Exception:  # a store that cannot open must not take the whole context down
-        folder = ''
-    if folder:
-        parts.append(('工作文件夹', folder))
-    if payload.get('dataset_id'):
-        parts.append(('数据集', _dataset_context(str(payload['dataset_id']), scope)))
-    if payload.get('run_id'):
-        run_text, section_cuts['运行'] = _run_context(str(payload['run_id']), scope)
-        parts.append(('运行', run_text))
-    if scope == 'full':
-        for index, doc in enumerate(docs_search(query, limit=3), 1):
-            parts.append((f'文档 {index}：{doc["title"]}', doc['text']))
-    budget = max(2000, int(get_setting('ai_max_context_chars') or 120000))
-    kept: list[str] = []
-    items: list[dict] = []
-    omitted: list[str] = []
-    redactions: dict[str, int] = {}
-    used = 0
-    for title, text in parts:
-        text, redacted_n = redact_with_count(text)
-        if not text:
-            continue
-        remaining = budget - used
-        if remaining <= 200:
-            omitted.append(title)
-            continue
-        clipped = text if len(text) <= remaining else text[:remaining] + '\n…'
-        kept.append(f'## {title}\n{clipped}')
-        cut = section_cuts.get(title) or {}
-        items.append(
-            {
-                'title': title,
-                'chars': len(clipped),
-                'truncated': len(clipped) < len(text) or bool(cut),
-                # A section that lists the first N of M items is a cut even when its TEXT fits the
-                # budget; the inspector shows these two numbers instead of calling it complete.
-                **({'shown': cut['shown'], 'total': cut['total']} if cut else {}),
-            }
-        )
-        # Only count what actually reached the model: a part scrubbed but then dropped by the
-        # budget was never sent, so reporting it would be a different (wrong) fact.
-        if redacted_n:
-            redactions[title] = redacted_n
-        used += len(clipped)
-    joined = '\n\n'.join(kept)
-    return joined, {
-        'scope': scope,
-        'items': items,
-        'chars': len(joined),
-        'tokens': estimate_tokens(joined),
-        'omitted': omitted,
-        'budget': budget,
-        'memories': memories_meta,
-        'redacted': redactions,
-    }
-
-
-def context_preview(query: str, payload: dict | None = None) -> dict:
-    text, meta = build_context(query, payload)
-    return {'ok': True, 'context': text, 'meta': meta}
-
-
-def for_replay(text: str) -> tuple[str, dict]:
-    """Clamp the block a turn will carry for the REST of the conversation.
-
-    The block is stored on the user's own row and replayed with that row forever (that is what lets
-    the provider's prefix cache hit across turns — a message whose bytes change invalidates
-    everything after it). "Forever" is why its size matters: a 120,000-character context repeated
-    over twenty turns is a window nobody has. The cap keeps it bounded, and what it drops is
-    reported (``replay_truncated``) and still reachable through the read tools.
-    """
-    value = str(text or '')
-    limit = int(get_setting('ai_context_replay_chars') or 0)
-    if limit <= 0:
-        # 0 = no application clamp. The model window is the only limit; the block is still measured
-        # and reported so the inspector can show how much each turn carries.
-        return value, {'replay_limit': 0, 'replay_chars': len(value), 'replay_truncated': False}
-    meta = {'replay_limit': limit, 'replay_chars': min(len(value), limit), 'replay_truncated': len(value) > limit}
-    if not meta['replay_truncated']:
-        return value, meta
-    note = f'\n…[context cut at {limit} chars for replay; read the rest with a tool]'
-    return value[:limit] + note, meta
 
 
 def safe_filename(name: str) -> str:

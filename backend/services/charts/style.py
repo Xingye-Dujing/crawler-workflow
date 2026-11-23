@@ -25,7 +25,9 @@ from services.charts.contracts import ChartConfigError
 #: from the chart registry's ``controls`` declaration, so the box the settings panel offers and
 #: the refusal the builder makes read one table. Any other type handed an annotation is refused
 #: rather than ignored: an annotation the figure does not show is worse than none.
-from services.charts.registry import ANNOTATED_TYPES as ANNOTATED_TYPES
+from services.charts.registry import ANNOTATED_TYPES
+
+__all__ = ['ANNOTATED_TYPES']
 
 logger = logging.getLogger(__name__)
 

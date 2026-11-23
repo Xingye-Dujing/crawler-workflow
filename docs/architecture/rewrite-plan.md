@@ -170,33 +170,37 @@
 
 ### P4 接入（只做采析绘的领域翻译与注册）
 
-- [ ] `backend/ai_host/` HostAdapter：facts/sources/tools/skills/resolvers/artifacts/UI adapter
-  （进行中：facts/tools/skills/artifact validators 已委托；resolvers/previews/UI/命令仍待）
-- [ ] `backend/api/ai.py` 改为 `AgentWorkspace` 的薄 HTTP/SSE 适配
-  （进行中：`/api/ai/ws` 新表面已建，旧路由保留至 parity）
-- [ ] 领域技能与工具迁移（18 技能 / 47 工具）、工作流/产物工具、源码阅读工具
-- [ ] **本地附件抽取**（pdf/docx/pptx/xlsx/csv/txt/html）与图片内联数据；框架只收结果
-- [ ] **限制设置迁移**：把采析绘设置映射到框架的 0=不限语义（语义在框架，映射在 host）
-- [ ] **`/init` 等宿主命令注册**；框架的 `/status` `/skills` `/mode` `/compact` 只在 host 暴露入口
-- [ ] parity matrix：每个旧功能在新框架有等价/更强测试
-- [x] `runtime/flags.py` 双路径开关（`ai_workspace`，默认开，owner/remove_by=2027-03-01）
-- [ ] `backend/ai/` 改为薄门面；删重复引擎模块
-- **DoD**：旧 AI 功能全部在新框架跑通；旧 `backend/ai` 无业务逻辑；AI 会话关闭/切换不中断；question 不再“找不到消息”。
+- [x] `backend/ai_host/` HostAdapter：facts/tools/skills/artifact validators/settings/commands/附件/
+  环境/搜索抓取/导入/脚本库/Python 运行器/事件总线/语言与账号绑定
+- [x] `backend/api/ai_workspace.py`：`/api/ai/ws` 是唯一的 AI 表面（旧 `api/ai.py` 已删除）
+- [x] 领域技能与工具迁移（18 技能 / 47 工具）、工作流/产物工具、源码阅读工具
+- [x] **本地附件抽取**（pdf/docx/pptx/xlsx/csv/txt/html）与图片内联数据；框架只收结果
+- [x] **限制设置迁移**：采析绘设置经 `config.LEGACY_KEYS` 映射到框架的 0=不限语义
+- [x] **`/init` 等宿主命令注册**；框架的 `/status` `/skills` `/mode` `/compact` 由框架提供
+- [x] parity matrix：每个旧功能在新框架有等价/更强测试（见 framework-parity.md 的残留项）
+- [x] 双路径开关已随旧引擎删除（`runtime/flags.py` 目前没有在途开关）
+- [x] `backend/ai/` 只剩领域模块：provider/context/skills/tools/validators/previews/vocabulary/
+  workflow_draft/workspace/monitors/file_text/dataset_access/files/errors/types/scopes/environment
+- **DoD**：旧 AI 功能全部在新框架跑通；旧 `backend/ai` 无回合引擎/存储/审批/插件宿主；
+  AI 会话关闭/切换不中断；question 不再“找不到消息”。
 
 > 归属备忘：`answer` 用框架的 `call_id`；旧前端的 `question_id`/`message_id` 派生是**host 的 HTTP 层**职责。
 > 事件名与前端 wire protocol 的映射也放 host（框架只保证 `EVENT_PROTOCOL` 版本与 `seq`）。
 
-## P5 框架前端（2-3 周）
+## P5 前端（已按“切换现有页面”完成，不做框架自带前端）
 
-- [ ] `agent_workspace/web/` 零构建壳
-- [ ] Host UI adapter：artifact/dataset/chart/run/source 预览注册
-- [ ] 采析绘全屏页先接入；再替换右侧 dock
-- [ ] 删除旧 `ai-workspace.js`/`ai/*.js`（或保留薄适配）
-- [ ] 交互修复：滚动/思考展开/工具详情/原位回答/侧栏/复制/单实例
-- [ ] 浏览器测量测试
-- [ ] 零构建 custom elements + host adapter + design tokens
-- [ ] 组件级 UI contribution registry
-- **DoD**：新旧 UI 功能 parity 或更强；所有 UI 问题在新 UI 有回归测试；旧 UI 删除。
+- [x] `ai-workspace.js` 全部请求切到 `/api/ai/ws`；`ai/studio.js`、`ai/watch.js`、`llm-settings.js`、
+  `panels/node-python.js`、`workflow.js` 同步切换（前端不再调用 `/api/ai/*`）
+- [x] host 边缘做 wire 映射（`text_delta→text`、`thinking_delta→thinking`、`tool_*`、`citation`）
+- [x] 实机浏览器用例：本地模型真实回答 + 实时行 + 停止
+- [x] 监视器：宿主事件总线把 `runtime.run_events` 映射给框架，交付行回填会话/运行事实
+- [ ] 框架自带 `agent_workspace/web/` 壳与 custom elements（**已决定不做**：保留采析绘自己的
+  零构建前端，只换后端表面；见 `docs/architecture/rewrite-plan.md#已确认的决策`）
+- **DoD**：前端功能 parity；旧 API 删除后页面无失效入口（本轮已达成，监视器/工作文件夹/附件/Python
+  面板均走同一表面）。
+
+> 2026-11-23 方向调整：**保留现有前端，仅切换 API 表面**。原计划的“替换右侧 dock / 删旧 UI”
+> 不再执行；对应事项视为关闭。
 
 ## P6 技能/工具/小模型（2-3 周）
 

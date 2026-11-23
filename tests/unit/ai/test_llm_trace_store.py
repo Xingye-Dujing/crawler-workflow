@@ -94,16 +94,12 @@ class TestATraditionalModel:
 
 
 class TestTheOldPanelBridge:
-    def test_the_old_conversation_route_opens_a_framework_trace(self):
-        """Until the frontend moves, the old panel must open the trace the run console now writes."""
-        from api.ai import _workspace_conversation
-        from flask import Flask
-
+    def test_a_trace_conversation_is_readable_through_the_framework_surface(self, client):
+        """The panel opens the trace the run console wrote, through the ONE AI surface."""
         run = _run_id()
         _client, conversation_id = llm_trace.start_node_trace(run, 'n5', 'clean', None)
-        with Flask(__name__).app_context():
-            response = _workspace_conversation(conversation_id)
-            assert response is not None
-            body = response.get_json()
+        response = client.get(f'/api/ai/ws/conversations/{conversation_id}')
+        assert response.status_code == 200
+        body = response.get_json()
         assert body['conversation']['skill'] == 'node_trace'
         assert body['messages']

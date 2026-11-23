@@ -37,7 +37,7 @@ def get_provider(provider_id: str):
 
 def public_catalog() -> list:
     """Every provider the picker may show. This reads no daemon: the live model list is
-    ``GET /api/ai/providers/<id>/models``, which the panel asks for when the provider is local."""
+    ``GET /api/ai/ws/providers/<id>/models``, which the panel asks for when the provider is local."""
     out = []
     for key in ORDER:
         provider = PROVIDERS[key]

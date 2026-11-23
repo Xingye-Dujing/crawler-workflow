@@ -11,7 +11,7 @@ The same object feeds three consumers, so they cannot disagree:
 - the system prompt (``prompt_line``) tells the model what it may claim to have read;
 - the skill list (``ai.skills.availability``) disables the one built-in skill that needs the
   repository source, and names the reason in the panel;
-- the UI (``/api/ai/bootstrap``) shows the runtime chip and can hide a control the host cannot
+- the UI (``/api/ai/ws/bootstrap``) shows the runtime chip and can hide a control the host cannot
   honour, instead of letting the click fail.
 """
 

@@ -22,11 +22,9 @@ import re
 from pathlib import Path
 
 from core.config import Config
-from runtime import account_context, policy
+from runtime import account_context
 from runtime.settings import get_setting
 
-from ai import scopes
-from ai.context import docs_search, project_facts
 from ai.errors import AIError
 from ai.types import ToolSpec
 
@@ -65,6 +63,24 @@ def _dataset_rows(dataset_id: str, wanted: int, ctx: dict) -> tuple[int, dict]:
     return dataset_access.consume(str((ctx or {}).get('conversation_id') or ''), dataset_id, wanted)
 
 
+def tool_request_dataset_access(args: dict, ctx: dict) -> dict:
+    """Create the conversation's grant AFTER the user approved this exact call.
+
+    The approval card is the consent (the framework asks because this tool is always-ask), so this
+    handler only records the grant it was approved for. It never widens the row budget itself.
+    """
+    from ai import dataset_access
+
+    dataset_id = str(args.get('dataset_id') or '').strip()
+    if not dataset_id:
+        raise AIError('ai.datasetEmpty', kind='bad_request')
+    conversation_id = str((ctx or {}).get('conversation_id') or '')
+    if not conversation_id:
+        raise AIError('ai.toolRefused', kind='bad_request', tool='request_dataset_access', reason='no conversation')
+    rows = _int_arg(args.get('rows'), 0, 0, None)
+    return {'grant': dataset_access.grant(conversation_id, dataset_id, rows)}
+
+
 def _dataset_frame(dataset_id: str):
     if not dataset_id:
         raise AIError('ai.toolRefused', kind='bad_request', tool='dataset', reason='dataset_id is missing')
@@ -79,26 +95,11 @@ def _dataset_frame(dataset_id: str):
     return frame
 
 
-def tool_project_facts(_args: dict, _ctx: dict) -> dict:
-    return {'facts': project_facts()}
-
-
 def tool_ai_coverage(_args: dict, _ctx: dict) -> dict:
     """The generated capability→entry matrix. A missing cell is a product gap, not a prompt issue."""
     from ai import coverage
 
     return coverage.audit()
-
-
-def tool_capabilities(args: dict, _ctx: dict) -> dict:
-    import capabilities.registry as capabilities
-
-    payload = capabilities.as_dict()
-    platform = str(args.get('platform') or '').strip()
-    if platform:
-        rows = [row for row in payload.get('platforms', []) if row.get('platform') == platform]
-        return {'platforms': rows}
-    return {'platforms': payload.get('platforms', []), 'machine': payload.get('machine', {})}
 
 
 def tool_catbus_status(_args: dict, _ctx: dict) -> dict:
@@ -142,11 +143,6 @@ def tool_catbus_status(_args: dict, _ctx: dict) -> dict:
             'CLI (npm i -g catbus-cli) or point CATBUS_HOME at a checkout. Never install without consent.'
         )
     return status
-
-
-def tool_docs_search(args: dict, _ctx: dict) -> dict:
-    query = str(args.get('query') or '').strip()
-    return {'results': docs_search(query, limit=5)}
 
 
 def tool_list_datasets(_args: dict, _ctx: dict) -> dict:
@@ -784,143 +780,32 @@ def tool_code_read(args: dict, _ctx: dict) -> dict:
     }
 
 
-def tool_web_search(args: dict, ctx: dict) -> dict:
-    """The standalone DeepSeek Search API, available to the research skill."""
-    if str(ctx.get('provider') or '') != 'deepseek':
-        raise AIError(
-            'ai.capabilityRefused',
-            kind='capability',
-            provider=ctx.get('provider') or '',
-            model=ctx.get('model') or '',
-            capability='web_search',
-        )
-    from ai import files
-
-    return files.search(
-        str(ctx.get('api_key') or ''),
-        str(args.get('query') or ''),
-        count=_int_arg(args.get('count'), 10, 1, 20),
-        need_content=bool(args.get('need_content')),
-        ori_question=str(args.get('ori_question') or ''),
-    )
-
-
-def tool_web_fetch(args: dict, ctx: dict) -> dict:
-    """The standalone DeepSeek Fetch API, available to the research skill."""
-    if str(ctx.get('provider') or '') != 'deepseek':
-        raise AIError(
-            'ai.capabilityRefused',
-            kind='capability',
-            provider=ctx.get('provider') or '',
-            model=ctx.get('model') or '',
-            capability='read_url',
-        )
-    from ai import files
-
-    return files.fetch(str(ctx.get('api_key') or ''), str(args.get('url') or ''))
-
-
-def _python_ready() -> None:
-    if Config.CLOUD_MODE:
-        raise AIError('ai.pythonCloud', kind='capability')
-    if not get_setting('ai_allow_python'):
-        raise AIError('ai.pythonDisabled', kind='capability')
-
-
-def tool_python_scripts(_args: dict, _ctx: dict) -> dict:
-    from services import python_scripts
-
-    return {
-        'scripts': [
-            {
-                'id': item['id'],
-                'name': item['name'],
-                'description': item['description'],
-                'builtin': item['builtin'],
-                'version': item['version'],
-                'tags': item.get('tags') or [],
-            }
-            for item in python_scripts.all_scripts()
-        ]
+#: The product's always-offered vocabulary: every turn may read the project, its workflow files,
+#: the working folder, propose an apply and ask for dataset rows, whatever skill was chosen.
+UNIVERSAL_TOOLS = frozenset(
+    {
+        'ai_coverage',
+        'app_errors',
+        'apply_workflow',
+        'export_delete',
+        'export_list',
+        'request_dataset_access',
+        'rerun_node',
+        'workflow_delete',
+        'workflow_export',
+        'workflow_list',
+        'workflow_read',
+        'workflow_rename',
+        'workflow_run',
+        'workflow_schema',
+        'workflow_stop',
+        'workflow_update',
+        'workflow_validate',
+        'workspace_info',
+        'workspace_list',
+        'workspace_read',
     }
-
-
-def tool_python_script(args: dict, _ctx: dict) -> dict:
-    from services import python_scripts
-
-    script = python_scripts.find_script(str(args.get('script_id') or args.get('name') or ''))
-    if script is None:
-        raise AIError('ai.pythonUnknown', kind='not_found', script=str(args.get('script_id') or ''))
-    return {'script': script}
-
-
-def tool_python_save_script(args: dict, _ctx: dict) -> dict:
-    _python_ready()
-    from services import python_scripts
-
-    return {'script': python_scripts.save_script(args)}
-
-
-def tool_python_run(args: dict, ctx: dict) -> dict:
-    _python_ready()
-    from services import python_runtime, python_scripts
-
-    script = python_scripts.find_script(str(args.get('script_id') or args.get('name') or ''))
-    code = str(args.get('code') or (script or {}).get('code') or '')
-    if not code:
-        raise AIError('ai.pythonUnknown', kind='bad_request', script=str(args.get('script_id') or ''))
-    rows = args.get('rows') if isinstance(args.get('rows'), list) else []
-    result = python_runtime.run_code(
-        code,
-        rows,
-        args.get('args') if isinstance(args.get('args'), dict) else {},
-        timeout=_int_arg(args.get('timeout'), 120, 1, 3600),
-        max_rows=_int_arg(args.get('max_rows'), 1000, 1, python_runtime.MAX_OUTPUT_ROWS),
-        label=str((script or {}).get('name') or 'inline'),
-        scope=str((ctx or {}).get('conversation_id') or ''),
-    )
-    # The AI gets the shape and a sample, not the whole table: a node run keeps every row, but a
-    # conversation turn only needs to know whether the script worked and what its output looks like.
-    sample = result['rows'][: _int_arg(args.get('sample_rows'), 5, 1, 10)]
-    if not result.get('wrote_output', True):
-        raise AIError('ai.pythonNoOutput', kind='error', script=str((script or {}).get('id') or 'inline'))
-    return {
-        'rows': len(result['rows']),
-        'sample': sample,
-        'columns': list(sample[0].keys()) if sample else [],
-        'stdout': result['stdout'][-2000:],
-        'stderr': result['stderr'][-2000:],
-        'duration_ms': result['duration_ms'],
-        'interpreter': result['interpreter'],
-        'truncated': bool(result.get('truncated')),
-    }
-
-
-def tool_python_files(_args: dict, _ctx: dict) -> dict:
-    from services import python_runtime
-
-    return {'workspace': python_runtime.workspace(), 'files': python_runtime.list_files()}
-
-
-def tool_python_read(args: dict, _ctx: dict) -> dict:
-    from services import python_runtime
-
-    return python_runtime.read_file(str(args.get('path') or ''))
-
-
-def tool_python_write(args: dict, _ctx: dict) -> dict:
-    _python_ready()
-    from services import python_runtime
-
-    return python_runtime.write_file(str(args.get('path') or ''), str(args.get('content') or ''))
-
-
-def _files_ready() -> None:
-    """The Harness tools exist only where the server can reach the user's machine."""
-    from ai import environment
-
-    if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
-        raise AIError('ai.workspaceCloud', kind='capability')
+)
 
 
 #: Tools whose effect is a change on the user's machine or their run records. With
@@ -931,6 +816,7 @@ APPROVAL_TOOLS = (
     'run_cmd',
     'workspace_write',
     'workspace_import',
+    'request_dataset_access',
     'rerun_node',
     'apply_codebook',
     'apply_node_result',
@@ -943,31 +829,10 @@ APPROVAL_TOOLS = (
 )
 
 #: Deletions are never covered by ``ai_auto_approve``: that switch means "do not ask me about your
-#: usual work", not "let a model remove my files". A per-call grant is still required here.
-ALWAYS_APPROVAL_TOOLS = frozenset({'workflow_delete', 'export_delete'})
-
-#: ``write:files`` tools that choose a setting rather than perform a per-call act. The panel owns
-#: them, so a per-call approval grant (keyed to exact args) cannot meaningfully cover them; without
-#: this exemption they were permanently refused with ai_auto_approve off — even after approval.
-SETTING_TOOLS = frozenset({'workspace_set'})
-
-
-def require_approval(name: str, args: dict, ctx: dict) -> None:
-    """Refuse a mutating call the user has not approved in this conversation.
-
-    The refusal NAMES the tool and tells the model to call ``request_approval`` first; the grant
-    is keyed by the exact arguments, so an approval for one command cannot spend itself on another.
-    """
-    if name not in ALWAYS_APPROVAL_TOOLS and (get_setting('ai_auto_approve') or name in SETTING_TOOLS):
-        return
-    if name in APPROVAL_TOOLS:
-        from ai import approvals
-
-        conversation_id = str((ctx or {}).get('conversation_id') or '')
-        if approvals.consume(conversation_id, name, args or {}):
-            return
-    raise AIError('ai.approvalRequired', kind='capability', tool=name)
-
+#: usual work", not "let a model remove my files". A per-call grant is still required here. A
+#: dataset grant is the same kind of act: it lets the model read the user's data, so it always
+#: asks, even when the model proposed a modest row count.
+ALWAYS_APPROVAL_TOOLS = frozenset({'workflow_delete', 'export_delete', 'request_dataset_access'})
 
 #: A rerun refusal names the ENGINE's i18n key; the workspace answers its own sentence, because the
 #: model's next step differs: "the canvas changed" is not "the run record is missing".
@@ -990,70 +855,45 @@ def rerun_refusal_message(exc) -> str:
     return t(key, **exc.params) if key and exc.params else t(key) if key else exc.localized()
 
 
+def tool_rerun_node(args: dict, _ctx: dict) -> dict:
+    """Re-run one failed subtree from the SAVED file; the canvas is never loaded or replaced."""
+    from runtime.stores import get_workflow_manager
+
+    from engine.workflow_rerun import RerunRefusalError, rerun_node
+    from i18n import get_lang
+
+    run_id = str(args.get('run_id') or '').strip()
+    workflow_name = str(args.get('workflow_name') or '').strip()
+    node_id = str(args.get('node_id') or '').strip()
+    if not (run_id and node_id and workflow_name):
+        raise AIError('ai.rerunArgs', kind='bad_request')
+    try:
+        workflow = get_workflow_manager().load(workflow_name)
+    except OSError:
+        workflow = None
+    if not workflow:
+        raise AIError('ai.rerunNoWorkflow', kind='not_found', name=workflow_name)
+    try:
+        answer = rerun_node(workflow, node_id, run_id, workflow_name=workflow_name, lang=get_lang())
+    except RerunRefusalError as exc:
+        raise AIError(rerun_refusal_message(exc), kind='bad_request') from exc
+    body = answer.get('body') or {}
+    if not body.get('ok'):
+        raise AIError('ai.rerunNoRun', kind='bad_request')
+    return {
+        'ok': True,
+        'run_id': run_id,
+        'node_id': node_id,
+        'queued': bool(body.get('queued')),
+        'invalidated': list(body.get('invalidated') or []),
+    }
+
+
 def tool_workflow_schema(_args: dict, _ctx: dict) -> dict:
     """The whole legal vocabulary: node types with seed params, the file shape and the rules."""
     from ai import vocabulary
 
     return vocabulary.workflow_schema()
-
-
-def tool_workspace_info(_args: dict, _ctx: dict) -> dict:
-    from ai import workspace
-
-    return workspace.describe()
-
-
-def tool_workspace_set(args: dict, _ctx: dict) -> dict:
-    from ai import workspace
-
-    return workspace.set_folder(str(args.get('path') or ''))
-
-
-def tool_workspace_list(args: dict, _ctx: dict) -> dict:
-    from ai import workspace
-
-    return workspace.list_dir(
-        str(args.get('path') or ''),
-        kind=str(args.get('root') or 'folder'),
-        limit=_int_arg(args.get('limit'), 200, 1, 500),
-    )
-
-
-def tool_workspace_read(args: dict, _ctx: dict) -> dict:
-    from ai import workspace
-
-    return workspace.read_text(
-        str(args.get('path') or ''),
-        kind=str(args.get('root') or 'folder'),
-        max_bytes=_int_arg(args.get('max_bytes'), workspace.MAX_READ_BYTES, 200, workspace.MAX_READ_BYTES),
-    )
-
-
-def tool_workspace_write(args: dict, _ctx: dict) -> dict:
-    _files_ready()
-    from ai import workspace
-
-    return workspace.write_text(str(args.get('path') or ''), str(args.get('content') or ''))
-
-
-def tool_workspace_import(args: dict, _ctx: dict) -> dict:
-    """A local table file → a dataset this account owns, parsed by the upload panel's parsers."""
-    _files_ready()
-    from ai import workspace
-
-    return workspace.import_table(str(args.get('path') or ''), str(args.get('name') or ''))
-
-
-def tool_run_command(args: dict, ctx: dict) -> dict:
-    _files_ready()
-    from ai import workspace
-
-    return workspace.run_command(
-        str(args.get('command') or ''),
-        cwd=str(args.get('cwd') or ''),
-        timeout=_int_arg(args.get('timeout'), 120, 1, workspace.MAX_TIMEOUT),
-        scope=str((ctx or {}).get('conversation_id') or ''),
-    )
 
 
 def tool_workflow_validate(args: dict, _ctx: dict) -> dict:
@@ -1402,22 +1242,6 @@ PRESENT_SCHEMA = {
 }
 
 
-APPLY_WORKFLOW_SCHEMA = {
-    'type': 'object',
-    'properties': {
-        'name': {'type': 'string', 'description': 'Saved workflow name. A clash gets a numeric suffix.'},
-        'workflow': {
-            'type': 'object',
-            'description': 'The workflow file: {nodes:[{id,type,x,y,title,params}], connections:[{from,to}], '
-            'settings:{mode,headless,disabledTypes}}. Read workflow_schema first.',
-        },
-        'run': {'type': 'boolean', 'description': 'Start the run right after it loads. Only when the user asked.'},
-        'summary': {'type': 'string'},
-    },
-    'required': ['workflow'],
-}
-
-
 RERUN_SCHEMA = {
     'type': 'object',
     'properties': {
@@ -1451,18 +1275,6 @@ TOOLS = {
     spec.name: spec
     for spec in (
         ToolSpec(
-            'project_facts',
-            'Read the generated project map: nodes, platforms, analysis operators and chart types.',
-            {'type': 'object', 'properties': {}},
-            handler=tool_project_facts,
-        ),
-        ToolSpec(
-            'capabilities',
-            'Read the crawler capability matrix. Pass a platform to narrow it.',
-            {'type': 'object', 'properties': {'platform': {'type': 'string'}}},
-            handler=tool_capabilities,
-        ),
-        ToolSpec(
             'ai_coverage',
             'Read the generated capability→AI-entry matrix: workflow nodes, platform modes, analysis '
             'operators, chart types and tools, each with the entry that reaches it and any gap.',
@@ -1475,12 +1287,6 @@ TOOLS = {
             'global catbus CLI. Call this before deciding how to crawl; it never installs anything.',
             {'type': 'object', 'properties': {}},
             handler=tool_catbus_status,
-        ),
-        ToolSpec(
-            'docs_search',
-            'Search the repository documentation for a phrase or concept.',
-            {'type': 'object', 'properties': {'query': {'type': 'string'}}, 'required': ['query']},
-            handler=tool_docs_search,
         ),
         ToolSpec(
             'list_datasets',
@@ -1543,7 +1349,8 @@ TOOLS = {
             'request_dataset_access',
             'Ask the user to authorize reading rows of this dataset in this conversation. '
             'dataset_page, dataset_sample and a filtered dataset_query need this grant; dataset_peek '
-            'stays free (five rows). rows=0 asks for all rows. The turn pauses until the user answers.',
+            'stays free (five rows). rows=0 asks for all rows. The user sees an approval card with '
+            'this dataset and row budget before anything is granted.',
             {
                 'type': 'object',
                 'properties': {
@@ -1557,7 +1364,7 @@ TOOLS = {
                 'required': ['dataset_id'],
             },
             permission='ask',
-            control=True,
+            handler=tool_request_dataset_access,
         ),
         ToolSpec(
             'dataset_query',
@@ -1712,122 +1519,6 @@ TOOLS = {
             handler=tool_code_read,
         ),
         ToolSpec(
-            'web_search',
-            'Search the web with the provider’s standalone Search API; returns structured results.',
-            {
-                'type': 'object',
-                'properties': {
-                    'query': {'type': 'string'},
-                    'count': {'type': 'integer'},
-                    'need_content': {'type': 'boolean'},
-                },
-                'required': ['query'],
-            },
-            permission='read:web',
-            handler=tool_web_search,
-        ),
-        ToolSpec(
-            'web_fetch',
-            'Fetch one web page as Markdown with the provider’s standalone Fetch API.',
-            {'type': 'object', 'properties': {'url': {'type': 'string'}}, 'required': ['url']},
-            permission='read:web',
-            handler=tool_web_fetch,
-        ),
-        ToolSpec(
-            'ask_user_question',
-            'Ask the user for a decision, a missing fact or a confirmation. Use options; '
-            'pause until the human answers.',
-            ASK_USER_SCHEMA,
-            permission='ask',
-            control=True,
-        ),
-        ToolSpec(
-            'update_plan',
-            'Publish or update a short plan for a multi-step task. The workspace renders it as a trace.',
-            UPDATE_PLAN_SCHEMA,
-            permission='plan',
-            control=True,
-        ),
-        ToolSpec(
-            'python_scripts',
-            'List saved Python scripts (id, name, description, built-in, version). Metadata only.',
-            {'type': 'object', 'properties': {}},
-            handler=tool_python_scripts,
-            permission='read:python',
-        ),
-        ToolSpec(
-            'python_script',
-            'Read one saved script in full, including its code, before editing or explaining it.',
-            {'type': 'object', 'properties': {'script_id': {'type': 'string'}, 'name': {'type': 'string'}}},
-            handler=tool_python_script,
-            permission='read:python',
-        ),
-        ToolSpec(
-            'python_save_script',
-            'Create or update a reusable script in the account library. id/name/code are required; '
-            'code reads CIXI_INPUT JSONL and writes CIXI_OUTPUT JSONL, args come from CIXI_ARGS.',
-            {
-                'type': 'object',
-                'properties': {
-                    'id': {'type': 'string'},
-                    'name': {'type': 'string'},
-                    'description': {'type': 'string'},
-                    'code': {'type': 'string'},
-                    'inputs': {'type': 'array', 'items': {'type': 'string'}},
-                    'outputs': {'type': 'array', 'items': {'type': 'string'}},
-                    'tags': {'type': 'array', 'items': {'type': 'string'}},
-                },
-                'required': ['id', 'name', 'code'],
-            },
-            handler=tool_python_save_script,
-            permission='write:python',
-        ),
-        ToolSpec(
-            'python_run',
-            'Run a saved script or inline code on the rows you pass, and return a small sample plus '
-            'stdout/stderr — never the whole output table.',
-            {
-                'type': 'object',
-                'properties': {
-                    'script_id': {'type': 'string'},
-                    'name': {'type': 'string'},
-                    'code': {'type': 'string'},
-                    'rows': {'type': 'array', 'items': {'type': 'object'}},
-                    'args': {'type': 'object'},
-                    'timeout': {'type': 'integer'},
-                    'max_rows': {'type': 'integer'},
-                    'sample_rows': {'type': 'integer'},
-                },
-            },
-            handler=tool_python_run,
-            permission='exec:python',
-        ),
-        ToolSpec(
-            'python_files',
-            'List files in the account Python workspace (ai_python).',
-            {'type': 'object', 'properties': {}},
-            handler=tool_python_files,
-            permission='read:python',
-        ),
-        ToolSpec(
-            'python_read',
-            'Read one file from the account Python workspace.',
-            {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path']},
-            handler=tool_python_read,
-            permission='read:python',
-        ),
-        ToolSpec(
-            'python_write',
-            'Write a text file in the account Python workspace (path traversal is refused).',
-            {
-                'type': 'object',
-                'properties': {'path': {'type': 'string'}, 'content': {'type': 'string'}},
-                'required': ['path', 'content'],
-            },
-            handler=tool_python_write,
-            permission='write:python',
-        ),
-        ToolSpec(
             'workflow_schema',
             'Read the complete legal vocabulary: every node type with its seed parameters, the workflow '
             'file shape and the rules. Call this before writing a workflow draft.',
@@ -1936,96 +1627,6 @@ TOOLS = {
             permission='write:project',
         ),
         ToolSpec(
-            'workspace_info',
-            'Read the working folder this account chose, the app root commands default to, and the '
-            'allowed executables.',
-            {'type': 'object', 'properties': {}},
-            handler=tool_workspace_info,
-            permission='read:files',
-        ),
-        ToolSpec(
-            'workspace_set',
-            'Set this account’s working folder. Absolute path to an existing directory; "" clears it.',
-            {'type': 'object', 'properties': {'path': {'type': 'string'}}, 'required': ['path']},
-            handler=tool_workspace_set,
-            permission='write:files',
-        ),
-        ToolSpec(
-            'workspace_list',
-            'List one directory of the WORKING FOLDER the user chose (the default: root="folder") — '
-            'this is what “工作文件夹 / my folder / the project folder” means. Use root="app" ONLY when the '
-            'user asks about this program’s own install/repository tree.',
-            {
-                'type': 'object',
-                'properties': {
-                    'path': {'type': 'string'},
-                    'root': {'type': 'string', 'enum': ['folder', 'app']},
-                    'limit': {'type': 'integer'},
-                },
-            },
-            handler=tool_workspace_list,
-            permission='read:files',
-        ),
-        ToolSpec(
-            'workspace_read',
-            'Read one text file of the WORKING FOLDER the user chose (default root="folder"); '
-            'root="app" is this program’s own tree, only when the user asks about the app. '
-            'Bounded and reports truncation.',
-            {
-                'type': 'object',
-                'properties': {
-                    'path': {'type': 'string'},
-                    'root': {'type': 'string', 'enum': ['folder', 'app']},
-                    'max_bytes': {'type': 'integer'},
-                },
-                'required': ['path'],
-            },
-            handler=tool_workspace_read,
-            permission='read:files',
-        ),
-        ToolSpec(
-            'workspace_write',
-            'Write a UTF-8 text file inside the working folder (the app tree is read-only).',
-            {
-                'type': 'object',
-                'properties': {'path': {'type': 'string'}, 'content': {'type': 'string'}},
-                'required': ['path', 'content'],
-            },
-            handler=tool_workspace_write,
-            permission='write:files',
-        ),
-        ToolSpec(
-            'workspace_import',
-            'Import a local CSV/TSV/Excel/JSON/bibliographic file from the working folder as a dataset '
-            'this account owns. Returns the dataset_id and columns.',
-            {
-                'type': 'object',
-                'properties': {'path': {'type': 'string'}, 'name': {'type': 'string'}},
-                'required': ['path'],
-            },
-            handler=tool_workspace_import,
-            permission='write:files',
-        ),
-        ToolSpec(
-            'run_cmd',
-            'Run ONE allow-listed executable in the working folder (or the app root when no folder is '
-            'chosen). No shell, no pipes, no chaining; args are passed as a list. Returns exit code, '
-            'stdout and stderr — use it to run a saved script, git status or a test. This call WAITS for '
-            'the process: pass timeout (up to 600) for a batch job, and make the script print progress so '
-            'the run is visibly alive.',
-            {
-                'type': 'object',
-                'properties': {
-                    'command': {'type': 'string'},
-                    'cwd': {'type': 'string'},
-                    'timeout': {'type': 'integer'},
-                },
-                'required': ['command'],
-            },
-            handler=tool_run_command,
-            permission='exec:cmd',
-        ),
-        ToolSpec(
             'app_errors',
             'Read the app’s own feedback: the backend log tail and the most recent failed/partial runs '
             'with their node errors and console lines. Use it before diagnosing or re-proposing.',
@@ -2034,115 +1635,14 @@ TOOLS = {
             permission='read:project',
         ),
         ToolSpec(
-            'apply_workflow',
-            'Validate a workflow draft, SAVE it as this account’s workflow file and load it onto the '
-            'canvas (optionally starting a run). Every problem is refused by name before anything loads.',
-            APPLY_WORKFLOW_SCHEMA,
-            permission='artifact',
-            control=True,
-        ),
-        ToolSpec(
-            'present_artifact',
-            'Present a workflow draft, analysis plan, chart spec, report, skill draft, plugin manifest, a '
-            'confirmed fact to remember (kind="memory", payload = {text}) or a run monitor. The user applies '
-            'it; kind="monitor" payload = {run_id, events, node_ids, statuses, min_rows, console_contains, '
-            'outcomes, max_triggers, note}.',
-            PRESENT_SCHEMA,
-            permission='artifact',
-            control=True,
-        ),
-        ToolSpec(
             'rerun_node',
             'Re-run ONE failed node and everything downstream of it, as a resume of the run that produced it. '
             'It does NOT load or replace the canvas: the SAVED workflow file is read, must still match the run '
             'record, and the kept upstream rows are reused. Refuses by name when the file is missing, the canvas '
             'changed, the node is unknown or the run is live.',
             RERUN_SCHEMA,
-            permission='artifact',
-            control=True,
-        ),
-        ToolSpec(
-            'request_approval',
-            'Ask the user to allow one exact mutating call (run_cmd, workspace_write, workflow_update, '
-            'workflow_delete, workflow_run, …) when the tool door refuses it with approval_required. '
-            'workflow_delete and export_delete ALWAYS ask, even with auto-approve on. Answer 允许一次 / '
-            '本次会话允许 / 拒绝; after an approval, repeat the identical tool call.',
-            APPROVAL_SCHEMA,
-            permission='ask',
-            control=True,
+            permission='write:project',
+            handler=tool_rerun_node,
         ),
     )
 }
-
-
-def schemas(allow_code: bool = False, allow_python: bool = False, allow_files: bool = False) -> list:
-    out = []
-    scope = account_context.scope_key()
-    for tool in TOOLS.values():
-        if not scopes.visible('tools', tool.name, scope):
-            # A tool another account installed is not this account's to offer.
-            continue
-        if tool.permission == 'read:code' and not allow_code:
-            continue
-        if tool.permission in ('read:python', 'write:python', 'exec:python') and not allow_python:
-            continue
-        if tool.permission in ('read:files', 'write:files', 'exec:cmd') and not allow_files:
-            continue
-        out.append(tool.schema())
-    return out
-
-
-def execute(name: str, args: dict, ctx: dict, allowed=None) -> dict:
-    """Run one offered tool, refusing anything this turn did not promise or the user disabled.
-
-    ``allowed`` is the set of tool names the turn's schema list contained. The schema list already
-    applies the skill allowlist and the two switches; enforcing it again here closes the gap that
-    a model (or a replayed ``tool_use``) can call a tool that was never offered.
-    """
-    tool = TOOLS.get(name)
-    if tool is None:
-        raise AIError('ai.toolUnknown', kind='bad_request', tool=name)
-    if not scopes.visible('tools', name, account_context.scope_key()):
-        # Registered by another account's plugin: installing is machine-level, USING is not.
-        raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='not available for this account')
-    if allowed is not None and name not in allowed:
-        raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='not offered in this turn')
-    if tool.control:
-        raise AIError(
-            'ai.toolRefused', kind='bad_request', tool=name, reason='control tools are handled by the runtime'
-        )
-    if tool.handler is None:
-        raise AIError('ai.toolRefused', kind='bad_request', tool=name, reason='no handler')
-    if tool.permission == 'read:code':
-        from ai import environment
-
-        if not (get_setting('ai_allow_code_context') and environment.capabilities()['local_source']):
-            raise AIError('ai.codeCloudRefused', kind='capability')
-    if tool.permission in ('read:python', 'write:python', 'exec:python'):
-        from ai import environment
-
-        if Config.CLOUD_MODE:
-            raise AIError('ai.pythonCloud', kind='capability')
-        if not (get_setting('ai_allow_python') and environment.capabilities()['code_plugins']):
-            raise AIError('ai.pythonDisabled', kind='capability')
-        if not policy.may_administer_machine():
-            # The script library and its workspace are ONE system-level tree, and inline code runs
-            # as the server's OS user. On an accounts host only the administrator may author a
-            # script, write its files, read the shared workspace or run inline code — the same line
-            # the HTTP routes draw. Running a STORED script by id stays available to everyone.
-            inline = name == 'python_run' and bool(str((args or {}).get('code') or '').strip())
-            if inline or tool.permission == 'write:python' or name in ('python_read', 'python_files'):
-                raise AIError(policy.machine_refusal_key(), kind='capability')
-    if tool.permission in ('read:files', 'write:files', 'exec:cmd'):
-        from ai import environment
-
-        if Config.CLOUD_MODE or not environment.capabilities()['user_files']:
-            raise AIError('ai.workspaceCloud', kind='capability')
-    if name in APPROVAL_TOOLS:
-        # ONE door for every act that changes the user's machine or their run records, whatever
-        # the tool's permission happens to be called. Checking only ``write:files``/``exec:cmd``
-        # left ``apply_node_result``/``apply_codebook``/``rerun_node`` (``write:project``) with no
-        # approval at all: with ``ai_auto_approve`` off the model over-wrote a stored node result
-        # while the user never saw a card.
-        require_approval(name, args or {}, ctx or {})
-    return tool.handler(args or {}, ctx or {})

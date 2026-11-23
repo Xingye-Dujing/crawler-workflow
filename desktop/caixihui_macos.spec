@@ -59,6 +59,7 @@ hiddenimports = []
 for package in (
     'api',
     'ai',
+    'ai_host',
     'extensions',
     'crawlers',
     'services',

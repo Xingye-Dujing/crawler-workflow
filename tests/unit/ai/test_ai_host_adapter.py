@@ -35,10 +35,10 @@ class TestTheToolCatalogue:
         for name in set(legacy_tools.ALWAYS_APPROVAL_TOOLS) & set(tools):
             assert tools[name].always_ask is True, name
 
-    def test_the_handler_is_the_legacy_function(self, host):
+    def test_the_handler_runs_the_legacy_function_behind_the_product_gate(self, host):
         tools = {spec.name: spec for spec in host.tools()}
         name = next(iter(tools))
-        assert tools[name].handler is legacy_tools.TOOLS[name].handler
+        assert tools[name].handler.__wrapped__ is legacy_tools.TOOLS[name].handler
 
 
 class TestTheSkillCatalogue:
@@ -55,10 +55,10 @@ class TestTheSkillCatalogue:
 
 class TestTheWorkspaceBoots:
     def test_the_product_settings_win_for_keys_it_already_owns(self, host, monkeypatch):
-        monkeypatch.setattr(
-            'ai_host.adapter.get_setting',
-            lambda key: {'ai_max_tool_rounds': 7, 'ai_auto_approve': False}.get(key),
-        )
+        def fake_setting(key, default=None):
+            return {'ai_max_tool_rounds': 7, 'ai_auto_approve': False}.get(key, default)
+
+        monkeypatch.setattr('ai_host.adapter.get_setting', fake_setting)
         settings = host.settings()
         assert settings.get('tools.max_rounds') == 7
         assert settings.get('approval.auto') is False

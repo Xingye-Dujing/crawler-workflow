@@ -10,9 +10,9 @@ from core.config import Config
 from runtime import account_context
 from runtime.settings import get_setting
 
-from ai import environment, scopes, store
+from ai import environment, scopes
 from ai.errors import AIError
-from ai.types import SKILL_ID_RE, SkillSpec, skill_from_manifest
+from ai.types import SkillSpec
 
 CONTEXT_SOURCES = frozenset({'project', 'canvas', 'dataset', 'run', 'docs', 'code'})
 ASK_POLICY = ('auto', 'always', 'never')
@@ -432,7 +432,7 @@ BUILTIN = {
             'your inference. If the provider cannot search, say so and answer from the project only.'
         ),
         context=('project',),
-        tools=('project_facts', 'docs_search', 'web_search', 'web_fetch'),
+        tools=('project_facts', 'docs_search', 'web_search', 'fetch_url'),
         requires=frozenset({'web_search'}),
         suggested=('DeepSeek V4.1 有什么更新？', '查一下这个平台最近的公开规则。'),
     ),
@@ -468,38 +468,10 @@ BUILTIN = {
 }
 
 
-def _user_skill(row: dict) -> SkillSpec:
-    return SkillSpec(
-        id=str(row.get('id') or ''),
-        name_key=str(row.get('name_key') or f'ai.skill.{row.get("id")}.name'),
-        description_key=str(row.get('description_key') or f'ai.skill.{row.get("id")}.desc'),
-        prompt=str(row.get('prompt') or ''),
-        context=tuple(row.get('context') or row.get('context_json') or ()),
-        tools=tuple(row.get('tools') or row.get('tools_json') or ()),
-        requires=frozenset(row.get('requires') or row.get('requires_json') or ()),
-        suggested=tuple(row.get('suggested') or row.get('suggested_json') or ()),
-        ask_policy=str(row.get('ask_policy') or 'auto'),
-        builtin=False,
-        version=int(row.get('version') or 1),
-        icon=str(row.get('icon') or 'spark'),
-        name=str(row.get('name') or ''),
-        description=str(row.get('description') or ''),
-    )
-
-
 def all_skills() -> dict:
+    """The product's built-in skills visible to this account (a code plugin may add one)."""
     scope = account_context.scope_key()
-    # A code plugin may add a skill to BUILTIN; it belongs to the account that installed it, the
-    # same way its tools and providers do.
-    skills = {key: skill for key, skill in BUILTIN.items() if scopes.visible('skills', key, scope)}
-    for row in store.list_user_skills():
-        try:
-            skill = _user_skill(row)
-        except (TypeError, ValueError):
-            continue
-        if skill.id not in BUILTIN:
-            skills[skill.id] = skill
-    return skills
+    return {key: skill for key, skill in BUILTIN.items() if scopes.visible('skills', key, scope)}
 
 
 def get_skill(skill_id: str) -> SkillSpec:
@@ -601,58 +573,3 @@ def route(text: str, page: str = '') -> str:
     if any(word in blob for word in ('搜索', '联网', '最新', '新闻', 'search', 'web')):
         return 'research'
     return 'project'
-
-
-def validate_user_skill(payload: dict) -> SkillSpec:
-    skill_id = str(payload.get('id') or '').strip()
-    if not SKILL_ID_RE.match(skill_id):
-        raise AIError('ai.skillBadId', kind='bad_request', skill=skill_id or '(empty)')
-    if skill_id in BUILTIN:
-        raise AIError('ai.skillExists', kind='bad_request')
-    prompt = str(payload.get('prompt') or '').strip()
-    if not prompt:
-        raise AIError('ai.skillNoPrompt', kind='bad_request', skill=skill_id)
-    skill = skill_from_manifest(payload, builtin=False)
-    for source in skill.context:
-        if source not in CONTEXT_SOURCES:
-            raise AIError('ai.skillBadContext', kind='bad_request', skill=skill.id, source=source)
-    from ai.tools import TOOLS
-
-    for tool in skill.tools:
-        if tool not in TOOLS:
-            raise AIError('ai.skillBadTool', kind='bad_request', skill=skill.id, tool=tool)
-        if TOOLS[tool].control:
-            raise AIError('ai.toolRefused', kind='bad_request', tool=tool, reason='control tools are always available')
-        if TOOLS[tool].permission in ('read:code',) and skill.id != 'developer':
-            # A user skill may not quietly gain source access; the developer skill is the one
-            # built-in that asks for it and the setting still gates the server side.
-            raise AIError('ai.toolRefused', kind='bad_request', tool=tool, reason='read:code is reserved')
-    if skill.ask_policy not in ASK_POLICY:
-        skill.ask_policy = 'auto'
-    return skill
-
-
-def save_user_skill(payload: dict) -> dict:
-    skill = validate_user_skill(payload)
-    row = store.save_user_skill(skill.to_manifest())
-    return _user_skill(row).to_public()
-
-
-def fork_skill(skill_id: str, new_id: str = '') -> dict:
-    source = get_skill(skill_id)
-    target = (new_id or f'{skill_id}_mine').strip()
-    payload = source.to_manifest()
-    payload['id'] = target
-    payload['name_key'] = f'ai.skill.{target}.name'
-    payload['description_key'] = f'ai.skill.{target}.desc'
-    payload['prompt'] = (
-        f'{source.prompt}\n\n'
-        f'This is a fork of the built-in {source.id} skill; keep its rules unless the user says otherwise.'
-    )
-    return save_user_skill(payload)
-
-
-def delete_user_skill(skill_id: str) -> bool:
-    if skill_id in BUILTIN:
-        raise AIError('ai.skillExists', kind='bad_request')
-    return store.delete_user_skill(skill_id)

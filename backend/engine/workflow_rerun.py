@@ -1,7 +1,7 @@
 """Re-run one node and its downstream, as a resume of the run that produced them.
 
 This is the body of ``POST /api/workflow/rerun-node``, moved out so a second caller (the AI
-workspace's ``rerun_node`` tool and ``POST /api/ai/rerun``) runs the SAME decision: resolve the
+workspace's ``rerun_node`` tool and ``POST /api/ai/ws/rerun``) runs the SAME decision: resolve the
 run, prove the canvas still matches it, refuse a live run and a node with no stored rows, then
 hand the request to the ONE start path (``engine.run.begin_run``, as a resume carrying the subtree
 to erase). The route stays a thin caller so the two doors cannot drift apart.

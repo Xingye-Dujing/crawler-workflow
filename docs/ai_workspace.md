@@ -14,7 +14,7 @@ index.html → ai-workspace.js
   ├─ ai/watch.js     运行监控的投递轮询
   └─ ai/studio.js    技能、Python 脚本库、插件、权限
               │
-POST /api/ai/chat → AgentService
+POST /api/ai/ws/chat → AgentService
   ├─ ContextBuilder   项目事实 / 实时数据 / 文档 / 预算
   ├─ SkillRegistry    内置 + 用户技能
   ├─ ToolRegistry     只读工具 + ask_user/update_plan/present_artifact
@@ -47,7 +47,7 @@ ISO-8859-1，中文变火星文、跨 chunk 的多字节字符把 JSON 截断（
 `dataset_peek` 只读前几行，绝不把整张表塞进提示词；单个附件超过 4 MB 按名字拒绝，并提示改走数据集或拆分；`@` 引用
 的导出文件/工作流只在服务端展开有界文本（每项 1200 字符、整轮 6000 字符）。同一份文件在不同会话里上传时按 sha256
 复用已上传的 `file_id`，不重复上传、不重复解析计费。**提问卡的回答框同样支持 `@`**：引用随 `answers` 一起送到
-`/api/ai/answer`，服务端用同一个 `references.resolve` 展开后放进该次工具结果，模型看到的是有界文本而不是路径。
+`/api/ai/ws/answer`，服务端用同一个 `references.resolve` 展开后放进该次工具结果，模型看到的是有界文本而不是路径。
 
 **本机 Ollama 不是“只有聊天”**：模型列表来自 `/api/tags`（面板打开时静默刷新一次，存过的选择只要守护进程还有就保留），
 `tools`/`thinking` 以 `/api/show` 的逐模型 `capabilities` 为答案；请求里 `messages` 保留 `role: tool`、assistant 回传
@@ -137,7 +137,7 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 - `dataset_query`：精确的只读聚合（`count`/`sum`/`mean`/`median`/`min`/`max`/`std`/`nunique`/`value_counts`/`groupby`/`filter`），操作名白名单在 schema 与执行时各查一次，列名不存在、算子不支持、参数不完整都按名拒绝，结果行数与单元格都封顶——精确数字不靠 `dataset_peek` 的前几行估算；
 - 工具结果超过 12,000 字会被截断并注明。
 
-写入永远是产物（工作流草稿、分析计划、图表规格、报告、技能草稿、插件清单、监控请求），由用户应用。可预览的产物卡（memory / workflow / workflow_draft / monitor / chart_spec）额外带一个“预览变更”按钮：`POST /api/ai/artifacts/preview` 先跑与原产物相同的校验（不通过时带校验原句按名拒绝），再由 `ai/previews/` 注册表按 kind 给出结构化说明——节点是新增还是覆盖、将写入的记忆文本、监控规则、图表与列名。工作流草稿会对照当前画布标出每个节点的去向；确认框里可勾选节点，只把选中的节点并入现有画布（未选中的保持原样，指向它们的连线丢弃），然后走与主键完全相同的 apply 路径。预览本身只读，不写任何东西。图表规格的产物卡还有“渲染这张图”按钮：`POST /api/ai/chart/preview` 按图表注册表与账号数据集校验类型、数据集与每个列名（缺列具名拒绝），返回归一化的渲染请求，浏览器再走**同一个** `/api/visualize/render` 与现有图表查看器；这里不持有第二份图表契约，也不把渲染逻辑复制成另一条路。
+写入永远是产物（工作流草稿、分析计划、图表规格、报告、技能草稿、插件清单、监控请求），由用户应用。可预览的产物卡（memory / workflow / workflow_draft / monitor / chart_spec）额外带一个“预览变更”按钮：`POST /api/ai/ws/artifacts/preview` 先跑与原产物相同的校验（不通过时带校验原句按名拒绝），再由 `ai/previews/` 注册表按 kind 给出结构化说明——节点是新增还是覆盖、将写入的记忆文本、监控规则、图表与列名。工作流草稿会对照当前画布标出每个节点的去向；确认框里可勾选节点，只把选中的节点并入现有画布（未选中的保持原样，指向它们的连线丢弃），然后走与主键完全相同的 apply 路径。预览本身只读，不写任何东西。图表规格的产物卡还有“渲染这张图”按钮：`POST /api/ai/ws/chart/preview` 按图表注册表与账号数据集校验类型、数据集与每个列名（缺列具名拒绝），返回归一化的渲染请求，浏览器再走**同一个** `/api/visualize/render` 与现有图表查看器；这里不持有第二份图表契约，也不把渲染逻辑复制成另一条路。
 
 **长期记忆是另一条边界：读得到，也必须管得住。** `ai.db` 的 `memories` 表由工作室的“记忆”页维护
 （新增/删除/计数）。助手不能直接写：它用 `present_artifact(kind="memory", payload={text})` 提议，
@@ -147,7 +147,7 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 
 ## 4. 运行监控
 
-AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分析”或“只通知”；侧栏也有“新建监控”手动填同一份规则。构建器先读 `GET /api/ai/monitors/catalog`：它从 `ai.monitors` 的 `EVENTS`/`STATUSES`/`OUTCOMES` 三张表给出可选名字，浏览器因此不持第二份事件表；填好后与产物卡共用 `POST /api/ai/monitors`，校验和投递路径不会分叉。条件示例：
+AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分析”或“只通知”；侧栏也有“新建监控”手动填同一份规则。构建器先读 `GET /api/ai/ws/monitors/catalog`：它从 `ai.monitors` 的 `EVENTS`/`STATUSES`/`OUTCOMES` 三张表给出可选名字，浏览器因此不持第二份事件表；填好后与产物卡共用 `POST /api/ai/ws/monitors`，校验和投递路径不会分叉。条件示例：
 
 ```json
 {"run_id": "…", "events": ["node.finished", "run.finished"], "node_ids": ["n3"],
@@ -190,9 +190,9 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   `workflow_apply` 事件给页面；页面用真实 `workflow.loadFromJSON()` 载入，`run=true` 时接着走正常 Run 通道。
   失败时页面把原因作为“自动反馈”消息送回 AI，让它改完再试。
 - **工作文件夹**：`ai/workspace.py`，每账号存在 `ai.db` 的 `prefs` 表；所有路径解析后必须留在根内，
-  `..`/绝对路径/越界符号链接按名字拒绝。页面顶栏 chip 打开目录选择器（服务端 `/api/ai/workspace/browse`）；
+  `..`/绝对路径/越界符号链接按名字拒绝。页面顶栏 chip 打开目录选择器（服务端 `/api/ai/ws/workspace/browse`）；
   选择器顶部列出本机**所有磁盘/挂载点**（`core.machine.filesystem_roots`，Windows 盘符、macOS `/Volumes`、
-  Linux `/media` `/mnt`），所以文件夹不限于系统盘。`POST /api/ai/workspace/pick` 用**系统自带**的文件夹
+  Linux `/media` `/mnt`），所以文件夹不限于系统盘。`POST /api/ai/ws/workspace/pick` 用**系统自带**的文件夹
   对话框（Windows PowerShell `FolderBrowserDialog`、macOS `osascript`、Linux `zenity`/`kdialog`）选完即设为
   工作文件夹；关掉窗口算取消，机器上没有任何一个对话框时按名拒绝（`ai.pickUnavailable`），云端不提供。
 - **本地文件 → 数据集 / Python / 命令**：`workspace_import` 走上传面板同一套解析器；`run_cmd` 不是 shell，
@@ -202,24 +202,21 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
 - **工具预算不是硬墙**：默认 30 轮（`ai_max_tool_rounds`，0=不限）；到达时 AI 通过同一个
   `ask_user_question` 通道询问“继续/到此为止”，回答即续跑一轮，按钮/选项照常进入历史。
 - **Plan / Build 与安全开关**：`agent_mode=plan` 时变更类工具不下发（`apply_workflow`、`rerun_node`、
-  `workspace_write`、`workspace_import`、`run_cmd`、Python 写入/运行）；`ai_auto_approve` 关闭时
-  `run_cmd`/`workspace_write`/`workspace_import`/`rerun_node` 按名拒绝并让 AI 先走 `request_approval`
-  （见下一节）。单次工具结果上限 `ai_max_tool_result_chars` 默认 12000，可调。
+  `workspace_write`、`workspace_import`、`run_cmd`、Python 写入/运行）；`approval.auto`（采析绘键
+  `ai_auto_approve`）关闭时，变更类工具先进入框架的审批暂停（`request_approval`），批准按确切参数生效。
+  单次工具结果上限 `tools.max_result_chars`（键 `ai_max_tool_result_chars`）默认 12000。
 - **失败节点重跑**：监控的自动分析回答用 `app_errors` 拿到失败节点，卡片列出节点 id + 错误，按钮
-  “重跑此节点及其下游”调 `POST /api/ai/rerun`；`ai/agent.py` 的 `rerun_node` 工具走同一个决定
+  “重跑此节点及其下游”调 `POST /api/ai/ws/rerun`；工具 `rerun_node` 走同一个决定
   （`engine/workflow_rerun.rerun_node`，路由 `/api/workflow/rerun-node` 也只剩薄壳）。它只读本账号
   `data/workflows/` 里的**已保存文件**，指纹与运行记录不一致、文件缺失、节点未知、运行未结束都按名拒绝；
   永不把工作流载回画布——页面只标一张“已开始重跑”的卡片并发 `rerun_started` 事件。
-- **逐次审批**：`ai/approvals.py` 在进程内按 `(会话, 工具, 参数的 SHA-256)` 记住授权，不落盘、不存密钥。
-  `request_approval` 复用 `ask_user_question` 的可恢复暂停（合成 assistant `tool_use`，供应商配对规则仍成立），
-  选项为 允许一次 / 本次会话允许 / 拒绝；`once` 用掉即失效，`session` 对同一份确切参数可重复使用，
-  拒绝/取消/换一份参数都不授权。`request_approval` 的 `detail` 必须是将要执行的**确切参数对象**。
-- **审批卡显示确切改动**：模型的 `summary` 只是它对自己的描述，不能当作批准依据。`ai/approval_preview.py`
-  按工具给出可核对的预览：`workspace_write` 用 `difflib` 对照现有文件与提议内容（解析后的绝对路径、
-  前后字节数、逐行 `+/-` diff，最多 400 行并声明截断；大文件只报大小并说明会整体替换），`run_cmd`
-  给出命令/工作目录/超时，`workspace_import` 给出文件与大小，`rerun_node` 给出运行/节点/工作流。
+- **逐次审批**：审批在框架（`agent_workspace.approvals`）内按 `(会话, 工具, 参数)` 记住授权，不落盘、不存密钥。
+  `request_approval` 复用 `ask_user_question` 的可恢复暂停，选项为 允许一次 / 本次会话允许 / 拒绝；
+  `once` 用掉即失效，`session` 对同一份确切参数可重复使用，拒绝/取消/换一份参数都不授权。
+- **审批卡显示确切改动**：模型的 `summary` 只是它对自己的描述，不能当作批准依据。框架的
+  `agent_workspace.approval_preview` 按工具给出可核对的预览（写文件 diff、命令/工作目录、导入文件、重跑目标），
   预览只读、绝不写入；路径逃逸或云端按名拒绝时，卡片显示工具本会给出的那句话，而不是中断对话。
-  预览随 `questions_json` 存入会话，刷新后的已回答卡仍显示当时批准的路径。
+  预览随暂停的问题持久化，刷新后的已回答卡仍显示当时批准的路径。
 - **跨面板入口**：数据集列表、运行列表、节点设置里的“问 AI”调 `AIWorkspace.askAbout()`：打开工作区、
   新建会话、把该对象作为手动上下文（服务端自己重读），并把问题**预填不发送**。面板不持有 AI 的会话
   模型，也不会猜上下文该送什么。
@@ -245,13 +242,13 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
 
 ## 7. 插件
 
-`backend/extensions/` 是清单/权限注册表，`backend/ai/plugins.py` 是宿主。声明式（skill-pack /
+`backend/extensions/` 是清单/权限注册表；插件宿主在框架（`agent_workspace.plugins`）。声明式（skill-pack /
 provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插件只允许本地/管理员，云端按名字拒绝。
-安装前校验 `api`、id、version、kind、permissions；禁用即从注册表移除，并同时从 `PROVIDERS`/`tools.TOOLS`/`skills.BUILTIN` 撤掉。
+安装前校验 `api`、id、version、kind、permissions；禁用即从注册表移除，并同时撤掉其工具/技能/provider 贡献。
 
 **安装是机器级的，使用是账号级的。** provider/tool/code 包装进进程共用的表，因此开启账号系统时只有管理员
-能安装；但每条贡献在 `backend/ai/scopes.py` 里记下安装它的账号作用域，工具清单、`tools.execute`、
-`get_provider` 与技能目录都按当前账号过滤——别的账号既看不到、也调不动。
+能安装；但每条贡献在框架的 scopes 里记下安装它的账号作用域，工具清单、工具调用、`get_provider`
+与技能目录都按当前账号过滤——别的账号既看不到、也调不动。
 
 ## 8. OMM-ZEN
 
@@ -259,70 +256,72 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 `--radius`、`--font`）；选中是内嵌墨色下划线，勾选是发丝方框 + 墨色勾，没有纯黑/纯蓝填充。
 动效以 transform/opacity 为主（少数状态用背景/边框色过渡），`prefers-reduced-motion: reduce` 下全部关闭；dock 层级在浮动面板之上、对话框之下。
 
-## 9. HTTP 端点
+## 9. HTTP 端点（唯一表面 `/api/ai/ws`）
 
 | 方法 | 路径 | 用途 |
 |---|---|---|
-| GET | `/api/ai/bootstrap` | 供应商、技能、会话、用量、设置、工具、运行时、监控 |
-| GET | `/api/ai/providers` | 供应商目录与能力 |
-| GET | `/api/ai/providers/<id>/models` | 模型列表 |
-| POST | `/api/ai/providers/<id>/test` | 一次最小流式往返 |
-| GET/POST | `/api/ai/conversations` | 列表（`?q=` 标题搜索、`?archived=1`、`limit/offset`）/ 新建 |
-| GET/PATCH/DELETE | `/api/ai/conversations/<id>` | 详情、重命名/置顶/归档、删除 |
-| GET | `/api/ai/conversations/<id>/export` | 下载 `format=md|json`（Markdown 投影 / JSON 无损） |
-| GET/POST | `/api/ai/memories` | 长期记忆列表（附上限）/ 新增（去重、超长与满额按名拒绝） |
-| DELETE | `/api/ai/memories/<id>` | 删除一条记忆 |
-| POST | `/api/ai/chat` | SSE 一轮（`?stream=0` 为 JSON） |
-| POST | `/api/ai/answer` | 恢复暂停的问题 |
-| POST | `/api/ai/stop` | 取消事件 |
-| POST | `/api/ai/context` | 上下文预览 |
-| GET/POST | `/api/ai/workspace` | 工作文件夹状态 / 设置 |
-| GET | `/api/ai/workspace/browse` | 目录选择器（只列目录，附本机磁盘/挂载点 `roots`） |
-| POST | `/api/ai/workspace/pick` | 调起系统文件夹对话框，返回所选路径或 `cancelled` |
-| POST | `/api/ai/workflow/validate` | 工作流草案的结构 + 引擎校验 |
-| POST | `/api/ai/chart/preview` | 校验 chart_spec（图表类型/数据集/列名）并返回归一化渲染请求 |
-| POST | `/api/ai/rerun` | 从已保存文件重跑一个失败节点及其下游（失败节点卡片的按钮） |
-| GET | `/api/ai/usage` | 本账号 token 汇总 |
-| GET/POST | `/api/ai/skills` | 技能列表 / 保存 |
-| POST | `/api/ai/skills/<id>/fork` | Fork 内置技能 |
-| GET/POST | `/api/ai/plugins` | 插件列表 / 安装 |
-| POST | `/api/ai/plugins/<id>/enable` | 启用/禁用 |
-| POST | `/api/ai/files` | 上传文件（DeepSeek Files API）；大表格改登记为数据集并回 `dataset` |
-| GET | `/api/ai/references` | `@` 引用候选：数据集 / 导出产物 / 工作流文件 / 之前上传的文件 |
-| GET | `/api/ai/conversations/<id>/files` | 会话附件 |
-| DELETE | `/api/ai/files/<id>` | 删除远端文件、本地副本与行 |
-| POST | `/api/ai/search` / `/api/ai/fetch` | 独立搜索 / 抓页 |
-| GET/POST | `/api/ai/monitors` | 监控列表 / 开启 |
-| DELETE | `/api/ai/monitors/<id>` | 停止监控 |
-| GET | `/api/ai/monitors/events` | 待投递事件 |
-| POST | `/api/ai/monitors/events/<id>/ack` | 确认投递 |
-| GET | `/api/ai/python/status` | 解释器、开关、工作区、下载计划 |
-| POST | `/api/ai/python/install` | 同意后下载解释器 |
-| GET/POST | `/api/ai/python/scripts` | 脚本列表 / 保存 |
-| GET/DELETE | `/api/ai/python/scripts/<id>` | 读取 / 删除 |
-| POST | `/api/ai/python/scripts/<id>/fork` | Fork |
-| POST | `/api/ai/python/run` | 用给定行跑脚本（返回样本） |
-| GET/POST | `/api/ai/python/files` | 工作区文件 |
+| GET | `/api/ai/ws/bootstrap` | 供应商、技能、会话、用量、设置、工具、运行时、监控 |
+| GET | `/api/ai/ws/health` | 健康检查 |
+| GET | `/api/ai/ws/providers` | 供应商目录与能力 |
+| GET | `/api/ai/ws/providers/<id>/models` · `/balance` | 模型列表 / 余额 |
+| POST | `/api/ai/ws/providers/<id>/test` | 一次最小流式往返 |
+| POST | `/api/ai/ws/chat` | SSE 一轮（`?stream=0` 为 JSON） |
+| GET | `/api/ai/ws/turns/<id>` · `/events` · `/steps` · `/trace` | 回合记录、续传事件、步骤、轨迹 |
+| POST | `/api/ai/ws/answer` · `/stop` · `/steer` · `/retry` · `/command` | 恢复问题、停止、插话、重试、宿主命令 |
+| GET | `/api/ai/ws/pending` · `/inbox` | 待答问题 / 邮箱 |
+| GET/POST | `/api/ai/ws/conversations` | 列表（`?q=`、`?archived=1`、`limit/offset`）/ 新建 |
+| GET/PATCH/DELETE | `/api/ai/ws/conversations/<id>` | 详情、重命名/置顶/归档、删除 |
+| GET | `/api/ai/ws/conversations/<id>/export` | 下载 `format=md|json` |
+| POST | `/api/ai/ws/conversations/<id>/context` | 单会话上下文预览 |
+| DELETE | `/api/ai/ws/conversations/<id>/dataset-grants/<dataset_id>` | 撤销数据集读取授权 |
+| GET/POST | `/api/ai/ws/memories` | 长期记忆列表 / 新增 |
+| DELETE | `/api/ai/ws/memories/<id>` | 删除一条记忆 |
+| GET | `/api/ai/ws/artifacts` | 会话产物列表 |
+| POST | `/api/ai/ws/artifacts/preview` · `/artifacts/<id>/apply` | 预览 / 应用 |
+| POST | `/api/ai/ws/context` | 上下文预览 |
+| GET/POST | `/api/ai/ws/workspace` | 工作文件夹状态 / 设置（框架 workspace，唯一根） |
+| GET | `/api/ai/ws/workspace/browse` | 目录选择器（附本机磁盘/挂载点 `roots`） |
+| POST | `/api/ai/ws/workspace/pick` | 调起系统文件夹对话框，返回所选路径或 `cancelled` |
+| POST | `/api/ai/ws/workflow/validate` | 工作流草案的结构 + 引擎校验 |
+| POST | `/api/ai/ws/chart/preview` | 校验 chart_spec 并返回归一化渲染请求 |
+| POST | `/api/ai/ws/rerun` | 从已保存文件重跑失败节点及其下游 |
+| GET | `/api/ai/ws/usage` | 本账号 token 汇总 |
+| GET/POST | `/api/ai/ws/skills` | 技能列表 / 保存 |
+| GET/DELETE | `/api/ai/ws/skills/<id>` | 读取 / 删除 |
+| POST | `/api/ai/ws/skills/<id>/fork` | Fork 技能 |
+| GET/POST | `/api/ai/ws/plugins` | 插件列表 / 安装 |
+| POST | `/api/ai/ws/plugins/<id>/enable` · `/plugins/install` | 启用/禁用 / 安装 |
+| DELETE | `/api/ai/ws/plugins/<id>` | 卸载 |
+| GET/POST | `/api/ai/ws/files` | 附件列表 / 上传（multipart；文本/图片进框架文件行） |
+| GET | `/api/ai/ws/references` | `@` 引用候选：数据集 / 导出产物 / 工作流文件 / 之前上传的文件 |
+| GET | `/api/ai/ws/conversations/<id>/files` | 会话附件 |
+| DELETE | `/api/ai/ws/files/<id>` | 删除附件行与本地副本 |
+| GET/POST | `/api/ai/ws/monitors` | 监控列表 / 开启（前端 `spec` 在 host 映射成框架 conditions） |
+| DELETE | `/api/ai/ws/monitors/<id>` | 停止监控 |
+| GET | `/api/ai/ws/monitors/catalog` | 事件/状态/结果词汇（服务端唯一表） |
+| GET | `/api/ai/ws/monitors/events` | 待投递事件 |
+| POST | `/api/ai/ws/monitors/events/<id>/ack` | 确认投递 |
+| GET | `/api/ai/ws/python/status` | 解释器、开关、下载计划 |
+| POST | `/api/ai/ws/python/install` | 同意后下载解释器 |
+| GET/POST | `/api/ai/ws/python/scripts` | 脚本列表 / 保存 |
+| GET/DELETE | `/api/ai/ws/python/scripts/<id>` | 读取 / 删除 |
+| POST | `/api/ai/ws/python/scripts/<id>/fork` | Fork |
+| POST | `/api/ai/ws/python/run` | 用给定行跑脚本（返回样本） |
+| GET/POST | `/api/ai/ws/settings` | 框架设置（采析绘键经 `LEGACY_KEYS` 映射） |
+| GET/POST | `/api/ai/ws/codebooks` · `/codebooks/<id>` | 编码簿 |
+| GET | `/api/ai/ws/traces/<run_id>` · POST `/traces/<id>/apply` | 节点轨迹列表 / 应用编辑结果 |
+
+搜索与抓页没有独立路由：它们只作为工具（`web_search`/`web_fetch`）在回合内调用，密钥随该请求到工具上下文。
 
 ## 10. 测试
 
-- `tests/unit/ai/test_ai_core.py`：目录、序列化、脱敏、技能、运行时矩阵。
-- `tests/api/test_ai_workflow.py`：脚本化供应商、SSE、提问/恢复、能力拒绝、技能与插件。
-- `tests/unit/ai/test_ai_approvals.py` + `tests/api/test_ai_approval_turn.py`：授权键（确切参数、
-  一次/会话、跨会话与换参数不命中）、拒绝/取消不授权、云端仍按名拒绝、`request_approval` 的暂停与恢复。
-- `tests/api/test_ai_rerun.py`：重跑决定（画布改过、运行缺失、节点未知、运行进行中、成功路径）与
-  `/api/ai/rerun` 的具名拒绝；agent 的 `rerun_node` 只发 `rerun_started`，不载入画布。
-- `tests/api/test_ai_files.py`：上传分片顺序、本地副本、删除、搜索/抓页与凭据 URL 拒绝。
-- `tests/api/test_ai_monitors.py`：监控匹配/投递/确认、`run.log` 关键字拒绝、脚本库往返与真实 Python 样本。
-- `tests/api/test_ai_memories.py`：记忆去重/超长/满额按名拒绝、上下文只带最新 N 条并报告省略、账号隔离、
-  记忆产物卡的提议与“空提案退回模型”。
-- `tests/api/test_ai_conversations.py`：标题搜索的 LIKE 转义、置顶/取消置顶不改变活跃时间、归档可见性、
-  Markdown/JSON 导出与文件名头。
-- `tests/unit/ai/test_approval_preview.py`：写文件 diff / 新建 / 相同内容 / 路径逃逸 / 超大文件 / 行数截断，
-  命令与导入的事实，未知工具的原始参数兜底。
+- `tests/unit/ai/`：目录、序列化、脱敏、技能、运行时矩阵、产物校验/预览、数据集授权、Python、轨迹存储。
+- `tests/api/test_ai_workspace_surface.py`：真实 app 内 `/api/ai/ws/bootstrap`。
+- `tests/integration/test_ai_workspace_live.py`：本地模型真实回答 + 实时行 + 停止（device tier）。
+- `tests/api/test_ai_artifact_previews.py`：`/api/ai/ws/artifacts/preview` 的只读描述与具名拒绝。
 - `tests/unit/ai/test_python_node.py`：Python 节点契约、云端拒绝、受限数据读取。
 - `tests/unit/ai/test_dataset_query.py`：精确聚合的算子白名单、有界结果、缺列/未知算子按名拒绝。
-- `tests/unit/ai/test_budget.py` + `tests/api/test_ai_budget.py`：token 软预算——超支预拒且不发起调用、轮中触顶只问一次、当日边界问机器时区。
+- 框架侧：token 预算、审批、附件、文件 API、记忆与插件宿主由 `agent_workspace` 自己的套件覆盖（224+）。
 - `tests/api/test_ai_chart_artifact.py`：chart_spec 的类型/数据集/列名校验与具名拒绝；前端产物卡的渲染按钮在 `tests/unit/frontend/test_frontend_ai_js.py`。
 - `tests/unit/frontend/test_frontend_ai_js.py` + `harness_ai.mjs`：真实解码器/渲染器、运行时 chip、禁用原因。
 

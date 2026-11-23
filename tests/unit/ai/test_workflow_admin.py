@@ -52,11 +52,7 @@ def wired(monkeypatch, manager):
     from ai import tools
 
     monkeypatch.setattr(tools, '_workflow_manager', lambda: manager)
-    from ai import approvals
-
-    approvals.reset()
     yield manager
-    approvals.reset()
 
 
 def test_list_and_read_return_the_saved_file(wired):
@@ -104,36 +100,6 @@ def test_rename_never_overwrites_and_delete_removes(wired):
     assert wired.load('renamed')['name'] == 'renamed'
     deleted = tools.tool_workflow_delete({'name': 'renamed'}, {})
     assert deleted['ok'] is True and wired.load('renamed') is None
-
-
-def test_delete_needs_an_approval_even_with_auto_approve_on(wired, monkeypatch):
-    from ai import approvals, tools
-
-    monkeypatch.setattr(tools, 'get_setting', lambda key: True)
-    with pytest.raises(AIError) as refused:
-        tools.execute('workflow_delete', {'name': 'demo'}, {'conversation_id': 'c1'}, allowed={'workflow_delete'})
-    assert refused.value.key == 'ai.approvalRequired'
-    assert wired.load('demo') is not None, 'a refused delete removed the file'
-
-    approvals.grant('c1', 'workflow_delete', {'name': 'demo'}, approvals.ONCE)
-    result = tools.execute('workflow_delete', {'name': 'demo'}, {'conversation_id': 'c1'}, allowed={'workflow_delete'})
-    assert result['deleted'] == 'demo'
-    assert wired.load('demo') is None
-
-
-def test_update_with_auto_approve_off_names_the_request_tool(wired, monkeypatch):
-    from ai import tools
-
-    monkeypatch.setattr(tools, 'get_setting', lambda key: False)
-    with pytest.raises(AIError) as refused:
-        tools.execute(
-            'workflow_update',
-            {'name': 'demo', 'workflow': _payload()},
-            {'conversation_id': 'c1'},
-            allowed={'workflow_update'},
-        )
-    assert refused.value.key == 'ai.approvalRequired'
-    assert refused.value.params['tool'] == 'workflow_update'
 
 
 def test_export_writes_a_named_bundle_into_the_export_directory(wired, monkeypatch):

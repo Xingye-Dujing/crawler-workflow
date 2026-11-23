@@ -423,19 +423,43 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
-## P5 前端切换已完成，旧蓝图删除待办（2026-11-23）
+## P4/P5 收口：旧 AI 引擎与蓝图已删除（2026-11-23）
 
-- `ai-workspace.js` 引入 `AI_BASE='/api/ai/ws'`（47 处调用），`ai/studio.js`、`ai/watch.js`、`workflow.js`、
-  `llm-settings.js`、`panels/node-python.js` 全部改到新表面；前端不再调用旧 `/api/ai`。
-- 新表面在 host 边缘做 wire 映射：`text_delta→text`、`thinking_delta→thinking`、`tool_*` 的 id/ok、`citation`/
-  `server_tool` 的字段；`skill='auto'` 映射为框架默认。
-- Python 路由改走 `services.python_scripts` + `services.python_runtime`（画布与 AI 共用同一脚本库）。
-- 框架 0.1.21：bootstrap 用清单模型、不实时拉 `/models`（否则每次开面板都阻塞/离线不可用）。
-- 验证：frontend/AI/API **1971 passed**；实机 AI 面板用例 2 passed（本地模型真实回答 + 停止）。
-- **仍待（删除旧路径）**：`api/ai.py` 与 `backend/ai` 的 agent/store/costs/approvals/files/monitors 等已无前端调用，
-  但它们仍被自身测试覆盖（13 个 `tests/api/test_ai_*.py`）。删除前需把 host 域测试（validators/previews/
-  workflow_draft/vocabulary）改写成直接单测，引擎测试随模块一起删除；然后删蓝图、引擎与 `ai_workspace` 开关，
-  最后处理旧 `ai.db` 历史。
+- **删除**：`backend/api/ai.py`；`backend/ai/agent.py`、`store.py`、`costs.py`、`approvals.py`、
+  `approval_preview.py`、`references.py`、`plugins.py`；`runtime/flags.py::ai_workspace`（已无在途开关）；
+  `api/ai.py` 的 `_workspace_conversation` 过渡桥。对应的 `tests/api/test_ai_*.py` 旧引擎用例随模块删除，
+  有价值的覆盖改写为直接单测/新表面用例。
+- **`backend/ai` 只留领域事实**：providers、context（项目事实+文档搜索）、skills（BUILTIN）、tools（领域工具）、
+  validators/previews、vocabulary/workflow_draft、workspace（文件夹选择器+表格导入）、monitors（事件词汇）、
+  file_text、dataset_access、files（搜索/抓取）、errors/types/scopes/environment。
+- **宿主编排补齐（0.1.22）**：`CaiXiHuiHost` 现在提供 `environment()`（cloud/desktop/local）、`bind_account`
+  （账号树 + 线程语言）、`search/fetch`（浏览器密钥随请求到工具上下文）、`import_table`、`script_library`、
+  `python_runtime`（画布与 AI 共用一个脚本库/解释器）、`universal_tools`、`event_bus`（把
+  `runtime.run_events` 映射为框架监视事件）、工具权限门（cloud/python/机器管理员）。
+- **修复的真实缺陷**：
+  - 新表面 `account()` 曾把 `Account` 对象的 repr 当账号 id（登录账号的路径全错），已改为 `user_id`。
+  - 监视器 POST 旧前端发 `spec`，新路由只读 `conditions`（手动建监视器从不生效）；现在在 host 边缘把
+    `spec` 规范化成框架 conditions，并把 armed/active、交付行映射回前端形状。
+  - 数据集读取授权（`request_dataset_access`）改为“永远询问”的审批工具：用户批准后落 grant，行数仍按
+    `dataset_access` 预算扣减；不再存在模型自行授权。
+  - 工作文件夹只有一个根：`/workspace` GET/POST 与工具都用框架 workspace；browse/pick 只做机器选择器，
+    非管理员按名拒绝。
+  - `/stop` 与删除会话会同时结束该会话 scope 的子进程（进程面板 parity）。
+  - POST 体规则统一：非对象 JSON 一律 400（`api/ai/ws/*` 全部纳入 body 矩阵）。
+- **前端**：保持不变，只把请求切到 `/api/ai/ws`（`AI_BASE` + 47 处调用及 studio/watch/llm-settings/
+  node-python/workflow）。实机浏览器用例（本地模型真实回答 + 实时行 + 停止）通过。
+- **验证**：全量 fast **10964 passed**（7 skipped）；`ruff check`/`format --check` 全绿；product/tests 两档 pylint
+  **10.00/10**；隔离数据根启动服务器（端口 5057）后 `/api/config`、`/api/ai/ws/health`、`/api/ai/ws/bootstrap`、
+  `/api/node-types`、`/api/workflow/list` 均 200；本地 Ollama 经 `/api/ai/ws/chat` 一轮真实回答 37s（text/usage/done）。
+  浏览器版 AI 实机用例本轮未能重跑：Selenium 启动在当前机器上挂起（无失败断言），此前同一前端切换已 2 passed。
+- **仍未做（明确声明，不静默）**：
+  1. 旧 `data/users/<id>/ai.db` 的历史会话/记忆/技能**不迁移**；新表面从空工作区开始。需要历史时用旧版
+     本导出，本版本没有导入器。
+  2. `backend/ai/tools.py` 仍保留若干“框架已同名提供”的工具声明（adapter 的 `FRAMEWORK_TOOLS` 会跳过它们）；
+     这是声明冗余而非运行路径，清理它们需要逐个改写技能工具清单，留待 P6 工具大扫除。
+  3. 框架的 `apply_artifact` 宿主钩子尚未实现；前端产物卡片走各自的类型端点（workflow/记忆/监控/图表），
+     `/artifacts/<id>/apply` 直接调用时按名拒绝。
+
 
 ## P4 接入第五片：node trace 迁到框架 store（2026-11-23）
 

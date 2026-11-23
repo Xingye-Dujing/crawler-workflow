@@ -100,7 +100,7 @@ hiddenimports = []
 # ``tests/unit/desktop/test_desktop_packaging.py`` fails if a package appears under backend/ without
 # being added here, if one named here has stopped existing, and if a file in a named package is not
 # in the collected set.
-for package in ('api', 'ai', 'extensions', 'crawlers', 'services', 'analyzers', 'core', 'capabilities', 'capabilities_kernel', 'engine', 'nodes', 'sessions', 'scheduling', 'i18n_catalog', 'runtime'):
+for package in ('api', 'ai', 'ai_host', 'extensions', 'crawlers', 'services', 'analyzers', 'core', 'capabilities', 'capabilities_kernel', 'engine', 'nodes', 'sessions', 'scheduling', 'i18n_catalog', 'runtime'):
     hiddenimports += package_module_names(BACKEND, package)
 # cryptography is imported inside verify_feed_signature (function-level, invisible to the
 # analysis); without it a packaged build with a configured pubkey cannot verify a feed.

@@ -1,6 +1,6 @@
 """Chart-spec preview: the chart, dataset and named columns a render would use.
 
-The full validation (chart type, dataset, required columns) stays in ``/api/ai/chart/preview`` and
+The full validation (chart type, dataset, required columns) stays in ``/api/ai/ws/chart/preview`` and
 ``/api/visualize/render``; this preview is only the legible description, never a second gate that
 could drift from them.
 """

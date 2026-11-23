@@ -47,17 +47,7 @@ class Flag:
 
 
 #: Declared switches. A flag with no consumer would be config that pretends to control something.
-FLAGS: dict[str, Flag] = {
-    # The old /api/ai surface and the framework-backed /api/ai/ws run side by side until parity;
-    # deleting the old engine and this switch is one change (P4 接入).
-    'ai_workspace': Flag(
-        name='ai_workspace',
-        owner='P4 AI 接入',
-        remove_by='2027-03-01',
-        description='Serve /api/ai/ws from the agent-workspace framework alongside the old /api/ai.',
-        default=True,
-    ),
-}
+FLAGS: dict[str, Flag] = {}
 
 
 def flag_for(name: str) -> Flag:

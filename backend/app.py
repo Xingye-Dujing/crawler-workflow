@@ -9,7 +9,6 @@ from urllib.parse import urlsplit
 from ai_host.manager import WorkspaceManager
 from api import auth as web_auth
 from api.accounts import bp as accounts_bp
-from api.ai import bp as ai_bp
 from api.ai_workspace import create_blueprint as create_ai_workspace_blueprint
 from api.analysis import bp as analysis_bp
 from api.biblio import bp as biblio_bp
@@ -50,7 +49,6 @@ from core.refs import (
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from runtime import flags as migration_flags
 from runtime.settings import get_setting, upload_limit_mb
 from runtime.state import (
     _push_log,
@@ -662,13 +660,10 @@ app.register_blueprint(components_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(update_bp)
 app.register_blueprint(llm_bp)
-app.register_blueprint(ai_bp)
 
-# The framework-backed AI surface (`/api/ai/ws`) runs beside the old one until parity. The switch is
-# declared in runtime/flags.py with an owner and a removal date; deleting the old engine removes it.
-if migration_flags.active('ai_workspace'):
-    ai_workspace_manager = WorkspaceManager()
-    app.register_blueprint(create_ai_workspace_blueprint(ai_workspace_manager))
+# The AI workspace is the framework-backed surface (`/api/ai/ws`); the old engine is gone.
+ai_workspace_manager = WorkspaceManager()
+app.register_blueprint(create_ai_workspace_blueprint(ai_workspace_manager))
 
 
 # ─── Execution History API (time-series comparison across runs) ───

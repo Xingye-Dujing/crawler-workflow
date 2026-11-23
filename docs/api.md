@@ -90,16 +90,16 @@ Flask 后端 HTTP 端点，按域名分组。未登录时 `/api/*` 答 401 `{ok:
 
 | 端点与方法 | 说明 |
 |---|---|
-| `GET` `/api/ai/bootstrap` · `GET` `/api/ai/providers` · `GET` `/api/ai/providers/<id>/models` · `POST` `/api/ai/providers/<id>/test` | 启动载荷（供应商、技能、会话、用量、设置、插件、工具、监视器）/ 目录 / 实时模型（取不到回退声明目录）/ 一次极小往返验证 |
-| `POST` `/api/ai/chat` · `POST` `/api/ai/answer` · `POST` `/api/ai/stop` | 一轮对话（SSE，`?stream=0` 回事件 JSON）/ 回答 `ask_user_question` 并继续同一轮 / 设置该会话取消事件 |
-| `GET`/`POST` `/api/ai/conversations` · `GET`/`PATCH`/`DELETE` `/api/ai/conversations/<id>` · `POST` `/api/ai/context` · `POST` `/api/ai/conversations/<id>/context` | 会话列表、新建、详情（含消息与附件）、改名或置顶、删除 / 预览一次上下文构建 |
-| `GET`/`POST` `/api/ai/skills` · `GET`/`DELETE` `/api/ai/skills/<id>` · `POST` `/api/ai/skills/<id>/fork` | 技能目录 / 保存用户技能 / 完整技能 / 删除 / 从内置 Fork |
-| `GET` `/api/ai/plugins` · `POST` `/api/ai/plugins/install` · `POST` `/api/ai/plugins/<id>/enable` · `DELETE` `/api/ai/plugins/<id>` | 插件清单 / 安装声明式插件（代码插件仅本地与管理员）/ 启停 / 卸载 |
-| `GET`/`POST` `/api/ai/memories` · `DELETE` `/api/ai/memories/<id>` · `POST` `/api/ai/files` · `GET` `/api/ai/conversations/<id>/files` · `DELETE` `/api/ai/files/<id>` | 长期记忆的列、存、删 / 上传附件（当前仅 DeepSeek）/ 列会话附件 / 删附件 |
-| `GET`/`POST` `/api/ai/monitors` · `DELETE` `/api/ai/monitors/<id>` · `GET` `/api/ai/monitors/catalog` · `GET` `/api/ai/monitors/events` · `POST` `/api/ai/monitors/events/<id>/ack` | 监视器列表、创建、取消 / 手动构建器的事件名清单（来自服务端匹配表）/ 待投递事件与确认；事件只带 id、状态与计数，不花 token |
-| `POST` `/api/ai/rerun` | 从**已保存的工作流文件**重跑一个失败节点及其下游（失败节点卡片的按钮）；指纹不符、文件缺失、节点未知或运行仍进行时按名拒绝，不载入画布 |
-| `GET` `/api/ai/python/status` · `POST` `/api/ai/python/install` · `GET`/`POST` `/api/ai/python/scripts` · `GET`/`DELETE` `/api/ai/python/scripts/<id>` · `POST` `/api/ai/python/scripts/<id>/fork` · `POST` `/api/ai/python/run` · `GET`/`POST` `/api/ai/python/files` | 解释器探测与安装、脚本库增删改查与 Fork、按 `script_id` 或内联 `code` 运行、工作区文件读写；云端按名拒绝 |
-| `POST` `/api/ai/search` · `POST` `/api/ai/fetch` · `GET` `/api/ai/usage` · `GET` `/api/ai/health` | 联网搜索 / 抓取网页正文（均仅 DeepSeek）/ 本账号 token 汇总 / 运行环境与代码插件可用性 |
+| `GET` `/api/ai/ws/bootstrap` · `GET` `/api/ai/ws/providers` · `GET` `/api/ai/ws/providers/<id>/models` · `POST` `/api/ai/ws/providers/<id>/test` | 启动载荷（供应商、技能、会话、用量、设置、插件、工具、监视器）/ 目录 / 实时模型（取不到回退声明目录）/ 一次极小往返验证 |
+| `POST` `/api/ai/ws/chat` · `POST` `/api/ai/ws/answer` · `POST` `/api/ai/ws/stop` | 一轮对话（SSE，`?stream=0` 回事件 JSON）/ 回答 `ask_user_question` 并继续同一轮 / 设置该会话取消事件 |
+| `GET`/`POST` `/api/ai/ws/conversations` · `GET`/`PATCH`/`DELETE` `/api/ai/ws/conversations/<id>` · `POST` `/api/ai/ws/context` · `POST` `/api/ai/ws/conversations/<id>/context` | 会话列表、新建、详情（含消息与附件）、改名或置顶、删除 / 预览一次上下文构建 |
+| `GET`/`POST` `/api/ai/ws/skills` · `GET`/`DELETE` `/api/ai/ws/skills/<id>` · `POST` `/api/ai/ws/skills/<id>/fork` | 技能目录 / 保存用户技能 / 完整技能 / 删除 / 从内置 Fork |
+| `GET` `/api/ai/ws/plugins` · `POST` `/api/ai/ws/plugins/install` · `POST` `/api/ai/ws/plugins/<id>/enable` · `DELETE` `/api/ai/ws/plugins/<id>` | 插件清单 / 安装声明式插件（代码插件仅本地与管理员）/ 启停 / 卸载 |
+| `GET`/`POST` `/api/ai/ws/memories` · `DELETE` `/api/ai/ws/memories/<id>` · `POST` `/api/ai/ws/files` · `GET` `/api/ai/ws/conversations/<id>/files` · `DELETE` `/api/ai/ws/files/<id>` | 长期记忆的列、存、删 / 上传附件（当前仅 DeepSeek）/ 列会话附件 / 删附件 |
+| `GET`/`POST` `/api/ai/ws/monitors` · `DELETE` `/api/ai/ws/monitors/<id>` · `GET` `/api/ai/ws/monitors/catalog` · `GET` `/api/ai/ws/monitors/events` · `POST` `/api/ai/ws/monitors/events/<id>/ack` | 监视器列表、创建、取消 / 手动构建器的事件名清单（来自服务端匹配表）/ 待投递事件与确认；事件只带 id、状态与计数，不花 token |
+| `POST` `/api/ai/ws/rerun` | 从**已保存的工作流文件**重跑一个失败节点及其下游（失败节点卡片的按钮）；指纹不符、文件缺失、节点未知或运行仍进行时按名拒绝，不载入画布 |
+| `GET` `/api/ai/ws/python/status` · `POST` `/api/ai/ws/python/install` · `GET`/`POST` `/api/ai/ws/python/scripts` · `GET`/`DELETE` `/api/ai/ws/python/scripts/<id>` · `POST` `/api/ai/ws/python/scripts/<id>/fork` · `POST` `/api/ai/ws/python/run` | 解释器探测与安装、脚本库增删改查与 Fork、按 `script_id` 或内联 `code` 运行；云端与普通账号按名拒绝（脚本库是机器级共享状态） |
+| `GET` `/api/ai/ws/usage` · `GET` `/api/ai/ws/health` | 本账号 token 汇总 / 健康检查（联网搜索与抓页只在回合内作为工具调用，密钥随该请求） |
 ### 供应商、Cookie、设置与系统
 
 | 端点与方法 | 说明 |

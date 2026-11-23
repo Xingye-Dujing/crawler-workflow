@@ -15,9 +15,6 @@ pytestmark = pytest.mark.api
 
 @pytest.fixture
 def clean_ai():
-    from ai import store
-
-    store.mark_interrupted()
     yield
 
 
@@ -154,20 +151,18 @@ class TestScope:
 
         child = _spawn()
         processes.register('cmd', 'chat batch', child, scope='c_stop')
-        body = client.post('/api/ai/stop', json={'conversation_id': 'c_stop'}).get_json()
-        assert body['ok'] is True
+        body = client.post('/api/ai/ws/stop', json={'conversation_id': 'c_stop'}).get_json()
         assert body['stopped_processes'] == 1
         child.wait(timeout=10)
         assert child.poll() is not None
 
     def test_deleting_a_conversation_stops_its_children(self, client, clean_ai):
-        from ai import store
         from runtime import processes
 
-        conversation = store.create_conversation('deepseek', 'deepseek-flash', 'auto')
+        conversation = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()['conversation']
         child = _spawn()
         processes.register('cmd', 'orphan batch', child, scope=conversation['id'])
-        body = client.delete('/api/ai/conversations/' + conversation['id']).get_json()
+        body = client.delete('/api/ai/ws/conversations/' + conversation['id']).get_json()
         assert body['ok'] is True and body['stopped_processes'] == 1
         child.wait(timeout=10)
         assert child.poll() is not None

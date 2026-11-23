@@ -202,7 +202,7 @@
 ## AI 工作区
 
 - **一个 provider 目录，因为一次运行不能谎报它的传输。** 目录拥有端点、模型表、能力清单与云端/本地拒绝；浏览器只渲染
-  `/api/ai/providers` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
+  `/api/ai/ws` 说的，JS 里第二张表会重演“记录说 OpenRouter、本地 daemon 在回答”的事故。
 - **能力是承诺。** 传输不支持 `thinking`/`web_search` 就得按名拒绝，不能发一个 provider 会静默忽略的字段。
 - **图表缺什么字段，由图表的声明回答，由 validate 说出来。** `ChartSpec.fields` 是“这个图读哪些列、哪些必填、每列是什么
   角色”的唯一位置；设置面板按它画框，`WorkflowEngine.validate_detailed` 先应用 `with_chart_defaults` 再读它，所以

@@ -93,13 +93,16 @@ def test_rerank_tool_is_bounded_and_uses_the_small_cross_encoder(monkeypatch):
 
 
 def test_new_skills_are_builtin_local_and_name_registered_tools():
+    from ai_host.adapter import FRAMEWORK_TOOLS
+
+    known = set(tools.TOOLS) | set(FRAMEWORK_TOOLS)
     for skill_id in ('models', 'model_tuning'):
         skill = skills.BUILTIN[skill_id]
         assert skill.local_only is True
         assert skill.name_key.startswith('ai.skill.')
         assert skill.tools
         for tool in skill.tools:
-            assert tool in tools.TOOLS, f'{skill_id} names an unregistered tool {tool}'
+            assert tool in known, f'{skill_id} names an unregistered tool {tool}'
 
 
 def test_prompt_block_names_the_registered_models():

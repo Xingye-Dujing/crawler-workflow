@@ -887,17 +887,6 @@ SETTINGS = (
         consumer='server',
     ),
     Setting(
-        'ai_max_output_tokens',
-        'int',
-        32768,
-        'ai',
-        'set.aiMaxOutput',
-        hint='set.aiMaxOutputHint',
-        minimum=1024,
-        maximum=131072,
-        consumer='server',
-    ),
-    Setting(
         'ai_max_tool_rounds',
         'int',
         0,

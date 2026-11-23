@@ -66,13 +66,13 @@ def test_an_image_field_that_is_a_number_is_a_bad_parameter(client):
 
 
 def test_a_context_field_that_is_a_list_is_a_bad_parameter(client):
-    response = client.post('/api/ai/context', json={'query': 'x', 'context': ['dataset_id']})
+    response = client.post('/api/ai/ws/context', json={'query': 'x', 'context': ['dataset_id']})
     assert response.status_code == 400
     assert response.get_json()['ok'] is False
 
 
 def test_a_bad_codebook_id_is_not_found_not_a_crash(client):
-    response = client.delete('/api/ai/codebooks/x')
+    response = client.delete('/api/ai/ws/codebooks/x')
     assert response.status_code == 404
     assert response.get_json()['ok'] is False
 

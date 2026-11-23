@@ -15,8 +15,10 @@ from agent_workspace import AIError as AgentError
 from agent_workspace import ChatRequest
 from agent_workspace import config as workspace_config
 from agent_workspace.errors import WorkspaceError
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, abort, jsonify, request
 from runtime import account_context
+
+from i18n import get_lang
 
 
 def _sse(events):
@@ -142,7 +144,7 @@ def _machine_refusal():
     from runtime import policy
 
     if not policy.may_administer_machine():
-        return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': 'machine.refused'}), 403
+        return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': policy.machine_refusal_key()}), 403
     return None
 
 
@@ -158,14 +160,32 @@ def create_blueprint(manager):
     blueprint = Blueprint('ai_workspace', __name__, url_prefix='/api/ai/ws')
 
     def account() -> str:
-        try:
-            return str(account_context.current() or 'default')
-        except Exception:
-            return 'default'
+        current = account_context.current()
+        return str(current.user_id) if current is not None else 'default'
 
     def body() -> dict:
+        """The JSON object, or a 400 for a body that is not one; an ABSENT body reads as {}.
+
+        The panel sends no body for a few actions, so "empty" is not malformed. A body that exists
+        and is not a JSON object (``null``, a list, a string, a number) is refused before any
+        handler can act on a half-read request.
+        """
         payload = request.get_json(silent=True)
-        return payload if isinstance(payload, dict) else {}
+        if payload is None:
+            if (request.get_data(cache=True) or b'').strip():
+                abort(400, description='a JSON object body is required')
+            return {}
+        if not isinstance(payload, dict):
+            abort(400, description='a JSON object body is required')
+        return payload
+
+    def context_payload(raw) -> dict:
+        """The optional context object; a list or scalar is a bad parameter, never a crash."""
+        if raw is None:
+            return {}
+        if not isinstance(raw, dict):
+            abort(400, description='context must be a JSON object')
+        return dict(raw)
 
     def provider_key() -> str:
         return str(request.headers.get('X-Provider-Key') or body().get('api_key') or '')
@@ -175,7 +195,7 @@ def create_blueprint(manager):
     @blueprint.post('/chat')
     def chat():
         payload = body()
-        context = dict(payload.get('context') or {})
+        context = context_payload(payload.get('context'))
         for key in ('attachments', 'references', 'agent_mode', 'locale'):
             if key in payload:
                 context[key] = payload[key]
@@ -184,6 +204,7 @@ def create_blueprint(manager):
             conversation_id=str(payload.get('conversation_id') or ''),
             account=account(),
             host=request.host_url.rstrip('/'),
+            lang=get_lang(),
             # The old panel's "auto" is not a skill id; the framework's default (general) is.
             skill='' if str(payload.get('skill') or '') in ('', 'auto') else str(payload.get('skill')),
             provider=str(payload.get('provider') or ''),
@@ -345,9 +366,11 @@ def create_blueprint(manager):
     @blueprint.post('/conversations/<conversation_id>/context')
     def conversation_context(conversation_id):
         payload = body()
+        if not manager.workspace(account()).store.get_conversation(conversation_id, account()):
+            return _not_found('conversation.unknown', conversation_id)
         return jsonify(
             manager.workspace(account()).context_preview(
-                str(payload.get('query') or ''), account(), payload.get('context') or {}
+                str(payload.get('query') or ''), account(), context_payload(payload.get('context'))
             )
         )
 
@@ -360,10 +383,12 @@ def create_blueprint(manager):
     @blueprint.delete('/conversations/<conversation_id>')
     def delete_conversation(conversation_id):
         from ai import dataset_access
+        from runtime import processes
 
         manager.workspace(account()).store.delete_conversation(conversation_id, account())
         dataset_access.revoke(conversation_id)
-        return jsonify({'ok': True})
+        stopped = processes.stop_scope(conversation_id)
+        return jsonify({'ok': True, 'stopped_processes': stopped})
 
     @blueprint.get('/memories')
     def memories():
@@ -441,7 +466,7 @@ def create_blueprint(manager):
         payload = body()
         return jsonify(
             manager.workspace(account()).context_preview(
-                str(payload.get('query') or ''), account(), payload.get('context') or {}
+                str(payload.get('query') or ''), account(), context_payload(payload.get('context'))
             )
         )
 
@@ -516,21 +541,22 @@ def create_blueprint(manager):
 
     @blueprint.route('/monitors', methods=['GET', 'POST'])
     def monitors():
+        from ai import monitors as host_monitors
+
         workspace = manager.workspace(account())
         if request.method == 'POST':
             payload = body()
             try:
-                return jsonify(
-                    {
-                        'ok': True,
-                        'monitor': workspace.arm_monitor(
-                            account(), str(payload.get('conversation_id') or ''), payload.get('conditions') or {}
-                        ),
-                    }
+                conditions = host_monitors.conditions(
+                    payload.get('spec') or payload.get('conditions') or {}, bool(payload.get('auto_analyze'))
                 )
+                row = workspace.arm_monitor(account(), str(payload.get('conversation_id') or ''), conditions)
+                return jsonify({'ok': True, 'monitor': host_monitors.public_monitor(row)})
             except WorkspaceError as exc:
                 return _error(exc)
-        return jsonify({'ok': True, 'monitors': workspace.monitors_list(account())})
+        return jsonify(
+            {'ok': True, 'monitors': [host_monitors.public_monitor(row) for row in workspace.monitors_list(account())]}
+        )
 
     @blueprint.delete('/monitors/<monitor_id>')
     def stop_monitor(monitor_id):
@@ -538,7 +564,19 @@ def create_blueprint(manager):
 
     @blueprint.get('/monitors/events')
     def monitor_events():
-        return jsonify({'ok': True, 'events': manager.workspace(account()).monitors.pending(account())})
+        from ai import monitors as host_monitors
+
+        workspace = manager.workspace(account())
+        by_id = {row['id']: row for row in workspace.monitors_list(account())}
+        return jsonify(
+            {
+                'ok': True,
+                'events': [
+                    host_monitors.public_delivery(row, by_id.get(row.get('monitor_id')))
+                    for row in workspace.monitors.pending(account())
+                ],
+            }
+        )
 
     @blueprint.post('/monitors/events/<delivery_id>/ack')
     def ack_delivery(delivery_id):
@@ -725,39 +763,43 @@ def create_blueprint(manager):
 
     @blueprint.get('/workspace')
     def workspace_get():
-        from ai import workspace
-
-        return jsonify({'ok': True, 'workspace': workspace.describe()})
+        space = manager.workspace(account())
+        return jsonify({'ok': True, 'workspace': space.workspace(account()).describe()})
 
     @blueprint.post('/workspace')
     def workspace_set():
-        from ai import workspace
-        from ai.errors import AIError as HostError
+        from runtime import policy
 
+        if not policy.may_administer_machine():
+            return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': 'machine.refused'}), 403
+        space = manager.workspace(account()).workspace(account())
         try:
-            state = workspace.set_folder(str(body().get('path') or ''))
-        except HostError as exc:
-            return _host_refusal(exc)
+            path = str(body().get('path') or '').strip()
+            state = space.clear_root() if not path else space.set_root(path)
+        except WorkspaceError as exc:
+            return _error(exc)
         return jsonify({'ok': True, 'workspace': state})
 
     @blueprint.get('/workspace/browse')
     def workspace_browse():
-        from ai import workspace
+        from ai import workspace as folders
         from ai.errors import AIError as HostError
 
+        space = manager.workspace(account()).workspace(account())
         try:
-            listing = workspace.browse(str(request.args.get('path') or ''))
+            listing = folders.browse(str(request.args.get('path') or ''), start_folder=space.root())
         except HostError as exc:
             return _host_refusal(exc)
         return jsonify({'ok': True, **listing})
 
     @blueprint.post('/workspace/pick')
     def workspace_pick():
-        from ai import workspace
+        from ai import workspace as folders
         from ai.errors import AIError as HostError
 
+        space = manager.workspace(account()).workspace(account())
         try:
-            picked = workspace.pick_folder(str(body().get('start') or ''))
+            picked = folders.pick_folder(str(body().get('start') or ''), start_folder=space.root())
         except HostError as exc:
             return _host_refusal(exc)
         return jsonify({'ok': True, **picked})
@@ -905,7 +947,7 @@ def create_blueprint(manager):
         from runtime.stores import get_workflow_manager
 
         from engine.workflow_rerun import RerunRefusalError, rerun_node
-        from i18n import get_lang, t
+        from i18n import t
 
         payload = body()
         conversation_id = str(payload.get('conversation_id') or '')
@@ -992,6 +1034,7 @@ def create_blueprint(manager):
     def trace_apply(conversation_id):
         from services.coding import node_results
 
+        data = body()
         workspace = manager.workspace(account())
         if not workspace.store.get_conversation(conversation_id, account()):
             return _not_found('conversation.unknown', conversation_id)
@@ -1008,7 +1051,6 @@ def create_blueprint(manager):
         node_id = str(provenance.get('node_id') or '')
         if not run_id or not node_id:
             return jsonify({'ok': False, 'error': 'trace has no result', 'key': 'ai.traceNoResult'}), 400
-        data = body()
         result = data.get('result', data)
         if not isinstance(result, (dict, list)):
             return jsonify({'ok': False, 'error': 'result must be a table or object', 'key': 'ai.traceBadResult'}), 400
@@ -1083,7 +1125,12 @@ def create_blueprint(manager):
 
     @blueprint.post('/stop')
     def stop():
-        return jsonify({'ok': manager.workspace(account()).stop(str(body().get('conversation_id') or ''))})
+        from runtime import processes
+
+        conversation_id = str(body().get('conversation_id') or '')
+        stopped = manager.workspace(account()).stop(conversation_id)
+        # A command the assistant started is scope-tagged with the conversation; STOP ends both.
+        return jsonify({'ok': stopped, 'stopped_processes': processes.stop_scope(conversation_id)})
 
     @blueprint.post('/steer')
     def steer():

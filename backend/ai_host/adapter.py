@@ -10,13 +10,18 @@ from __future__ import annotations
 
 from agent_workspace import DefaultHostAdapter
 from agent_workspace.config import BY_KEY, LEGACY_KEYS
+from agent_workspace.host import EventBus, HostEnvironment
 from agent_workspace.settings import FileSettings
 from agent_workspace.tools import CONTROL_TOOLS, generic_specs
 from agent_workspace.types import SkillSpec, ToolSpec
+from ai import environment as product_environment
+from ai import files as product_files
 from ai import skills as legacy_skills
 from ai import tools as legacy_tools
 from ai import validators as legacy_validators
 from ai.context import project_facts
+from core.config import Config
+from runtime import account_context, policy, run_events
 from runtime.settings import get_setting
 
 #: framework key → the product setting that already owns it (``LEGACY_KEYS`` is the other direction).
@@ -63,7 +68,7 @@ def _convert_tool(spec) -> ToolSpec:
         spec.description,
         spec.parameters,
         permission=str(getattr(spec, 'permission', 'read:project')),
-        handler=spec.handler,
+        handler=_gated(spec),
         control=bool(getattr(spec, 'control', False)),
         mutating=spec.name in legacy_tools.APPROVAL_TOOLS,
         always_ask=spec.name in legacy_tools.ALWAYS_APPROVAL_TOOLS,
@@ -93,8 +98,13 @@ def _convert_skill(spec) -> SkillSpec:
 class CaiXiHuiHost(DefaultHostAdapter):
     """The product's HostAdapter. Domain facts/tools/skills live here, never in the framework."""
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._settings = None
+        self._bus = None
+
     def settings(self):
-        if not hasattr(self, '_settings'):
+        if self._settings is None:
             self._settings = ProductSettings(self.data_dir() / 'settings.json')
         return self._settings
 
@@ -139,3 +149,244 @@ class CaiXiHuiHost(DefaultHostAdapter):
             return list(result.problems or [result.message])
 
         return validate
+
+    # ── the machine this host runs on ────────────────────────────────────────
+
+    def environment(self):
+        kind = 'cloud' if Config.CLOUD_MODE else ('desktop' if product_environment.kind() == 'desktop' else 'local')
+        return HostEnvironment(
+            kind=kind,
+            source_root=product_environment.code_root(),
+            extra=product_environment.capabilities(),
+        )
+
+    def bind_account(self, account: str, lang: str = '') -> None:
+        """A turn runs on its own thread: bind the account tree and the language there.
+
+        ``paths.active()`` reads this context; without it a tool that writes (a dataset grant, a
+        script, a monitor delivery) would write the local owner's tree for a signed-in account.
+        """
+        from i18n import set_lang
+
+        account_context.bind(self._account_record(account))
+        if lang:
+            set_lang(lang)
+
+    @staticmethod
+    def _account_record(account: str):
+        """The identity behind a user id: the registered row when accounts exist, else the owner."""
+        if not account or account == 'default':
+            return None
+        from runtime.account_context import Account
+
+        from services.accounts.service import get_account_service
+
+        row = get_account_service().store.get_user(str(account))
+        if not row:
+            return None
+        return Account(
+            user_id=str(row['user_id']),
+            username=str(row['username']),
+            role=str(row['role']),
+            must_change_password=bool(row['must_change_password']),
+        )
+
+    # ── the product's own services the engine delegates to ───────────────────
+
+    def search(self, query: str, limit: int = 3, api_key: str = '') -> list[dict]:
+        return list(product_files.search(api_key, str(query or ''), count=max(1, int(limit or 3))).get('results') or [])
+
+    def fetch(self, url: str, api_key: str = '') -> str:
+        page = product_files.fetch(api_key, str(url or ''))
+        title = str(page.get('title') or '')
+        content = str(page.get('content') or '')
+        return f'{title}\n\n{content}'.strip() if title else content
+
+    def command_allowlist(self) -> tuple[str, ...]:
+        from ai.workspace import ALLOWED_COMMANDS
+
+        return tuple(sorted(ALLOWED_COMMANDS))
+
+    def import_table(self, path: str) -> dict:
+        from ai import workspace as product_workspace
+
+        return product_workspace.import_path(str(path or ''))
+
+    def apply_artifact(self, kind: str, payload: dict) -> dict:
+        """The product applies each artifact through its own typed endpoint (workflow/memory/chart).
+
+        The framework's generic apply door stays closed here rather than guessing a writer: a kind
+        with no typed endpoint is refused by name, and the card's button is what actually applies.
+        """
+        raise NotImplementedError(f'artifacts of kind {kind} are applied through their own endpoint')
+
+    def script_library(self, store):
+        return _ProductScriptLibrary()
+
+    def python_runtime(self):
+        return _ProductPythonRuntime()
+
+    # ── universally offered domain tools ─────────────────────────────────────
+
+    def universal_tools(self) -> tuple[str, ...]:
+        """The product's always-offered verbs (the old agent's UNIVERSAL_TOOLS).
+
+        A skill names what is special to it; reading the project, the workflow file and the working
+        folder, asking for dataset rows and proposing an apply are every turn's vocabulary.
+        """
+        return legacy_tools.UNIVERSAL_TOOLS
+
+    # ── run monitors ────────────────────────────────────────────────────────
+
+    def event_bus(self):
+        if self._bus is None:
+            self._bus = EventBus()
+            run_events.subscribe(self._on_run_event)
+        return self._bus
+
+    def _on_run_event(self, payload: dict) -> None:
+        """One run fact, mapped once into the framework's monitor vocabulary.
+
+        The bus is the product's; the monitor engine is the framework's. The mapping keeps the
+        product's event names (its catalogue is what the panel offers) and gives the framework the
+        keys it matches on — subject/status/console/row_count — never crawled text.
+        """
+        event = str(payload.get('event') or '')
+        if event not in MONITOR_EVENTS:
+            return
+        owner = account_context.current()
+        bus = getattr(self, '_bus', None)
+        if bus is None:
+            return
+        bus.publish(
+            event,
+            {
+                'account': owner.user_id if owner is not None else 'default',
+                'subject': str(payload.get('run_id') or ''),
+                'run_id': str(payload.get('run_id') or ''),
+                'workflow': str(payload.get('workflow') or ''),
+                'node_id': str(payload.get('node_id') or ''),
+                'node_type': str(payload.get('node_type') or ''),
+                'label': str(payload.get('label') or ''),
+                'status': str(payload.get('status') or ''),
+                'outcome': str(payload.get('outcome') or ''),
+                'row_count': int(payload.get('rows') or 0),
+                'console': str(payload.get('line') or ''),
+                'done': int(payload.get('done') or 0),
+                'total': int(payload.get('total') or 0),
+                'failed': int(payload.get('failed') or 0),
+                'skipped': int(payload.get('skipped') or 0),
+            },
+        )
+
+
+MONITOR_EVENTS = ('run.started', 'node.finished', 'run.finished', 'run.log')
+
+
+def _gated(spec):
+    """The product's cloud / Python / machine-authority gate, at the ONE door tools enter.
+
+    The framework owns approval and offering; these refusals are domain facts it cannot know (a
+    cloud host has no user filesystem, inline Python is machine-level). Wrapping here keeps every
+    existing handler unchanged instead of re-checking inside 40 tools.
+    """
+
+    def run(args, ctx):
+        from ai.errors import AIError
+
+        permission = str(getattr(spec, 'permission', '') or '')
+        if permission == 'read:code' and (
+            Config.CLOUD_MODE
+            or not (get_setting('ai_allow_code_context') and product_environment.capabilities()['local_source'])
+        ):
+            raise AIError('ai.codeCloudRefused', kind='capability')
+        if permission in ('read:python', 'write:python', 'exec:python'):
+            if Config.CLOUD_MODE:
+                raise AIError('ai.pythonCloud', kind='capability')
+            if not (get_setting('ai_allow_python') and product_environment.capabilities()['code_plugins']):
+                raise AIError('ai.pythonDisabled', kind='capability')
+            inline = spec.name == 'python_run' and bool(str((args or {}).get('code') or '').strip())
+            if (inline or permission == 'write:python' or spec.name in ('python_read', 'python_files')) and not (
+                policy.may_administer_machine()
+            ):
+                raise AIError(policy.machine_refusal_key(), kind='capability')
+        if permission in ('read:files', 'write:files', 'exec:cmd') and (
+            Config.CLOUD_MODE or not product_environment.capabilities()['user_files']
+        ):
+            raise AIError('ai.workspaceCloud', kind='capability')
+        runtime_ctx = dict(ctx or {})
+        runtime_ctx.setdefault('provider', str(runtime_ctx.get('provider_id') or ''))
+        return spec.handler(args or {}, runtime_ctx)
+
+    run.__wrapped__ = spec.handler
+    return run
+
+
+class _ProductScriptLibrary:
+    """``ScriptLibrary``'s interface over the product's ONE saved-script library."""
+
+    def all(self, _account: str) -> list[dict]:
+        from services import python_scripts
+
+        return python_scripts.all_scripts()
+
+    def get(self, _account: str, script_id: str) -> dict:
+        from services import python_scripts
+
+        return python_scripts.find_script(str(script_id or '')) or {}
+
+    def code(self, _account: str, script_id: str) -> str:
+        return str(self.get(_account, script_id).get('code') or '')
+
+    def save(self, _account: str, payload: dict) -> dict:
+        from services import python_scripts
+
+        return python_scripts.save_script(dict(payload or {}))
+
+    def fork(self, _account: str, script_id: str) -> dict:
+        from services import python_scripts
+
+        return python_scripts.fork_script(str(script_id or ''))
+
+    def delete(self, _account: str, script_id: str) -> bool:
+        from services import python_scripts
+
+        return python_scripts.delete_script(str(script_id or ''))
+
+
+class _ProductPythonRuntime:
+    """The framework Python tools over the product's interpreter discovery and runner."""
+
+    def status(self, _settings=None) -> dict:
+        from services import python_runtime
+
+        found = python_runtime.interpreter()
+        return {
+            'available': bool(found.get('available')),
+            'interpreter': str(found.get('path') or ''),
+            'version': str(found.get('version') or ''),
+            'enabled': bool(get_setting('ai_allow_python')),
+            'contract': {
+                'input': 'CIXI_INPUT (path to JSON Lines)',
+                'output': 'CIXI_OUTPUT (path to JSON Lines)',
+                'args': 'CIXI_ARGS (JSON in the environment)',
+            },
+            'sandbox': False,
+        }
+
+    def run_code(self, code, *, rows=None, args=None, timeout=10, python_bin='', cancel_event=None, **kwargs) -> dict:
+        from services import python_runtime
+
+        # The product discovers its own interpreter (`ai_python_path`, mapped from the framework's
+        # `python.path`); the engine's explicit binary is therefore already the same answer.
+        del python_bin
+        result = python_runtime.run_code(
+            str(code or ''),
+            list(rows or []),
+            dict(args or {}),
+            timeout=int(timeout or 10),
+            cancel_event=cancel_event,
+            max_rows=int(kwargs.get('max_rows') or 1000),
+        )
+        result.setdefault('row_count', len(result.get('rows') or []))
+        return result

@@ -66,6 +66,12 @@ def _read_setting_keys() -> set:
                 found.add(key.value)
             elif isinstance(key, ast.Name):
                 found.update(assigned.get(key.id, ()))
+    # The AI workspace is the framework's: its host bridge (`ai_host.adapter.ProductSettings`)
+    # hands these exact product keys to `get_setting` through the one legacy→framework table, so
+    # the table IS their reader. Without this the gate would demand a second literal call site.
+    from agent_workspace.config import LEGACY_KEYS
+
+    found.update(LEGACY_KEYS)
     return found
 
 

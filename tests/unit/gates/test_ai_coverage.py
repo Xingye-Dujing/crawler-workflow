@@ -41,7 +41,7 @@ def test_a_tool_with_no_skill_or_universal_entry_is_reported(monkeypatch):
 
 
 def test_the_coverage_tool_is_itself_reachable():
-    from ai import agent, tools
+    from ai import tools
 
-    assert 'ai_coverage' in agent.UNIVERSAL_TOOLS
+    assert 'ai_coverage' in tools.UNIVERSAL_TOOLS
     assert 'ai_coverage' in tools.TOOLS

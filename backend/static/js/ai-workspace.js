@@ -3497,7 +3497,7 @@ const AIWorkspace = {
         }
         if (type === 'paused') {
             if (this._current?.thinking) this._current.thinking.classList.remove('is-live');
-            /* A pause is an ending of THIS stream (the answer resumes through `/api/ai/answer`), so
+            /* A pause is an ending of THIS stream (the answer resumes through `/api/ai/ws/answer`), so
                it must not be reported as a cut connection by `_noteCutStream`. */
             this._turnEnded = true;
             this._sending = false;

@@ -1,30 +1,14 @@
-"""Run monitors: an AI-requested watch on a running (or next) workflow.
+"""Run-monitor vocabulary: the names the panel offers and the rule the workspace matches.
 
-The AI proposes a monitor as an artifact; the user arms it. From then on the run publishes
-lifecycle events (``runtime.run_events``), this module matches them against the armed specs and
-writes one durable delivery row per match. The browser is the reaction: it polls for pending
-deliveries, shows the event in its conversation, and — when the monitor was armed for automatic
-analysis — starts a turn with the stored key. The server never spends a token on its own and never
-holds an API key, which is why a trigger can wait for hours without costing anything.
-
-A monitor carries no crawled text: an event is an id, a status and counts. The automatic turn's
-prompt tells the model to read the run through its read-only tools, so the evidence still comes
-from the run store.
+The framework owns the monitor store, the delivery rows and the polling surface; this module owns
+only the product's *vocabulary* — which run events exist, which node statuses and run outcomes a
+rule may name — plus the normalization every door (preview, arm) shares. A monitor carries ids,
+statuses and counts, never crawled text.
 """
 
-import contextlib
-import logging
-import queue
-import threading
-import time
+from __future__ import annotations
 
-from runtime import account_context, paths, run_events
-
-from ai import store
 from ai.errors import AIError
-from i18n import get_lang, set_lang, t
-
-logger = logging.getLogger('ai.monitors')
 
 #: The event names a monitor may ask for. ``node.finished`` carries status/rows; ``run.log`` needs a
 #: needle or it would fire on every line.
@@ -32,43 +16,14 @@ EVENTS = ('run.started', 'node.finished', 'run.finished', 'run.log')
 STATUSES = ('done', 'restored', 'partial', 'failed', 'skipped')
 OUTCOMES = ('completed', 'failed', 'interrupted')
 
+_MAX_TRIGGERS = 50
+
 
 def public_catalog() -> dict:
     """The names a manual monitor builder may offer, read from the SAME tables ``validate_spec``
     checks. The browser holds no second copy: a new event or status is offered only when the server
     can actually match it."""
     return {'events': list(EVENTS), 'statuses': list(STATUSES), 'outcomes': list(OUTCOMES)}
-
-
-_MAX_TRIGGERS = 50
-_CACHE: dict = {}
-_CACHE_SECONDS = 10.0
-_CACHE_LOCK = threading.Lock()
-
-
-def invalidate() -> None:
-    """Drop the armed-monitor cache after a create/delete."""
-    with _CACHE_LOCK:
-        _CACHE.clear()
-
-
-def _armed() -> list:
-    """The armed monitors for the account this event belongs to, cached briefly.
-
-    A run emits one ``run.log`` per console line; opening SQLite per line would put a disk commit
-    in front of the console. The cache is keyed by the account's ai.db path and invalidated the
-    moment this process creates or deletes a monitor.
-    """
-    path = paths.active().ai_db
-    now = time.monotonic()
-    with _CACHE_LOCK:
-        cached = _CACHE.get(path)
-        if cached is not None and cached[0] > now:
-            return cached[1]
-    rows = store.list_monitors(active_only=True)
-    with _CACHE_LOCK:
-        _CACHE[path] = (now + _CACHE_SECONDS, rows)
-    return rows
 
 
 def _clean_events(raw) -> list:
@@ -129,175 +84,54 @@ def validate_spec(payload: dict) -> dict:
     }
 
 
-def create(conversation_id: str, payload: dict, auto_analyze: bool = False) -> dict:
-    if store.get_conversation(conversation_id) is None:
-        raise AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id)
-    spec = validate_spec(payload)
-    row = store.add_monitor(conversation_id, spec, auto_analyze)
-    invalidate()
-    return row
+def conditions(spec: dict, auto_analyze: bool = False) -> dict:
+    """The product rule as the framework's monitor conditions.
 
-
-def cancel(monitor_id: str) -> bool:
-    deleted = store.delete_monitor(monitor_id)
-    invalidate()
-    return deleted
-
-
-def _run_id_matches(spec: dict, payload: dict) -> bool:
-    wanted = str(spec.get('run_id') or '').strip()
-    if not wanted or wanted == '*':
-        return True
-    records = payload.get('records') or []
-    return wanted == str(payload.get('run_id') or '') or wanted in {str(item) for item in records}
-
-
-def matches(spec: dict, payload: dict) -> bool:
-    if not isinstance(spec, dict):
-        return False
-    event = str(payload.get('event') or '')
-    if event not in (spec.get('events') or ()):
-        return False
-    if not _run_id_matches(spec, payload):
-        return False
-    if event == 'node.finished':
-        node_ids = spec.get('node_ids') or []
-        if node_ids and str(payload.get('node_id') or '') not in node_ids:
-            return False
-        statuses = spec.get('statuses') or []
-        if statuses and str(payload.get('status') or '') not in statuses:
-            return False
-        if int(payload.get('rows') or 0) < int(spec.get('min_rows') or 0):
-            return False
-    elif event == 'run.finished':
-        outcomes = spec.get('outcomes') or []
-        if outcomes and str(payload.get('outcome') or '') not in outcomes:
-            return False
-    elif event == 'run.log':
-        needle = str(spec.get('console_contains') or '').strip().lower()
-        if not needle or needle not in str(payload.get('line') or '').lower():
-            return False
-    return True
-
-
-def _compact(payload: dict) -> dict:
-    """What a delivery keeps: ids, status and counts — never the run's text.
-
-    ``run.log`` used to keep the matched console line, which can quote a crawled post or a
-    script's stderr; the automatic turn reads the console through ``run_console`` instead.
+    The framework matches one ``subject``; ``'*'`` is its "whatever run starts next", which is what
+    a rule with a blank run id means. ``auto_analyze`` rides along so the delivery path can start a
+    turn after the user armed it for that; it is never a server-side model call.
     """
-    keep = (
-        'event',
-        'run_id',
-        'workflow',
-        'node_id',
-        'node_type',
-        'label',
-        'status',
-        'rows',
-        'outcome',
-        'done',
-        'total',
-        'failed',
-        'skipped',
-        'resume',
-    )
-    return {key: payload.get(key) for key in keep if payload.get(key) not in (None, '')}
+    normalized = validate_spec(spec)
+    return {
+        **normalized,
+        'subject': normalized.get('run_id') or '*',
+        'auto_analyze': bool(auto_analyze),
+    }
 
 
-def _cached_armed() -> list | None:
-    """Armed monitors only while the cache is warm; ``None`` means "ask the worker"."""
-    path = paths.active().ai_db
-    now = time.monotonic()
-    with _CACHE_LOCK:
-        cached = _CACHE.get(path)
-        if cached is not None and cached[0] > now:
-            return cached[1]
-    return None
+def public_monitor(row: dict) -> dict:
+    """One framework monitor as the panel's shape (armed/stopped, spec, auto flag)."""
+    conditions_row = row.get('conditions') or {}
+    return {
+        'id': str(row.get('id') or ''),
+        'conversation_id': str(row.get('conversation_id') or ''),
+        'status': 'armed' if str(row.get('status') or '') == 'active' else str(row.get('status') or ''),
+        'spec': {key: value for key, value in conditions_row.items() if key not in ('subject', 'auto_analyze')},
+        'auto_analyze': bool(conditions_row.get('auto_analyze')),
+        'created_at': row.get('created_at') or '',
+    }
 
 
-def _deliver(payload: dict) -> None:
-    event = str(payload.get('event') or '')
-    for monitor in _armed():
-        spec = monitor.get('spec') or {}
-        if not matches(spec, payload):
-            continue
-        body = _compact(payload)
-        store.add_monitor_event(monitor['id'], monitor['conversation_id'], event, body)
-        limit = int(spec.get('max_triggers') or 20)
-        updated = store.touch_monitor(monitor['id'], limit)
-        # touch_monitor retires the row in SQLite once its budget is spent, but the armed list is
-        # cached for 10s. Without dropping that cache the same retired monitor kept delivering on
-        # every subsequent event — far past max_triggers, including extra auto-analyze turns.
-        if updated is not None and limit and int(updated.get('trigger_count') or 0) >= limit:
-            invalidate()
-
-
-def _on_event(payload: dict) -> None:
-    """Queue one matching event, WITH the account it happened under. Never opens SQLite on the
-    run thread.
-
-    The run emits one ``run.log`` per console line; a listener that wrote a row inline put a disk
-    commit in front of the crawl. Filtering uses the warm cache when it has one and otherwise
-    defers to the worker, which loads the list off the run thread.
-
-    The identity travels because ``threading.Thread`` starts with an EMPTY account context:
-    ``paths.active().ai_db`` in the worker resolved to the local owner's tree, so a monitor
-    armed by a signed-in account never matched anything (and a broadcast one would have written
-    that account's run facts into the owner's table). The language is captured for the same
-    reason — the failure line below is logged on the worker thread.
-    """
-    if str(payload.get('event') or '') not in EVENTS:
-        return
-    armed = _cached_armed()
-    if armed is not None and not armed:
-        return
-    _QUEUE.put((account_context.current(), get_lang(), payload))
-
-
-_QUEUE: queue.Queue = queue.Queue()
-_WORKER: threading.Thread | None = None
-_STARTED = False
-_LOCK = threading.Lock()
-
-
-def _work() -> None:
-    while True:
-        owner, lang, payload = _QUEUE.get()
-        try:
-            token = account_context.bind(owner)
-            try:
-                set_lang(lang or 'zh')
-                _deliver(payload)
-            except Exception:  # a monitoring failure is logged, never raised into the run
-                # ...and never allowed to kill this worker either: the console handler forwards
-                # logger.* through the run sink, and a sink that throws (a closing store) would
-                # otherwise end the thread for the life of the process, silently.
-                with contextlib.suppress(Exception):
-                    logger.warning(t('run.eventListenerFailed', event=payload.get('event') or ''), exc_info=True)
-            finally:
-                account_context.unbind(token)
-        finally:
-            _QUEUE.task_done()
-
-
-def drain(timeout: float | None = None) -> bool:
-    """Wait until queued deliveries are written; used by tests and shutdown."""
-    started = time.monotonic()
-    while _QUEUE.unfinished_tasks:
-        if timeout is not None and time.monotonic() - started > timeout:
-            return False
-        time.sleep(0.01)
-    return True
-
-
-def start() -> None:
-    """Subscribe once and start the one delivery worker. Called when the AI blueprint is imported."""
-    global _STARTED, _WORKER
-    with _LOCK:
-        if _STARTED:
-            return
-        _STARTED = True
-        _WORKER = threading.Thread(target=_work, name='ai-monitors', daemon=True)
-        _WORKER.start()
-    run_events.subscribe(_on_event)
+def public_delivery(row: dict, monitor: dict | None) -> dict:
+    """One delivery as the poller reads it: id, monitor, conversation and the run facts it names."""
+    payload = dict(row.get('payload') or {})
+    fields = payload.pop('fields', {}) or {}
+    meta = {
+        'event': payload.get('event') or '',
+        'run_id': fields.get('run_id') or payload.get('subject') or '',
+        'workflow': fields.get('workflow') or '',
+        'node_id': fields.get('node_id') or '',
+        'label': fields.get('label') or '',
+        'status': fields.get('status') or payload.get('status') or '',
+        'outcome': fields.get('outcome') or '',
+    }
+    meta.update(payload.get('counts') or {})
+    return {
+        'id': str(row.get('id') or ''),
+        'monitor_id': str(row.get('monitor_id') or ''),
+        'conversation_id': str((monitor or {}).get('conversation_id') or ''),
+        'payload': meta,
+        'event': meta['event'],
+        'created_at': row.get('created_at') or '',
+        'ack': bool(row.get('ack')),
+    }

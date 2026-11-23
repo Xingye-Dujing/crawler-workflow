@@ -156,15 +156,14 @@ P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pendi
 | `/codebooks/*` | 同名 | ✅ |
 | `/traces/<run_id>`、`/traces/<id>/apply` | 同名 | ✅（node trace 已写框架 store） |
 
-补齐这些 host 端点并切换前端后，才能删除旧 `api/ai.py`、`backend/ai` 引擎与 `ai_workspace` 开关。
+旧 `api/ai.py` 与 `backend/ai` 的回合引擎已删除（2026-11-23）：`/api/ai/ws` 是唯一表面，
+宿主补齐了环境/账号绑定/搜索抓取/导入/脚本库/运行器/通用工具/事件总线与权限门。
 
-### P4 接入还剩什么（不能勾 P4 DoD）
+### P4 收口后的明确残留（不影响运行）
 
-- 领域 AI 路由（traces/harness/workflow draft/codebooks 等）仍在旧 `api/ai.py`，需移到 host 蓝图并脱离旧引擎。
-- 旧 `backend/ai` 的引擎模块（agent/store/tools/providers）仍被那些路由使用，尚未删除。
-- 旧 `ai.db` 的历史会话/记忆迁移到框架库（或明确不迁移并提示用户）。
-- parity 矩阵每行补 host 侧等价测试（当前覆盖 chat/turn/命令/附件/设置/CRUD 冒烟）。
-- 双路径开关 `ai_workspace` 已声明（默认开，2027-03-01），删除旧引擎时一并删除。
+- 旧 `data/users/<id>/ai.db` 历史会话/记忆/技能**不迁移**；新工作区从空开始（声明在 handoff）。
+- `backend/ai/tools.py` 仍保留“框架同名服务”的声明（adapter 的 `FRAMEWORK_TOOLS` 跳过）；清理归 P6 工具大扫除。
+- 框架 `apply_artifact` 宿主钩子未实现；前端产物走类型端点，直接调用 `/artifacts/<id>/apply` 会按名拒绝。
 
 ## 依赖与钉版
 

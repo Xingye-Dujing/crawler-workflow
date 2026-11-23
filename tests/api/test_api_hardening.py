@@ -42,35 +42,36 @@ RECORDS = [{'title': 'sanya', 'score': 3}, {'title': 'haikou', 'score': 5}]
 # Every POST handler that reads a field belongs here — `TestBodyPolicy` below
 # fails if this list and app.py drift apart.
 BODY_ROUTES = [
-    '/api/ai/answer',
-    '/api/ai/artifacts/preview',
-    '/api/ai/chat',
-    '/api/ai/chart/preview',
-    '/api/ai/context',
-    '/api/ai/retry',
-    '/api/ai/rerun',
-    '/api/ai/workflow/validate',
-    '/api/ai/workspace',
-    '/api/ai/workspace/pick',
-    '/api/ai/monitors',
-    '/api/ai/python/install',
-    '/api/ai/python/scripts',
-    '/api/ai/python/scripts/<script_id>/fork',
-    '/api/ai/python/run',
-    '/api/ai/python/files',
-    '/api/ai/conversations',
-    '/api/ai/conversations/<conversation_id>/context',
-    '/api/ai/memories',
-    '/api/ai/codebooks',
-    '/api/ai/traces/<conversation_id>/apply',
-    '/api/ai/plugins/<plugin_id>/enable',
-    '/api/ai/plugins/install',
-    '/api/ai/providers/<provider_id>/test',
-    '/api/ai/search',
-    '/api/ai/fetch',
-    '/api/ai/skills',
-    '/api/ai/skills/<skill_id>/fork',
-    '/api/ai/stop',
+    '/api/ai/ws/answer',
+    '/api/ai/ws/artifacts/preview',
+    '/api/ai/ws/chart/preview',
+    '/api/ai/ws/chat',
+    '/api/ai/ws/codebooks',
+    '/api/ai/ws/command',
+    '/api/ai/ws/context',
+    '/api/ai/ws/conversations',
+    '/api/ai/ws/conversations/<conversation_id>/context',
+    '/api/ai/ws/files',
+    '/api/ai/ws/memories',
+    '/api/ai/ws/monitors',
+    '/api/ai/ws/plugins',
+    '/api/ai/ws/plugins/<plugin_id>/enable',
+    '/api/ai/ws/plugins/install',
+    '/api/ai/ws/providers/<provider_id>/test',
+    '/api/ai/ws/python/install',
+    '/api/ai/ws/python/run',
+    '/api/ai/ws/python/scripts',
+    '/api/ai/ws/python/scripts/<script_id>/fork',
+    '/api/ai/ws/rerun',
+    '/api/ai/ws/retry',
+    '/api/ai/ws/settings',
+    '/api/ai/ws/skills',
+    '/api/ai/ws/steer',
+    '/api/ai/ws/stop',
+    '/api/ai/ws/traces/<conversation_id>/apply',
+    '/api/ai/ws/workflow/validate',
+    '/api/ai/ws/workspace',
+    '/api/ai/ws/workspace/pick',
     '/api/account/password',
     '/api/accounts',
     '/api/accounts/<user_id>/logout',
@@ -161,8 +162,12 @@ BODYLESS_POSTS = {
     '/api/cookies/generate/confirm': 'signals the login window that the user is done',
     '/api/components/jobs/<job_id>/cancel': 'signals the background install job to stop; the job id is in the URL',
     '/api/data/upload': 'multipart form field, not a JSON body',
-    '/api/ai/files': 'multipart file upload, not a JSON body',
-    '/api/ai/monitors/events/<event_id>/ack': 'acknowledges one delivery; the id is in the URL',
+    '/api/ai/ws/artifacts/<artifact_id>/apply': 'applies one stored artifact by id; its payload is in the row',
+    '/api/ai/ws/skills/<skill_id>/fork': 'forks one stored skill by id; the fork name is derived, not posted',
+    '/api/ai/ws/monitors/events/<delivery_id>/ack': 'acknowledges one delivery; the id is in the URL',
+    '/api/update/download': 'starts the updater its own state machine owns; the request carries no fields',
+    '/api/update/cancel': 'signals the updater to cancel; the request carries no fields',
+    '/api/update/restart': 'signals the updater to restart; the request carries no fields',
     '/api/project/import': 'multipart project bundle, not a JSON body',
     '/api/runs/purge': 'applies the retention policy, which lives in settings',
     '/api/workflow/queue/clear': 'drops every parked request',
@@ -195,21 +200,24 @@ def _post_route_policies() -> dict:
     see docs/ARCHITECTURE.md), and a Blueprint uses ``@bp.route`` not ``@app.route``,
     so the scan covers every route-source file and matches either receiver.
     """
-    route_re = re.compile(r"@\w+\.route\('([^']+)',\s*methods=\[([^\]]+)\]")
+    route_re = re.compile(r"@\w+\.(?:route\('([^']+)',\s*methods=\[([^\]]+)\]|post\('([^']+)'\))")
     policies = {}
     for file in _route_source_files():
-        lines = file.read_text(encoding='utf-8').splitlines()
+        source_text = file.read_text(encoding='utf-8')
+        lines = source_text.splitlines()
+        prefix_match = re.search(r"Blueprint\([^)]*url_prefix='([^']+)'", source_text)
+        prefix = prefix_match.group(1) if prefix_match else ''
         starts = []
         for index, line in enumerate(lines):
             match = route_re.search(line)
-            if match and 'POST' in match.group(2):
-                starts.append((index, match.group(1)))
+            if match and (match.group(3) or 'POST' in (match.group(2) or '')):
+                starts.append((index, prefix + (match.group(1) or match.group(3))))
         for position, (index, path) in enumerate(starts):
             end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
-            body = '\n'.join(lines[index:end])
-            if '_json_body()' in body:
+            source = '\n'.join(lines[index:end])
+            if '_json_body()' in source or 'body()' in source:
                 policies[path] = 'helper'
-            elif 'request.get_json(' in body:
+            elif 'request.get_json(' in source:
                 policies[path] = 'inline'
             else:
                 policies[path] = 'none'

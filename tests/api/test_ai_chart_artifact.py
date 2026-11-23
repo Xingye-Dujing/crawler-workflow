@@ -24,7 +24,7 @@ def seeded(monkeypatch):
 
 
 def _preview(client, spec):
-    return client.post('/api/ai/chart/preview', json={'spec': spec}).get_json()
+    return client.post('/api/ai/ws/chart/preview', json={'spec': spec}).get_json()
 
 
 def test_a_chart_spec_becomes_a_validated_render_request(client, seeded):

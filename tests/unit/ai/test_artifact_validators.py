@@ -68,7 +68,8 @@ def test_workflow_validator_keeps_the_published_report_shape():
 
 
 def test_memory_validator_normalizes_a_legal_draft_and_refuses_an_empty_one():
-    from ai import store, validators
+    from ai import validators
+    from ai.validators.memory import MAX_MEMORY_CHARS
 
     legal = validators.check('memory', {'text': '  用默认账号  '})
     assert legal is not None and legal.ok is True
@@ -77,116 +78,10 @@ def test_memory_validator_normalizes_a_legal_draft_and_refuses_an_empty_one():
     empty = validators.check('memory', {'text': '   '})
     assert empty is not None and empty.ok is False
     assert empty.problems == ['memory needs non-empty text']
-    assert str(store.MAX_MEMORY_CHARS) in empty.message
+    assert str(MAX_MEMORY_CHARS) in empty.message
 
-    long_text = {'text': 'x' * (store.MAX_MEMORY_CHARS + 1)}
-    assert validators.check('memory', long_text).problems == [
-        f'memory text exceeds {store.MAX_MEMORY_CHARS} characters'
-    ]
-
-
-def test_refusal_notes_are_scoped_to_the_kind():
-    from ai.agent import AgentService
-
-    from i18n import t
-
-    service = AgentService()
-    service._draft_refusals = {}
-    assert service._refusal_note(['bad'], 'memory') == ''
-    assert service._refusal_note(['bad'], 'workflow') == ''
-    # The second *same* problem set of a kind is the existing “stop resending” note.
-    assert service._refusal_note(['bad'], 'memory') == t('ai.draftRefusedAgain')
-    # A different kind starts its own budget; a workflow refusal cannot silence a memory draft.
-    assert service._refusal_note(['other'], 'workflow') == ''
-
-
-def test_a_kind_hits_the_repair_cap_on_different_problem_sets():
-    from ai import validators
-    from ai.agent import AgentService
-
-    from i18n import t
-
-    service = AgentService()
-    service._draft_refusals = {}
-    for index in range(validators.MAX_ARTIFACT_REPAIRS):
-        note = service._refusal_note([f'problem {index}'], 'strict_note')
-        expected = (
-            ''
-            if index < validators.MAX_ARTIFACT_REPAIRS - 1
-            else t('ai.repairCapReached', limit=validators.MAX_ARTIFACT_REPAIRS)
-        )
-        assert note == expected
-
-
-def test_a_new_turn_resets_the_refusal_counter(monkeypatch):
-    """retry() and answer() go straight to _loop, never through send()'s old reset.
-
-    A counter that survived into the next turn answered an identical bad draft with “stop
-    resending” (or the repair cap) it had not earned in that conversation. The reset now lives in
-    the one method all three entry points reach.
-    """
-    from ai import agent, skills, store
-
-    from i18n import t
-
-    class DoneProvider:
-        def __init__(self):
-            from ai.types import ModelSpec, ProviderSpec
-
-            self.spec = ProviderSpec(
-                id='done_provider',
-                label_key='x',
-                notes_key='y',
-                protocol='openai',
-                base_url='',
-                models=(ModelSpec('m', 'M', 1000),),
-            )
-
-        def supports(self, capability, model=''):
-            return False
-
-        def context_window(self, model=''):
-            return 0
-
-        def stream(self, request):
-            yield {'type': 'text_delta', 'text': 'ok'}
-            yield {'type': 'done', 'stop_reason': 'end_turn'}
-
-    monkeypatch.setattr(agent, 'get_setting', lambda key, default=None: default)
-    service = agent.AgentService()
-    conversation = store.create_conversation('done_provider', 'm', 'auto')
-    store.append_message(conversation['id'], 'user', 'hi', status='done')
-
-    def run_turn():
-        list(
-            service._loop(
-                conversation=conversation,
-                turn_id='t-refusals',
-                skill=skills.get_skill('project'),
-                skill_reason='auto',
-                provider=DoneProvider(),
-                model='m',
-                api_key='',
-                thinking=False,
-                web_search=False,
-                safety='high',
-                context_meta={},
-                run_id='',
-            )
-        )
-
-    # First turn earns one bad-draft count, then a second identical one is refused.
-    service._draft_refusals = {}
-    assert service._refusal_note(['bad'], 'memory') == ''
-    assert service._refusal_note(['bad'], 'memory') == t('ai.draftRefusedAgain')
-
-    # Each fresh turn (the retry/answer path) must start with a clean counter.
-    run_turn()
-    assert service._draft_refusals == {}
-    assert service._refusal_note(['bad'], 'memory') == ''
-    run_turn()
-    assert service._draft_refusals == {}
-    assert service._refusal_note(['bad'], 'memory') == ''
+    long_text = {'text': 'x' * (MAX_MEMORY_CHARS + 1)}
+    assert validators.check('memory', long_text).problems == [f'memory text exceeds {MAX_MEMORY_CHARS} characters']
 
 
 def test_reset_then_load_restores_the_builtin_validators():
