@@ -214,13 +214,25 @@ def _hook_problems(reference: str, *args, failure_code: str = 'engine.validator_
     return found
 
 
-def validation_problems(manifest, node: dict, context: ValidationContext, sample: list | None = None) -> list[dict]:
-    """Static rules, every declared validator, and — when a sample is available — the preflight.
+def validation_problems(
+    manifest,
+    node: dict,
+    context: ValidationContext,
+    sample: list | None = None,
+    columns: dict | None = None,
+) -> list[dict]:
+    """Static rules, validators, the column contract, and — when a sample exists — the preflight.
 
     ``sample`` is up to 200 rows of the node's upstream output from a stored run whose node
     fingerprint matches the current graph. ``None`` means "no sample": the preflight is not called,
     because a check with no data behind it would be a guess. An empty list IS a sample (the
     upstream produced nothing), and the hook decides what that proves.
+
+    ``columns`` is ``{node_id: [column names] | None}`` — what each upstream's output table holds
+    (a settled run's recorded shape, else the producer's declared contract; see
+    ``services.validation.contracts``). A consumer's declared reads are compared with that union;
+    an unknown upstream (``None`` or absent) skips the check, because a name we cannot see is not a
+    name we can call missing.
     """
     found = static_problems(
         manifest,
@@ -231,8 +243,70 @@ def validation_problems(manifest, node: dict, context: ValidationContext, sample
     )
     for reference in manifest.validators:
         found.extend(_hook_problems(reference, node, context))
+    found.extend(_missing_column_problems(manifest, node, context, columns))
     if manifest.preflight and sample is not None:
         found.extend(
             _hook_problems(manifest.preflight, node, sample, failure_code='engine.preflight_failed'),
         )
     return found
+
+
+def _column_reads(manifest, node: dict) -> tuple[list[str], dict | None]:
+    """The columns the manifest says this node reads, or the named failure that stopped us."""
+    reference = manifest.ports.read_columns
+    if not reference:
+        return [], None
+    try:
+        produced = kernel_registry.resolve(reference)(node)
+    except Exception as exc:
+        return [], _failed(reference, exc, code='engine.read_columns_failed')
+    if not isinstance(produced, (list, tuple)):
+        return [], _failed(
+            reference,
+            ValueError(f'returned {type(produced).__name__}, not a list'),
+            code='engine.read_columns_failed',
+        )
+    return [str(column) for column in produced if str(column or '').strip()], None
+
+
+def _missing_column_problems(manifest, node: dict, context: ValidationContext, columns: dict | None) -> list[dict]:
+    """A consumer's declared reads against what its data parents provably hold.
+
+    The check is deliberately silent unless every parent's shape is known: a crawl whose columns
+    no stored run has recorded (and whose plugin declares no ``emit_columns``) is ``None``, and
+    guessing there would refuse runs that would have succeeded. A ``name`` parent is metadata, not
+    a table. The union across parents is the engine's own fan-in (a verify node reads both sides;
+    a join reads both tables), so the rule matches what the run will hand the node.
+    """
+    if columns is None:
+        return []
+    reads, failure = _column_reads(manifest, node)
+    if failure is not None:
+        return [failure]
+    if not reads:
+        return []
+    parents = [pid for pid in context.parent_ids() if context.node(pid).get('type') != 'name']
+    if not parents:
+        return []
+    known: list[str] = []
+    for pid in parents:
+        parent_columns = columns.get(pid)
+        if parent_columns is None:
+            return []  # unknown upstream: never guess a shape
+        known.extend(str(column) for column in parent_columns)
+    missing = [column for column in dict.fromkeys(reads) if column not in known]
+    if not missing:
+        return []
+    return [
+        {
+            'code': 'engine.missing_column',
+            'message_key': 'engine.missing_column',
+            # Advisory on purpose: the canvas badge must name it, but a whole canvas must not be
+            # refused for one branch the executor will name at run time (and the declared half of
+            # the evidence is a contract, not a row that was actually seen).
+            'severity': 'warning',
+            'param': '',
+            'context': {'columns': ', '.join(missing)},
+            'fix': None,
+        },
+    ]

@@ -6,6 +6,8 @@ the model has already answered.
 - ``runs``       one row per execution: identity, status, timing.
 - ``node_runs``  one row per node per run: status, row count, crawl cursor.
 - ``node_rows``  the rows a node produced, in order — the data itself.
+- ``node_schema`` the column set each node's stored table really had, with its digest,
+                 so a downstream consumer can check its declared reads without a run.
 - ``item_seen``  fingerprints of crawled items, so a resumed crawl never
                  collects the same post twice.
 - ``llm_cache``  answers keyed by (operation, model, column, text). A re-run —
@@ -37,6 +39,8 @@ from .identity import (
     first_text,
     item_key,
     node_fingerprint,
+    schema_digest,
+    schema_of_rows,
     stable_params,
     workflow_fingerprint,
 )
@@ -66,6 +70,8 @@ __all__ = [
     'fingerprints_for_workflow',
     'item_key',
     'node_fingerprint',
+    'schema_digest',
+    'schema_of_rows',
     'stable_params',
     'workflow_fingerprint',
 ]

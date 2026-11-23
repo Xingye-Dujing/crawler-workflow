@@ -283,28 +283,40 @@ class WorkflowEngine:
         }
         return WorkflowEngine(sub_workflow, self.executor)
 
-    def validate(self, samples: dict | None = None) -> list[str]:
-        """The console-facing view of validation: the same messages, in the same order,
-        as ``validate_detailed``. The run path and the parity tests read this; the
-        edit-time badges read ``validate_detailed`` to know WHICH node each message is
-        about. Kept as a one-line projection so there is exactly one rule body."""
-        return [entry['message'] for entry in self.validate_detailed(samples=samples)]
+    def validate(self, samples: dict | None = None, columns: dict | None = None) -> list[str]:
+        """The console-facing view of validation: the run gate's messages, in entry order.
 
-    def validate_detailed(self, samples: dict | None = None) -> list[dict]:
-        """Everything that would make a node produce nothing, as one entry per problem.
+        Only ``error`` entries block a run; a ``warning`` is advice for the canvas and must not
+        refuse a run that would otherwise start (a missing column the executor names at run time is
+        the existing case). The parity tests read this; the edit-time badges read
+        ``validate_detailed`` to know WHICH node each message is about. Kept as a one-line
+        projection so there is exactly one rule body."""
+        return [
+            entry['message']
+            for entry in self.validate_detailed(samples=samples, columns=columns)
+            if entry['severity'] == 'error'
+        ]
+
+    def validate_detailed(self, samples: dict | None = None, columns: dict | None = None) -> list[dict]:
+        """Every problem the canvas should show, as one entry per problem (errors and warnings).
 
         ``id`` is the node the problem belongs to (``None`` for a canvas-wide one —
         an empty canvas, a dangling wire, a cycle), so the frontend can put a badge on
         the right box; ``code`` is the ``engine.*`` key (or ``engine.source`` for the
         matrix-driven source rules, whose message already names the field); ``message``
         is the localised text. ``severity``/``param``/``fix`` travel with it so a panel can
-        point at the box and apply a mechanical fix without re-deriving either. Order and text
-        are identical to ``validate``.
+        point at the box and apply a mechanical fix without re-deriving either. ``validate``
+        is the run gate: it keeps the error entries only.
 
         ``samples`` is ``{node_id: rows}`` — up to 200 upstream rows from a stored run of the same
         node fingerprint. It is OPTIONAL and the caller owns it (``services.validation.samples``):
         the engine itself never opens a database, so a unit test or an AI draft stays pure. A node
         absent from the mapping is not preflighted — no sample, no verdict.
+
+        ``columns`` is ``{node_id: [column names] | None}`` — the shape of each node's output table
+        (a settled run's recorded schema, else the producer's declared contract;
+        ``services.validation.contracts``). It is optional for the same reason, and an unknown
+        upstream (``None``) makes the consumer's read check silent rather than a guess.
         """
         entries: list[dict] = []
 
@@ -348,8 +360,8 @@ class WorkflowEngine:
                 continue
             # A migrated node declares its pre-run refusals in its manifest; this loop is the one
             # evaluator, so the console, the canvas badge and the AI tools cannot disagree about
-            # what a node needs. Warnings are collected for the UI later; nothing downgrades an
-            # error today.
+            # what a node needs. Warnings stay in this list for the canvas badge; ``validate``
+            # filters them out so only an error can refuse a run.
             manifest = manifest_for_node(ntype)
             if manifest is not None:
                 context = ValidationContext(
@@ -364,9 +376,8 @@ class WorkflowEngine:
                     node,
                     context,
                     sample=(samples or {}).get(str(nid)),
+                    columns=columns,
                 ):
-                    if problem['severity'] != 'error':
-                        continue
                     add(
                         nid,
                         problem['code'],

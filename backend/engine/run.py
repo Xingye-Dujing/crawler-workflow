@@ -91,6 +91,7 @@ from services.runs.store import (
     RUN_FAILED,
     RUN_INTERRUPTED,
     fingerprints_for_workflow,
+    schema_of_rows,
     workflow_fingerprint,
 )
 from services.workflows.expand import expand_reusable_workflow
@@ -138,7 +139,7 @@ def settle_node_as_stopped(store, run_id: str, nid: str, label: str, wf_idx: int
     downstream, and 继续 must still be able to pick this node up again.
     """
     rows = _settle_published_rows(store, run_id, nid, label)
-    store.finish_node(run_id, nid, NODE_PARTIAL, error=err)
+    store.finish_node(run_id, nid, NODE_PARTIAL, error=err, schema=schema_of_rows(rows))
     with _completed_lock:
         execution_state['stopped_node_ids'].add(nid)
     add_log(t('run.nodeStopped', nid=label, n=len(rows)), wf_idx=wf_idx)
@@ -257,7 +258,7 @@ def run_node_durable(
         rows = applied['result']
         store.replace_rows(run_id, nid, rows, label=label)
         add_log(t('run.applied_trace_result', nid=label, n=len(rows)), wf_idx=wf_idx)
-        store.finish_node(run_id, nid, NODE_DONE)
+        store.finish_node(run_id, nid, NODE_DONE, schema=schema_of_rows(rows))
         return rows, NODE_DONE
 
     try:
@@ -298,7 +299,7 @@ def run_node_durable(
         # after every batch, and crawlers stream every item into the store.
         rows = _settle_published_rows(store, run_id, nid, label)
         status = NODE_PARTIAL if rows else NODE_FAILED
-        store.finish_node(run_id, nid, status, error=str(e))
+        store.finish_node(run_id, nid, status, error=str(e), schema=schema_of_rows(rows))
         add_log(
             t(
                 'wf.node_failed',
@@ -351,7 +352,7 @@ def run_node_durable(
         # DONE would let resume restore it and the 未处理 gaps would stay
         # forever. PARTIAL keeps the rows but marks the node for a re-run,
         # where the answer cache makes only the missing rows cost anything.
-        store.finish_node(run_id, nid, NODE_PARTIAL)
+        store.finish_node(run_id, nid, NODE_PARTIAL, schema=schema_of_rows(result))
         return result, NODE_PARTIAL
     # Close the node's visible LLM trace (a no-op for nodes without one). This is the ONE generic
     # hook: any future LLM-backed node gets a settled trace and the confirm→rerun coordinates.
@@ -373,7 +374,12 @@ def run_node_durable(
             'output_rows': result if isinstance(result, list) else [],
         },
     )
-    store.finish_node(run_id, nid, NODE_DONE)
+    store.finish_node(
+        run_id,
+        nid,
+        NODE_DONE,
+        schema=schema_of_rows(result) if isinstance(result, list) else None,
+    )
     return result, NODE_DONE
 
 
@@ -1053,6 +1059,22 @@ def _preflight_samples(workflow: dict) -> dict:
         return {}
 
 
+def _contract_columns(workflow: dict) -> dict:
+    """Each node's table shape for the run gate, or nothing when it cannot be read.
+
+    A recorded schema (``node_schema``) is evidence about a previous run of the same definition;
+    failing to read it may never refuse a run that would otherwise start, so the read is guarded
+    and logged without a console line of its own.
+    """
+    try:
+        from services.validation.contracts import columns_for
+
+        return columns_for(workflow)
+    except Exception:  # the contract is evidence; the run gate keeps its static verdicts
+        logger.exception(t('run.schemaReadFailed'))
+        return {}
+
+
 def _run_worker(
     workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None, rerun=None
 ):
@@ -1117,7 +1139,7 @@ def _run_worker(
         }
         execution_state['skipped_seen'] = ctx['skipped_seen']
         engine = WorkflowEngine(workflow, execution_state['executor'])
-        errors = engine.validate(samples=_preflight_samples(workflow))
+        errors = engine.validate(samples=_preflight_samples(workflow), columns=_contract_columns(workflow))
         if errors:
             for e in errors:
                 add_log(t('wf.validation_error', err=e))

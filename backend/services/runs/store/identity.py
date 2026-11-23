@@ -110,6 +110,36 @@ def _sha1(*parts) -> str:
     return hashlib.sha1(joined.encode('utf-8')).hexdigest()
 
 
+def schema_columns(columns) -> list[str]:
+    """The sorted, non-blank column names of a table shape.
+
+    Sorting is a correctness property, not cosmetics: two runs whose tables hold the same columns
+    in a different key order describe ONE contract, and the digest below must not move.
+    """
+    return sorted({str(column) for column in columns or () if str(column).strip()})
+
+
+def schema_of_rows(rows) -> list[str]:
+    """The column union of a node's rows — its table shape, as far as the data can say.
+
+    A crawl row may omit a field on some items (a platform's optional cell), so the shape is the
+    union over every row, never the first row's keys. Non-dict rows (a chart's spec dict is not a
+    row table) contribute nothing; no rows at all answers ``[]``, which the store treats as "no
+    evidence" rather than "a table with no columns".
+    """
+    columns: set[str] = set()
+    for row in rows or ():
+        if isinstance(row, dict):
+            columns.update(str(key) for key in row if str(key).strip())
+    return sorted(columns)
+
+
+def schema_digest(columns) -> str:
+    """The stable identity of a table shape; ``''`` when the shape is unknown."""
+    names = schema_columns(columns)
+    return _sha1(*names) if names else ''
+
+
 def first_text(item: dict, fields) -> str:
     for field in fields:
         value = str(item.get(field) or '').strip()

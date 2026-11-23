@@ -98,19 +98,22 @@ class TestValidation:
         unknown = [entry for entry in entries if entry['code'] == 'engine.chart_unknown']
         assert unknown and unknown[0]['fix'] == {'set': {'chart_type': 'bar'}}
 
-    def test_a_sample_names_a_renamed_column_before_the_run(self):
-        """The engine stays pure (no database), so the caller hands it the sample. Without one the
-        static verdict is unchanged; with one the chart's missing column is named."""
+    def test_a_renamed_column_is_named_by_the_data_contract(self):
+        """The engine stays pure (no database): the caller hands it each node's table shape.
+        Without evidence the chart is not judged; with the upstream's shape the rename is named."""
         workflow = {
-            'nodes': [{'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': '词'}}],
-            'connections': [],
+            'nodes': [
+                {'id': 'p', 'type': 'upload', 'params': {'dataset_id': 'd1'}},
+                {'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': '词'}},
+            ],
+            'connections': [{'from': 'p', 'to': 'v'}],
         }
         engine = WorkflowEngine(workflow)
-        assert 'engine.chart_column_missing' not in [entry['code'] for entry in engine.validate_detailed()]
-        entries = engine.validate_detailed(samples={'v': [{'X': 1}]})
-        missing = [entry for entry in entries if entry['code'] == 'engine.chart_column_missing']
-        assert missing and missing[0]['param'] == 'x_field'
-        assert missing[0]['id'] == 'v'
+        assert 'engine.missing_column' not in [entry['code'] for entry in engine.validate_detailed()]
+        entries = engine.validate_detailed(columns={'p': ['X']})
+        missing = [entry for entry in entries if entry['code'] == 'engine.missing_column']
+        assert missing and missing[0]['id'] == 'v'
+        assert '词' in missing[0]['message']
 
     def test_a_sample_with_a_text_value_column_is_named(self):
         workflow = {

@@ -182,7 +182,8 @@ function fresh() {
         pa.Diagnostics._timer = null;
         pa.Diagnostics.schedule = function () {};
         pa.Diagnostics._columns = {};
-        pa.Diagnostics._reads = {};
+        pa.Diagnostics._validation = { messages: [], perNode: {} };
+        pa.Diagnostics._paramProblems = {};
         pa.Diagnostics._problems = {};
     }
     /* A scenario that pressed a run-starting button leaves the page "running",
@@ -791,10 +792,11 @@ out.dataset_reconcile_missing = {
     cls: pa.canvas._nodeEl(refNode).classList.contains('node-missing'),
 };
 
-/* ── edit-time diagnostics: badges, missing-column, cost ─────────────
-   The backend answers the columns; recompute() merges the server's validation
-   problems with a missing-column diff and paints. A node whose upstream is a crawl
-   (unknown columns) must NEVER be flagged — the whole point is to not guess a shape. */
+/* ── edit-time diagnostics: server verdicts, output columns, cost ─────
+   The backend answers the columns AND every problem; recompute() merges the
+   step-contract problems with that answer and paints. The browser never diffs
+   reads against columns — a server validation entry is the only source of a
+   missing-column badge. */
 fresh();
 const dUp = addCanvasNode('upload', { dataset_id: 'd1', dataset_name: 'a.csv', row_count: 3 });
 const dProc = addCanvasNode('process', { operation: 'clean', text_column: '正文' });
@@ -805,7 +807,8 @@ pa.Diagnostics._columns = {
     [dProc]: ['正文', '评论数', 'action', 'cleaned_text'],
     [dChart]: null,
 };
-pa.Diagnostics._reads = { [dUp]: [], [dProc]: ['正文'], [dChart]: ['pc1', 'pc2', 'topic', 'ghost_col'] };
+const dMissing = ['图表缺列：ghost_col', '图表缺列：pc1'];
+pa.Diagnostics._validation = { messages: dMissing.slice(), perNode: { [dChart]: dMissing.slice() } };
 pa.Diagnostics.recompute();
 out.diagnostics_missing_column = {
     chartInvalid: pa.canvas._nodeEl(dChart).classList.contains('node-invalid'),
@@ -815,13 +818,14 @@ out.diagnostics_missing_column = {
     outputCols: pa.Diagnostics.outputColumns(dUp),
 };
 
-/* An unknown upstream (a crawl) suppresses the flag entirely. */
+/* Columns alone never invent a problem: with no server entry the node stays clean,
+   even when the upstream's shape is unknown (a crawl before its first run). */
 fresh();
 const dSrc = addCanvasNode('source', { platform: 'zhihu', collect: 'posts' });
 const dChart2 = addCanvasNode('visualize', { chart_type: 'bar', x_field: 'anything', y_field: 'nope' });
 pa.canvas.connections = [{ from: dSrc, to: dChart2 }];
 pa.Diagnostics._columns = { [dSrc]: null, [dChart2]: null };
-pa.Diagnostics._reads = { [dSrc]: [], [dChart2]: ['anything', 'nope'] };
+pa.Diagnostics._validation = { messages: [], perNode: {} };
 pa.Diagnostics.recompute();
 out.diagnostics_unknown_upstream_no_flag = {
     chartInvalid: pa.canvas._nodeEl(dChart2).classList.contains('node-invalid'),

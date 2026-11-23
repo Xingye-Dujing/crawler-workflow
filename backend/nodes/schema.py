@@ -10,17 +10,16 @@ missing-column flag: the whole point is to never tell the user a column is absen
 we cannot actually see the table (AGENTS: refuse by name, never guess a shape).
 
 **A node type's column rule lives with the node type.** A plugin in ``nodes/executors/<type>.py``
-may declare ``emit_columns(node, merged)`` and/or ``read_columns(node)``; this module walks the
-graph, folds the fan-in and asks. A plugin that declares nothing is unknown — that is the answer,
-not a gap: ``source``, ``comment``, ``resume``, ``output``, ``compile`` and ``visualize`` are
-exactly the nodes whose table no static view can see. The old shape (one 340-line module holding
-eighteen ``elif ntype == …`` branches, with the process/analysis/biblio/fuse/upload rules written
-inside it) meant a new node type silently answered "unknown" from a chain nobody had edited.
+may declare ``emit_columns(node, merged)``; this module walks the graph, folds the fan-in and asks.
+A plugin that declares nothing is unknown — that is the answer, not a gap: ``source``, ``comment``,
+``resume``, ``output``, ``compile`` and ``visualize`` are exactly the nodes whose table no static
+view can see. The old shape (one 340-line module holding eighteen ``elif ntype == …`` branches,
+with the process/analysis/biblio/fuse/upload rules written inside it) meant a new node type
+silently answered "unknown" from a chain nobody had edited.
 
-``referenced_columns`` answers the other half: which columns a node will READ from its input,
-taken straight from the params the user typed (a chart's ``x_field``, an analysis step's
-``column``). The frontend compares those against the upstream node's emitted columns and flags a
-provable miss — the schema truth lives with the plugin, the wording lives there.
+A consumer's declared reads are its manifest's ``ports.read_columns``; ``services.validation``
+checks them against the producer's recorded or declared shape, so this module holds no second
+copy of the missing-column rule.
 """
 
 from __future__ import annotations
@@ -83,20 +82,6 @@ def compute_columns(nodes: dict, connections: list) -> dict:
         else:
             out[nid] = emit(node, _merged_columns(out, upstream.get(nid, [])))
     return out
-
-
-def referenced_columns(nodes: dict) -> dict:
-    """{node_id: [column names this node will read from its input]}."""
-    reads: dict[str, list[str]] = {}
-    for nid, node in nodes.items():
-        read = _hook(node.get('type'), 'read_columns')
-        if read is None:
-            reads[nid] = []
-            continue
-        # The blank-filter is the view's own rule, not each plugin's: an empty box asks for
-        # nothing, and a blank must never reach a badge as a column name.
-        reads[nid] = [column for column in read(node) or [] if column]
-    return reads
 
 
 def param_errors(nodes: dict) -> dict:

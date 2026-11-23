@@ -199,6 +199,32 @@
   product/tests pylint `10.00/10`；`gen_capabilities.py --check`、`doctor.py --all` 全绿；隔离 data root 冒烟：
   种入一条同指纹的上游运行后，`POST /api/workflow/validate` 返回 `engine.chart_column_missing`（`param=x_field`），
   列存在时无条目。
+- 第三片把缺列判定移到数据契约（`engine.missing_column`），`engine.chart_column_missing` 已删除；样本只保留
+  “数值列没有数字”的值检查。
+
+## P3 第三片：数据契约（2026-11-23）
+
+- 生产者结算时记录真实输出形状：`run_store.finish_node(..., schema=rows)` 把列并集写进新表 `node_schema`
+  （排序后的 `columns_json` + `schema_hash`）；读取按 `node_fingerprint` 匹配，指纹变化时 `begin_node` 删除、
+  `invalidate_nodes`/`delete_run` 一并释放；空表不写形状（空输出不是“没有列”的证据）。
+- `services.validation.contracts.columns_for(workflow)`：在有效图上取“记录优先、声明兜底”的 `{节点: 列|None}`；
+  store 读失败只丢记录的一半并记 `run.schemaReadFailed`，`compute_columns` 的插件错误仍由诊断路由按原有 `ok:false` 处理。
+- `WorkflowEngine.validate_detailed(samples=, columns=)`：每个声明了 `ports.read_columns` 的消费者，把所有数据父节点
+  （name 不算数据）的列取并集，读列表里不在并集里的列按名报 `engine.missing_column`（warning：上徽章，不拒绝运行；
+  节点仍在运行期按名失败）；任一父节点未知就沉默；读钩子抛错报 `engine.read_columns_failed`。诊断、
+  `/api/workflow/validate` 与运行门接线，引擎仍不读数据库。`validate()` 只保留 error，`validate_detailed()` 含 warning。
+- 图表缺列从样本 preflight 移到数据契约：同一缺列不再出现两条徽章；样本只保留数值角色检查。旧运行没有
+  `node_schema` 时，爬虫→图表这一段要等下一次运行才裁决（声明已知的生产者不受影响）。
+- 前端：`Diagnostics` 删除 `_reads`/`inputColumns`/`missingColumnProblems`，只渲染 `validation.perNode` 与
+  `problems`；`/api/workflow/diagnostics` 不再返回 `reads`；`nodes.schema.referenced_columns` 删除（读取声明归清单）。
+- 测试：`test_run_store.py::TestNodeSchema`（排序/摘要/指纹/最新/空形状/stale/invalidate/delete）；
+  `test_validation_contracts.py`（记录优先、声明兜底、有效图、store 失败）；`test_validation_engine.py::TestTheColumnContract`
+  （缺列/未知上游/name 父节点/无父节点/坏钩子）；`test_workflow_engine.py`（运行门 helper 与引擎接线）；
+  `test_diagnostics.py`（不再有 reads、契约与样本各自接线）；前端 harness 场景改为“服务端条目才产生徽章”。
+- 本片验证：全量快测 `11140 passed, 7 skipped, 386 deselected`；设备层 `215 passed, 5 skipped`；ruff 全绿；
+  product/tests pylint `10.00/10`；`gen_capabilities.py --check`、`doctor.py --all` 全绿；隔离 data root 冒烟：
+  种入一条同指纹运行（`schema=['X']`）后，`x_field=不存在的列` 返回 `engine.missing_column`（warning，`messages` 为空），
+  `x_field=X` 无条目，`/api/workflow/diagnostics` 的 `columns.p=['X']` 且不再返回 `reads`。
 
 ## P3 第一片：图表契约与一键修复（2026-11-23）
 
@@ -345,10 +371,10 @@
 
 1. **P3 第二片已完成**：`Manifest.preflight` + `samples_for`（≤200 行、指纹匹配、30 秒缓存）+ visualize 数据检查；
    验证条目带 `param`/`severity`/`fix`，设置面板有一键修复。见“P3 第二片”。
-2. **P3 第三片（下一步）**：数据契约 `schema_hash`。生产者节点把输出表的列集合哈希写进运行记录/Asset；
-   消费者（analysis/chart/verify/fuse）在 validate 阶段用“上游最近同指纹运行的 schema_hash × 本节点 `read_columns`”
-   对齐，替换目前前端对 `columns/reads` 的差集提示（前端只渲染服务端结论）。然后做运行后数据质量断言（可选 hook）。
-3. 之后按 `docs/architecture/rewrite-plan.md`：P4 Asset/AI 框架；每个切片结束更新本文件。
+2. **P3 第三片已完成**：`node_schema` 记录生产者真实列集合 + `schema_hash`；`contracts.columns_for` 记录优先、
+   声明兜底；引擎按 `read_columns` 报 `engine.missing_column`，前端删除差集。见“P3 第三片”。
+3. **下一步**：运行后数据质量断言（可选 hook，例如“这次输出真的非空/行数下限/列非全空”），然后按
+   `docs/architecture/rewrite-plan.md` 进入 P4 Asset/AI 框架；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 

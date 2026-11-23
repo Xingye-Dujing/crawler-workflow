@@ -14,6 +14,8 @@ from .identity import (
     NODE_RUNNING,
     _dumps,
     item_key,
+    schema_columns,
+    schema_digest,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,6 +61,7 @@ class NodesMixin:
                         ('item:' + str(fingerprint), run_id),
                     ).rowcount
                 self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+                self._conn.execute('DELETE FROM node_schema WHERE run_id = ? AND node_id = ?', (run_id, node_id))
                 cleared += self._conn.execute(
                     'DELETE FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id)
                 ).rowcount
@@ -92,6 +95,9 @@ class NodesMixin:
         stale = bool(previous) and previous[0]['fingerprint'] not in (None, '', fingerprint)
         if stale:
             self._execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+            # The stored shape described the rows just dropped: a consumer must not validate the
+            # new definition against the old table's columns.
+            self._execute('DELETE FROM node_schema WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         self._execute(
             'INSERT INTO node_runs (run_id, node_id, node_type, title, fingerprint, status, row_count, '
             'component, component_name, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) '
@@ -126,7 +132,23 @@ class NodesMixin:
         )
         return stale
 
-    def finish_node(self, run_id: str, node_id: str, status: str, cursor: dict = None, error: str = ''):
+    def finish_node(
+        self,
+        run_id: str,
+        node_id: str,
+        status: str,
+        cursor: dict = None,
+        error: str = '',
+        schema: list = None,
+    ):
+        """Settle a node, recording the shape of the table it produced.
+
+        ``schema`` is the column list of what this attempt really output. It is written beside the
+        node as ``node_schema`` (sorted columns + digest) so a downstream consumer can check its
+        declared reads without a run. ``None`` (or an empty list) leaves the stored shape alone:
+        an empty table proves no columns, and a same-definition rerun that produced nothing must
+        not erase the contract the earlier attempt established.
+        """
         stamp = self.now()
         count = self.row_count(run_id, node_id)
         cursor_json = _dumps(cursor) if cursor is not None else None
@@ -135,6 +157,13 @@ class NodesMixin:
             'cursor_json = COALESCE(?, cursor_json) WHERE run_id = ? AND node_id = ?',
             (status, count, stamp, stamp, error[:2000], cursor_json, run_id, node_id),
         )
+        columns = schema_columns(schema)
+        if columns:
+            self._execute(
+                'INSERT OR REPLACE INTO node_schema (run_id, node_id, columns_json, schema_hash, updated_at) '
+                'VALUES (?, ?, ?, ?, ?)',
+                (run_id, node_id, _dumps(columns), schema_digest(columns), stamp),
+            )
 
     def save_cursor(self, run_id: str, node_id: str, cursor: dict):
         """Where a crawl got to. Written as it advances, not at the end, so the
@@ -364,6 +393,40 @@ class RowsMixin:
             if rows:
                 return row['run_id'], rows
         return '', []
+
+    def schemas_for(self, fingerprints: dict) -> dict[str, list]:
+        """``{node_id: [columns]}`` for the newest settled run of each node's CURRENT definition.
+
+        *fingerprints* is ``{node_id: node_fingerprint}`` for the graph being validated. A stored
+        shape is evidence only for the definition that produced it, so a record under another
+        fingerprint is skipped — exactly like :meth:`sample_rows`. Only settled states count: a
+        ``running`` table is still growing and a ``skipped`` one produced nothing. One query answers
+        the whole canvas; the newest run wins by ``runs.seq`` (two runs in one second share a
+        timestamp, and only insertion order is reliable).
+        """
+        wanted = {str(nid): str(fp or '') for nid, fp in (fingerprints or {}).items() if str(fp or '')}
+        if not wanted:
+            return {}
+        rows = self._query(
+            'SELECT s.node_id AS node_id, s.columns_json AS columns_json, n.fingerprint AS fingerprint '
+            'FROM node_schema s '
+            'JOIN node_runs n ON n.run_id = s.run_id AND n.node_id = s.node_id '
+            'JOIN runs r ON r.run_id = s.run_id '
+            'WHERE s.node_id IN (' + ', '.join('?' * len(wanted)) + ') '
+            "AND n.status IN ('done', 'partial', 'restored', 'failed') "
+            'ORDER BY r.seq DESC',
+            tuple(wanted),
+        )
+        out: dict[str, list] = {}
+        for row in rows:
+            nid = str(row['node_id'])
+            if nid in out or str(row['fingerprint'] or '') != wanted[nid]:
+                continue
+            with contextlib.suppress(TypeError, ValueError):
+                columns = json.loads(row['columns_json'])
+                if isinstance(columns, list) and columns:
+                    out[nid] = [str(column) for column in columns]
+        return out
 
     def sample_rows(self, node_id: str, fingerprint: str, limit: int = 200) -> tuple[str, list]:
         """The newest ≤*limit* rows a node produced under *fingerprint* → (run_id, rows).

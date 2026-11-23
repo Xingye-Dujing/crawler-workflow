@@ -1,22 +1,21 @@
-/* Edit-time diagnostics: what each node emits and reads, before a run is paid for.
+/* Edit-time diagnostics: what each node emits, before a run is paid for.
  *
  * Split out of ``workflow.js`` (Stage 8, 2026-10-29) byte for byte. The backend answers what each
- * node emits and reads (the schema truth lives beside the executors); this panel decides WHICH nodes
- * to flag and words it in the UI's language. The cost estimate beside it is part of the same panel:
- * its refresh calls ``renderCostSummary``.
+ * node emits (the schema truth lives beside the executors) and every problem a node has
+ * (``engine.workflow.validate_detailed``, including a column its upstream provably lacks); this
+ * panel only decides WHICH nodes to flag and words the step-contract problems in the UI's language.
+ * The cost estimate beside it is part of the same panel: its refresh calls ``renderCostSummary``.
  */
 
 /* ─── Edit-time diagnostics ───────────────────────────────────────────
    Before this, a wrong column or a missing config only surfaced when a run was
-   already paid for. The backend answers WHAT each node emits and reads (the schema
-   truth lives beside the executors); the frontend decides WHICH nodes to flag and
-   words it in the UI's language. Config/wiring problems come from the SAME server answer
-   (``/api/workflow/diagnostics`` carries ``engine.workflow.validate_detailed``); missing-column
-   problems are the diff between a node's reads and its upstream's known columns — never flagged
-   when the upstream is a crawl/comment/resume whose columns the server cannot see without running. */
+   already paid for. The backend answers WHAT each node emits and which nodes have
+   problems; the frontend paints that answer and never derives a verdict of its own:
+   the missing-column check is the server's (it compares a consumer's declared reads
+   with the producer's recorded/declared schema), so the browser holds no second copy
+   of the data contract. */
 /* One parameter problem, worded for the badge. The server answers WHICH box is wrong
-   (``services/analysis/step_checks``); this function owns the words, exactly as
-   ``missingColumnProblems`` does for a missing column. ``field`` is a label key the
+   (``services/analysis/step_checks``); this function owns the words. ``field`` is a label key the
    settings panel already displays, so the message names the box the user is looking at. */
 function analysisParamMessage(title, problem) {
     if (problem.code === 'params_shape') {
@@ -59,7 +58,6 @@ var Diagnostics = {
     _timer: null,
     _armed: false,
     _columns: {},
-    _reads: {},
     _validation: { messages: [], perNode: {} },
     _paramProblems: {},
     _problems: {},
@@ -104,53 +102,12 @@ var Diagnostics = {
             if (generation !== this._generation) return;
             if (!result || !result.ok) return; /* offline: keep the last known picture */
             this._columns = result.columns || {};
-            this._reads = result.reads || {};
             this._validation = result.validation || { messages: [], perNode: {} };
             /* The step contract answered which boxes are empty; the badge words it the same
-               way it words a missing column — the run gate itself is unchanged. */
+               way it words a server validation entry — the run gate itself is unchanged. */
             this._paramProblems = result.problems || {};
             this.recompute();
         } catch (e) { /* diagnostics are decoration; a failure leaves the last picture */ }
-    },
-
-    /* The columns a node RECEIVES = union of its direct upstream producers' emitted
-       columns; unknown (null) if any upstream is unknown, so a crawl never triggers a
-       false "missing column" on everything below it. */
-    inputColumns(id) {
-        var ups = canvas.connections.filter(function (c) { return String(c.to) === String(id); }).map(function (c) { return c.from; });
-        if (!ups.length) return [];
-        var cols = [];
-        for (var i = 0; i < ups.length; i += 1) {
-            var c = this._columns[ups[i]];
-            if (c === null || c === undefined) return null;
-            c.forEach(function (x) { if (cols.indexOf(x) < 0) cols.push(x); });
-        }
-        return cols;
-    },
-
-    missingColumnProblems() {
-        var out = {};
-        var self = this;
-        var nodes = canvas.nodes;
-        /* A disabled node is as if it were not on the canvas, so a reading the server left behind
-           (it answered for the snapshot it was sent, which may predate the switch) must not
-           repaint that box's badge. ``effectiveNodeMap`` is workflow.js's one mirror of the run's
-           graph; a harness without it keeps the full map, exactly as before. */
-        var live = typeof effectiveNodeMap === 'function' ? effectiveNodeMap() : nodes;
-        Object.keys(this._reads).forEach(function (id) {
-            if (!live[id]) return;
-            var reads = self._reads[id] || [];
-            if (!reads.length) return;
-            var input = self.inputColumns(id);
-            if (input === null) return; /* unknown upstream: never guess */
-            var missing = reads.filter(function (col) { return input.indexOf(col) < 0; });
-            if (missing.length) {
-                var node = nodes[id];
-                var label = (node && node.title) || id;
-                out[id] = [I18n.t('diagnostics.missingColumn').replace('{cols}', missing.join(', ')).replace('{node}', label)];
-            }
-        });
-        return out;
     },
 
     /* The step contract's own answer for one analysis node, worded here. ``field`` is a label
@@ -168,12 +125,9 @@ var Diagnostics = {
         var perNode = (this._validation && this._validation.perNode) || {};
         var merged = {};
         Object.keys(perNode).forEach(function (id) { merged[id] = perNode[id].slice(); });
-        var missing = this.missingColumnProblems();
-        Object.keys(missing).forEach(function (id) {
-            (merged[id] = merged[id] || []).push.apply(merged[id], missing[id]);
-        });
-        /* Same channel as a missing column: what the step's own contract answers joins the
-           server's validation, so a blank required box gets its badge before a run is paid for. */
+        /* What the step's own contract answers joins the server's validation, so a blank required
+           box gets its badge before a run is paid for. Nothing else is derived here: the
+           missing-column verdict is the server's, and the browser never re-runs that diff. */
         Object.keys(this._paramProblems).forEach(function (id) {
             (merged[id] = merged[id] || []).push.apply(merged[id], this.paramProblems(id));
         }, this);

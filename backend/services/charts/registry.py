@@ -509,12 +509,13 @@ def _field_columns(field, value: str) -> list[str]:
 
 
 def chart_preflight(chart_type: str, params: dict, sample) -> list[dict]:
-    """What a SAMPLE of the upstream rows proves about this chart's contract — nothing more.
+    """What a SAMPLE of the upstream rows proves about this chart's VALUE contract.
 
-    Two facts are conclusive once the sample comes from a run of the same node fingerprint:
+    The missing-column half is the data contract's: ``services.validation.engine`` compares the
+    chart's declared reads with the producer's recorded (or declared) schema, so a rename is named
+    before any run without this function having to guess from 200 rows. What only data can answer
+    stays here:
 
-    * a named column that is not in the sample is a rename the chart would refuse at run time
-      (``require_columns``), so it is named here, before the upstream is paid for;
     * a value/coordinate/list column holding at least one non-blank cell and NO number at all is
       the ``chart.y_not_numeric`` refusal the builders make. An all-blank column is NOT reported:
       the builders draw it as an empty chart rather than refuse, and the preflight mirrors that.
@@ -533,47 +534,35 @@ def chart_preflight(chart_type: str, params: dict, sample) -> list[dict]:
     for row in rows:
         present.update(str(key) for key in row)
     found: list[dict] = []
-    named: list[tuple[str, str, str]] = []
     for field in spec.fields:
+        if field.role not in NUMERIC_ROLES:
+            continue
         value = str(effective.get(field.name) or '').strip()
         if not value:
             continue
         for column in _field_columns(field, value):
             if column not in present:
+                continue
+            has_text = False
+            has_number = False
+            for row in rows:
+                cell = row.get(column)
+                if _blank_cell(cell):
+                    continue
+                if _cell_number(cell) is None:
+                    has_text = True
+                else:
+                    has_number = True
+            if has_text and not has_number:
                 found.append(
                     {
-                        'code': 'engine.chart_column_missing',
-                        'message_key': 'engine.chart_column_missing',
+                        'code': 'engine.chart_column_not_numeric',
+                        'message_key': 'engine.chart_column_not_numeric',
                         'severity': 'error',
                         'param': field.name,
                         'context': {'chart': chart, 'column': column},
                     },
                 )
-            else:
-                named.append((field.name, column, field.role))
-    for param, column, role in named:
-        if role not in NUMERIC_ROLES:
-            continue
-        has_text = False
-        has_number = False
-        for row in rows:
-            cell = row.get(column)
-            if _blank_cell(cell):
-                continue
-            if _cell_number(cell) is None:
-                has_text = True
-            else:
-                has_number = True
-        if has_text and not has_number:
-            found.append(
-                {
-                    'code': 'engine.chart_column_not_numeric',
-                    'message_key': 'engine.chart_column_not_numeric',
-                    'severity': 'error',
-                    'param': param,
-                    'context': {'chart': chart, 'column': column},
-                },
-            )
     return found
 
 

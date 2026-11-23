@@ -29,11 +29,12 @@
   消息带图表名和字段的中文标签。
 - `engine.chart_field_group_missing`：至少需要一个字段的图型（箱线图：x 或 y）两个都空。
 - `engine.chart_unknown`：存档里的 `chart_type` 已不在本版本的图表清单里；声明默认值（`bar`）就是它的修复建议。
-- `engine.chart_column_missing`：**数据 preflight**。该图点名的列不在上游最近一次同指纹运行的表里（多半是改名了）。
+- `engine.missing_column`：**数据契约**。图表的读取列表里有一列，上游已知的表没有它（多半是改名了）；上游未知（爬虫还没跑过）时不裁决。它是 **warning**：上徽章、不拒绝运行，节点仍会在运行期按名失败。
 - `engine.chart_column_not_numeric`：**数据 preflight**。数值角色（数值/坐标/堆叠列表）的列有非空值，但样本里一个数字都没有。
 - `engine.preflight_failed`：preflight 钩子自己抛错；按名报出，诊断接口继续回答其它节点。
 
-preflight 只报能证明的事实：样本为空、列全空、饼图聚合后为负、热力图最终格数都不裁决，这些仍由 builder 在运行期按名拒绝。
+缺列由数据契约回答（`node_schema` 记录的真实列集合优先，生产者的 `emit_columns` 兜底），所以只报“表可证明没有”的列；
+preflight 只报样本能证明的值事实：样本为空、列全空、饼图聚合后为负、热力图最终格数都不裁决，这些仍由 builder 在运行期按名拒绝。
 样本来自该账号 `runs.db` 中与当前节点指纹一致的上游最近一次运行（≤200 行），30 秒缓存；没有样本就没有数据结论。
 
 问题条目带 `param`（哪个参数）和可选 `fix`（`{"set": {参数: 值}}`）；设置面板据此显示“一键修复”。

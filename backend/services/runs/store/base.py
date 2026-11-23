@@ -150,6 +150,19 @@ class BaseMixin:
                     created_at TEXT,
                     PRIMARY KEY (run_id, node_id, seq)
                 );
+                -- The shape of a node's output table, recorded when the node settles: its sorted
+                -- column set and that set's digest. A consumer validates its declared reads against
+                -- this WITHOUT a run, and a run listing every node stays small because the shape
+                -- lives here rather than in ``node_runs``. A table with no rows has no shape, so
+                -- no row is written — an empty output is not evidence of an empty schema.
+                CREATE TABLE IF NOT EXISTS node_schema (
+                    run_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    columns_json TEXT NOT NULL,
+                    schema_hash TEXT NOT NULL,
+                    updated_at TEXT,
+                    PRIMARY KEY (run_id, node_id)
+                );
                 CREATE TABLE IF NOT EXISTS item_seen (
                     scope TEXT NOT NULL,
                     item_key TEXT NOT NULL,
@@ -212,6 +225,7 @@ class BaseMixin:
                 CREATE INDEX IF NOT EXISTS idx_runs_wf ON runs(workflow_fingerprint, started_at);
                 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
                 CREATE INDEX IF NOT EXISTS idx_node_runs_status ON node_runs(run_id, status);
+                CREATE INDEX IF NOT EXISTS idx_node_schema_node ON node_schema(node_id);
                 CREATE INDEX IF NOT EXISTS idx_run_files_run ON run_files(run_id, node_id, kind);
                 CREATE INDEX IF NOT EXISTS idx_run_log_wf ON run_log(run_id, wf_idx, seq);
                 -- The waiting run queue, mirrored from the in-memory _RUN_QUEUE so a restart

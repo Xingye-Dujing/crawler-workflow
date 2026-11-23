@@ -40,7 +40,20 @@ backend/capabilities_kernel/
 - `services.validation.samples.samples_for(workflow)` 取每个声明了 preflight 的节点的**数据上游**（name 节点不算数据），以及该上游在“当前节点指纹”下最近一次已结算运行的 ≤200 行（`run_store.sample_rows`，SQL `LIMIT`）；任一上游没有同指纹的存储运行就是“没有样本”，不猜。多个上游按引擎 fan-in 的顺序拼接。
 - 缓存键是 `(该账号的 runs.db, 节点 id, 节点指纹)`，TTL 30 秒、最多 32 项：诊断面板按击键防抖轮询，不能每次都读一遍 10 万行表。
 - 调用点：`/api/workflow/diagnostics`、`/api/workflow/validate`（同一个 `validation_payload`）与运行门 `engine.run`。读样本失败只记日志并当作没有样本——样本是提示，不能让一次本来能跑的运行被拒。
-- 钩子的返回形状与 validator 相同（`code`/`message_key`/`severity`/`param`/`context`/`fix`）；钩子抛错按名报 `engine.preflight_failed`，不 500。只有可证明的事实才报 error：列不在样本里、数值角色列有非空值却没有一个数字；空样本、全空列、饼图负值、矩阵最终格数都不在样本上裁决。
+- 钩子的返回形状与 validator 相同（`code`/`message_key`/`severity`/`param`/`context`/`fix`）；钩子抛错按名报 `engine.preflight_failed`，不 500。只有可证明的事实才报 error：数值角色列有非空值却没有一个数字；空样本、全空列、饼图负值、矩阵最终格数都不在样本上裁决。
+
+## 数据契约：记录的形状 × 声明的读取
+
+“这个节点的表有哪些列”有两个来源，强弱不同：
+
+- **记录的形状**：节点结算时（`run_store.finish_node(..., schema=rows)`）把本次真实输出的列并集写进 `node_schema`（排序后的列名 + `schema_hash`），与 `(run_id, node_id)` 一起存，按 `node_fingerprint` 读取。爬虫的列静态看不见，这里就是唯一答案；一次运行后下游就能核对。没有行的表不写形状——空表不能证明“没有列”。
+- **声明的契约**：`ports.emit_columns` 经 `nodes.schema.compute_columns` 折叠 fan-in，回答“第一次运行之前它应该有哪些列”。
+
+`services.validation.contracts.columns_for(workflow)` 在**有效图**上取“记录优先、声明兜底”的 `{节点: 列|None}`；`None` 是“未知”，不是“没有列”。`WorkflowEngine.validate_detailed(columns=...)` 对每个声明了 `ports.read_columns` 的消费者，把所有**数据父节点**（name 不算数据）的列取并集，读列表里不在并集里的列按名报 `engine.missing_column`；任一父节点未知就整条检查沉默（`name` 父节点不占数据槽）。这正是引擎自己的 fan-in 语义，所以 verify/fuse/join 的两侧读法一致。读钩子抛错报 `engine.read_columns_failed`，不 500。
+
+`engine.missing_column` 是 **warning**：它上画布徽章（`validate_detailed`/`perNode`），但不进入运行门（`validate()` 只保留 error），所以一次画布不会因为一条分支的缺列被整体拒绝——节点仍会在运行期按名失败。声明的一半是契约、不是真实见过的行，这也是不拒绝运行的原因。`/api/workflow/validate` 的 `messages` 同样只含 error，浏览器据此拦截运行。
+
+调用方与样本相同：诊断路由、`/api/workflow/validate` 与运行门；`WorkflowEngine` 不打开数据库。读 store 失败只丢“记录的形状”，声明契约仍然生效（`run.schemaReadFailed`）。前端不再持有 `reads` 或做差集：它只渲染 `validation.perNode`，缺列徽章因此只有一个来源。
 
 ## 表单：清单选择渲染器，不选择分支
 
@@ -54,8 +67,8 @@ backend/capabilities_kernel/
 
 - **设置面板**：`/api/node-types` 的 `charts` 与冷启动 `node-types-fallback.js` 由 `chart_profiles()` 生成；`panels/node-chart.js` 按 profile 画框，`NodeTypes.charts()` 之外没有图型/字段数组。
 - **运行前校验**：`chart_problems(chart, params)` 先并入 `defaults` 再逐个检查必填字段；未知图型给出 `engine.chart_unknown` 与声明默认值的 `fix`，`nodes.executors.visualize:validate_node` 只调用它。
-- **数据 preflight**：`nodes.executors.visualize:preflight(node, sample)` 读同一份 `fields` 的 role。样本来自 `services.validation.samples`：节点指纹与当前图一致的上游最近一次运行（≤200 行，`run_store.sample_rows` 的 SQL LIMIT），按 `(账号 runs.db, 节点, 指纹)` 缓存 30 秒。它只报能证明的事实：字段点名的列不在样本里（改名）、数值角色列有非空值却一个数字都没有；样本为空/全空列/饼图负值都不下结论（builder 仍在运行期拒绝）。调用方是 `/api/workflow/diagnostics`、`/api/workflow/validate` 与运行门；`WorkflowEngine` 自身不读数据库。
-- **血缘**：`nodes.executors.visualize:read_columns` 从同一 `fields` 读出这个节点要读的列（含模型一致率的三列），所以面板显示的框与缺列徽章问的是同一份声明。
+- **数据 preflight**：`nodes.executors.visualize:preflight(node, sample)` 读同一份 `fields` 的 role。样本来自 `services.validation.samples`：节点指纹与当前图一致的上游最近一次运行（≤200 行，`run_store.sample_rows` 的 SQL LIMIT），按 `(账号 runs.db, 节点, 指纹)` 缓存 30 秒。它只报样本能证明的值事实：数值角色列有非空值却一个数字都没有；缺列由数据契约回答（`engine.missing_column`），样本为空/全空列/饼图负值都不下结论（builder 仍在运行期拒绝）。调用方是 `/api/workflow/diagnostics`、`/api/workflow/validate` 与运行门；`WorkflowEngine` 自身不读数据库。
+- **血缘**：`nodes.executors.visualize:read_columns` 从同一 `fields` 读出这个节点要读的列（含模型一致率的三列），所以面板显示的框、缺列徽章与 `node_schema` 的契约检查问的是同一份声明。
 
 ## 生成物（freshness gate）
 

@@ -11,7 +11,7 @@ dispatch kept every answer.
 
 from pathlib import Path
 
-from nodes.schema import compute_columns, referenced_columns
+from nodes.schema import compute_columns
 
 from engine.workflow import WorkflowEngine
 
@@ -83,20 +83,6 @@ class TestComputeColumns:
         assert compute_columns(nodes, [])['a'] == ['阶段']
 
 
-class TestReferencedColumns:
-    def test_a_chart_reads_its_named_fields(self):
-        nodes = {
-            'v': {'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': 'stage', 'y_field': 'n'}}
-        }
-        assert sorted(referenced_columns(nodes)['v']) == ['n', 'stage']
-
-    def test_an_analysis_step_reads_its_named_column(self):
-        nodes = {
-            'a': {'id': 'a', 'type': 'analysis', 'params': {'steps': [{'op': 'topic_map', 'column': 'cleaned_text'}]}}
-        }
-        assert referenced_columns(nodes)['a'] == ['cleaned_text']
-
-
 class TestTheShapeTheCanvasActuallyStores:
     """Every case here is a verbatim flat node from ``data/workflows/*.json``.
 
@@ -104,7 +90,7 @@ class TestTheShapeTheCanvasActuallyStores:
     ``steps`` list — and the model used to throw those siblings away, computing the DEFAULT
     column name for a node the user had renamed. A renamed 划分阶段 then hid 生命周期 and
     阶段序号 from the lineage, so a downstream step reading them looked like an input nobody
-    made, while ``missingColumnProblems`` never fired for any analysis node at all.
+    made, and the edit-time flag never fired for any analysis node at all.
     """
 
     @staticmethod
@@ -214,12 +200,6 @@ class TestTheShapeTheCanvasActuallyStores:
         )
         scored = compute_columns(with_score, [])['a']
         assert 'sentiment_index' in scored and 'intensity' in scored and 'score_n' in scored, scored
-
-    def test_a_flat_analysis_node_reads_the_column_it_names(self):
-        """``referenced_columns`` used to answer ``[]`` for every flat node, which is what
-        silenced the edit-time missing-column flag for the whole analysis family."""
-        nodes = self._analysis({'operation': 'bin_time', 'column': '日期', 'phase_new_col': '阶段'})
-        assert referenced_columns(nodes)['a'] == ['日期']
 
 
 class TestValidateDetailed:
@@ -401,4 +381,3 @@ class TestTheContractIsDeclaredPerPlugin:
         """Diagnostics runs on canvases written by an older build: an unregistered type must be
         modelled as "nothing is known", never raise while a panel is being drawn."""
         assert compute_columns({'x': {'id': 'x', 'type': 'no_such_node'}}, []) == {'x': None}
-        assert referenced_columns({'x': {'id': 'x', 'type': 'no_such_node', 'params': {}}}) == {'x': []}

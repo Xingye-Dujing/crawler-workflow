@@ -16,8 +16,9 @@ and ``some`` would accept a composite key on only one side. They are declared he
 
 The answer is data, never prose: ``code`` names the problem and ``param`` the box, while
 ``field`` is the label key the panel already shows, so wording stays the browser catalogue's
-job. Whether a named column EXISTS is a question about a table and stays with the lineage view
-(``referenced_columns``), which hands the columns to ``validate_step`` at run time.
+job. Whether a named column EXISTS is a question about a table: ``services.validation.engine``
+compares the manifest's declared reads with the producer's recorded or declared shape, and
+``validate_step`` still refuses a missing column by name at run time.
 """
 
 from services.analysis.contracts import NO_DEFAULT, STEP_PARAMS

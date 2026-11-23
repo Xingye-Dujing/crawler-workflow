@@ -26,7 +26,7 @@ def test_a_crawl_is_unknown_and_a_topic_map_answers_its_contract(client):
     assert data['ok'] is True
     assert data['columns']['s'] is None
     assert data['columns']['a'] == ['topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words']
-    assert data['reads']['a'] == ['正文']
+    assert 'reads' not in data, 'the browser no longer receives the read list it used to diff'
 
 
 def test_a_disabled_node_is_not_reported(client):
@@ -46,7 +46,27 @@ def test_a_preflight_sample_reaches_the_entries(client, monkeypatch):
     per-node validation entry with the box (``param``) the panel outlines."""
     from services.validation import samples
 
-    monkeypatch.setattr(samples, 'samples_for', lambda _workflow: {'v': [{'X': 1}]})
+    monkeypatch.setattr(samples, 'samples_for', lambda _workflow: {'v': [{'X': 1, 'Y': '很高'}]})
+    body = {
+        'nodes': {
+            'p': {'id': 'p', 'type': 'upload', 'params': {'dataset_id': 'ds_1'}},
+            'v': {'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': 'X', 'y_field': 'Y'}},
+        },
+        'connections': [{'from': 'p', 'to': 'v'}],
+        'settings': {},
+    }
+    data = client.post('/api/workflow/diagnostics', json=body).get_json()
+    entries = [entry for entry in data['validation']['entries'] if entry['id'] == 'v']
+    assert [entry['code'] for entry in entries] == ['engine.chart_column_not_numeric']
+    assert entries[0]['param'] == 'y_field'
+
+
+def test_the_column_contract_reaches_the_entries(client, monkeypatch):
+    """A consumer's declared reads against the producer's shape is the engine's verdict; the route
+    supplies the shape (recorded schema first, declared contract second)."""
+    from services.validation import contracts
+
+    monkeypatch.setattr(contracts, 'columns_for', lambda _workflow: {'p': ['X'], 'v': None})
     body = {
         'nodes': {
             'p': {'id': 'p', 'type': 'upload', 'params': {'dataset_id': 'ds_1'}},
@@ -57,8 +77,8 @@ def test_a_preflight_sample_reaches_the_entries(client, monkeypatch):
     }
     data = client.post('/api/workflow/diagnostics', json=body).get_json()
     entries = [entry for entry in data['validation']['entries'] if entry['id'] == 'v']
-    assert [entry['code'] for entry in entries] == ['engine.chart_column_missing']
-    assert entries[0]['param'] == 'x_field'
+    assert [entry['code'] for entry in entries] == ['engine.missing_column']
+    assert '词' in entries[0]['message']
 
 
 def test_a_sample_read_failure_keeps_the_static_answer(client, monkeypatch):
@@ -117,10 +137,11 @@ def test_a_failed_column_check_logs_one_message_and_keeps_the_traceback(client, 
     """A plugin hook that raises is caught, but ``logger.exception(msg, exc)`` used to hand the
     exception as a %-format argument to a message with no placeholder, so logging raised
     "not all arguments converted" and threw away the traceback it was meant to capture."""
+    import nodes.schema
     from api import diagnostics
 
     calls = []
-    monkeypatch.setattr(diagnostics, 'compute_columns', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('boom')))
+    monkeypatch.setattr(nodes.schema, 'compute_columns', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('boom')))
     monkeypatch.setattr(diagnostics.logger, 'exception', lambda *args, **kwargs: calls.append((args, kwargs)))
 
     body = {'nodes': {'u': {'id': 'u', 'type': 'upload', 'params': {}}}, 'connections': [], 'settings': {}}

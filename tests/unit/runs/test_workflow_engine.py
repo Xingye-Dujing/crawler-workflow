@@ -1012,3 +1012,49 @@ class TestTheRunGateReadsASample:
 
         monkeypatch.setattr(samples, 'samples_for', boom)
         assert run_module._preflight_samples({'nodes': [], 'connections': []}) == {}
+
+
+class TestTheRunGateReadsTheColumnContract:
+    """A consumer's declared reads are checked against the caller's shape mapping — and an
+    unreadable mapping is no mapping, never a refused run."""
+
+    def test_the_columns_are_passed_through(self, monkeypatch):
+        from engine import run as run_module
+        from services.validation import contracts
+
+        monkeypatch.setattr(contracts, 'columns_for', lambda _workflow: {'u': ['正文']})
+        assert run_module._contract_columns({'nodes': [], 'connections': []}) == {'u': ['正文']}
+
+    def test_an_unreadable_contract_is_not_a_refusal(self, monkeypatch):
+        from engine import run as run_module
+        from services.validation import contracts
+
+        def boom(_workflow):
+            raise RuntimeError('store locked')
+
+        monkeypatch.setattr(contracts, 'columns_for', boom)
+        assert run_module._contract_columns({'nodes': [], 'connections': []}) == {}
+
+    def test_the_engine_names_a_missing_column(self):
+        from services.validation import engine as validation
+
+        nodes = [
+            _node('u', 'upload', params={'dataset_id': 'd1'}),
+            _node('a', 'analysis', params={'steps': [{'op': 'topic_map', 'column': '正文'}]}),
+        ]
+        engine = WorkflowEngine(_wf(nodes, [{'from': 'u', 'to': 'a'}]))
+        entries = engine.validate_detailed(columns={'u': ['X'], 'a': None})
+        found = [entry for entry in entries if entry['code'] == 'engine.missing_column']
+        assert found and found[0]['id'] == 'a'
+        assert found[0]['severity'] == 'warning', 'the badge names it; the run gate does not refuse it'
+        assert '正文' in found[0]['message']
+        assert '正文' not in ' '.join(engine.validate(columns={'u': ['X'], 'a': None}))
+        assert validation  # the rule body is the shared evaluator
+
+    def test_an_unknown_producer_silences_the_check(self):
+        nodes = [
+            _node('u', 'upload', params={'dataset_id': 'd1'}),
+            _node('a', 'analysis', params={'steps': [{'op': 'topic_map', 'column': '正文'}]}),
+        ]
+        entries = WorkflowEngine(_wf(nodes, [{'from': 'u', 'to': 'a'}])).validate_detailed(columns={'u': None})
+        assert 'engine.missing_column' not in [entry['code'] for entry in entries]

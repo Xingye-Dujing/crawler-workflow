@@ -391,25 +391,25 @@ class TestUploadDatasetPicker:
 
 
 class TestDiagnostics:
-    """Edit-time badges, missing-column lineage and the pre-run cost estimate.
+    """Edit-time badges, the output-column line and the pre-run cost estimate.
 
-    The backend answers the columns; recompute() merges the offline validateDetailed
-    problems with a missing-column diff and paints. The cardinal rule: a node whose
-    upstream is a crawl (unknown columns) is never flagged.
+    The backend answers the columns AND every problem; recompute() merges the step-contract
+    problems with that answer and paints. The cardinal rule: the browser never derives a verdict
+    of its own — a missing-column badge exists only because a server validation entry does.
     """
 
-    def test_a_chart_reading_an_absent_column_is_badged(self, pa):
+    def test_a_server_missing_column_entry_is_badged(self, pa):
         d = pa['diagnostics_missing_column']
         assert d['chartInvalid'] is True
         assert d['chartBadgeShown'] is True
         assert 'ghost_col' in d['chartTitle']
         assert 'pc1' in d['chartTitle']
-        assert d['procInvalid'] is False, 'a clean node reading a present column is fine'
+        assert d['procInvalid'] is False, 'a clean node is not flagged'
         assert d['outputCols'] == ['正文', '评论数']
 
-    def test_an_unknown_upstream_never_triggers_a_missing_column_flag(self, pa):
-        """A crawl's columns are unknown without a run; flagging everything below it
-        would be guessing a shape the server cannot see."""
+    def test_columns_alone_never_invent_a_problem(self, pa):
+        """The browser holds no second copy of the data contract: with no server entry the node
+        stays clean, even when the upstream's shape is unknown (a crawl before its first run)."""
         assert pa['diagnostics_unknown_upstream_no_flag']['chartInvalid'] is False
 
     def test_a_config_problem_badges_from_the_diagnostics_payload(self, pa):

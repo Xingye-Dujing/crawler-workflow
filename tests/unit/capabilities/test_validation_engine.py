@@ -231,3 +231,91 @@ class TestThePreflightSeam:
             self._preflighted(), {'id': 'c', 'type': 'compile'}, _context(), sample=[{'x': 1}]
         )
         assert [problem['code'] for problem in found] == ['engine.preflight_failed']
+
+
+class TestTheColumnContract:
+    """A consumer's declared reads against its data parents' known table shapes.
+
+    The engine never opens a database: ``columns`` is the caller's mapping (a settled run's
+    recorded schema, else the producer's declared contract). The rule is silent unless every data
+    parent is known — a missing column is a refusal only when the table is provably known — and a
+    ``name`` parent is metadata, not a table.
+    """
+
+    @staticmethod
+    def _with_reads(reads='fake.reader:columns'):
+        manifest = _manifest()
+        return replace(manifest, validators=(), ports=replace(manifest.ports, read_columns=reads))
+
+    @staticmethod
+    def _resolver(handler):
+        def resolve(reference):
+            if reference != 'fake.reader:columns':
+                raise KeyError(reference)
+            return handler
+
+        return resolve
+
+    def test_a_missing_read_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        found = engine.validation_problems(
+            self._with_reads(), {'id': 'c', 'type': 'compile'}, _context(), columns={'p': ['X']}
+        )
+        assert [problem['code'] for problem in found] == ['engine.missing_column']
+        assert found[0]['context']['columns'] == '正文'
+
+    def test_a_present_read_is_clean(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        found = engine.validation_problems(
+            self._with_reads(), {'id': 'c', 'type': 'compile'}, _context(), columns={'p': ['正文', 'X']}
+        )
+        assert found == []
+
+    def test_an_unknown_upstream_is_not_judged(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        for columns in ({'p': None}, {}):
+            found = engine.validation_problems(
+                self._with_reads(), {'id': 'c', 'type': 'compile'}, _context(), columns=columns
+            )
+            assert found == []
+
+    def test_without_evidence_nothing_is_checked(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        assert engine.validation_problems(self._with_reads(), {'id': 'c', 'type': 'compile'}, _context()) == []
+
+    def test_a_name_parent_is_metadata_not_a_table(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        context = engine.ValidationContext(
+            node_id='c',
+            label='编译 #c',
+            nodes={'c': {'id': 'c', 'type': 'compile'}, 'n': {'id': 'n', 'type': 'name'}},
+            connections=[{'from': 'n', 'to': 'c'}],
+            data_inputs=frozenset(),
+        )
+        assert engine.validation_problems(self._with_reads(), {'id': 'c', 'type': 'compile'}, context, columns={}) == []
+
+    def test_no_parent_is_not_judged(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        context = engine.ValidationContext(
+            node_id='c',
+            label='编译 #c',
+            nodes={'c': {'id': 'c', 'type': 'compile'}},
+            connections=[],
+            data_inputs=frozenset(),
+        )
+        assert engine.validation_problems(self._with_reads(), {'id': 'c', 'type': 'compile'}, context, columns={}) == []
+
+    def test_a_broken_read_hook_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: (_ for _ in ()).throw(RuntimeError('boom')))
+        found = engine.validation_problems(
+            self._with_reads(), {'id': 'c', 'type': 'compile'}, _context(), columns={'p': ['正文']}
+        )
+        assert [problem['code'] for problem in found] == ['engine.read_columns_failed']
+        assert found[0]['context']['ref'] == 'fake.reader:columns'
+
+    def test_a_manifest_without_a_read_hook_is_not_checked(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', self._resolver(lambda _node: ['正文']))
+        found = engine.validation_problems(
+            self._with_reads(''), {'id': 'c', 'type': 'compile'}, _context(), columns={'p': []}
+        )
+        assert found == []

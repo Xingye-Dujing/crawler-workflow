@@ -1,14 +1,11 @@
-"""The chart preflight: what a SAMPLE of the upstream rows proves before a run is paid for.
+"""The chart preflight: what a SAMPLE of the upstream rows proves about a chart's values.
 
-The static contract (``chart_problems``) proves the boxes are filled; this half proves the columns
-those boxes name actually hold what the builder needs. It is deliberately narrow — only conclusive
-facts are refused, because a preflight that guesses would refuse runs that would have succeeded:
-
-* a named column that is not in the sample (the sample comes from a run of the same node
-  fingerprint, so it is the table this node would receive);
-* a value/coordinate/stack column with at least one real cell and no number in any of them (the
-  builders' own ``chart.y_not_numeric`` refusal, mirrored exactly — an all-blank column draws an
-  empty chart rather than refusing, and so does this).
+The static contract (``chart_problems``) proves the boxes are filled, and the data contract
+(``services.validation.engine`` + ``services.validation.contracts``) proves the columns those boxes
+name exist upstream — both without a run. This half owns the fact only data can answer: a
+value/coordinate/stack column with at least one real cell and no number in any of them (the
+builders' own ``chart.y_not_numeric`` refusal, mirrored exactly — an all-blank column draws an
+empty chart rather than refusing, and so does this).
 
 A share's negativity and a matrix's final cardinality cannot be proved from 200 rows, so those
 refusals stay with the builder at run time.
@@ -94,11 +91,12 @@ class TestWhatASampleProves:
                     ('engine.chart_column_not_numeric', field.name)
                 }, (spec.key, field.name, found)
 
-    def test_a_renamed_column_is_named_before_the_run(self):
+    def test_a_missing_column_is_left_to_the_data_contract(self):
+        """A rename is the contract's verdict (recorded/declared shape), not this sample's: the
+        sample may simply not have reached a sparse column yet, and a false refusal costs a run
+        that would have worked."""
         found = chart_preflight('bar', {'chart_type': 'bar', 'x_field': '词'}, [{'X': '甲', 'Y': 1}])
-        assert [p['code'] for p in found] == ['engine.chart_column_missing']
-        assert found[0]['param'] == 'x_field'
-        assert found[0]['context']['column'] == '词'
+        assert found == []
 
     def test_a_text_value_column_is_named(self):
         sample = [{'X': '甲', 'Y': '很高'}, {'X': '乙', 'Y': '一般'}]
@@ -144,9 +142,9 @@ class TestWhatASampleProves:
     def test_an_unknown_chart_type_is_left_to_the_static_contract(self):
         assert chart_preflight('moonbase', {'chart_type': 'moonbase'}, [{'X': 1}]) == []
 
-    def test_a_declared_default_column_is_checked_too(self):
-        """An untouched 主题距离图 reads pc1/pc2 by contract; a sample without them is still a
-        rename the builder would refuse."""
+    def test_a_sample_missing_every_named_column_is_not_a_verdict(self):
+        """An untouched 主题距离图 reads pc1/pc2 by contract; a sample without them says nothing
+        here — the data contract names the rename, and this check must not double-report it."""
         found = chart_preflight('topic_map', {'chart_type': 'topic_map'}, [{'term': '甲', 'overall_freq': 2}])
-        assert [p['param'] for p in found] == ['x_field', 'y_field', 'label_field', 'value_field']
+        assert found == []
         assert CHART_TYPES, 'the registry must enumerate chart types'

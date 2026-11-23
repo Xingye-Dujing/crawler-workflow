@@ -32,6 +32,7 @@ from services.runs.store import (
     fingerprints_for_workflow,
     item_key,
     node_fingerprint,
+    schema_digest,
     stable_params,
     workflow_fingerprint,
 )
@@ -1597,3 +1598,67 @@ class TestPreflightSampleRows:
         run_id, rows = store.sample_rows('node-1', 'fp-1')
         assert run_id == 'r2'
         assert rows == [{'v': 'new'}]
+
+
+class TestNodeSchema:
+    """``node_schema``: the shape a settled node's table really had, pinned to its fingerprint.
+
+    A downstream consumer validates its declared reads against this, so the three properties that
+    matter are the same as a sample's: the current definition only, settled states only, and the
+    newest attempt when several exist.
+    """
+
+    @staticmethod
+    def _settle(store, run_id, node_id, fingerprint, columns, status=NODE_DONE):
+        store.begin_node(run_id, node_id, 'upload', fingerprint=fingerprint)
+        store.finish_node(run_id, node_id, status, schema=columns)
+
+    def test_a_settled_shape_is_read_back_sorted_with_its_digest(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['B', 'A', 'A'])
+        assert store.schemas_for({'node-1': 'fp-1'}) == {'node-1': ['A', 'B']}
+        row = store._query('SELECT schema_hash FROM node_schema WHERE run_id = ? AND node_id = ?', ('r1', 'node-1'))
+        assert row[0]['schema_hash'] == schema_digest(['A', 'B'])
+
+    def test_another_fingerprint_is_not_evidence(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['A'])
+        assert store.schemas_for({'node-1': 'fp-other'}) == {}
+
+    def test_the_newest_settled_run_wins(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['OLD'])
+        _start(store, 'r2')
+        self._settle(store, 'r2', 'node-1', 'fp-1', ['NEW'])
+        assert store.schemas_for({'node-1': 'fp-1'}) == {'node-1': ['NEW']}
+
+    def test_an_empty_shape_does_not_erase_the_previous_one(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['A'])
+        store.begin_node('r1', 'node-1', 'upload', fingerprint='fp-1')
+        store.finish_node('r1', 'node-1', NODE_FAILED, schema=[])
+        assert store.schemas_for({'node-1': 'fp-1'}) == {'node-1': ['A']}
+
+    def test_a_stale_begin_drops_the_shape(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['A'])
+        assert store.begin_node('r1', 'node-1', 'upload', fingerprint='fp-2') is True
+        assert store.schemas_for({'node-1': 'fp-1'}) == {}
+        assert store.schemas_for({'node-1': 'fp-2'}) == {}
+
+    def test_a_running_or_skipped_node_is_not_evidence(self, store):
+        _start(store, 'r1')
+        store.begin_node('r1', 'node-1', 'upload', fingerprint='fp-1')
+        assert store.schemas_for({'node-1': 'fp-1'}) == {}
+        store.finish_node('r1', 'node-1', NODE_SKIPPED, schema=['A'])
+        assert store.schemas_for({'node-1': 'fp-1'}) == {}
+
+    def test_invalidate_and_delete_release_it(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['A'])
+        assert store.invalidate_nodes('r1', ['node-1']) == 1
+        assert store.schemas_for({'node-1': 'fp-1'}) == {}
+        self._settle(store, 'r1', 'node-1', 'fp-1', ['A'])
+        counts = store.delete_run('r1')
+        assert counts['node_schema'] == 1
+        assert store.schemas_for({'node-1': 'fp-1'}) == {}
