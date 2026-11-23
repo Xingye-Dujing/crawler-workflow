@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`30d1d5d 功能更新：待答期间的消息邮箱`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`6f49c40e 功能更新：框架 0.1.4（待答消息邮箱）`；框架仓库 `30d1d5d`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -55,6 +55,7 @@
 | `47496d0` | 框架 0.1.2（ADR-003 第一片）：`fsm.py` TurnFSM；`turns`/`turn_events`/`pending_calls`；answer 按 `call_id` 幂等并复用原 turn；重启保留待答问题、收尾半途 turn |
 | `e99a6d8` | 框架 0.1.3（ADR-003 第二片）：后台 `TurnRunner` + `subscribe(after)`；关流不停轮；`EVENT_PROTOCOL=1`；`turn_commands` 持久 stop；`bind_account`；`/turns/<id>` 与 `/turns/<id>/events` 重连路由 |
 | `30d1d5d` | 框架 0.1.4（ADR-003 第三片）：`turn_inbox` 邮箱——待答期间的新消息排队、`notice(turn.queued)`、带 `mailbox_id` 再发才执行 |
+| `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
 
