@@ -9,6 +9,7 @@ keeps running when the browser closes. The browser owns the provider key: it tra
 from __future__ import annotations
 
 import base64
+import json
 
 from agent_workspace import AIError as AgentError
 from agent_workspace import ChatRequest
