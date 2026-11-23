@@ -72,6 +72,7 @@
 | `aef340c` | 修复 trace 顺序：按 rowid 插入顺序，避免同一微秒的 span 排序漂移 |
 | `22f9ef51` | wheel 0.1.17；rewrite-plan 勾选 F18，P4.0 全部完成；handoff/README 记录第十五片与 P4 接入 |
 | `c8a1278f` | P4 接入第一片：`backend/ai_host` 的 `CaiXiHuiHost`（facts/tools/skills 委托旧注册表）；门禁加入 ai_host；运行库带 vendored wheel |
+| `809fe5c9` | P4 接入第二片：`CaiXiHuiHost.artifact_validators()` 委托 `ai.validators`（memory/workflow/workflow_draft） |
 | `6c894ccb` | wheel 0.1.16；rewrite-plan 勾选 F16；handoff/README 记录第十四片，P4.0 只剩 F18 |
 | `fa7d965d` | wheel 0.1.15；rewrite-plan 勾选 F15；handoff/README 记录第十三片，下一步 F16 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
