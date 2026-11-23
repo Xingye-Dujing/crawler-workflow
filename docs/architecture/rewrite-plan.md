@@ -133,7 +133,8 @@
 
 **待框架实现（按依赖顺序）**
 
-- [ ] **steer**：运行中插入指引只在安全边界注入（`turn_commands` 已有表结构，缺注入语义）
+- [x] **steer**：运行中插入指引只在安全边界注入——`steer()` 写 `turn_commands`，runner 在两轮之间把指引作为
+  `user` 行加入本轮并发 `steer` 事件；最后边界之后到达的指引进邮箱作为下一轮（框架 0.1.5）
 - [ ] **F6 权限/审批策略引擎**：工具声明 permission/destructive；“删除永远要人批”“同参数 once/session”；
   “先授权再建资源”（如 `request_dataset_access`）走同一暂停通道——这是通用能力，放框架
 - [ ] **F7 限制语义 0=不限 + usage meter**：跟随模型窗口与用户设置；真实占用可读——框架
