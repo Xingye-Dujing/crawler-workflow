@@ -164,6 +164,19 @@ class TestTheSurface:
         assert missing.status_code == 404
         assert client.get('/api/ai/ws/plugins').get_json()['ok'] is True
 
+    def test_a_node_trace_is_listed_and_openable(self, client, manager, monkeypatch):
+        import services.llm_trace as trace
+
+        monkeypatch.setattr(trace, '_MANAGER', manager)
+        run = 'run_trace_case'
+        _client, conversation_id = trace.start_node_trace(run, 'n1', 'clean', None, provider='local BERT')
+        listed = client.get(f'/api/ai/ws/traces/{run}').get_json()['conversations']
+        assert [row['id'] for row in listed] == [conversation_id]
+        detail = client.get(f'/api/ai/ws/conversations/{conversation_id}').get_json()
+        assert detail['conversation']['skill'] == 'node_trace'
+        apply = client.post(f'/api/ai/ws/traces/{conversation_id}/apply', json={'result': {}})
+        assert apply.status_code == 400
+
     def test_conversations_memories_artifacts_settings_and_usage(self, client):
         created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
         conversation_id = created['conversation']['id']

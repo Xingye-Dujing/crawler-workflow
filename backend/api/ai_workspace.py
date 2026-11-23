@@ -256,7 +256,9 @@ def create_blueprint(manager):
         row = workspace.store.get_conversation(conversation_id, account())
         if not row:
             return _not_found('conversation.unknown', conversation_id)
-        return jsonify({'ok': True, 'conversation': row, 'messages': workspace.store.list_messages(conversation_id)})
+        messages = workspace.store.list_messages(conversation_id)
+        skill = next((item['meta'].get('skill') for item in messages if (item.get('meta') or {}).get('skill')), '')
+        return jsonify({'ok': True, 'conversation': {**row, 'skill': skill}, 'messages': messages})
 
     @blueprint.patch('/conversations/<conversation_id>')
     def patch_conversation(conversation_id):
@@ -831,6 +833,50 @@ def create_blueprint(manager):
         except ValueError as exc:
             return jsonify({'ok': False, 'error': str(exc), 'key': 'plugin.badManifest'}), 400
         return jsonify({'ok': True, **result})
+
+    @blueprint.get('/traces/<run_id>')
+    def traces_for_run(run_id):
+        from services.llm_trace import traces_for_run as list_traces
+
+        return jsonify({'ok': True, 'conversations': list_traces(run_id)})
+
+    @blueprint.post('/traces/<conversation_id>/apply')
+    def trace_apply(conversation_id):
+        from services.coding import node_results
+
+        workspace = manager.workspace(account())
+        if not workspace.store.get_conversation(conversation_id, account()):
+            return _not_found('conversation.unknown', conversation_id)
+        messages = workspace.store.list_messages(conversation_id, limit=400)
+        provenance = next(
+            (
+                item.get('meta') or {}
+                for item in reversed(messages)
+                if (item.get('meta') or {}).get('kind') == 'trace_result'
+            ),
+            {},
+        )
+        run_id = str(provenance.get('run_id') or '')
+        node_id = str(provenance.get('node_id') or '')
+        if not run_id or not node_id:
+            return jsonify({'ok': False, 'error': 'trace has no result', 'key': 'ai.traceNoResult'}), 400
+        data = body()
+        result = data.get('result', data)
+        if not isinstance(result, (dict, list)):
+            return jsonify({'ok': False, 'error': 'result must be a table or object', 'key': 'ai.traceBadResult'}), 400
+        try:
+            saved = node_results.save(run_id, node_id, result)
+        except ValueError:
+            return jsonify({'ok': False, 'error': 'run_id/node_id rejected', 'key': 'ai.traceBadResult'}), 400
+        return jsonify(
+            {
+                'ok': True,
+                'saved': saved,
+                'run_id': run_id,
+                'workflow_name': str(provenance.get('workflow_name') or ''),
+                'node_id': node_id,
+            }
+        )
 
     @blueprint.get('/codebooks')
     def codebooks_list():

@@ -27,7 +27,10 @@ class WorkspaceManager:
         account = account or 'default'
         if self._root is not None:
             return self._root / account
-        return Path(paths.user_root(account)) / 'ai_workspace'
+        # ``'default'`` is the local owner: ``paths.active()`` resolves that tree (and an account's
+        # id resolves through ``for_user``); ``user_root('default')`` is not a valid account id.
+        active = paths.active() if account == 'default' else paths.for_user(account)
+        return Path(active.ai_db).parent / 'ai_workspace'
 
     def workspace(self, account: str = 'default') -> AgentWorkspace:
         account = account or 'default'

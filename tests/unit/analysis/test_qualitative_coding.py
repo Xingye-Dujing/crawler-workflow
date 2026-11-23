@@ -84,55 +84,68 @@ class FakeStore:
         self.messages = []
         self.updates = []
 
-    def create_conversation(self, provider='', model='', skill='auto'):
-        row = {'id': f'c{len(self.conversations)}', 'provider': provider, 'model': model, 'skill': skill, 'title': ''}
+    def create_conversation(self, account='default', title='', conversation_id=''):
+        row = {'id': f'c{len(self.conversations)}', 'account': account, 'title': title}
         self.conversations.append(row)
         return row
 
-    def touch_conversation(self, conversation_id, **fields):
-        row = next(item for item in self.conversations if item['id'] == conversation_id)
-        row.update(fields)
-
-    def append_message(self, conversation_id, role, content='', **fields):
+    def append_message(self, conversation_id, turn_id, role, blocks, meta=None, status='done', message_id=''):
         mid = f'm{len(self.messages) + 1}'
         row = {
             'id': mid,
             'conversation_id': conversation_id,
+            'turn_id': turn_id,
             'role': role,
-            'content': content,
-            '_born_status': fields.get('status', 'done'),
-            **fields,
+            'blocks': list(blocks),
+            'meta': dict(meta or {}),
+            '_born_status': status,
+            'status': status,
         }
         self.messages.append(row)
         return row
 
-    def update_message(self, message_id, **fields):
+    def update_message(self, message_id, *, blocks=None, meta=None, status=''):
         row = next(item for item in self.messages if item['id'] == message_id)
-        row.update(fields)
-        self.updates.append((message_id, fields.get('content'), fields.get('status')))
+        if blocks is not None:
+            row['blocks'] = list(blocks)
+        if meta is not None:
+            row['meta'] = dict(meta)
+        if status:
+            row['status'] = status
+        self.updates.append((message_id, row['blocks'][0]['text'] if row['blocks'] else '', status or None))
         return row
 
-    def list_conversations(self, limit=80, q='', **kwargs):
-        return [row for row in self.conversations if q in str(row.get('title') or '')]
+    def list_conversations(self, account='default', query='', archived=False, limit=80, offset=0):
+        return [row for row in self.conversations if query in str(row.get('title') or '')]
 
-    def list_messages(self, conversation_id, limit=400):
-        return [row for row in self.messages if row['conversation_id'] == conversation_id][-limit:]
+    def list_messages(self, conversation_id, limit=0):
+        rows = [row for row in self.messages if row['conversation_id'] == conversation_id]
+        return rows[-limit:] if limit else rows
+
+
+class FakeWorkspace:
+    def __init__(self, store):
+        self.store = store
+
+
+def _text(row: dict) -> str:
+    return ''.join(str(block.get('text') or '') for block in row.get('blocks') or ())
 
 
 def test_trace_client_records_both_sides_without_touching_the_key(monkeypatch):
     import services.llm_trace as trace
 
     fake = FakeStore()
-    monkeypatch.setattr(trace, 'store', fake)
+    monkeypatch.setattr(trace, '_workspace', lambda: FakeWorkspace(fake))
     monkeypatch.setattr(trace, 'add_log', lambda msg: None)
     client, conversation_id = start_node_trace('r1', 'n2', 'open_code', FakeClient())
     assert conversation_id == 'c0'
     assert 'r1' in fake.conversations[0]['title']
     assert client.chat('提示词') == '回答:提示词'
     assert [item['role'] for item in fake.messages[1:]] == ['user', 'assistant']
-    assert fake.messages[1]['content'] == '提示词'
-    assert fake.messages[2]['content'].endswith('回答:提示词')
-    assert '估算' in fake.messages[2]['content']
+    assert _text(fake.messages[1]) == '提示词'
+    assert _text(fake.messages[2]).endswith('回答:提示词')
+    assert '估算' in _text(fake.messages[2])
     assert fake.messages[2]['status'] == 'done'
     assert all(item['meta'].get('estimated') is True for item in fake.messages[1:])
     assert traces_for_run('r1') and not traces_for_run('other')
@@ -143,20 +156,17 @@ def test_trace_streams_answer_deltas_then_settles(monkeypatch):
     import services.llm_trace as trace
 
     fake = FakeStore()
-    monkeypatch.setattr(trace, 'store', fake)
+    monkeypatch.setattr(trace, '_workspace', lambda: FakeWorkspace(fake))
     monkeypatch.setattr(trace, 'add_log', lambda msg: None)
     client, _ = start_node_trace('r2', 'n3', 'open_code', FakeClient(chunks=['体验', '卡顿', ' | 很卡']))
     assert client.chat('提示词') == '回答:提示词'
 
     assistant = fake.messages[2]
     assert assistant['_born_status'] == 'streaming', 'the trace row is born streaming'
-    # Deltas are flushed at most every TRACE_FLUSH_MS, so three instant chunks produce at most
-    # three intermediate writes — never one DB write per token. The final settle is always 'done'
-    # and carries the full answer, so nothing is lost even when a chunk arrived between flushes.
     deltas = [content for _, content, status in fake.updates if status is None]
     assert len(deltas) <= 3
-    assert assistant['content'].endswith('回答:提示词')
-    assert '估算' in assistant['content']
+    assert _text(assistant).endswith('回答:提示词')
+    assert '估算' in _text(assistant)
     assert assistant['status'] == 'done'
     assert any(status == 'done' for _, _, status in fake.updates), 'a final settle writes the estimate'
 
@@ -165,7 +175,7 @@ def test_no_run_id_means_no_trace(monkeypatch):
     import services.llm_trace as trace
 
     fake = FakeStore()
-    monkeypatch.setattr(trace, 'store', fake)
+    monkeypatch.setattr(trace, '_workspace', lambda: FakeWorkspace(fake))
     client, conversation_id = start_node_trace('', 'n2', 'clean', FakeClient())
     assert isinstance(client, FakeClient) and conversation_id == ''
     assert not fake.conversations
