@@ -91,3 +91,19 @@ class TestATraditionalModel:
         sample = [row for row in rows if row['meta'].get('kind') == 'trace_sample']
         assert sample and '| 正文 |' in sample[0]['blocks'][0]['text']
         assert [row for row in rows if row['meta'].get('kind') == 'trace_result']
+
+
+class TestTheOldPanelBridge:
+    def test_the_old_conversation_route_opens_a_framework_trace(self):
+        """Until the frontend moves, the old panel must open the trace the run console now writes."""
+        from api.ai import _workspace_conversation
+        from flask import Flask
+
+        run = _run_id()
+        _client, conversation_id = llm_trace.start_node_trace(run, 'n5', 'clean', None)
+        with Flask(__name__).app_context():
+            response = _workspace_conversation(conversation_id)
+            assert response is not None
+            body = response.get_json()
+        assert body['conversation']['skill'] == 'node_trace'
+        assert body['messages']

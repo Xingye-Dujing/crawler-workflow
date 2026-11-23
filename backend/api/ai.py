@@ -82,6 +82,29 @@ def _public_attachment(row: dict) -> dict:
     return {key: row.get(key) for key in keys if key in row}
 
 
+def _workspace_conversation(conversation_id: str):
+    """Read one conversation the framework owns (node traces) for the old panel during the cutover."""
+    from ai_host.manager import WorkspaceManager
+
+    account = str(getattr(account_context.current(), 'user_id', '') or 'default')
+    workspace = WorkspaceManager().workspace(account)
+    row = workspace.store.get_conversation(conversation_id, account)
+    if not row:
+        return None
+    messages = workspace.store.list_messages(conversation_id)
+    skill = next((item['meta'].get('skill') for item in messages if (item.get('meta') or {}).get('skill')), '')
+    return jsonify(
+        {
+            'ok': True,
+            'conversation': {**row, 'skill': skill},
+            'messages': messages,
+            'pending_questions': [],
+            'attachments': [],
+            'dataset_grants': [],
+        }
+    )
+
+
 def _sse(payload: dict) -> str:
     return 'data: ' + json.dumps(payload, ensure_ascii=False, default=str) + '\n\n'
 
@@ -1152,6 +1175,11 @@ def ai_conversation_create():
 def ai_conversation(conversation_id: str):
     conversation = store.get_conversation(conversation_id)
     if conversation is None:
+        # A node trace lives in the framework store now; the old panel must still open it until the
+        # frontend moves to /api/ai/ws (then this fallback and the old blueprint are deleted).
+        fallback = _workspace_conversation(conversation_id)
+        if fallback is not None:
+            return fallback
         return _error(AIError('ai.apiNoConversation', kind='not_found', conversation=conversation_id), 404)
     return jsonify(
         {
