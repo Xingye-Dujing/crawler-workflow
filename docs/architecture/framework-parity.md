@@ -127,8 +127,18 @@ F1–F5 是“不修就要带病迁移”的前置项；F6–F16、F18 在写 ho
 
 P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
 
-**进度（2026-11-23，框架 0.1.18）**：**P4.0 全部完成**（F1–F18）。P4 接入进行中：`ai_host` 的 facts/tools/skills/
-artifact validators 已委托，`/api/ai/ws` 蓝图已建（待注册与 parity）。
+**进度（2026-11-23，框架 0.1.18）**：**P4.0 全部完成**（F1–F18）。P4 接入进行中：`/api/ai/ws` 已覆盖框架
+41 条通用路由（chat/turns/events/answer/stop/steer/retry/command/pending/inbox、会话/记忆/产物/技能/插件/监控/
+文件/Python/设置/用量/上下文/引用/bootstrap），`ai_host` 委托工具/技能/事实/产物校验/设置映射、附件抽取与 `/init`；
+旧 `/api/ai` 与旧引擎保留至领域路由迁移与 parity 完成。
+
+### P4 接入还剩什么（不能勾 P4 DoD）
+
+- 领域 AI 路由（traces/harness/workflow draft/codebooks 等）仍在旧 `api/ai.py`，需移到 host 蓝图并脱离旧引擎。
+- 旧 `backend/ai` 的引擎模块（agent/store/tools/providers）仍被那些路由使用，尚未删除。
+- 旧 `ai.db` 的历史会话/记忆迁移到框架库（或明确不迁移并提示用户）。
+- parity 矩阵每行补 host 侧等价测试（当前覆盖 chat/turn/命令/附件/设置/CRUD 冒烟）。
+- 双路径开关 `ai_workspace` 已声明（默认开，2027-03-01），删除旧引擎时一并删除。
 
 ## 依赖与钉版
 

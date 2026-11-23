@@ -423,6 +423,16 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4 接入第三片：新表面补齐通用路由（2026-11-23）
+
+- `/api/ai/ws` 现有约 40 条路由：chat/turns/events/steps/trace、answer/stop/steer/retry/command、pending/inbox、
+  bootstrap/providers、会话 CRUD+导出、记忆、产物+apply、技能/插件、监控+投递、文件、Python、设置、用量、上下文、
+  引用、健康检查。账号来自 `account_context`，附件在 host 侧用 `ai.file_text` 抽取，`/init` 由 host 注册。
+- 测试：聊天→turn→重放、关流后续跑、命令/停止/steer、附件进模型、会话/记忆/产物/设置/用量、通用路由冒烟；
+  282 个 AI 相关用例通过。
+- **仍未完成（P4 DoD 不勾）**：领域路由（traces/harness/workflow draft/codebooks）仍在旧 `api/ai.py`；旧引擎未删；
+  旧 `ai.db` 历史未迁移；parity 矩阵未逐行补齐。
+
 ## P4 接入第二片：/api/ai/ws 新表面（2026-11-23）
 
 - `backend/ai_host/manager.py`：每账号一个 `AgentWorkspace`，目录 `users/<id>/ai_workspace`（**不复用旧 ai.db**）；
