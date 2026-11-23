@@ -48,6 +48,60 @@
 | codebooks / traces | host | 采析绘服务与路由 |
 | 对话区与设置/工作室共用一个列 | host（P5 迁移到框架 UI） | 采析绘现在是 `#ai-chat` 里的两个同级面：`#ai-transcript`（按 turn id 复用）与 `#ai-panel`；框架 UI 必须保留“面板不覆盖转录、转录按 turn_id 复用”的约定，不能回到整段重建 |
 
+## 框架先行（P4.0）：先补齐通用能力，再迁 host
+
+**为什么顺序不能倒。** `agent_workspace` 是从本项目抽取的，抽取时只覆盖当时跑通的路径。采析绘现在的 AI 面
+（18 技能 / 47 工具 / 审批 / 数据集授权 / 监控 / 多供应商 / 长会话）比框架宽。先写 `ai_host` 的话，缺的通用能力
+只能在 host 里各实现一遍，框架就退回薄壳，下一次改动又出现两份事实。所以 P4 的顺序是
+**框架补齐 → host adapter → 薄门面 → 前端**，host 只做领域翻译。
+
+**通用性约束（每条改动都按它审）：**
+
+- 判断标准是“另一个宿主是否也需要”，不是“采析绘现在能不能跑”。
+- 节点、平台、算子、图表、数据集、工作流、导出这些事实只允许出现在 `backend/ai_host/`；框架代码里出现这些词
+  就是缺陷。
+- 框架不 import Flask，也不 import 宿主模块；`HostAdapter` 是唯一的反向注入点。
+- 一项能力一个声明点：框架给接口，host 给实现和数据；框架里不得再存一份默认值、选项表或句子。
+- 框架自己的测试是这项能力的验收标准；本仓库再加 host 侧 parity 用例，缺一不算完成。
+
+**架构基准（2026-11-23 决定）：保留 `AgentWorkspace` 门面与分层，先做结构化重构，必要时重写单层；不做一次性全量重写。**
+
+```text
+domain/          纯类型与端口：Provider / AgentStore / ToolRegistry / EventSink / PolicyEngine / HostAdapter
+application/     TurnFSM（持久化状态机）、上下文构建、工具编排与审批策略、产物应用
+infrastructure/  SQLite store、供应商传输、Python 脚本运行时
+adapters/        HTTP/SSE 绑定（Flask 等），只做序列化
+```
+
+- 现在 `store.py`（678 行）/`agent.py`（661 行）/`tools.py`（506 行）把持久化、循环与策略混在一起，pending、
+  重试、事件序号散在门面里。把它们拆成“端口 + 适配器 + 显式状态机”是 P4.0 的架构工作。
+- 允许“推倒重写”的边界：某一层承载不了所需通用能力时，重写该层并保留同名公开入口；公开 API 变化必须同时改
+  host、重建 wheel 并升版本号。
+- 禁止的捷径：在 host 里复制 turn 循环、审批或事件序列化。
+
+**P4.0 清单（按依赖顺序，每项都要有框架测试）：**
+
+| # | 通用能力 | 现在 | 验收 |
+|---|---|---|---|
+| F1 | pending call 持久化 | 只在内存 dict，重启即丢 | `pending_calls` 表 + 启动 rehydrate + `answer(call_id)` 幂等；刷新、切会话后可答 |
+| F2 | 提问不被新消息取消 | 新 turn 把未答问题 settle 成 skipped | 未答问题保留，新消息进邮箱逐轮投递；只有显式 cancel 才取消 |
+| F3 | retry 还原原轮 | 只重发最后一条用户消息 | 从 user 行 meta 恢复 provider/model/skill/context/attachments，重跑同一轮的后续 |
+| F4 | 事件协议 v1 | 事件名与旧前端不同、无序号 | `seq` 单调、`Last-Event-ID` 续传、`tool_start/tool_result` 成对；迁移期旧前端仍能解析 |
+| F5 | 后台 turn + 断线恢复 | 跑在请求线程里 | 轮次与 HTTP 请求解耦；重连从 seq 续传；关页不中断 |
+| F6 | 审批/权限策略引擎 | 只有全局 auto-approve | 工具声明 permission/destructive；“删除永远要人批”“同参数 once/session”可表达；`request_dataset_access` 这类“先授权再建资源”的控制工具走同一暂停通道 |
+| F7 | 限制语义 0=不限 | 0 被当 2048 | 跟随模型窗口与用户设置；usage meter 报真实占用 |
+| F8 | 多问题卡 | 单问题 | `questions[]`（≤5）通用 schema，答案按 `call_id` 回填 |
+| F9 | plan/build 模式 | 无 | 通用字段 + 工具遮罩，host 只提供模式文案 |
+| F10 | attachment 接缝 | 只认 file_id | 接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 是三个独立能力 |
+| F11 | 产物 validator/preview 注册 | 无 | 通用注册表；preview 由 Host UI adapter 实现；无 validator 的产物按名拒绝或降级为纯文本 |
+| F12 | run/step 记录 + 恢复 | 无 | `agent_runs`/`agent_steps`；崩溃按状态机恢复；同一 `tool_use` 不重复执行 |
+| F13 | 工具/技能注册收口 | `host.tools()` 声明了却从未被调用 | 初始化即注册；id 冲突按名拒绝；技能按白名单过滤工具 |
+| F14 | trace/观测 | 无 | OTel GenAI 语义的 trace 表 + trace 树；事件只含 id/状态/计数 |
+| F15 | 结构化输出 / thinking 控制 | 部分 | 能力声明 + 不支持按名拒绝；Ollama `think:false` 保持 |
+| F16 | 并发 | 串行 | LLM 行任务可并发、按供应商限流；一轮内工具调用仍有序 |
+
+F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host adapter 前完成；F13–F16 可以与 host 并行。
+
 ## 依赖与钉版
 
 - 框架没有 index 发布：`vendor/agent_workspace-<version>-py3-none-any.whl` 是钉版产物，`requirements.txt`
@@ -61,9 +115,10 @@
 
 ## 迁移顺序
 
-1. 框架通用修复（pending 持久化、retry、event 协议、validator 接口、host.tools、max_tokens）。
+0. **P4.0 框架完善**（见上）：F1–F16 与架构拆分在框架仓库完成，框架测试全绿、重建 wheel；host 不复制引擎。
+1. 框架通用修复（已并入 P4.0 的 F1–F4；这里保留原来的表述作为验收口径）。
 2. `backend/ai_host/`：facts/sources/tools/skills/resolvers/artifacts/UI adapter。
-3. `backend/api/ai.py` 改为 `AgentWorkspace` 的薄 HTTP/SSE 适配；旧 `backend/ai` 保留兼容层。
+3. `backend/api/ai.py` 改为 `AgentWorkspace` 的薄 HTTP/SSE 适配；旧 `backend/ai` 在切换期只做转发。
 4. parity matrix 全绿；删旧引擎模块；保留采析绘域工具/技能/路由。
 5. 前端切到框架 UI；旧 `ai-workspace.js` 删除或只留适配。
 

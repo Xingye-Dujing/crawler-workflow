@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`ec8faf20 功能更新：运行后数据质量检查（分析流水线 0 行告警）`
+- 最后提交：`8b6cc478 功能更新：钉版 agent-workspace 框架 wheel（vendor + 门禁 + 镜像安装路径）`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -50,6 +50,7 @@
 | `429b5cfd` | P3 第二片：`Manifest.preflight` + 同指纹上游样本（≤200 行、30 秒缓存）；图表缺列/非数值列在 validate 阶段命名；诊断/validate/运行门接线 |
 | `43caa638` | P3 第三片：`node_schema` 记录生产者真实列集合 + `schema_hash`；`contracts.columns_for` 记录优先、声明兜底；引擎按 `read_columns` 报 `engine.missing_column`（warning）；前端删除差集，诊断不再返回 `reads` |
 | `ec8faf20` | P3 第四片：`Manifest.postcheck`（`postcheck(node, rows, inputs)`）；运行循环在节点 DONE 后打一行控制台，不改状态；analysis 非空输入产出 0 行报 `engine.empty_output` |
+| `8b6cc478` | P4 依赖：`vendor/agent_workspace-0.1.0-py3-none-any.whl` 钉版；`requirements.txt` 以仓库根相对路径引用；`deploy/Dockerfile` 复制 `vendor/` 并从 `/app` 安装；requirements 门禁校验 wheel 名/METADATA/唯一声明 |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -389,6 +390,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 决策：框架先完善，再接入（2026-11-23）
+
+用户追加约束：**AI 框架可能还不完善；先按通用标准把框架补到能承载采析绘的全部 AI 功能，再做接入。框架必须保持
+宿主无关、可扩展、架构合理，不为采析绘加领域分支；允许重构，必要时重写单层。**
+
+- 顺序：P4.0 框架完善（F1–F16，见 `framework-parity.md`）→ `backend/ai_host/` → `/api/ai` 薄门面 → 前端。
+- 架构基准：保留 `AgentWorkspace` 门面与分层；把 `store.py`/`agent.py`/`tools.py` 的持久化、策略与循环拆成
+  “端口 + 适配器 + `TurnFSM`”；某一层无法承载所需通用能力时重写该层、保留公开入口并升版本。
+- 通用性门禁：框架仓库里不得出现节点/数据集/工作流/图表/平台等领域词；宿主只经 `HostAdapter` 注入。
+- 依赖节奏：框架改动 → 框架测试全绿 → 重建 wheel（替换同一文件、更新 sha256）→ 本仓库 AI 测试 → 提交流程不变。
+- 已完成：`8b6cc478` 把 wheel 钉版、`vendor/README.md`、requirements 门禁与 Docker 安装路径落好。
+
 ## 下一步（按顺序）
 
 1. **P3 第二片已完成**：`Manifest.preflight` + `samples_for`（≤200 行、指纹匹配、30 秒缓存）+ visualize 数据检查；
@@ -397,8 +410,11 @@
    声明兜底；引擎按 `read_columns` 报 `engine.missing_column`，前端删除差集。见“P3 第三片”。
 3. **P3 第四片已完成**：`Manifest.postcheck` + 运行循环的控制台告警；analysis 0 行检查。P3 清单全部勾选。
    见“P3 第四片”。
-4. **下一步：P4**。按 `docs/architecture/rewrite-plan.md`：agent-workspace wheel 钉版 + `ai_host/` HostAdapter；
-   同时把 `core.asset.DataAsset` 真正物化到运行输出（P3 的 `node_schema` 是它的形状半部）。每个切片结束更新本文件。
+4. **P4 依赖已完成**：wheel 钉版 + 门禁 + 镜像安装路径（`8b6cc478`）。
+5. **下一步：P4.0 框架完善**。第一片按依赖顺序做 F1–F4：`pending_calls` 持久化与 rehydrate、`answer(call_id)`
+   幂等、未答问题不被新消息取消 + 邮箱、retry 还原原轮、事件 `seq`/续传。框架测试全绿后重建 wheel，再更新本仓库
+   的 parity 与测试。`core.asset.DataAsset` 物化可以并行，但不阻塞框架。
+
 
 ## H11 的关键落点（避免重复调查）
 

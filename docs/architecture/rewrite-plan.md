@@ -102,9 +102,29 @@
 - [x] 验证矩阵：每个图表 × 缺参/错类型/空数据/正常（空数据=无样本，不下结论）
 - **DoD**：所有“运行才知道”的已知错误在 validate 阶段被命名；无前端第二套规则。
 
-## P4 AI 框架接入（2-3 周）
+## P4 AI 框架完善与接入（3-4 周；先补框架，再迁 host）
 
-- [ ] 构建/钉版 agent-workspace wheel；dev editable；CI 安装
+> 2026-11-23 追加约束：框架可能还不完善，**先按通用标准把框架补到能承载采析绘的全部 AI 功能**，再做 host
+> adapter。框架必须保持宿主无关、可扩展；不为采析绘在框架里加领域分支。允许重构框架，必要时重写单层。清单与
+> 验收见 [framework-parity.md](framework-parity.md#框架先行p40先补齐通用能力再迁-host)。
+
+### P4.0 框架完善（先行）
+
+- [ ] F1–F4 持久化与恢复：`pending_calls` 表 + rehydrate、回答按 `call_id` 幂等、未答问题不被新消息取消、
+  邮箱、retry 还原原轮、事件 `seq`/`Last-Event-ID` 续传
+- [ ] F5–F7 后台 turn 与断线恢复、审批/权限策略引擎（destructive 永远要人批、先授权再建资源）、限制语义
+  0=不限 + usage meter
+- [ ] F8–F10 多问题卡（≤5）、plan/build 模式 + 工具遮罩、attachment 接缝（已抽取文本与内联图片）
+- [ ] F11–F12 产物 validator/preview 注册、`agent_runs`/`agent_steps` + 崩溃恢复与幂等
+- [ ] F13–F16 工具/技能注册收口、OTel GenAI trace、供应商能力声明、LLM 行任务并发与限流
+- [ ] 架构收口：端口/适配器/`TurnFSM` 拆分；框架测试全绿；重建 wheel 并升版本
+- [ ] 通用性门禁：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
+- **DoD**：F1–F16 全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
+
+### P4 接入
+
+- [x] 构建/钉版 agent-workspace wheel；CI 安装（`vendor/` + `requirements.txt`；本地 dev editable 见
+  `vendor/README.md`）
 - [ ] `backend/ai_host/` HostAdapter
 - [ ] `backend/ai/` 改为薄门面；删重复引擎模块
 - [ ] parity matrix：每个旧功能在新框架有等价/更强测试
