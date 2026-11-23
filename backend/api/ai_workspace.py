@@ -817,6 +817,56 @@ def create_blueprint(manager):
             return _host_refusal(exc)
         return jsonify({'ok': True, 'result': result})
 
+    @blueprint.post('/plugins/install')
+    def plugin_install():
+        from runtime import policy
+
+        data = body()
+        if str(data.get('kind') or '') != 'skill-pack' and not policy.may_administer_machine():
+            return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': 'machine.refused'}), 403
+        try:
+            result = manager.workspace(account()).install_plugin(data, account(), admin=bool(data.get('admin')))
+        except WorkspaceError as exc:
+            return _error(exc)
+        except ValueError as exc:
+            return jsonify({'ok': False, 'error': str(exc), 'key': 'plugin.badManifest'}), 400
+        return jsonify({'ok': True, **result})
+
+    @blueprint.get('/codebooks')
+    def codebooks_list():
+        from services.coding import codebooks
+
+        return jsonify({'ok': True, 'codebooks': codebooks.list_codebooks()})
+
+    @blueprint.get('/codebooks/<codebook_id>')
+    def codebook_get(codebook_id):
+        from services.coding import codebooks
+
+        try:
+            return jsonify({'ok': True, 'codebook': codebooks.load_codebook(codebook_id)})
+        except codebooks.CodebookError as exc:
+            return jsonify({'ok': False, 'error': str(exc)}), 404
+
+    @blueprint.post('/codebooks')
+    def codebook_save():
+        from services.coding import codebooks
+
+        data = body()
+        try:
+            saved = codebooks.save_codebook(data, codebook_id=str(data.get('id') or ''))
+        except codebooks.CodebookError as exc:
+            return jsonify({'ok': False, 'error': str(exc)}), 400
+        return jsonify({'ok': True, 'codebook': saved})
+
+    @blueprint.delete('/codebooks/<codebook_id>')
+    def codebook_delete(codebook_id):
+        from services.coding import codebooks
+
+        try:
+            return jsonify({'ok': True, 'deleted': codebooks.delete_codebook(codebook_id)})
+        except codebooks.CodebookError as exc:
+            return jsonify({'ok': False, 'error': str(exc)}), 404
+
     # ── commands ──────────────────────────────────────────────────────────────
 
     @blueprint.post('/answer')

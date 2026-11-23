@@ -158,6 +158,12 @@ class TestTheSurface:
         listed = client.get(f'/api/ai/ws/conversations/{conversation_id}/files').get_json()['attachments']
         assert [row['id'] for row in listed] == [attachment['id']]
 
+    def test_codebooks_and_plugin_surface(self, client):
+        assert client.get('/api/ai/ws/codebooks').get_json()['ok'] is True
+        missing = client.get('/api/ai/ws/codebooks/nope')
+        assert missing.status_code == 404
+        assert client.get('/api/ai/ws/plugins').get_json()['ok'] is True
+
     def test_conversations_memories_artifacts_settings_and_usage(self, client):
         created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
         conversation_id = created['conversation']['id']
