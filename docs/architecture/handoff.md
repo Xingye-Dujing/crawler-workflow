@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`43caa638 功能更新：节点输出记录真实列契约，缺列校验移入服务端`
+- 最后提交：`ec8faf20 功能更新：运行后数据质量检查（分析流水线 0 行告警）`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -49,6 +49,7 @@
 | `1be81060` | P3 第一片：`ChartSpec.fields` 成为面板/校验/血缘/AI 目录的单一来源；验证条目带 `param`/`severity`/`fix`；设置面板一键修复与字段描红 |
 | `429b5cfd` | P3 第二片：`Manifest.preflight` + 同指纹上游样本（≤200 行、30 秒缓存）；图表缺列/非数值列在 validate 阶段命名；诊断/validate/运行门接线 |
 | `43caa638` | P3 第三片：`node_schema` 记录生产者真实列集合 + `schema_hash`；`contracts.columns_for` 记录优先、声明兜底；引擎按 `read_columns` 报 `engine.missing_column`（warning）；前端删除差集，诊断不再返回 `reads` |
+| `ec8faf20` | P3 第四片：`Manifest.postcheck`（`postcheck(node, rows, inputs)`）；运行循环在节点 DONE 后打一行控制台，不改状态；analysis 非空输入产出 0 行报 `engine.empty_output` |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -394,8 +395,10 @@
    验证条目带 `param`/`severity`/`fix`，设置面板有一键修复。见“P3 第二片”。
 2. **P3 第三片已完成**：`node_schema` 记录生产者真实列集合 + `schema_hash`；`contracts.columns_for` 记录优先、
    声明兜底；引擎按 `read_columns` 报 `engine.missing_column`，前端删除差集。见“P3 第三片”。
-3. **下一步**：运行后数据质量断言（可选 hook，例如“这次输出真的非空/行数下限/列非全空”），然后按
-   `docs/architecture/rewrite-plan.md` 进入 P4 Asset/AI 框架；每个切片结束更新本文件。
+3. **P3 第四片已完成**：`Manifest.postcheck` + 运行循环的控制台告警；analysis 0 行检查。P3 清单全部勾选。
+   见“P3 第四片”。
+4. **下一步：P4**。按 `docs/architecture/rewrite-plan.md`：agent-workspace wheel 钉版 + `ai_host/` HostAdapter；
+   同时把 `core.asset.DataAsset` 真正物化到运行输出（P3 的 `node_schema` 是它的形状半部）。每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 
