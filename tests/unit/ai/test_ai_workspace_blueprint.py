@@ -78,3 +78,16 @@ class TestTheSurface:
         missing = client.get('/api/ai/ws/turns/turn_nope')
         assert missing.status_code == 404
         assert missing.get_json()['key'] == 'turn.unknown'
+
+    def test_a_text_attachment_is_extracted_host_side(self, client):
+        import base64
+
+        data = base64.b64encode(b'the attached words').decode()
+        body = _chat(client, 'read it', attachments=[{'name': 'a.txt', 'data': data}]).get_json()
+        assert body['ok'] is True
+        assert 'the attached words' in body['text']
+
+    def test_a_known_host_command_runs_through_the_same_surface(self, client):
+        body = client.post('/api/ai/ws/command', json={'name': 'init'}).get_json()
+        assert body['result']['tools'] > 0
+        assert body['result']['skills'] > 0

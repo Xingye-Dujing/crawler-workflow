@@ -9,12 +9,46 @@ handler signature ``(args, ctx)``, so migration is a declaration change, not a r
 from __future__ import annotations
 
 from agent_workspace import DefaultHostAdapter
+from agent_workspace.config import BY_KEY, LEGACY_KEYS
+from agent_workspace.settings import FileSettings
 from agent_workspace.tools import CONTROL_TOOLS, generic_specs
 from agent_workspace.types import SkillSpec, ToolSpec
 from ai import skills as legacy_skills
 from ai import tools as legacy_tools
 from ai import validators as legacy_validators
 from ai.context import project_facts
+from runtime.settings import get_setting
+
+#: framework key → the product setting that already owns it (``LEGACY_KEYS`` is the other direction).
+_PRODUCT_KEY = {framework: product for product, framework in LEGACY_KEYS.items()}
+
+
+class ProductSettings(FileSettings):
+    """The product's settings win for the keys it already owns; the framework file holds the rest.
+
+    This is the whole "settings migration": a user who set ``ai_max_tool_rounds`` in 采析绘 keeps that
+    value in the workspace, and a key the product has never heard of lives in the workspace's own
+    JSON. Nothing is copied at boot, so a later change in the product is seen on the next read.
+    """
+
+    def get(self, key: str, default=None):
+        product = _PRODUCT_KEY.get(key)
+        if product:
+            value = get_setting(product)
+            if value is not None:
+                setting = BY_KEY.get(key)
+                return setting.validate(value) if setting else value
+        return super().get(key, default)
+
+    def all(self) -> dict:
+        values = super().all()
+        for framework, product in _PRODUCT_KEY.items():
+            value = get_setting(product)
+            if value is not None:
+                setting = BY_KEY.get(framework)
+                values[framework] = setting.validate(value) if setting else value
+        return values
+
 
 #: Names the framework already serves itself (its own generic tools and control tools). The
 #: product's tool of the same name is not re-declared: the framework's copy reads the same host facts
@@ -59,6 +93,11 @@ def _convert_skill(spec) -> SkillSpec:
 class CaiXiHuiHost(DefaultHostAdapter):
     """The product's HostAdapter. Domain facts/tools/skills live here, never in the framework."""
 
+    def settings(self):
+        if not hasattr(self, '_settings'):
+            self._settings = ProductSettings(self.data_dir() / 'settings.json')
+        return self._settings
+
     def facts(self) -> dict:
         return {'project': project_facts()}
 
@@ -67,6 +106,19 @@ class CaiXiHuiHost(DefaultHostAdapter):
 
     def skills(self) -> list[SkillSpec]:
         return [_convert_skill(spec) for spec in legacy_skills.BUILTIN.values()]
+
+    def commands(self) -> dict:
+        """`/init` belongs to the product: it reports the project map this host actually serves."""
+        return {'init': self._command_init}
+
+    @staticmethod
+    def _command_init(_payload: dict) -> dict:
+        facts = project_facts()
+        return {
+            'facts_chars': len(facts),
+            'tools': len(legacy_tools.TOOLS),
+            'skills': len(legacy_skills.BUILTIN),
+        }
 
     def artifact_validators(self) -> dict:
         """The product's strict artifact validators, by kind.

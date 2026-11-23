@@ -8,8 +8,9 @@ keeps running when the browser closes. The browser owns the provider key: it tra
 
 from __future__ import annotations
 
-import json
+import base64
 
+from agent_workspace import AIError as AgentError
 from agent_workspace import ChatRequest
 from agent_workspace.errors import WorkspaceError
 from flask import Blueprint, Response, jsonify, request
@@ -19,6 +20,46 @@ from runtime import account_context
 def _sse(events):
     for item in events:
         yield f'data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n'
+
+
+def _attachments(raw) -> list[dict]:
+    """Host-side extraction: the browser sends bytes, the framework only ever sees text/images.
+
+    ``[{'name': 'a.pdf', 'data': '<base64>'}]`` is extracted here with ``ai.file_text``; an entry with
+    ``text`` or ``image`` is passed through unchanged, so a client that already extracted can skip
+    the upload. Every failure becomes a named refusal, never an empty document.
+    """
+    from ai import file_text
+    from ai.errors import AIError as LegacyError
+
+    found = []
+    for item in raw or []:
+        if not isinstance(item, dict):
+            raise AgentError('attachment.badShape', kind='bad_request', key='attachment.badShape')
+        entry = {'name': str(item.get('name') or '')}
+        if item.get('file_id'):
+            entry['file_id'] = str(item['file_id'])
+        if item.get('text'):
+            entry['text'] = str(item['text'])
+        elif item.get('data'):
+            try:
+                data = base64.b64decode(str(item['data']), validate=False)
+            except Exception as exc:
+                raise AgentError(
+                    'attachment.badData',
+                    kind='bad_request',
+                    key='attachment.badData',
+                    reason=str(item.get('name') or ''),
+                ) from exc
+            try:
+                extracted = file_text.extract(str(item.get('name') or ''), data)
+            except LegacyError as exc:
+                raise AgentError(str(exc), kind='bad_request', key=str(exc.key or 'ai.attachExtract')) from exc
+            entry['text'] = str(extracted.get('text') or '')
+        if item.get('image'):
+            entry['image'] = str(item['image'])
+        found.append(entry)
+    return found
 
 
 def _error(exc: WorkspaceError):
@@ -73,6 +114,8 @@ def create_blueprint(manager):
         )
         workspace = manager.workspace(account())
         try:
+            if payload.get('attachments'):
+                req.context_payload['attachments'] = _attachments(payload.get('attachments'))
             if payload.get('stream') is False:
                 events = list(workspace.ask(req))
                 text = ''.join(str(item.get('text') or '') for item in events if item.get('type') == 'text_delta')

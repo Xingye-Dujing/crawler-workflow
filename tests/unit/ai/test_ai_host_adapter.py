@@ -54,12 +54,25 @@ class TestTheSkillCatalogue:
 
 
 class TestTheWorkspaceBoots:
+    def test_the_product_settings_win_for_keys_it_already_owns(self, host, monkeypatch):
+        monkeypatch.setattr(
+            'ai_host.adapter.get_setting',
+            lambda key: {'ai_max_tool_rounds': 7, 'ai_auto_approve': False}.get(key),
+        )
+        settings = host.settings()
+        assert settings.get('tools.max_rounds') == 7
+        assert settings.get('approval.auto') is False
+        assert settings.all()['tools.max_rounds'] == 7
+        # A key the product has never heard of still comes from the workspace's own file.
+        assert settings.get('chat.temperature') is not None
+
     def test_the_framework_sees_the_host_catalogue(self, host):
         workspace = AgentWorkspace(host)
         try:
             assert workspace.tools.get('project_facts') is not None
             assert workspace.skills.get('project', 'default') is not None
-            assert workspace.commands.names() == ['compact', 'mode', 'skills', 'status']
+            assert workspace.commands.names() == ['compact', 'init', 'mode', 'skills', 'status']
+            assert workspace.commands.host_names() == ['init']
         finally:
             workspace.close()
 
