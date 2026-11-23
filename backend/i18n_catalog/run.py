@@ -85,6 +85,9 @@ ZH = {
     'engine.chart_field_missing': '节点 {nid}：{chart}缺少必填字段“{field}”',
     'engine.chart_field_group_missing': '节点 {nid}：{chart}至少需要填写 {fields} 之一',
     'engine.chart_unknown': '节点 {nid}：不支持图表类型“{chart}”',
+    'engine.chart_column_missing': '节点 {nid}：{chart}要读的列“{column}”不在上游最近一次运行的表里',
+    'engine.chart_column_not_numeric': '节点 {nid}：{chart}把“{column}”当数值列，但样本里这一列没有任何数值',
+    'engine.preflight_failed': '节点 {nid}：数据预检“{ref}”失败（{err}）',
     'engine.watermarkRecrawl': '节点 {nid}：跨运行水位与“重新采集”不能同时开启',
     'engine.watermarkUnsupported': '节点 {nid}：跨运行水位只支持哔哩哔哩作者投稿',
     'housekeeping.datasetStoreFailed': '孤立文件自动清理失败（不影响本次运行）',
@@ -353,6 +356,7 @@ ZH = {
     'run.wallRetry': ('{platform} 在第一条数据之前就被弹到登录页，这更像同一账号被两次并发搜索撞了：{n} 秒后重试一次'),
     'run.watermarkFirst': '跨运行水位：这是第一次运行，完成后保存边界',
     'run.watermarkLoaded': '跨运行水位：从上次完成的边界 {boundary} 开始，遇到它即停止',
+    'run.preflightSamplesFailed': '数据预检样本读取失败（不影响静态校验）',
     'run.watermarkNoNew': '已到上次的边界 {boundary}，本次没有更新的条目',
     'run.watermarkNoScope': '跨运行水位需要运行上下文里的节点指纹；直接调用执行器时不能启用',
     'run.watermarkSaved': '跨运行水位已更新：{boundary}（本次新采 {n} 条）',
@@ -554,6 +558,13 @@ EN = {
     'engine.chart_field_missing': 'Node {nid}: the {chart} is missing the required field "{field}"',
     'engine.chart_field_group_missing': 'Node {nid}: the {chart} needs at least one of {fields}',
     'engine.chart_unknown': 'Node {nid}: "{chart}" is not a chart type this build serves',
+    'engine.chart_column_missing': (
+        'Node {nid}: the {chart} reads column "{column}", which the upstream\'s last run does not have'
+    ),
+    'engine.chart_column_not_numeric': (
+        'Node {nid}: the {chart} reads "{column}" as numbers, but the sample holds no number in it'
+    ),
+    'engine.preflight_failed': 'Node {nid}: the data preflight "{ref}" failed ({err})',
     'engine.watermarkRecrawl': 'Node {nid}: cross-run watermark and re-crawl cannot both be on',
     'engine.watermarkUnsupported': 'Node {nid}: cross-run watermark supports only Bilibili author uploads',
     'housekeeping.datasetStoreFailed': 'Automatic orphan-file cleanup failed (the run itself is unaffected)',
@@ -855,6 +866,7 @@ EN = {
     'run.watermarkLoaded': (
         'Cross-run watermark: starting from the previous boundary {boundary}; stop when it is reached'
     ),
+    'run.preflightSamplesFailed': 'Could not read the data-preflight sample; static validation is unaffected',
     'run.watermarkNoNew': 'Reached the previous boundary {boundary}; no newer items this run',
     'run.watermarkNoScope': (
         'A cross-run watermark needs the node fingerprint from a run context; a direct executor call cannot enable it'

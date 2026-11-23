@@ -41,6 +41,46 @@ def test_a_disabled_node_is_not_reported(client):
     assert 'u' not in data['columns'], 'a disabled node is not on the canvas a run sees'
 
 
+def test_a_preflight_sample_reaches_the_entries(client, monkeypatch):
+    """The route owns the store read, the engine owns the rule: a stored sample must show up as a
+    per-node validation entry with the box (``param``) the panel outlines."""
+    from services.validation import samples
+
+    monkeypatch.setattr(samples, 'samples_for', lambda _workflow: {'v': [{'X': 1}]})
+    body = {
+        'nodes': {
+            'p': {'id': 'p', 'type': 'upload', 'params': {'dataset_id': 'ds_1'}},
+            'v': {'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': '词'}},
+        },
+        'connections': [{'from': 'p', 'to': 'v'}],
+        'settings': {},
+    }
+    data = client.post('/api/workflow/diagnostics', json=body).get_json()
+    entries = [entry for entry in data['validation']['entries'] if entry['id'] == 'v']
+    assert [entry['code'] for entry in entries] == ['engine.chart_column_missing']
+    assert entries[0]['param'] == 'x_field'
+
+
+def test_a_sample_read_failure_keeps_the_static_answer(client, monkeypatch):
+    """A locked/missing run store may never take the badges down with it."""
+    from services.validation import samples
+
+    def boom(_workflow):
+        raise RuntimeError('store locked')
+
+    monkeypatch.setattr(samples, 'samples_for', boom)
+    body = {
+        'nodes': {'p': {'id': 'p', 'type': 'upload', 'params': {}}},
+        'connections': [],
+        'settings': {},
+    }
+    response = client.post('/api/workflow/diagnostics', json=body)
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data['ok'] is True
+    assert any(entry['id'] == 'p' for entry in data['validation']['entries'])
+
+
 def test_a_non_object_json_body_is_a_clean_refusal(client):
     # A body that IS present but is not an object (a JSON array) is refused, not read
     # as "no fields" — that is the case _json_body guards against.

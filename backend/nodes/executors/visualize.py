@@ -15,6 +15,7 @@ from nodes.context import NodeCall, node_params
 from services.charts.outputs import build_latex_outputs
 from services.charts.registry import (
     BIBLIO_CHART_READS,
+    chart_preflight,
     chart_problems,
     effective_chart_key,
     spec_for,
@@ -33,6 +34,17 @@ def validate_node(node: dict, _context) -> list[dict]:
     """
     params = node_params(node)
     return chart_problems(params.get('chart_type'), params)
+
+
+def preflight(node: dict, sample: list) -> list[dict]:
+    """What a sample of the node's upstream rows proves about the chart contract.
+
+    ``sample`` is the last stored output of the upstream (≤200 rows) from a run of the same
+    fingerprint; ``samples`` decides when that is known. The data rules live in the chart registry
+    beside the field declarations, so a chart type added tomorrow is preflighted by the same table.
+    """
+    params = node_params(node)
+    return chart_preflight(params.get('chart_type'), params, sample)
 
 
 def read_columns(node: dict) -> list[str]:

@@ -25,13 +25,22 @@ backend/capabilities_kernel/
 | 参数 | `ParamSpec` | JSON Schema 子集（type/default/enum/min/max/required）+ 表单 widget/label/placeholder/hint 键 |
 | 端口 | `Ports` | 行形状、输入数、`emit_columns`/`read_columns` 的 `module:function` |
 | 执行 | `Execution` | 懒加载的 `module:function`、控制台静默策略 |
-| 验证 | `Rule` | 运行前的声明式拒绝（`required_param`/`enum_param`/`upstream_required`/`no_input`/`requires_output`），以及 `validators` 指向的节点专属检查 |
+| 验证 | `Rule` | 运行前的声明式拒绝（`required_param`/`enum_param`/`upstream_required`/`no_input`/`requires_output`）、`validators` 指向的节点专属检查，以及可选的 `preflight`（对上游样本的数据检查） |
 | UI | `Ui` | 默认 schema 表单（可带 `hint_key`），或 `custom_renderer` 逃生口 |
 | AI | `Ai` | 工具名、摘要、步骤、可解析的模板 JSON、失败模式 |
 | 测试 | `Tests` | 证明该能力的契约测试路径 |
 | 文档 | `Docs` | 说明页路径、生成的技能路径、文档哈希 |
 
 `Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
+
+## 数据 preflight：样本、身份与缓存
+
+`Manifest.preflight='module:function'` 是 ADR 里的 `preflight(node, sample)`：只声明标准库与内核的清单指向能力自己的函数。样本由调用方提供，`WorkflowEngine` 永远不打开数据库：
+
+- `services.validation.samples.samples_for(workflow)` 取每个声明了 preflight 的节点的**数据上游**（name 节点不算数据），以及该上游在“当前节点指纹”下最近一次已结算运行的 ≤200 行（`run_store.sample_rows`，SQL `LIMIT`）；任一上游没有同指纹的存储运行就是“没有样本”，不猜。多个上游按引擎 fan-in 的顺序拼接。
+- 缓存键是 `(该账号的 runs.db, 节点 id, 节点指纹)`，TTL 30 秒、最多 32 项：诊断面板按击键防抖轮询，不能每次都读一遍 10 万行表。
+- 调用点：`/api/workflow/diagnostics`、`/api/workflow/validate`（同一个 `validation_payload`）与运行门 `engine.run`。读样本失败只记日志并当作没有样本——样本是提示，不能让一次本来能跑的运行被拒。
+- 钩子的返回形状与 validator 相同（`code`/`message_key`/`severity`/`param`/`context`/`fix`）；钩子抛错按名报 `engine.preflight_failed`，不 500。只有可证明的事实才报 error：列不在样本里、数值角色列有非空值却没有一个数字；空样本、全空列、饼图负值、矩阵最终格数都不在样本上裁决。
 
 ## 表单：清单选择渲染器，不选择分支
 
@@ -45,6 +54,7 @@ backend/capabilities_kernel/
 
 - **设置面板**：`/api/node-types` 的 `charts` 与冷启动 `node-types-fallback.js` 由 `chart_profiles()` 生成；`panels/node-chart.js` 按 profile 画框，`NodeTypes.charts()` 之外没有图型/字段数组。
 - **运行前校验**：`chart_problems(chart, params)` 先并入 `defaults` 再逐个检查必填字段；未知图型给出 `engine.chart_unknown` 与声明默认值的 `fix`，`nodes.executors.visualize:validate_node` 只调用它。
+- **数据 preflight**：`nodes.executors.visualize:preflight(node, sample)` 读同一份 `fields` 的 role。样本来自 `services.validation.samples`：节点指纹与当前图一致的上游最近一次运行（≤200 行，`run_store.sample_rows` 的 SQL LIMIT），按 `(账号 runs.db, 节点, 指纹)` 缓存 30 秒。它只报能证明的事实：字段点名的列不在样本里（改名）、数值角色列有非空值却一个数字都没有；样本为空/全空列/饼图负值都不下结论（builder 仍在运行期拒绝）。调用方是 `/api/workflow/diagnostics`、`/api/workflow/validate` 与运行门；`WorkflowEngine` 自身不读数据库。
 - **血缘**：`nodes.executors.visualize:read_columns` 从同一 `fields` 读出这个节点要读的列（含模型一致率的三列），所以面板显示的框与缺列徽章问的是同一份声明。
 
 ## 生成物（freshness gate）

@@ -181,3 +181,53 @@ class TestAFixIsADeclaredRepair:
         assert entry['param'] == 'x_field'
         assert entry['severity'] == 'error'
         assert entry['fix'] == {'set': {'x_field': '��'}}
+
+
+class TestThePreflightSeam:
+    """``preflight(node, sample)`` is called only when a sample exists, and a broken one is named.
+
+    The engine never opens a database: the caller passes ``samples`` and a node absent from the
+    mapping is simply not preflighted. That keeps a unit test, an AI draft and a canvas with no
+    stored run on the same code path.
+    """
+
+    @staticmethod
+    def _preflighted():
+        return replace(_manifest(), validators=(), preflight='fake.preflight:check')
+
+    def test_a_missing_sample_never_calls_the_hook(self, monkeypatch):
+        called = []
+
+        def handler(node, sample):
+            called.append((node, sample))
+            return []
+
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: handler)
+        engine.validation_problems(self._preflighted(), {'id': 'c', 'type': 'compile'}, _context())
+        assert called == []
+
+    def test_the_hook_gets_the_sample(self, monkeypatch):
+        seen = {}
+
+        def handler(_node, sample):
+            seen['sample'] = sample
+            return []
+
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: handler)
+        engine.validation_problems(self._preflighted(), {'id': 'c', 'type': 'compile'}, _context(), sample=[{'x': 1}])
+        assert seen['sample'] == [{'x': 1}]
+
+    def test_a_raising_preflight_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: (_ for _ in ()).throw(RuntimeError('boom')))
+        found = engine.validation_problems(
+            self._preflighted(), {'id': 'c', 'type': 'compile'}, _context(), sample=[{'x': 1}]
+        )
+        assert [problem['code'] for problem in found] == ['engine.preflight_failed']
+        assert found[0]['context']['ref'] == 'fake.preflight:check'
+
+    def test_a_malformed_preflight_result_is_named(self, monkeypatch):
+        monkeypatch.setattr(registry, 'resolve', lambda _reference: lambda _node, _sample: [{'code': 'x'}])
+        found = engine.validation_problems(
+            self._preflighted(), {'id': 'c', 'type': 'compile'}, _context(), sample=[{'x': 1}]
+        )
+        assert [problem['code'] for problem in found] == ['engine.preflight_failed']

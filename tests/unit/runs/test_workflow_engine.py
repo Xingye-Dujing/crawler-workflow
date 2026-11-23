@@ -990,3 +990,25 @@ class TestCompileAndPdfValidation:
         conns = [{'from': 'v', 'to': 'o'}]
         errors = WorkflowEngine(_wf(nodes, conns)).validate()
         assert any('format must be PDF' in e for e in errors), errors
+
+
+class TestTheRunGateReadsASample:
+    """The run path validates with the same preflight the browser gate used — but a sample it
+    cannot read is no sample, never a refused run."""
+
+    def test_the_sample_is_passed_through(self, monkeypatch):
+        from engine import run as run_module
+        from services.validation import samples
+
+        monkeypatch.setattr(samples, 'samples_for', lambda _workflow: {'v': [{'X': 1}]})
+        assert run_module._preflight_samples({'nodes': [], 'connections': []}) == {'v': [{'X': 1}]}
+
+    def test_an_unreadable_sample_is_not_a_refusal(self, monkeypatch):
+        from engine import run as run_module
+        from services.validation import samples
+
+        def boom(_workflow):
+            raise RuntimeError('store locked')
+
+        monkeypatch.setattr(samples, 'samples_for', boom)
+        assert run_module._preflight_samples({'nodes': [], 'connections': []}) == {}

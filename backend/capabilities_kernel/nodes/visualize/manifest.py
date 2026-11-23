@@ -44,6 +44,7 @@ MANIFEST = Manifest(
     ports=Ports(rows='pdf', inputs=-1, read_columns='nodes.executors.visualize:read_columns'),
     execution=Execution(handler='nodes.executors.visualize:run'),
     validators=('nodes.executors.visualize:validate_node',),
+    preflight='nodes.executors.visualize:preflight',
     ui=Ui(form='custom', custom_renderer='visualize'),
     ai=Ai(
         summary=(

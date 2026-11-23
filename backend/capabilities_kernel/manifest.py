@@ -192,6 +192,10 @@ class Manifest:
     #: itself). Each is ``module:function`` returning ``[{code, message_key, context?, severity?}]``;
     #: the function lives with the capability, never in the shared validator.
     validators: tuple[str, ...] = ()
+    #: A data-aware check against a SAMPLE of the node's upstream rows (the ADR's
+    #: ``preflight(node, sample)``). One ``module:function``, optional: a capability whose contract
+    #: cannot be proved from rows declares none, and a node with no stored sample is never called.
+    preflight: str = ''
     ui: Ui = field(default_factory=Ui)
     ai: Ai = field(default_factory=Ai)
     tests: Tests = field(default_factory=Tests)
@@ -289,6 +293,9 @@ class Manifest:
                 found.append('validators: empty reference')
             elif ':' not in reference:
                 found.append(f'validators: {reference!r} is not module:function')
+
+        if self.preflight and ':' not in self.preflight:
+            found.append(f'preflight: {self.preflight!r} is not module:function')
 
         if self.ui.form not in _UI_FORMS:
             found.append(f'ui.form: {self.ui.form!r} is not one of {", ".join(_UI_FORMS)}')

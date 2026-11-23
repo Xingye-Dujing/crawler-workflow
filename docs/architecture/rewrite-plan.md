@@ -92,14 +92,14 @@
 
 ## P3 验证完整化（1-2 周，与 P2 交叠）
 
-- [ ] 30 个图表契约 required/type/preflight/fix（required/fix 已随 `ChartSpec.fields` 落地；type/preflight 待样本钩子）
+- [x] 30 个图表契约 required/type/preflight/fix（`ChartSpec.fields` 的必填与角色、`chart_preflight`、`fix`）
 - [x] stack_pct/stack_fields、pie/value、heatmap/xy、sankey/source-target、biblio reads
-- [ ] 样本 preflight：每节点可选 hook；上游取样 ≤200 行；缓存
+- [x] 样本 preflight：每节点可选 hook；上游取样 ≤200 行；缓存
 - [x] 验证结果含 fix；UI 一键修复；AI 工具同一引擎
 - [x] 删除临时热修规则（H16）
 - [ ] 数据契约：生产者 `schema_hash` × 消费者 `read_columns` 对齐
 - [ ] 运行后数据质量断言（可选 hook）
-- [ ] 验证矩阵：每个图表 × 缺参/错类型/空数据/正常（缺参与正常已覆盖；错类型/空数据待 preflight）
+- [x] 验证矩阵：每个图表 × 缺参/错类型/空数据/正常（空数据=无样本，不下结论）
 - **DoD**：所有“运行才知道”的已知错误在 validate 阶段被命名；无前端第二套规则。
 
 ## P4 AI 框架接入（2-3 周）

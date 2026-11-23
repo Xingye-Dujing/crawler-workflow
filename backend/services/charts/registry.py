@@ -20,6 +20,9 @@ and ``nodes.executors.visualize.read_columns`` is derived from the fields — on
 surfaces, none of them allowed a second copy.
 """
 
+from __future__ import annotations
+
+import math
 from dataclasses import dataclass
 
 #: A chart family is where the type is built and what it reads, not a cosmetic grouping:
@@ -54,6 +57,10 @@ FIELD_ROLES = (
 #: parameter default; ``test_visualize_manifest`` pins the two together so this is a link, not a
 #: second opinion.
 DEFAULT_CHART = 'bar'
+
+#: Field roles whose named column must hold a number for the builder to draw anything. ``list`` is
+#: a comma-joined set of such columns (stacked shares); the rest are drawn as labels or groups.
+NUMERIC_ROLES = ('value', 'coordinate', 'list')
 
 
 @dataclass(frozen=True)
@@ -468,6 +475,103 @@ def chart_problems(chart_type: str, params: dict) -> list[dict]:
                     'severity': 'error',
                     'param': group[0],
                     'context': {'chart': chart, 'fields': ', '.join(group)},
+                },
+            )
+    return found
+
+
+def _blank_cell(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, float) and value != value:  # NaN: a cell pandas left empty, not a text value
+        return True
+    return not str(value).strip()
+
+
+def _cell_number(value) -> float | None:
+    """The cell as a finite number, or None — the one reading the preflight applies."""
+    if isinstance(value, bool) or _blank_cell(value):
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        try:
+            number = float(str(value).strip())
+        except ValueError:
+            return None
+    return number if math.isfinite(number) else None
+
+
+def _field_columns(field, value: str) -> list[str]:
+    if field.role == 'list':
+        return [part.strip() for part in value.replace('，', ',').split(',') if part.strip()]
+    return [value]
+
+
+def chart_preflight(chart_type: str, params: dict, sample) -> list[dict]:
+    """What a SAMPLE of the upstream rows proves about this chart's contract — nothing more.
+
+    Two facts are conclusive once the sample comes from a run of the same node fingerprint:
+
+    * a named column that is not in the sample is a rename the chart would refuse at run time
+      (``require_columns``), so it is named here, before the upstream is paid for;
+    * a value/coordinate/list column holding at least one non-blank cell and NO number at all is
+      the ``chart.y_not_numeric`` refusal the builders make. An all-blank column is NOT reported:
+      the builders draw it as an empty chart rather than refuse, and the preflight mirrors that.
+
+    A sample cannot prove a pie share is negative after ALL rows are aggregated — more positive
+    rows can flip a sum — so that refusal stays at run time. A preflight that guessed would refuse
+    runs that would have succeeded, which is the failure mode this project bans.
+    """
+    chart = effective_chart_key(chart_type)
+    spec = spec_for(chart)
+    rows = [row for row in (sample or []) if isinstance(row, dict)]
+    if spec is None or not rows:
+        return []
+    effective = with_chart_defaults(chart, params)
+    present: set[str] = set()
+    for row in rows:
+        present.update(str(key) for key in row)
+    found: list[dict] = []
+    named: list[tuple[str, str, str]] = []
+    for field in spec.fields:
+        value = str(effective.get(field.name) or '').strip()
+        if not value:
+            continue
+        for column in _field_columns(field, value):
+            if column not in present:
+                found.append(
+                    {
+                        'code': 'engine.chart_column_missing',
+                        'message_key': 'engine.chart_column_missing',
+                        'severity': 'error',
+                        'param': field.name,
+                        'context': {'chart': chart, 'column': column},
+                    },
+                )
+            else:
+                named.append((field.name, column, field.role))
+    for param, column, role in named:
+        if role not in NUMERIC_ROLES:
+            continue
+        has_text = False
+        has_number = False
+        for row in rows:
+            cell = row.get(column)
+            if _blank_cell(cell):
+                continue
+            if _cell_number(cell) is None:
+                has_text = True
+            else:
+                has_number = True
+        if has_text and not has_number:
+            found.append(
+                {
+                    'code': 'engine.chart_column_not_numeric',
+                    'message_key': 'engine.chart_column_not_numeric',
+                    'severity': 'error',
+                    'param': param,
+                    'context': {'chart': chart, 'column': column},
                 },
             )
     return found

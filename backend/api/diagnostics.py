@@ -38,13 +38,30 @@ def _workflow_from_body(body: dict) -> dict:
     return {'nodes': list(nodes.values()), 'connections': connections, 'settings': settings}
 
 
+def _samples(workflow: dict) -> dict:
+    """The stored upstream rows a preflight may judge — never a reason for the route to fail.
+
+    ``services.validation.samples`` resolves the account's run store and pins a sample to the
+    node fingerprint; a missing store, a locked DB or an unreadable row is answered as "no
+    sample" so the canvas keeps the static verdicts it already had.
+    """
+    try:
+        from services.validation.samples import samples_for
+
+        return samples_for(workflow)
+    except Exception:  # a sample is decoration; it must never 500 the route
+        logger.exception(t('run.preflightSamplesFailed'))
+        return {}
+
+
 def validation_payload(workflow: dict) -> dict:
     """The run gate's answer for one canvas: per-node messages plus the flat list.
 
     ``engine.workflow.WorkflowEngine`` is the ONE rule body (manifest rules, validators, the
-    source matrix, cycles); the console and the canvas badges word it from the same entries.
+    source matrix, cycles, and the preflight when a sample exists); the console and the canvas
+    badges word it from the same entries.
     """
-    entries = WorkflowEngine(workflow).validate_detailed()
+    entries = WorkflowEngine(workflow).validate_detailed(samples=_samples(workflow))
     per_node: dict[str, list[str]] = {}
     for entry in entries:
         if entry['id'] is None:

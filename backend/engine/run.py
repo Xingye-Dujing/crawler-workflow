@@ -1037,6 +1037,22 @@ def _notify_run_outcome(workflow_name: str, outcome: str) -> None:
     )
 
 
+def _preflight_samples(workflow: dict) -> dict:
+    """The stored upstream rows validation may judge, or nothing when they are unreadable.
+
+    A preflight sample is a hint about a previous run; failing to read it may never refuse a run
+    that would otherwise start, so the read is guarded and an error is logged (with its traceback)
+    without a console line of its own.
+    """
+    try:
+        from services.validation.samples import samples_for
+
+        return samples_for(workflow)
+    except Exception:  # a sample is advisory; the run gate keeps its static verdicts
+        logger.exception(t('run.preflightSamplesFailed'))
+        return {}
+
+
 def _run_worker(
     workflow, mode, headless, use_profile, run_id, resume_run_id, workflow_name, max_workers, account=None, rerun=None
 ):
@@ -1101,7 +1117,7 @@ def _run_worker(
         }
         execution_state['skipped_seen'] = ctx['skipped_seen']
         engine = WorkflowEngine(workflow, execution_state['executor'])
-        errors = engine.validate()
+        errors = engine.validate(samples=_preflight_samples(workflow))
         if errors:
             for e in errors:
                 add_log(t('wf.validation_error', err=e))

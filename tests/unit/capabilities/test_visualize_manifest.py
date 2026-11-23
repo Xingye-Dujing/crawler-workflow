@@ -48,6 +48,8 @@ class TestTheDeclaration:
         assert registry.resolve(manifest.ports.read_columns) is executor.read_columns
         assert registry.resolve(manifest.execution.handler) is executor.run
         assert registry.resolve(manifest.validators[0]) is executor.validate_node
+        assert manifest.preflight == 'nodes.executors.visualize:preflight'
+        assert registry.resolve(manifest.preflight) is executor.preflight
 
     def test_the_page_and_contract_exist(self):
         manifest = _manifest()
@@ -95,3 +97,32 @@ class TestValidation:
         entries = _entries({'chart_type': 'moonbase'})
         unknown = [entry for entry in entries if entry['code'] == 'engine.chart_unknown']
         assert unknown and unknown[0]['fix'] == {'set': {'chart_type': 'bar'}}
+
+    def test_a_sample_names_a_renamed_column_before_the_run(self):
+        """The engine stays pure (no database), so the caller hands it the sample. Without one the
+        static verdict is unchanged; with one the chart's missing column is named."""
+        workflow = {
+            'nodes': [{'id': 'v', 'type': 'visualize', 'params': {'chart_type': 'bar', 'x_field': '词'}}],
+            'connections': [],
+        }
+        engine = WorkflowEngine(workflow)
+        assert 'engine.chart_column_missing' not in [entry['code'] for entry in engine.validate_detailed()]
+        entries = engine.validate_detailed(samples={'v': [{'X': 1}]})
+        missing = [entry for entry in entries if entry['code'] == 'engine.chart_column_missing']
+        assert missing and missing[0]['param'] == 'x_field'
+        assert missing[0]['id'] == 'v'
+
+    def test_a_sample_with_a_text_value_column_is_named(self):
+        workflow = {
+            'nodes': [
+                {
+                    'id': 'v',
+                    'type': 'visualize',
+                    'params': {'chart_type': 'bar', 'x_field': 'X', 'y_field': 'Y'},
+                }
+            ],
+            'connections': [],
+        }
+        entries = WorkflowEngine(workflow).validate_detailed(samples={'v': [{'X': '甲', 'Y': '很高'}]})
+        named = [entry for entry in entries if entry['code'] == 'engine.chart_column_not_numeric']
+        assert named and named[0]['param'] == 'y_field'

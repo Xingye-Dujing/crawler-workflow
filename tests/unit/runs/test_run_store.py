@@ -1543,3 +1543,57 @@ class TestRunQueue:
         store._conn.commit()
         got = store.load_queue()
         assert [e['id'] for e in got] == ['a']
+
+
+class TestPreflightSampleRows:
+    """``sample_rows``: a preflight may only judge rows of the node's CURRENT definition.
+
+    The sample is what lets a chart refuse a renamed column before the upstream is paid for; a
+    record from a different fingerprint, a running node or a ``skipped`` one is not evidence.
+    """
+
+    @staticmethod
+    def _settle(store, run_id, node_id, fingerprint, rows, status=NODE_DONE):
+        store.begin_node(run_id, node_id, 'upload', fingerprint=fingerprint)
+        store.append_rows(run_id, node_id, rows)
+        store.finish_node(run_id, node_id, status)
+
+    def test_matching_rows_are_returned_in_order(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', [{'a': 1}, {'a': 2}])
+        run_id, rows = store.sample_rows('node-1', 'fp-1')
+        assert run_id == 'r1'
+        assert rows == [{'a': 1}, {'a': 2}]
+
+    def test_another_fingerprint_is_not_evidence(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', [{'a': 1}])
+        assert store.sample_rows('node-1', 'fp-other') == ('', [])
+
+    def test_a_running_node_is_not_sampled(self, store):
+        _start(store, 'r1')
+        store.begin_node('r1', 'node-1', 'source', fingerprint='fp-1')
+        store.append_rows('r1', 'node-1', [{'a': 1}])
+        assert store.sample_rows('node-1', 'fp-1') == ('', [])
+
+    def test_a_skipped_node_is_not_sampled(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', [{'a': 1}], status=NODE_SKIPPED)
+        assert store.sample_rows('node-1', 'fp-1') == ('', [])
+
+    def test_the_limit_is_applied_by_the_query(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', [{'n': index} for index in range(10)])
+        run_id, rows = store.sample_rows('node-1', 'fp-1', limit=3)
+        assert run_id == 'r1'
+        assert rows == [{'n': 0}, {'n': 1}, {'n': 2}]
+
+    def test_the_newest_settled_run_wins(self, store):
+        _start(store, 'r1')
+        self._settle(store, 'r1', 'node-1', 'fp-1', [{'v': 'old'}])
+        _start(store, 'r2')
+        self._settle(store, 'r2', 'node-1', 'fp-1', [{'v': 'new'}])
+        store._execute("UPDATE node_runs SET started_at='2000-01-01T00:00:00' WHERE run_id='r1'")
+        run_id, rows = store.sample_rows('node-1', 'fp-1')
+        assert run_id == 'r2'
+        assert rows == [{'v': 'new'}]

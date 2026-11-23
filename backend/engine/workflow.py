@@ -283,14 +283,14 @@ class WorkflowEngine:
         }
         return WorkflowEngine(sub_workflow, self.executor)
 
-    def validate(self) -> list[str]:
+    def validate(self, samples: dict | None = None) -> list[str]:
         """The console-facing view of validation: the same messages, in the same order,
         as ``validate_detailed``. The run path and the parity tests read this; the
         edit-time badges read ``validate_detailed`` to know WHICH node each message is
         about. Kept as a one-line projection so there is exactly one rule body."""
-        return [entry['message'] for entry in self.validate_detailed()]
+        return [entry['message'] for entry in self.validate_detailed(samples=samples)]
 
-    def validate_detailed(self) -> list[dict]:
+    def validate_detailed(self, samples: dict | None = None) -> list[dict]:
         """Everything that would make a node produce nothing, as one entry per problem.
 
         ``id`` is the node the problem belongs to (``None`` for a canvas-wide one —
@@ -300,6 +300,11 @@ class WorkflowEngine:
         is the localised text. ``severity``/``param``/``fix`` travel with it so a panel can
         point at the box and apply a mechanical fix without re-deriving either. Order and text
         are identical to ``validate``.
+
+        ``samples`` is ``{node_id: rows}`` — up to 200 upstream rows from a stored run of the same
+        node fingerprint. It is OPTIONAL and the caller owns it (``services.validation.samples``):
+        the engine itself never opens a database, so a unit test or an AI draft stays pure. A node
+        absent from the mapping is not preflighted — no sample, no verdict.
         """
         entries: list[dict] = []
 
@@ -354,7 +359,12 @@ class WorkflowEngine:
                     connections=self.connections,
                     data_inputs=frozenset(data_inputs),
                 )
-                for problem in validation_problems(manifest, node, context):
+                for problem in validation_problems(
+                    manifest,
+                    node,
+                    context,
+                    sample=(samples or {}).get(str(nid)),
+                ):
                     if problem['severity'] != 'error':
                         continue
                     add(

@@ -60,6 +60,17 @@ def capability_rows(manifest, root: Path = ROOT) -> list[dict]:
             bad_validators.append(f'{reference}: {exc}')
     rows.append(_row('validators', not bad_validators, '; '.join(bad_validators)))
 
+    preflight_ok = True
+    preflight_detail = 'not declared'
+    if manifest.preflight:
+        try:
+            preflight_ok = callable(registry.resolve(manifest.preflight))
+            preflight_detail = '' if preflight_ok else f'{manifest.preflight} is not callable'
+        except Exception as exc:
+            preflight_ok = False
+            preflight_detail = f'{manifest.preflight}: {exc}'
+    rows.append(_row('preflight', preflight_ok, preflight_detail))
+
     page = manifest.docs.page
     page_ok = bool(page) and (root / page).is_file()
     rows.append(_row('docs', page_ok, page or 'no docs.page'))

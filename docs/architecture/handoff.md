@@ -171,6 +171,34 @@
   改问 `session_problems()` 的数据。
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`；文档：`docs/capabilities/nodes/source.md`。
 
+## P3 第二片：样本 preflight（2026-11-23）
+
+- `Manifest` 第九段之外新增可选 `preflight='module:function'`（ADR-002 的 `preflight(node, sample)`）；`problems()`
+  拒绝不是 `module:function` 的引用，`doctor.py` 增一行 `preflight`，`generate.MATRIX_CHECKS` 与完整性门禁同步枚举。
+- `services/validation/samples.py`：`samples_for(workflow)` 只给声明了 preflight 的节点取样本——
+  - 上游是它的**数据父节点**（name 节点是元数据，不算数据），
+  - 取“当前节点指纹”下最近一次已结算运行（`done`/`partial`/`restored`/`failed`）的 ≤200 行，
+    由新 `run_store.sample_rows(node_id, fingerprint, limit)` 的 SQL `LIMIT` 读取（不物化整张表）；
+  - 任一上游没有同指纹的存储运行 = 没有样本，不猜；多个上游按引擎 fan-in 顺序拼接；
+  - 缓存键 `(该账号 runs.db, 节点 id, 指纹)`，TTL 30 秒、上限 32 项；命中返回浅拷贝行。
+- `WorkflowEngine.validate_detailed(samples=None)` / `validate(samples=None)`：引擎不读数据库，调用方给样本；
+  没有样本的节点不调用 preflight。`/api/workflow/diagnostics`、`/api/workflow/validate` 与运行门
+  （`engine.run._preflight_samples`）都传入；读样本失败只记一条 `run.preflightSamplesFailed`，当作没有样本。
+- `nodes.executors.visualize:preflight` → `chart_preflight()`：同一 `ChartSpec.fields` 的 role。只报能证明的事实：
+  - 点名的列不在样本里 → `engine.chart_column_missing`（多半是改名）；
+  - 数值/坐标/堆叠列有非空值却一个数字都没有 → `engine.chart_column_not_numeric`（与 builder 的 `chart.y_not_numeric` 同规则）；
+  - 空样本、全空列、饼图负值、热力图最终格数都不下结论（builder 仍在运行期拒绝），写在函数 docstring 里。
+  - 钩子抛错/返回畸形 → `engine.preflight_failed`（不 500，其它节点继续）。
+- 测试：`tests/unit/charts/test_chart_preflight.py`（30 图型 × 合格样本；每个数值角色 × 文本列；改名/空样本/未知图型/
+  默认列）；`tests/unit/runs/test_validation_samples.py`（数据父节点、多上游拼接、name 不取、指纹/账号缓存键）；
+  `test_run_store.py::TestPreflightSampleRows`（最新已结算运行、指纹不匹配、running/skipped 不取、LIMIT）；
+  `test_visualize_manifest.py` 与 `test_diagnostics.py` 钉端到端（引擎纯函数 + 路由接线 + 样本读取失败仍 200）；
+  `engine.run._preflight_samples` 的通过/失败两例。
+- 本片验证：全量快测 `11118 passed, 7 skipped, 386 deselected`；设备层 `215 passed, 5 skipped`；ruff 全绿；
+  product/tests pylint `10.00/10`；`gen_capabilities.py --check`、`doctor.py --all` 全绿；隔离 data root 冒烟：
+  种入一条同指纹的上游运行后，`POST /api/workflow/validate` 返回 `engine.chart_column_missing`（`param=x_field`），
+  列存在时无条目。
+
 ## P3 第一片：图表契约与一键修复（2026-11-23）
 
 - `services/charts/registry.py` 的 `ChartSpec` 新增 `fields`（`FieldSpec`：参数名、角色、是否必填、表单标签/占位/提示键、
@@ -314,15 +342,12 @@
 
 ## 下一步（按顺序）
 
-1. **P3 第一片已完成**：图表契约（`ChartSpec.fields`）成为面板/校验/血缘/`read_columns`/AI 目录的单一来源；
-   验证条目带 `param`/`severity`/`fix`，设置面板有一键修复。见“P3 第一片”。
-2. **P3 第二片（下一步）**：样本 preflight。给 `Manifest` 加可选的 `preflight='module:function'`（形如 `validators`），
-   实现 `nodes.executors.visualize:preflight(node, sample)` 读 `ChartSpec.fields` 的 role（数值列/空数据/饼图负值/
-   矩阵格数），样本来自运行库最近一次该上游节点的 ≤200 行（`run_store` 加分页/`LIMIT` 读取 + 缓存），接到
-   `/api/workflow/diagnostics` 与 `/api/workflow/validate`；`chart_profiles` 增加 `requiredWhen` 一类的展示字段按需。
-   然后补“每个图表 × 错类型/空数据”的矩阵与 `stack_pct` 的数值校验。
-3. 之后按 `docs/architecture/rewrite-plan.md`：`schema_hash` 数据契约、运行后质量断言、P4 Asset/AI 框架；
-   每个切片结束更新本文件。
+1. **P3 第二片已完成**：`Manifest.preflight` + `samples_for`（≤200 行、指纹匹配、30 秒缓存）+ visualize 数据检查；
+   验证条目带 `param`/`severity`/`fix`，设置面板有一键修复。见“P3 第二片”。
+2. **P3 第三片（下一步）**：数据契约 `schema_hash`。生产者节点把输出表的列集合哈希写进运行记录/Asset；
+   消费者（analysis/chart/verify/fuse）在 validate 阶段用“上游最近同指纹运行的 schema_hash × 本节点 `read_columns`”
+   对齐，替换目前前端对 `columns/reads` 的差集提示（前端只渲染服务端结论）。然后做运行后数据质量断言（可选 hook）。
+3. 之后按 `docs/architecture/rewrite-plan.md`：P4 Asset/AI 框架；每个切片结束更新本文件。
 
 ## H11 的关键落点（避免重复调查）
 

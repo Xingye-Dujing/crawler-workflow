@@ -55,6 +55,12 @@ class TestAManifestIsWhole:
         for reference in manifest.validators:
             assert callable(registry.resolve(reference)), reference
 
+    def test_the_declared_preflight_resolves(self, manifest):
+        """A preflight is optional, but a declared one must be a callable ``module:function``:
+        a typo would silently skip every data check the capability claims."""
+        if manifest.preflight:
+            assert callable(registry.resolve(manifest.preflight)), manifest.preflight
+
     def test_the_documented_page_and_contract_tests_exist(self, manifest):
         if manifest.docs.page:
             assert (REPO / manifest.docs.page).is_file(), manifest.docs.page

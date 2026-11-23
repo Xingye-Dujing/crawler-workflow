@@ -208,6 +208,8 @@
   角色”的唯一位置；设置面板按它画框，`WorkflowEngine.validate_detailed` 先应用 `with_chart_defaults` 再读它，所以
   主题距离图 的默认列不会误报，占比堆叠图的 `stack_fields` 会在**运行前**按名出现。把这条规则写进
   `if chart_type == 'stack_pct'` 会让下一个图再犯一次；也不要把拒绝留到 builder，那时上游爬取已经付过钱。
+  **数据检查只在有证据时说话**：`preflight(node, sample)` 的样本必须来自“当前节点指纹”的上游运行（≤200 行）；
+  空样本、全空列、饼图聚合后的负值都不能从样本证明，留给 builder 在运行期拒绝——用样本猜一次，就会拒掉本来能跑的运行。
 - **能力必须有入口，入口必须是注册表算出来的。** `ai.coverage` 不手写清单：节点来自 `nodes.catalog`，平台模式来自
   `capabilities.registry`，算子/图表来自各自的 `OPS`/`SPECS`，工具来自 `TOOLS` 与技能/通用集合的交集。新加一个节点或算子
   却没有任何 AI 入口时，`tests/unit/gates/test_ai_coverage.py` 直接红；这条门禁还能反向失败（测试里清空技能列表会报

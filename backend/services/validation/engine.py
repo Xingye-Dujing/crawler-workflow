@@ -82,10 +82,10 @@ def _default_fix(manifest, rule) -> dict | None:
     return {'set': {rule.param: default}}
 
 
-def _failed(reference: str, reason: Exception) -> dict:
+def _failed(reference: str, reason: Exception, *, code: str = 'engine.validator_failed') -> dict:
     return {
-        'code': 'engine.validator_failed',
-        'message_key': 'engine.validator_failed',
+        'code': code,
+        'message_key': code,
         'severity': 'error',
         'param': '',
         'context': {'ref': reference, 'err': str(reason)[:300]},
@@ -184,8 +184,44 @@ def static_problems(
     return found
 
 
-def validation_problems(manifest, node: dict, context: ValidationContext) -> list[dict]:
-    """Static rules plus every declared validator, each failure named rather than raised."""
+def _hook_problems(reference: str, *args, failure_code: str = 'engine.validator_failed') -> list[dict]:
+    """Resolve and call one capability hook; every failure becomes a named problem.
+
+    A plugin bug (a missing reference, a raise, a malformed item) stays visible on the canvas and
+    says which reference failed; it never 500s the diagnostics route and never hides the problem by
+    passing silently.
+    """
+    try:
+        handler = kernel_registry.resolve(reference)
+        produced = handler(*args)
+    except Exception as exc:
+        return [_failed(reference, exc, code=failure_code)]
+    if not isinstance(produced, (list, tuple)):
+        return [
+            _failed(
+                reference,
+                ValueError(f'returned {type(produced).__name__}, not a list'),
+                code=failure_code,
+            ),
+        ]
+    found: list[dict] = []
+    for item in produced:
+        normalized, reason = _normalize(item, reference)
+        if normalized is None:
+            found.append(_failed(reference, ValueError(reason), code=failure_code))
+        else:
+            found.append(normalized)
+    return found
+
+
+def validation_problems(manifest, node: dict, context: ValidationContext, sample: list | None = None) -> list[dict]:
+    """Static rules, every declared validator, and — when a sample is available — the preflight.
+
+    ``sample`` is up to 200 rows of the node's upstream output from a stored run whose node
+    fingerprint matches the current graph. ``None`` means "no sample": the preflight is not called,
+    because a check with no data behind it would be a guess. An empty list IS a sample (the
+    upstream produced nothing), and the hook decides what that proves.
+    """
     found = static_problems(
         manifest,
         node,
@@ -194,19 +230,9 @@ def validation_problems(manifest, node: dict, context: ValidationContext) -> lis
         has_output=context.has_output(),
     )
     for reference in manifest.validators:
-        try:
-            handler = kernel_registry.resolve(reference)
-            produced = handler(node, context)
-        except Exception as exc:  # a plugin bug is reported, not allowed to 500 diagnostics
-            found.append(_failed(reference, exc))
-            continue
-        if not isinstance(produced, (list, tuple)):
-            found.append(_failed(reference, ValueError(f'returned {type(produced).__name__}, not a list')))
-            continue
-        for item in produced:
-            normalized, reason = _normalize(item, reference)
-            if normalized is None:
-                found.append(_failed(reference, ValueError(reason)))
-            else:
-                found.append(normalized)
+        found.extend(_hook_problems(reference, node, context))
+    if manifest.preflight and sample is not None:
+        found.extend(
+            _hook_problems(manifest.preflight, node, sample, failure_code='engine.preflight_failed'),
+        )
     return found

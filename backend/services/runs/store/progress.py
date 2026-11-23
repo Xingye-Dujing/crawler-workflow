@@ -365,6 +365,38 @@ class RowsMixin:
                 return row['run_id'], rows
         return '', []
 
+    def sample_rows(self, node_id: str, fingerprint: str, limit: int = 200) -> tuple[str, list]:
+        """The newest ≤*limit* rows a node produced under *fingerprint* → (run_id, rows).
+
+        The fingerprint is the CURRENT graph's :func:`node_fingerprint` for that node, so rows
+        stored by a different configuration are never evidence about this one: a chart preflight
+        may only judge the table this node would produce now. ``limit`` is applied in SQL — a
+        sample never materialises a whole crawl. Only settled node states are read: a ``running``
+        or ``pending`` row set is still growing, and a ``skipped`` one produced nothing by design.
+        """
+        candidates = self._query(
+            'SELECT n.run_id AS run_id, MAX(r.started_at) AS started_at '
+            'FROM node_rows n JOIN node_runs r ON r.run_id = n.run_id AND r.node_id = n.node_id '
+            'WHERE n.node_id = ? AND r.fingerprint = ? '
+            "AND r.status IN ('done', 'partial', 'restored', 'failed') "
+            'GROUP BY n.run_id ORDER BY started_at DESC LIMIT 5',
+            (str(node_id), str(fingerprint)),
+        )
+        for candidate in candidates:
+            payloads = self._query(
+                'SELECT payload FROM node_rows WHERE run_id = ? AND node_id = ? ORDER BY seq LIMIT ?',
+                (candidate['run_id'], str(node_id), max(1, int(limit))),
+            )
+            rows = []
+            for row in payloads:
+                try:
+                    rows.append(json.loads(row['payload']))
+                except (TypeError, ValueError):
+                    continue
+            if rows:
+                return str(candidate['run_id']), rows
+        return '', []
+
     def row_count(self, run_id: str, node_id: str) -> int:
         rows = self._query('SELECT COUNT(*) AS n FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         return int(rows[0]['n']) if rows else 0

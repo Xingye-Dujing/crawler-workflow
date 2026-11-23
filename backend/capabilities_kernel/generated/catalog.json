@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "c62b538c4d010bc33a83acd88bac71d308646d3fc7e6df4d05d34289692651d2",
+      "digest": "ebac43fd0f92849843a3cf33c0d263e8f733b16623aedfe65257cc0e2a371fcf",
       "manifest": {
         "identity": {
           "id": "name",
@@ -81,6 +81,7 @@
           }
         ],
         "validators": [],
+        "preflight": "",
         "ui": {
           "form": "schema",
           "custom_renderer": "",
@@ -126,7 +127,7 @@
     {
       "kind": "node",
       "id": "source",
-      "digest": "b54ec1cd24eb6ddb1229fa158ba0b1869d004cb851d711eec8e5d72cce752703",
+      "digest": "c69c952bc49ebf60b25012d8594dbc94f0dc9b2ac5082a6334ec0b05c2c95ee4",
       "manifest": {
         "identity": {
           "id": "source",
@@ -153,6 +154,7 @@
         "validators": [
           "nodes.executors.source:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "source",
@@ -202,7 +204,7 @@
     {
       "kind": "node",
       "id": "upload",
-      "digest": "ebae21411a804ecaca17e8a80b668f61bc43720bb68eb3be83a66080c75da00e",
+      "digest": "b019d1ad5bc6212cf42f1cf1c412a63ebe238fab073a3afdf5c9dba9950b6b8d",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -278,6 +280,7 @@
           }
         ],
         "validators": [],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "upload",
@@ -323,7 +326,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "ce647a382d900b6275da60dce2961d9640403bb4c6bacd8a7d75fffedd067b5f",
+      "digest": "d14875d5035a2aeb58f5562773c6ddcf455dee32df8cfde70bacdc0a4e900bba",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -391,6 +394,7 @@
         },
         "rules": [],
         "validators": [],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "resume",
@@ -436,7 +440,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "690bda030c079c0a64c846a24a0c41cd6264416e0420be5bc616764495637775",
+      "digest": "c107cabc199318ddab56040f0a56a93cb87b36abf89c6aa5874b621bd6ad8564",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -573,6 +577,7 @@
         "validators": [
           "nodes.executors.comment:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "comment",
@@ -624,7 +629,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "e96244fcfe41df8c4f26f1325f78afaee294509789d01b244ee9aada1824579c",
+      "digest": "68f960d82fa0ebf8ce29c06a3502f17d392f74cd4e7f205cf5bb3f5240bb3058",
       "manifest": {
         "identity": {
           "id": "process",
@@ -739,6 +744,7 @@
         "validators": [
           "nodes.executors.process:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "process",
@@ -793,7 +799,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "9e5d75835b548096982c855e76e23624085e52060539f982df85fe5e705e89d2",
+      "digest": "9cf3ae19a167e8e8508de4ca11aece2cff33d4259079b95b0e54b6c92b5587c3",
       "manifest": {
         "identity": {
           "id": "python",
@@ -875,6 +881,7 @@
         },
         "rules": [],
         "validators": [],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "python",
@@ -922,7 +929,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "6c1d1cae32e29b7d8bde3d6e6daa7a88a086a7bee615e267f0e5e2f3d36c2d7d",
+      "digest": "f0cfdb562ac757b875633e2c0ef3ed09bb2ff5ec3d426f05202ce01c7800615f",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -1062,6 +1069,7 @@
         "validators": [
           "nodes.executors.analysis:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "analysis",
@@ -1107,7 +1115,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "caebdb47df7bab633fa7850b228f4be7da637bb1e8817aac7bcd0585a6f58ca4",
+      "digest": "60cec6b9ed1c3698d9a8b885189a9134cae08805e01548e7e2a937c43317ccee",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1187,6 +1195,7 @@
           }
         ],
         "validators": [],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "tokenize",
@@ -1233,7 +1242,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "4d2d86eed15e1bf1479f07dba730f27d13a8dcf6762aa63420cfcbc5107ab3f7",
+      "digest": "61969179a3f231fa2a63aebb64f2f5d79151596ff15da88199d7965c8697bd64",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -2104,6 +2113,7 @@
         "validators": [
           "nodes.executors.biblio:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "biblio",
@@ -2160,7 +2170,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "2506b0ff98d08b90ec83a7852abada0a23b71934e1e83e136b4c251c8c23579c",
+      "digest": "408073068d1430d36f8cc1f6a4bd3ac3d61cf58e75e4a0961a6e0e2f628260fa",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -2317,6 +2327,7 @@
         "validators": [
           "nodes.executors.verify:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "verify",
@@ -2364,7 +2375,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "8be419349419a97c5b83b0fd1a3b64daffbd6d37958017e614068b61d1605c0c",
+      "digest": "f8ebebb85d676807e626745d7f4cd6093bcd7dd364e0d6f384ae37acf3068920",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2554,6 +2565,7 @@
         "validators": [
           "nodes.executors.fuse:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "fuse",
@@ -2600,7 +2612,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "f38419276e5aa3dd41abdcc79a9aaea69b7657c743af91d3301b7b544f451361",
+      "digest": "64f8ed065601115869149519244e2ae7bf457e57d9772971a6756719f9daef95",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2673,6 +2685,7 @@
         "validators": [
           "nodes.executors.accumulate:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "accumulate",
@@ -2719,7 +2732,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "43cbb59e220c4db090244aad3d52e28aa8aa07735f912ad5d52f49e0b76e9e2b",
+      "digest": "a63879d3c9c1e8c1f926118934324c4e11122e960297f1436f26110d639bb0a0",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -2887,6 +2900,7 @@
         "validators": [
           "nodes.executors.visualize:validate_node"
         ],
+        "preflight": "nodes.executors.visualize:preflight",
         "ui": {
           "form": "custom",
           "custom_renderer": "visualize",
@@ -2934,7 +2948,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "44f1a0605d4e1e156d80546f00ae2d6a151861477b42611a73bd28c5e5557478",
+      "digest": "b2ade0789296e2c80d470768e14077ea589c748d37d052764bbe42959d378f01",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -2961,6 +2975,7 @@
         "validators": [
           "nodes.executors.compile:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "schema",
           "custom_renderer": "",
@@ -3003,7 +3018,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "9bc4f88a2bef1ed57aec97be64e042dcaa93882253cce3d67687929540089ef2",
+      "digest": "d86e1bc07a01a0a4ba505eda7dee096b9f03e0c30418456d3d1073dade303c12",
       "manifest": {
         "identity": {
           "id": "output",
@@ -3073,6 +3088,7 @@
         "validators": [
           "nodes.executors.output:validate_node"
         ],
+        "preflight": "",
         "ui": {
           "form": "custom",
           "custom_renderer": "output",
@@ -3128,6 +3144,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3145,6 +3162,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3162,6 +3180,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3179,6 +3198,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3196,6 +3216,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3213,6 +3234,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3230,6 +3252,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3247,6 +3270,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3264,6 +3288,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3281,6 +3306,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3298,6 +3324,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3315,6 +3342,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3332,6 +3360,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3349,6 +3378,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3366,6 +3396,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
@@ -3383,6 +3414,7 @@
         "executor",
         "port_hooks",
         "validators",
+        "preflight",
         "docs",
         "contracts",
         "title_keys"
