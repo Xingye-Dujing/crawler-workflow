@@ -2,8 +2,26 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`d46b8a1b 功能更新：P6 第五片——严格模式工具预算`；框架仓库 `cf6d89f`（0.1.25）
-- 工作区：干净（`git status --short` 无输出）
+- 最后提交：`50ca1505 功能更新：P7 第一类——37 个分析算子清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 工作区：干净（唯一未跟踪/未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 第一类：37 个分析算子清单化（2026-11-24）
+
+- **新增能力种类 `operator`**：`backend/capabilities_kernel/operators/<id>/manifest.py`，用
+  `capabilities_kernel/operator.py` 的 `OperatorManifest` 声明：读（`one`/`some`/`nonblank`/`mapping`/
+  `two_table_keys`）、写（`replace`/`add`/`select`/`passthrough`/`dynamic`/`unknown` + 固定列/追加列/`bin_column`
+  的 `<列>_bin`）、策略（`needs_llm`/`empty_by_design`/`checks`）、参数与选项、徽章字段名、七段技能。
+- **一套投影，删掉五张手写表**：`contracts.STEP_PARAMS`、`LLM_OPS`；`params` 的七个写表；
+  `matching.STEP_TWO_TABLE`/`MATCH_MODES`/`KEEP_MODES`；`kernels` 六个选项表；`step_checks.TWO_TABLE_KEYS`
+  与 `_OP_PARAM_LABELS`；`ops.OPS`。全部由 `registry.manifests('operator')` 生成，`NO_DEFAULT` 移到 kernel。
+- **七段技能自动生成**：`operator_manifest()` 从必填框推导模板与前置/步骤/失败/验收；人工只写“何时用/别用”。
+  生成 `docs/capabilities/operators/<id>.md`（契约说明）与 `docs/capabilities/skills/operators/<id>.md`（七段正文），
+  `skill_catalog`/`skill_load` 直接可检索；`knowledge.prompt_lines` 只放节点 L1（算子已在合法词汇表逐条列出）。
+- **形状检查不再写死在共享模块**：`bin_time` 的边界/名称数量检查由清单 `checks=` 引用，`step_checks` 只负责调用。
+- **验证**：`analysis`/`ai`/`capabilities`/`gates`/`frontend contract`/`api analysis` **3332 passed**；ruff
+  check/format 全绿；product 与 tests pylint **10.00/10**；`tools/doctor.py` 全绿（含 artifacts）。
+- **未做**：把算子参数的中文标签搬进清单（面板表单仍是 `panels/node-analysis.js` 的 `if op == …`）；
+  图表与平台两类清单化；算子级 `preflight`（数据样本检查）。
 
 ## 已完成（每个一类改动一个 commit）
 
@@ -14,6 +32,7 @@
 | `d8104301` | P6 第三片：RecipeFSM（证据步骤、工具遮罩、用户跳步）、两条产品配方与 `/recipes` API，框架 0.1.24 |
 | `f661b4a8` | P6 第四片：配方进度条与跳过（输入框上方，状态只来自服务端） |
 | `d46b8a1b` | P6 第五片：严格模式工具预算（本地供应商 12 个工具，控制/核心/配方步骤必留），框架 0.1.25 |
+| `50ca1505` | P7 第一类：37 个分析算子清单化（契约/读写形状/策略/七段技能；analysis 旧表全部改为投影） |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
