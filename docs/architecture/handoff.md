@@ -423,6 +423,16 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4 接入第四片：host 端点补齐（2026-11-23）
+
+- `/api/ai/ws` 补齐旧前端在用的 host 端点：workspace（GET/POST/browse/pick）、artifacts/preview、chart/preview、
+  workflow/validate、rerun、monitors/catalog、python/install、plugins/install、codebooks、multipart 上传（文本/图片
+  存入框架文件行 `meta`，chat 的 attachments 接受文件 id）。
+- 框架 0.1.20：`add_file(..., meta=)`；0.1.19：`test_provider` 返回 model/latency/reply。
+- 测试：上传→按 id 附件进模型、预览/图表/校验/重跑拒绝、codebooks/插件冒烟；蓝图用例 13 passed。
+- **仍剩**：node trace（`services/llm_trace` 仍写旧 store，需迁到框架 store/turns）；前端切到 `/api/ai/ws`；
+  删旧引擎与开关；旧 ai.db 历史。
+
 ## P4 接入第三片：新表面补齐通用路由（2026-11-23）
 
 - `/api/ai/ws` 现有约 40 条路由：chat/turns/events/steps/trace、answer/stop/steer/retry/command、pending/inbox、

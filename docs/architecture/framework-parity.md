@@ -146,13 +146,15 @@ P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pendi
 | `/conversations/<id>/context` | POST | ✅ |
 | `/conversations/<id>/usage` | `/usage?conversation_id=` | ✅ |
 | `/skills`、`/skills/<id>`、fork/delete | 同名 | ✅ |
-| `/plugins`、enable/uninstall | 同名 | ✅；`/plugins/install` 待补 |
-| `/monitors`、events/ack | 同名 | ✅；`/monitors/catalog` 待补 |
-| `/python/status`、scripts、run | 同名 | ✅；`/python/install` 待补 |
-| `/files`（列表/删除） | 同名 | ✅；**multipart 上传待补** |
-| `/workspace`、`/workspace/browse|pick` | — | 待补（host 域） |
-| `/artifacts/preview`、`/chart/preview` | — | 待补（host 预览） |
-| `/workflow/validate`、`/rerun`、`/traces/*`、`/codebooks/*` | — | 待补（host 域，脱离旧引擎） |
+| `/plugins`、enable/uninstall/install | 同名 | ✅ |
+| `/monitors`、events/ack、`/monitors/catalog` | 同名 | ✅ |
+| `/python/status`、scripts、run、install | 同名 | ✅ |
+| `/files`（列表/删除/multipart 上传） | 同名 | ✅ |
+| `/workspace`、`/workspace/browse|pick` | 同名 | ✅（host 域） |
+| `/artifacts/preview`、`/chart/preview` | 同名 | ✅（host 预览） |
+| `/workflow/validate`、`/rerun` | 同名 | ✅（host 域） |
+| `/codebooks/*` | 同名 | ✅ |
+| `/traces/<run_id>`、`/traces/<id>/apply` | — | 待补（node trace 仍用旧 store） |
 
 补齐这些 host 端点并切换前端后，才能删除旧 `api/ai.py`、`backend/ai` 引擎与 `ai_workspace` 开关。
 
