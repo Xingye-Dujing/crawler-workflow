@@ -99,8 +99,9 @@ adapters/        HTTP/SSE 绑定（Flask 等），只做序列化
 | F14 | trace/观测 | 无 | OTel GenAI 语义的 trace 表 + trace 树；事件只含 id/状态/计数 |
 | F15 | 结构化输出 / thinking 控制 | 部分 | 能力声明 + 不支持按名拒绝；Ollama `think:false` 保持 |
 | F16 | 并发 | 串行 | LLM 行任务可并发、按供应商限流；一轮内工具调用仍有序 |
+| F17 | 轮次完成通知接缝 | 无 | `HostAdapter.turn_finished(summary)`：每次 `ask()` 结束后一次，`completed`/`paused`/`cancelled`/`error`/`aborted` + ≤240 字预览；宿主决定桌面弹窗/提示音，异常不打断轮次 |
 
-F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host adapter 前完成；F13–F16 可以与 host 并行。
+F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host adapter 前完成；F13–F17 可以与 host 并行。
 
 ## 依赖与钉版
 

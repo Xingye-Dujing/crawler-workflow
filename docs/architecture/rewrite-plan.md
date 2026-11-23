@@ -117,9 +117,11 @@
 - [ ] F8–F10 多问题卡（≤5）、plan/build 模式 + 工具遮罩、attachment 接缝（已抽取文本与内联图片）
 - [ ] F11–F12 产物 validator/preview 注册、`agent_runs`/`agent_steps` + 崩溃恢复与幂等
 - [ ] F13–F16 工具/技能注册收口、OTel GenAI trace、供应商能力声明、LLM 行任务并发与限流
+- [x] F17 轮次完成通知接缝：`HostAdapter.turn_finished(summary)` 每次 `ask()` 一次，带状态与 ≤240 字预览；
+  弹窗/提示音由宿主决定，钩子异常不打断轮次（框架 0.1.1）
 - [ ] 架构收口：端口/适配器/`TurnFSM` 拆分；框架测试全绿；重建 wheel 并升版本
 - [ ] 通用性门禁：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
-- **DoD**：F1–F16 全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
+- **DoD**：F1–F17 全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
 
 ### P4 接入
 

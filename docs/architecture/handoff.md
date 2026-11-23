@@ -401,6 +401,10 @@
 - 通用性门禁：框架仓库里不得出现节点/数据集/工作流/图表/平台等领域词；宿主只经 `HostAdapter` 注入。
 - 依赖节奏：框架改动 → 框架测试全绿 → 重建 wheel（替换同一文件、更新 sha256）→ 本仓库 AI 测试 → 提交流程不变。
 - 已完成：`8b6cc478` 把 wheel 钉版、`vendor/README.md`、requirements 门禁与 Docker 安装路径落好。
+- 已完成 F17：框架仓库 `7323f2e` 新增 `HostAdapter.turn_finished(summary)`——每次 `ask()` 结束后一次，
+  `completed`/`paused`/`cancelled`/`error`/`aborted` + ≤240 字预览；宿主据此做桌面右下角通知与提示音，框架不知道
+  窗口焦点，钩子异常也不打断轮次。框架升到 0.1.1（139 个测试全绿），`vendor/` 已替换新 wheel。
+  **采析绘接入时**：`ai_host` 覆写该方法，只在窗口不在前台或用户开了提醒时弹窗/响铃；不要在钩子里做网络或长任务。
 
 ## 下一步（按顺序）
 
@@ -411,9 +415,10 @@
 3. **P3 第四片已完成**：`Manifest.postcheck` + 运行循环的控制台告警；analysis 0 行检查。P3 清单全部勾选。
    见“P3 第四片”。
 4. **P4 依赖已完成**：wheel 钉版 + 门禁 + 镜像安装路径（`8b6cc478`）。
-5. **下一步：P4.0 框架完善**。第一片按依赖顺序做 F1–F4：`pending_calls` 持久化与 rehydrate、`answer(call_id)`
-   幂等、未答问题不被新消息取消 + 邮箱、retry 还原原轮、事件 `seq`/续传。框架测试全绿后重建 wheel，再更新本仓库
-   的 parity 与测试。`core.asset.DataAsset` 物化可以并行，但不阻塞框架。
+5. **P4.0 第一项已完成（F17）**：框架 `turn_finished` 通知接缝（框架 `7323f2e`，0.1.1）。
+6. **下一步：P4.0 框架完善 F1–F4**：`pending_calls` 持久化与 rehydrate、`answer(call_id)` 幂等、未答问题不被新消息
+   取消 + 邮箱、retry 还原原轮、事件 `seq`/续传。框架测试全绿后重建 wheel，再更新本仓库的 parity 与测试。
+   `core.asset.DataAsset` 物化可以并行，但不阻塞框架。
 
 
 ## H11 的关键落点（避免重复调查）
