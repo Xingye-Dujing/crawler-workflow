@@ -132,6 +132,30 @@ P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pendi
 文件/Python/设置/用量/上下文/引用/bootstrap），`ai_host` 委托工具/技能/事实/产物校验/设置映射、附件抽取与 `/init`；
 旧 `/api/ai` 与旧引擎保留至领域路由迁移与 parity 完成。
 
+### 前端端点对齐表（P5 切换前必须全绿）
+
+`ai-workspace.js` 调用的每个端点及其新表面状态。切换基址只需改一处，但表里出现 `待补` 就不能切。
+
+| 端点 | 新表面 | 状态 |
+|---|---|---|
+| `/providers`、`/providers/<id>/models|balance|test` | `/api/ai/ws/...` | ✅ |
+| `/bootstrap` | `/api/ai/ws/bootstrap` | ✅（形状需前端适配） |
+| `/chat`、`/answer`、`/stop`、`/retry`、`/steer` | 同名 | ✅ |
+| `/conversations`（列表/新建/删除/导出） | 同名 | ✅ |
+| `/conversations/<id>`（详情/重命名/置顶/归档） | GET/PATCH | ✅ |
+| `/conversations/<id>/context` | POST | ✅ |
+| `/conversations/<id>/usage` | `/usage?conversation_id=` | ✅ |
+| `/skills`、`/skills/<id>`、fork/delete | 同名 | ✅ |
+| `/plugins`、enable/uninstall | 同名 | ✅；`/plugins/install` 待补 |
+| `/monitors`、events/ack | 同名 | ✅；`/monitors/catalog` 待补 |
+| `/python/status`、scripts、run | 同名 | ✅；`/python/install` 待补 |
+| `/files`（列表/删除） | 同名 | ✅；**multipart 上传待补** |
+| `/workspace`、`/workspace/browse|pick` | — | 待补（host 域） |
+| `/artifacts/preview`、`/chart/preview` | — | 待补（host 预览） |
+| `/workflow/validate`、`/rerun`、`/traces/*`、`/codebooks/*` | — | 待补（host 域，脱离旧引擎） |
+
+补齐这些 host 端点并切换前端后，才能删除旧 `api/ai.py`、`backend/ai` 引擎与 `ai_workspace` 开关。
+
 ### P4 接入还剩什么（不能勾 P4 DoD）
 
 - 领域 AI 路由（traces/harness/workflow draft/codebooks 等）仍在旧 `api/ai.py`，需移到 host 蓝图并脱离旧引擎。
