@@ -423,6 +423,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4 接入第五片：node trace 迁到框架 store（2026-11-23）
+
+- `services/llm_trace.py` 不再写旧 `ai.db`：会话、intro、追问、流式行、样本、结果全部进 `AgentWorkspace`
+  store；会话标题仍是 `run | node | op #n`，`traces_for_run` 按 run 前缀检索，`meta.skill=node_trace`。
+- 工作区目录按账号解析：`ai_host.manager` 用 `paths.active()`（本地所有者）或 `paths.for_user(id)`，
+  不再把 `default` 当账号 id。
+- `/api/ai/ws` 增加 `GET /traces/<run_id>`、`POST /traces/<id>/apply`；会话详情返回 `skill` 供 trace 面板识别。
+- 旧 `api/ai.py` 的 trace 列表已读新 store（同一 `services.llm_trace`），但打开会话仍走旧 store——前端切换时一并解决。
+- 测试：框架 store 的 trace 用例（prompt/answer 行、run 检索、结果 provenance、传统模型样本）替换旧 sweep 用例；
+  AI/analysis/API **1584 passed**。
+- 下一步：前端切 `/api/ai/ws` → 删旧 `api/ai.py`/`backend/ai`/开关 → 旧 ai.db 历史。
+
 ## P4 接入第四片：host 端点补齐（2026-11-23）
 
 - `/api/ai/ws` 补齐旧前端在用的 host 端点：workspace（GET/POST/browse/pick）、artifacts/preview、chart/preview、
