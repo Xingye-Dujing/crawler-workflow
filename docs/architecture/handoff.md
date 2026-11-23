@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`429b5cfd 修改：图表数据预检读取同指纹运行样本`
+- 最后提交：`43caa638 功能更新：节点输出记录真实列契约，缺列校验移入服务端`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -48,6 +48,7 @@
 | `64dede4e` | P2 前端第四片：清单 `ui` 选择表单；`openSettings` 删除逐类型分支；通用 schema 渲染器 + 注册表；设备层禁用节点用例等待服务端诊断 |
 | `1be81060` | P3 第一片：`ChartSpec.fields` 成为面板/校验/血缘/AI 目录的单一来源；验证条目带 `param`/`severity`/`fix`；设置面板一键修复与字段描红 |
 | `429b5cfd` | P3 第二片：`Manifest.preflight` + 同指纹上游样本（≤200 行、30 秒缓存）；图表缺列/非数值列在 validate 阶段命名；诊断/validate/运行门接线 |
+| `43caa638` | P3 第三片：`node_schema` 记录生产者真实列集合 + `schema_hash`；`contracts.columns_for` 记录优先、声明兜底；引擎按 `read_columns` 报 `engine.missing_column`（warning）；前端删除差集，诊断不再返回 `reads` |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
