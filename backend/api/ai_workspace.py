@@ -13,6 +13,7 @@ import json
 
 from agent_workspace import AIError as AgentError
 from agent_workspace import ChatRequest
+from agent_workspace import config as workspace_config
 from agent_workspace.errors import WorkspaceError
 from flask import Blueprint, Response, jsonify, request
 from runtime import account_context
@@ -170,6 +171,83 @@ def create_blueprint(manager):
     def inbox():
         conversation_id = str(request.args.get('conversation_id') or '')
         return jsonify({'ok': True, 'inbox': manager.workspace(account()).inbox(conversation_id, account())})
+
+    # ── catalogue / conversations / memories / artifacts / settings ───────────
+
+    @blueprint.get('/bootstrap')
+    def bootstrap():
+        workspace = manager.workspace(account())
+        return jsonify(workspace.bootstrap(account(), request.args.get('provider', '')))
+
+    @blueprint.get('/providers')
+    def providers():
+        return jsonify({'ok': True, 'providers': manager.workspace(account()).providers(account())})
+
+    @blueprint.get('/conversations')
+    def conversations():
+        rows = manager.workspace(account()).store.list_conversations(
+            account(), limit=int(request.args.get('limit') or 50)
+        )
+        return jsonify({'ok': True, 'conversations': rows})
+
+    @blueprint.post('/conversations')
+    def create_conversation():
+        payload = body()
+        row = manager.workspace(account()).store.create_conversation(account(), title=str(payload.get('title') or ''))
+        return jsonify({'ok': True, 'conversation': row})
+
+    @blueprint.delete('/conversations/<conversation_id>')
+    def delete_conversation(conversation_id):
+        manager.workspace(account()).store.delete_conversation(conversation_id, account())
+        return jsonify({'ok': True})
+
+    @blueprint.get('/memories')
+    def memories():
+        return jsonify({'ok': True, 'memories': manager.workspace(account()).store.list_memories(account())})
+
+    @blueprint.post('/memories')
+    def add_memory():
+        try:
+            memory = manager.workspace(account()).add_memory(account(), str(body().get('text') or ''))
+            return jsonify({'ok': True, 'memory': memory})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.delete('/memories/<memory_id>')
+    def delete_memory(memory_id):
+        return jsonify({'ok': manager.workspace(account()).delete_memory(account(), memory_id)})
+
+    @blueprint.get('/artifacts')
+    def artifacts():
+        conversation_id = str(request.args.get('conversation_id') or '')
+        return jsonify({'ok': True, 'artifacts': manager.workspace(account()).artifacts(account(), conversation_id)})
+
+    @blueprint.post('/artifacts/<artifact_id>/apply')
+    def apply_artifact(artifact_id):
+        try:
+            return jsonify(manager.workspace(account()).apply_artifact(account(), artifact_id))
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.get('/settings')
+    def settings():
+        workspace = manager.workspace(account())
+        return jsonify({'ok': True, 'settings': workspace.settings.all(), 'schema': workspace_config.schema()})
+
+    @blueprint.post('/settings')
+    def set_setting():
+        payload = body()
+        try:
+            return jsonify(
+                manager.workspace(account()).set_setting(str(payload.get('key') or ''), payload.get('value'))
+            )
+        except (KeyError, WorkspaceError) as exc:
+            return jsonify({'ok': False, 'error': str(exc), 'key': 'settings.unknown'}), 400
+
+    @blueprint.get('/usage')
+    def usage():
+        conversation_id = str(request.args.get('conversation_id') or '')
+        return jsonify({'ok': True, 'usage': manager.workspace(account()).usage(conversation_id)})
 
     # ── commands ──────────────────────────────────────────────────────────────
 

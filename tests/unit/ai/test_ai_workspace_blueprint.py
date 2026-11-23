@@ -91,3 +91,21 @@ class TestTheSurface:
         body = client.post('/api/ai/ws/command', json={'name': 'init'}).get_json()
         assert body['result']['tools'] > 0
         assert body['result']['skills'] > 0
+
+    def test_conversations_memories_artifacts_settings_and_usage(self, client):
+        created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
+        conversation_id = created['conversation']['id']
+        listed = client.get('/api/ai/ws/conversations').get_json()['conversations']
+        assert any(row['id'] == conversation_id for row in listed)
+
+        memory = client.post('/api/ai/ws/memories', json={'text': 'remember this'}).get_json()
+        assert memory['ok'] is True
+        assert any(row['text'] == 'remember this' for row in client.get('/api/ai/ws/memories').get_json()['memories'])
+        assert client.delete(f'/api/ai/ws/memories/{memory["memory"]["id"]}').get_json()['ok'] is True
+
+        assert client.get('/api/ai/ws/artifacts').get_json()['artifacts'] == []
+        settings = client.get('/api/ai/ws/settings').get_json()
+        assert settings['ok'] is True and settings['schema']
+        assert client.get('/api/ai/ws/usage').get_json()['ok'] is True
+        assert client.get('/api/ai/ws/bootstrap').get_json()['ok'] is not False
+        assert client.delete(f'/api/ai/ws/conversations/{conversation_id}').get_json()['ok'] is True
