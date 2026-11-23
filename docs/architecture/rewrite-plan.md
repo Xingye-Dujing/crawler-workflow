@@ -135,8 +135,8 @@
 
 - [x] **steer**：运行中插入指引只在安全边界注入——`steer()` 写 `turn_commands`，runner 在两轮之间把指引作为
   `user` 行加入本轮并发 `steer` 事件；最后边界之后到达的指引进邮箱作为下一轮（框架 0.1.5）
-- [ ] **F6 权限/审批策略引擎**：工具声明 permission/destructive；“删除永远要人批”“同参数 once/session”；
-  “先授权再建资源”（如 `request_dataset_access`）走同一暂停通道——这是通用能力，放框架
+- [x] **F6 权限/审批策略引擎**：`ToolSpec.always_ask` + `policy.PolicyEngine`；`mutating` 在 auto 关闭时确认，
+  `always_ask`（删除/覆盖/资源授权）永远确认且不接受 session 授权（框架 0.1.6）
 - [ ] **F7 限制语义 0=不限 + usage meter**：跟随模型窗口与用户设置；真实占用可读——框架
 - [ ] **F12 run/step 记录 + 崩溃恢复幂等**：`agent_runs`/`agent_steps`；同一 `tool_use` 不重复执行——框架
 - [ ] **F13 注册收口**：`host.tools()` 初始化即注册；id 冲突按名拒绝；技能白名单过滤——框架

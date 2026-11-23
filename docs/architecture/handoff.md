@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`4c506e0 功能更新：steer 安全边界插入指引`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`57dd1c9 功能更新：审批策略引擎与 always_ask 工具`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -56,6 +56,7 @@
 | `e99a6d8` | 框架 0.1.3（ADR-003 第二片）：后台 `TurnRunner` + `subscribe(after)`；关流不停轮；`EVENT_PROTOCOL=1`；`turn_commands` 持久 stop；`bind_account`；`/turns/<id>` 与 `/turns/<id>/events` 重连路由 |
 | `30d1d5d` | 框架 0.1.4（ADR-003 第三片）：`turn_inbox` 邮箱——待答期间的新消息排队、`notice(turn.queued)`、带 `mailbox_id` 再发才执行 |
 | `4c506e0` | 框架 0.1.5（ADR-003 第四片）：`steer` 安全边界插入指引；最后边界之后的指引进邮箱；`/steer` 路由 |
+| `57dd1c9` | 框架 0.1.6（F6）：`policy.PolicyEngine` + `ToolSpec.always_ask`；删除/覆盖/资源授权永远人批且不接受 session 授权 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
@@ -398,6 +399,15 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第五片：审批策略（2026-11-23，框架 0.1.6）
+
+- `agent_workspace/policy.py` 的 `PolicyEngine.decide(spec, auto=)` 是唯一判断点：读工具不询问；`mutating`
+  在 auto-approve 关闭时询问；`always_ask`（删除/覆盖/资源授权）**永远**询问，`session_allowed=False`。
+- `ToolSpec.always_ask` 由 host 在注册工具时声明；审批卡只提供“允许一次/拒绝”，`Approvals.consume(once_only=True)`
+  拒绝 session 授权，`settle` 对未提供的 scope 不授予任何东西。
+- 测试覆盖三类决策、伪造 session 答案、同一参数的一次授权、以及“下一轮再问一次”。
+- 下一步：F12（`agent_runs`/`agent_steps` + 幂等恢复）→ F13（注册收口）→ F8…。
+
 ## P4.0 第四片：steer（2026-11-23，框架 0.1.5）
 
 - `steer(conversation_id, text)` 写 `turn_commands`；runner 在**两轮之间**把指引作为一条 `user` 行加入本轮
@@ -499,9 +509,9 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第五片**：F6 权限/审批策略引擎（工具声明 permission/destructive；“删除永远要人批”“先授权再建资源”）；
-   随后 F12（run/step 幂等）→ F13（注册收口）→ F8/F9/F10/F11/F14/F15/F16/F18/F3。**P4 接入只保留 host 领域翻译**：
-   ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。R10 Asset 物化可以并行。
+8. **下一步：P4.0 第六片**：F12（`agent_runs`/`agent_steps` + 崩溃恢复幂等）→ F13（注册收口）→ F8/F9/F10/F11/F14/F15/F16/F18/F3。
+   **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
+   R10 Asset 物化可以并行。
 
 
 ## H11 的关键落点（避免重复调查）
