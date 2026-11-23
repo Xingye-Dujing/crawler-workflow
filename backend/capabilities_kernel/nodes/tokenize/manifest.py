@@ -78,6 +78,11 @@ MANIFEST = Manifest(
             '分词 turns one text column into a word table: word/frequency pairs, bare words, or a single '
             'space-joined line. The upstream rows are the corpus; the node never reads a file itself.'
         ),
+        when_not_to_use=(
+            'Cleaning or one text operation belongs on node.process.',
+            'Corpus statistics belong on node.analysis.',
+        ),
+        prerequisites=('An upstream table with a text column.',),
         steps=(
             'Wire a node that produces text rows into 分词.',
             'Pick the text column and an output mode.',
@@ -89,12 +94,23 @@ MANIFEST = Manifest(
                 'params': {'text_column': '正文', 'top_n': '120', 'output_mode': 'word_freq'},
             },
         ),
+        template={
+            'type': 'tokenize',
+            'params': {'text_column': '正文', 'top_n': '120', 'output_mode': 'word_freq'},
+        },
         failures=(
             'No text column configured: refuses before the run with engine.tokenize_no_column.',
             'The column is absent from the upstream table: the executor names the column and the columns it saw.',
             'No upstream rows: the executor refuses instead of settling an empty table DONE.',
         ),
+        acceptance=(
+            'The word table has word/frequency columns and no blank words.',
+            'An absent text column is named with the columns seen.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_tokenize_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/tokenize.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/tokenize.md',
+        skill='docs/capabilities/skills/nodes/tokenize.md',
+    ),
 )

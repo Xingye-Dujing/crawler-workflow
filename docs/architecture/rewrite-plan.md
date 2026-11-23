@@ -84,7 +84,7 @@
 - [x] 删除 `canvas.js` 的节点默认参数/类型表；表单分派由清单 `ui` 选择
 - [x] 删除前端验证 if 链；接 `/api/workflow/validate`
 - [x] `/api/node-types` 返回完整清单；`node-types.js` 只做冷启动 fallback
-- [ ] 每节点技能骨架 + 示例 + 工具生成
+- [x] 每节点技能骨架 + 示例 + 工具生成（清单第七段；`knowledge.py` 投影 L1/L2，生成 `docs/capabilities/skills/`）
 - [ ] 每节点声明 `emit`/`read` 契约与 `schema_hash`
 - [ ] 每节点输出物化为 Asset
 - [ ] 完整性门禁全绿
@@ -204,9 +204,9 @@
 
 ## P6 技能/工具/小模型（2-3 周）
 
-- [ ] L1/L2 分类 + 目录生成
-- [ ] 每节点/算子/图表/平台技能七段内容
-- [ ] catalog/search/load/read + @
+- [x] L1/L2 分类 + 目录生成（16 个节点技能：清单第七段七段内容；`skill_catalog`/`skill_load`；生成页面有 freshness 门禁）
+- [ ] 每节点/算子/图表/平台技能七段内容（节点已完成；算子/图表/平台随 P7 清单化）
+- [ ] catalog/search/load/read + @（catalog/search/load 已完成；`@技能` 强制加载待做）
 - [ ] 配方 FSM + 工具遮罩 + 证据勾选
 - [ ] 严格/普通模式
 - [ ] 能力优先策略 + Python 缺口审批 + 审计

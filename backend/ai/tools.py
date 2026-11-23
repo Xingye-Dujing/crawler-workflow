@@ -102,6 +102,27 @@ def tool_ai_coverage(_args: dict, _ctx: dict) -> dict:
     return coverage.audit()
 
 
+def tool_skill_catalog(args: dict, _ctx: dict) -> dict:
+    """The level-1 capability-skill catalogue: words to select on, not bodies."""
+    from ai import knowledge
+
+    return knowledge.catalog(
+        kind=str(args.get('kind') or ''),
+        query=str(args.get('query') or ''),
+        limit=_int_arg(args.get('limit'), 30, 1, 200),
+    )
+
+
+def tool_skill_load(args: dict, _ctx: dict) -> dict:
+    """The level-2 body of one capability skill, with its parameter table rendered fresh."""
+    from ai import knowledge
+
+    skill = str(args.get('skill_id') or '').strip()
+    if not skill:
+        raise AIError('ai.skillUnknown', kind='bad_request', skill='')
+    return knowledge.load(skill)
+
+
 def tool_catbus_status(_args: dict, _ctx: dict) -> dict:
     """Report the CatBus toolchain the app itself would use — one detector, two run modes.
 
@@ -791,6 +812,8 @@ UNIVERSAL_TOOLS = frozenset(
         'export_list',
         'request_dataset_access',
         'rerun_node',
+        'skill_catalog',
+        'skill_load',
         'workflow_delete',
         'workflow_export',
         'workflow_list',
@@ -1280,6 +1303,33 @@ TOOLS = {
             'operators, chart types and tools, each with the entry that reaches it and any gap.',
             {'type': 'object', 'properties': {}},
             handler=tool_ai_coverage,
+        ),
+        ToolSpec(
+            'skill_catalog',
+            'List the capability skills (level 1: id, category, one-sentence summary, when to use and when '
+            'not to). Pass query to search and kind to narrow (node/operator/chart/platform/tool/skill). '
+            'Load one body with skill_load before acting on a capability you are not sure about.',
+            {
+                'type': 'object',
+                'properties': {
+                    'kind': {'type': 'string'},
+                    'query': {'type': 'string'},
+                    'limit': {'type': 'integer'},
+                },
+            },
+            handler=tool_skill_catalog,
+        ),
+        ToolSpec(
+            'skill_load',
+            'Read one capability skill in full (level 2): prerequisites, ordered steps, examples, a template '
+            'JSON, the parameters re-read from the live manifest, named refusals and acceptance. Refuses an '
+            'unknown id by name.',
+            {
+                'type': 'object',
+                'properties': {'skill_id': {'type': 'string'}},
+                'required': ['skill_id'],
+            },
+            handler=tool_skill_load,
         ),
         ToolSpec(
             'catbus_status',

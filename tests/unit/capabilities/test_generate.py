@@ -1,9 +1,9 @@
 """Generated artifacts are derived, deterministic and current.
 
-Five files are rendered from the manifests. The failures this file guards are the quiet ones: an
-artifact left behind after a parameter rename looks authoritative, a renderer that sorts dict keys
-differently on another run makes every freshness check red, and a form catalogue that no longer
-parses breaks the P2 form before anyone opens the page.
+Six fixed artifacts plus one page per capability skill are rendered from the manifests. The failures
+this file guards are the quiet ones: an artifact left behind after a parameter rename looks
+authoritative, a renderer that sorts dict keys differently on another run makes every freshness check
+red, and a form catalogue that no longer parses breaks the P2 form before anyone opens the page.
 """
 
 import json
@@ -21,11 +21,10 @@ def _manifest():
 
 
 class TestTheRenderedSet:
-    def test_the_six_surfaces_exist(self):
+    def test_the_fixed_surfaces_and_the_skill_pages_exist(self):
         rendered = generate.render()
-        assert len(rendered) == 6
         names = {path.relative_to(generate.ROOT).as_posix() for path in rendered}
-        assert names == {
+        fixed = {
             'backend/capabilities_kernel/generated/catalog.json',
             'backend/capabilities_kernel/generated/openapi.json',
             'backend/capabilities_kernel/generated/ai_tools.json',
@@ -33,6 +32,10 @@ class TestTheRenderedSet:
             'backend/static/js/node-types-fallback.js',
             'docs/capabilities/index.md',
         }
+        assert fixed <= names
+        extra = names - fixed
+        assert extra, 'no capability skill page was rendered'
+        assert all(path.startswith('docs/capabilities/skills/') for path in extra), sorted(extra)
 
     def test_rendering_twice_is_byte_identical(self):
         first = {str(path): text for path, text in generate.render().items()}
@@ -88,6 +91,14 @@ class TestTheArtifactsSayTheSameThing:
         text = generate.render()[generate.ROOT / 'docs/capabilities/index.md']
         assert '| tokenize |' in text
         assert '(../capabilities/nodes/tokenize.md)' in text
+        assert '[技能](skills/nodes/tokenize.md)' in text
+
+    def test_the_skill_page_is_the_body_the_tool_renders(self):
+        from capabilities_kernel import knowledge
+
+        manifest = registry.manifest_for_node('tokenize')
+        page = generate.render()[generate.ROOT / 'docs/capabilities/skills/nodes/tokenize.md']
+        assert page == knowledge.render(manifest)
 
 
 class TestTheFrontendCatalogue:

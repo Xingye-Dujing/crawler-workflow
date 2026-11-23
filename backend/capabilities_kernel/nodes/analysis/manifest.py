@@ -54,6 +54,11 @@ MANIFEST = Manifest(
             'statistics, text analysis (keyword/topic/LDA) and chart-ready aggregates. Each operator declares '
             'the columns it reads and the columns it emits.'
         ),
+        when_not_to_use=('One text operation belongs on node.process; a chart belongs on node.visualize.',),
+        prerequisites=(
+            'An upstream table.',
+            'Every column a step reads exists upstream; the step refuses by name otherwise.',
+        ),
         steps=(
             'Add steps in order; each step is {op, ...params}.',
             'A step that reads a column refuses by name when the column is absent upstream.',
@@ -65,12 +70,23 @@ MANIFEST = Manifest(
                 'params': {'operation': 'drop_null', 'steps': '[{"op": "drop_null", "columns": "正文"}]'},
             },
         ),
+        template={
+            'type': 'analysis',
+            'params': {'operation': 'drop_null', 'steps': '[{"op": "drop_null", "columns": "正文"}]'},
+        },
         failures=(
             'No steps and no operation: engine.analysis_no_op.',
             'An unknown operator/parameter: data_analysis.validate_step names it with the allowed values.',
             'A missing input column: the step refuses by name rather than guessing.',
         ),
+        acceptance=(
+            'The output carries the last step’s columns.',
+            'A zero-row result from non-empty input is reported as engine.empty_output.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_analysis_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/analysis.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/analysis.md',
+        skill='docs/capabilities/skills/nodes/analysis.md',
+    ),
 )

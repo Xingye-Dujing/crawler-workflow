@@ -40,6 +40,14 @@ MANIFEST = Manifest(
             'an author page, a note/article list, or one link list). The platform matrix decides the '
             'fields, the required values and whether the mode needs a saved login.'
         ),
+        when_not_to_use=(
+            'A local file corpus belongs on node.upload; comments under known links belong on node.comment.',
+        ),
+        prerequisites=(
+            'A platform and a mode this build offers; the matrix answers both.',
+            'A saved login for a mode whose session is required.',
+            'Reachable network for the platform.',
+        ),
         steps=(
             'Pick a platform, then an engine (Selenium or CatBus) and a mode; the form shows that cell’s fields.',
             'Fill the mode’s required fields (a keyword, a board, a link list or an author link).',
@@ -49,21 +57,32 @@ MANIFEST = Manifest(
             {
                 'type': 'source',
                 'params': {
-                    'platform': 'weibo',
-                    'mode': 'search',
+                    'platform': 'zhihu',
+                    'mode': 'posts',
                     'keyword': '人工智能',
                     'target_count': 100,
                     'account': 'default',
                 },
             },
         ),
+        template={
+            'type': 'source',
+            'params': {'platform': 'zhihu', 'mode': 'posts', 'keyword': 'AI', 'target_count': 100},
+        },
         failures=(
             'No platform: engine.source_no_platform.',
             'A platform/mode this matrix does not offer: engine.source_unknown_platform / _unknown_mode.',
             'A missing required field: engine.source_missing; a value off the offered list: engine.source_bad_option.',
             'A session-required mode whose account holds no login: the preflight keys.',
         ),
+        acceptance=(
+            'The run stores rows with the columns the mode declares.',
+            'A login wall or risk page is named in the console, never settled as an empty table.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_source_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/source.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/source.md',
+        skill='docs/capabilities/skills/nodes/source.md',
+    ),
 )

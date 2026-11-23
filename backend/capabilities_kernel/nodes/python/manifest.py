@@ -41,6 +41,15 @@ MANIFEST = Manifest(
             'Python 节点 runs one saved script from the account’s script library over the upstream rows. '
             'The script reads CIXI_INPUT and writes CIXI_OUTPUT (JSON Lines); the node stores its id, not code.'
         ),
+        when_not_to_use=(
+            'When a built-in operation exists, use node.process first (capability-first policy).',
+            'Cloud mode has no Python and refuses this node by name.',
+        ),
+        prerequisites=(
+            'A script saved in the account script library.',
+            'Local or desktop mode with ai_allow_python on.',
+            'Upstream rows in the CIXI_INPUT JSONL contract.',
+        ),
         steps=(
             'Save or pick a script in the Python panel.',
             'Wire the rows in and set args (a JSON object the script reads from CIXI_ARGS).',
@@ -57,12 +66,23 @@ MANIFEST = Manifest(
                 },
             },
         ),
+        template={
+            'type': 'python',
+            'params': {'script_id': 'clean_links', 'args': '{}', 'timeout': 120},
+        },
         failures=(
             'Cloud mode: refused by name (ai.pythonCloud).',
             'No/unknown script: refused with ai.pythonUnknown.',
             'Bad args JSON: ai.pythonArgs; bad timeout/max_rows: ai.pythonBadNumber.',
         ),
+        acceptance=(
+            'The node returns rows written to CIXI_OUTPUT and a zero exit code.',
+            'A failed script names its stderr instead of settling an empty table.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_python_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/python.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/python.md',
+        skill='docs/capabilities/skills/nodes/python.md',
+    ),
 )

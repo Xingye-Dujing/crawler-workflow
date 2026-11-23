@@ -18,6 +18,8 @@ from capabilities_kernel import generate, registry
 from capabilities_kernel.manifest import KINDS
 from frontend_catalogue import catalog_keys
 
+from engine.workflow import WorkflowEngine
+
 pytestmark = pytest.mark.unit
 
 REPO = Path(__file__).resolve().parents[3]
@@ -70,6 +72,8 @@ class TestAManifestIsWhole:
     def test_the_documented_page_and_contract_tests_exist(self, manifest):
         if manifest.docs.page:
             assert (REPO / manifest.docs.page).is_file(), manifest.docs.page
+        if manifest.docs.skill:
+            assert (REPO / manifest.docs.skill).is_file(), manifest.docs.skill
         for relative in manifest.tests.contracts:
             assert (REPO / relative).is_file(), relative
 
@@ -153,12 +157,43 @@ class TestTheGeneratedArtifactsAreCurrent:
         """A rename that skips the generator must fail here, not in the P2 form."""
         assert generate.check() == [], 'run `python tools/gen_capabilities.py` and commit the result'
 
-    def test_the_generator_renderers_and_the_outputs_table_agree(self):
-        assert {path.name for path in generate.render()} == {
-            'catalog.json',
-            'openapi.json',
-            'ai_tools.json',
-            'capability-schema.json',
-            'node-types-fallback.js',
-            'index.md',
+    def test_the_generated_artifact_set_is_the_declared_set_plus_skill_pages(self):
+        """Six fixed artifacts, plus one page per capability skill under their own tree.
+
+        The skill pages are derived from the same manifest section the ``skill_load`` tool renders,
+        so they are generated rather than hand-kept; every extra path must live under that tree, so a
+        typo cannot quietly add a document somewhere nobody reviews.
+        """
+        rendered = {path.relative_to(REPO).as_posix() for path in generate.render()}
+        fixed = {
+            'backend/capabilities_kernel/generated/catalog.json',
+            'backend/capabilities_kernel/generated/openapi.json',
+            'backend/capabilities_kernel/generated/ai_tools.json',
+            'backend/capabilities_kernel/generated/capability-schema.json',
+            'backend/static/js/node-types-fallback.js',
+            'docs/capabilities/index.md',
         }
+        assert fixed <= rendered
+        extra = rendered - fixed
+        assert extra, 'no capability skill page was rendered'
+        assert all(path.startswith('docs/capabilities/skills/') for path in extra), sorted(extra)
+
+
+class TestTheTrainingTemplateIsAccepted:
+    """A skill's template is offered to the model as something to send back, so the engine must
+    accept it: a template that names an illegal option teaches the model a call the server refuses.
+    """
+
+    @pytest.mark.parametrize('manifest', MANIFESTS, ids=IDS)
+    def test_the_template_produces_no_parameter_or_matrix_refusal(self, manifest):
+        template = dict(manifest.ai.template)
+        template.setdefault('id', 'a')
+        codes = [entry for entry in WorkflowEngine({'nodes': [template], 'connections': []}).validate_detailed()]
+        wrong = [
+            entry['code']
+            for entry in codes
+            if entry.get('param')
+            or any(word in entry['code'] for word in ('unknown', 'bad', 'missing'))
+            or entry['code'] == 'engine.source'
+        ]
+        assert wrong == [], f'{manifest.identity.id} template is refused: {wrong}'

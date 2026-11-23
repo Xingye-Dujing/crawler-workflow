@@ -57,6 +57,15 @@ MANIFEST = Manifest(
             'same comment table a 数据源 in comments mode produces (评论内容/评论时间/点赞数/文章URL …). '
             'The cursor records only the leading links it PROVED complete, so 继续 replays from the first hole.'
         ),
+        when_not_to_use=(
+            'A platform mode that already emits comments belongs on node.source.',
+            'A post table that only needs a chart is not a comment crawl.',
+        ),
+        prerequisites=(
+            'One article link per line, or a title where the platform matrix declares names.',
+            'A saved login for each platform the links name; the wall is per account.',
+            'A comment budget when the crawl should stop early.',
+        ),
         steps=(
             'Paste article links (one per line); a 红果 title is accepted where the matrix declares names.',
             'Pick the login account — the comment wall is a per-account rate limit, which is why accounts exist.',
@@ -76,13 +85,29 @@ MANIFEST = Manifest(
                 },
             },
         ),
+        template={
+            'type': 'comment',
+            'params': {
+                'urls': 'https://www.zhihu.com/question/1/answer/2',
+                'comment_limit': 0,
+                'part_size': 50,
+                'format': 'csv',
+            },
+        },
         failures=(
             'No links: engine.comment_no_urls.',
             'The account holds no login for a platform a link names: engine.source_no_cookie_account.',
             'A @pool account with no saved login / all cooling: engine.source_pool_empty / _cooling.',
             'A walled or short link settles PARTIAL and keeps its cursor hole, so 继续 re-walks it.',
         ),
+        acceptance=(
+            'The node stores the comment table with content/time/likes/article URL.',
+            'Every blocked link stays a cursor hole and is reported as PARTIAL.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_comment_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/comment.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/comment.md',
+        skill='docs/capabilities/skills/nodes/comment.md',
+    ),
 )

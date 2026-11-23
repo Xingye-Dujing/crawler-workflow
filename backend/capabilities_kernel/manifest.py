@@ -152,15 +152,31 @@ class Ui:
 
 @dataclass(frozen=True)
 class Ai:
-    """Section 7: what the AI tools/skills should know. Generated into skills in P6."""
+    """Section 7: the capability skill, authored once and read through progressive disclosure.
 
+    The skill contract has seven sections and every one of them is declared here, never re-typed
+    in a document: the words a small model selects on (summary/when_to_use/when_not_to_use), the
+    facts it must check first (prerequisites), the ordered actions (steps), the two example kinds
+    (a call and a template), the named refusals, and how success is proved. The L1 catalogue is a
+    projection of this section plus ``identity``; the L2 body is rendered from it on demand, so a
+    parameter table can never go stale.
+    """
+
+    #: The tool that reaches this capability, when one tool owns it (a node is reached generically).
     tool: str = ''
     summary: str = ''
+    #: Negative triggers, each naming the nearest confusable capability so a router can choose.
+    when_not_to_use: tuple[str, ...] = ()
+    prerequisites: tuple[str, ...] = ()
     steps: tuple[str, ...] = ()
     #: Template JSON the AI can send back. Each entry must survive ``json.dumps`` — the gate parses
     #: it so a hand-written example cannot become a tool call the server refuses.
     examples: tuple[dict, ...] = ()
+    #: One node/artifact fragment a caller can paste and fill; checked against the declared params.
+    template: dict = field(default_factory=dict)
     failures: tuple[str, ...] = ()
+    #: How success is proved from data or state (validate green, run id, row count, file exists).
+    acceptance: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -332,4 +348,45 @@ class Manifest:
                 found.append('tests.contracts: a node needs at least one contract test')
             if not str(self.docs.page or '').strip():
                 found.append('docs.page: a node needs a documentation page')
+            if not str(self.docs.skill or '').strip():
+                found.append('docs.skill: a node needs a generated skill page path')
+            elif not self.docs.skill.startswith('docs/capabilities/skills/'):
+                found.append(f'docs.skill: {self.docs.skill!r} is not under docs/capabilities/skills/')
+            found.extend(self._skill_problems())
+        return found
+
+    def _skill_problems(self) -> list[str]:
+        """The seven-section skill, checked where it is declared.
+
+        A node without a skill is a capability the assistant cannot be taught to use, which is the
+        gap P6 closes. The checks stay structural: what needs the rest of the app (a tool exists, a
+        template validates in the engine) belongs to the completeness gate.
+        """
+        found: list[str] = []
+        if not str(self.ai.summary or '').strip():
+            found.append('ai.summary: empty')
+        for field_name in ('when_not_to_use', 'prerequisites', 'steps', 'examples', 'failures', 'acceptance'):
+            if not getattr(self.ai, field_name):
+                found.append(f'ai.{field_name}: a node skill needs this section')
+        if not self.ai.template:
+            found.append('ai.template: a node skill needs a template')
+            return found
+        template = self.ai.template
+        if not isinstance(template, dict):
+            found.append(f'ai.template: {type(template).__name__} is not an object')
+            return found
+        if template.get('type') != self.identity.id:
+            found.append(f'ai.template.type: {template.get("type")!r} is not {self.identity.id!r}')
+        params = template.get('params') or {}
+        if not isinstance(params, dict):
+            found.append(f'ai.template.params: {type(params).__name__} is not an object')
+            return found
+        for name, value in params.items():
+            spec = self.param(name)
+            if spec is not None and spec.enum and value not in ('', None) and value not in spec.enum:
+                found.append(f'ai.template.params.{name}: {value!r} is not in its enum')
+        try:
+            json.dumps(template, ensure_ascii=False)
+        except (TypeError, ValueError):
+            found.append('ai.template: not JSON-serialisable')
         return found

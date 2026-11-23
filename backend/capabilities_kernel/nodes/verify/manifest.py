@@ -48,6 +48,11 @@ MANIFEST = Manifest(
             '采集校验 reads two tables: the promised list and the crawled result. It matches keys, compares the '
             'expected count (评论数) with the actual rows, and emits 采集状态/期望条数/实际条数/缺失条数/完成度.'
         ),
+        when_not_to_use=('For an exact count over one table use dataset_query; this node compares two tables.',),
+        prerequisites=(
+            'Two tables: the promised list first and the crawl result second (or swap_tables).',
+            'Key columns that exist in both tables.',
+        ),
         steps=(
             'Wire the promised list in first and the crawl result in second (or set swap_tables).',
             'Name the list key, the result key and the expected-count column.',
@@ -64,12 +69,28 @@ MANIFEST = Manifest(
                 },
             },
         ),
+        template={
+            'type': 'verify',
+            'params': {
+                'input_key_column': '链接',
+                'result_key_column': '文章URL',
+                'expected_count_column': '期望条数',
+                'output_mode': 'gaps',
+            },
+        },
         failures=(
             'Not exactly two data parents: engine.verify_two_inputs.',
             'Missing list/result key: engine.verify_need_list_col/result_col.',
             'A key column absent from its table: the executor names the column.',
         ),
+        acceptance=(
+            'The output counts missing and short items per key.',
+            'Both key columns are named when absent.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_verify_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/verify.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/verify.md',
+        skill='docs/capabilities/skills/nodes/verify.md',
+    ),
 )

@@ -26,10 +26,16 @@ to turn a missing dependency into a failure. Never run `live_*` unattended; ask 
 
 - **A** — docs/comments/anchor: `tests/unit/gates/test_doc_paths.py` (+ `ruff check` for a `.py`).
 - **B** — a move or test-seam retarget with unchanged behavior: the moved module's cases, contract
-  tests naming it, ruff/format on touched files. Full fast + both pylint tiers once per ~4-knife batch.
-- **C** — real behavior: full fast always; device when UI/engine/LLM/crawling changed; pylint at
-  batch end.
-- **Closure** — any "done" claim: every tier once, nothing deselected/skipped, no file left to edit.
+  tests naming it, ruff/format on touched files.
+- **C** — one domain's behavior change: that domain's own suite plus the contract/gate tests that
+  name it; device only when UI/engine/LLM/crawling changed.
+- **One full fast run per batch, not per edit**: run it when a ~4-knife batch closes, when the change
+  crosses several domains, or at the closure gate. It costs ~14 minutes of the user's time. Both
+  pylint tiers ride with that batch run.
+- **Do not test the world twice.** A green file is not re-run because a doc line moved. "不用那么严格"
+  is about scope, not about the touched domain — prove that one, and let CI be the backstop.
+- **Closure** — a "done" claim: one full fast run + the tiers the change touched, nothing
+  deselected/skipped, no file left to edit.
 
 CI (`.github/workflows/ci.yml`) runs fast + ruff + two pylint tiers on Windows, Linux and macOS on
 every push; it is the backstop, not a substitute for the lane.

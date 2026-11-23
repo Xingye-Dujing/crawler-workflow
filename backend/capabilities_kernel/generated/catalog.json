@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "8a9b336329eab3f9e2374df9c4fd18597904410b288f1af1c37ff1149329105c",
+      "digest": "96a1b3525068cc15c8a4b176a6d1dd019425b5c742ca7bcb539e95c38a08659b",
       "manifest": {
         "identity": {
           "id": "name",
@@ -92,6 +92,12 @@
         "ai": {
           "tool": "",
           "summary": "工作流命名 is pure metadata: it names the run and must feed a real node.",
+          "when_not_to_use": [
+            "Not for naming the exported file: that is node.output."
+          ],
+          "prerequisites": [
+            "A canvas that holds at least one data-producing node downstream."
+          ],
           "steps": [
             "Put 工作流命名 at the head of the canvas (no incoming wire).",
             "Type the run name; a blank name is refused before the run and in history grouping.",
@@ -106,10 +112,21 @@
               }
             }
           ],
+          "template": {
+            "type": "name",
+            "params": {
+              "workflow_name": "example run",
+              "layout_order": ""
+            }
+          },
           "failures": [
             "Blank workflow_name: refused with engine.name_no_label.",
             "An incoming wire: refused with engine.name_not_head.",
             "No outgoing wire: refused with engine.name_no_downstream."
+          ],
+          "acceptance": [
+            "Validate reports no error for this node.",
+            "The history panel groups the run under the typed name."
           ]
         },
         "tests": {
@@ -119,7 +136,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/name.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/name.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -128,7 +145,7 @@
     {
       "kind": "node",
       "id": "source",
-      "digest": "730c2fd582d30da555703a87581146813a1a0e64328ab08657fa3e5fc9a16645",
+      "digest": "5ba1b35907fb71d5e7874275e330bb1b55b0099a4144aa401ed6293ebc0bb846",
       "manifest": {
         "identity": {
           "id": "source",
@@ -166,6 +183,14 @@
         "ai": {
           "tool": "",
           "summary": "数据源 crawls one platform with one mode and emits that mode’s table (a search, a board, an author page, a note/article list, or one link list). The platform matrix decides the fields, the required values and whether the mode needs a saved login.",
+          "when_not_to_use": [
+            "A local file corpus belongs on node.upload; comments under known links belong on node.comment."
+          ],
+          "prerequisites": [
+            "A platform and a mode this build offers; the matrix answers both.",
+            "A saved login for a mode whose session is required.",
+            "Reachable network for the platform."
+          ],
           "steps": [
             "Pick a platform, then an engine (Selenium or CatBus) and a mode; the form shows that cell’s fields.",
             "Fill the mode’s required fields (a keyword, a board, a link list or an author link).",
@@ -175,19 +200,32 @@
             {
               "type": "source",
               "params": {
-                "platform": "weibo",
-                "mode": "search",
+                "platform": "zhihu",
+                "mode": "posts",
                 "keyword": "人工智能",
                 "target_count": 100,
                 "account": "default"
               }
             }
           ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "zhihu",
+              "mode": "posts",
+              "keyword": "AI",
+              "target_count": 100
+            }
+          },
           "failures": [
             "No platform: engine.source_no_platform.",
             "A platform/mode this matrix does not offer: engine.source_unknown_platform / _unknown_mode.",
             "A missing required field: engine.source_missing; a value off the offered list: engine.source_bad_option.",
             "A session-required mode whose account holds no login: the preflight keys."
+          ],
+          "acceptance": [
+            "The run stores rows with the columns the mode declares.",
+            "A login wall or risk page is named in the console, never settled as an empty table."
           ]
         },
         "tests": {
@@ -197,7 +235,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/source.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/source.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -206,7 +244,7 @@
     {
       "kind": "node",
       "id": "upload",
-      "digest": "f442fa6eb986157defbe28dd298c0d6511964f74cc34c175a7ef4b72f4196dda",
+      "digest": "5afa5214398ec81b767fb6282ff04b52518d490df088bd82df7997fc90aa8a00",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -293,6 +331,12 @@
         "ai": {
           "tool": "",
           "summary": "文件上传 turns one stored dataset into the same row table a crawl produces. Downstream nodes never know the difference; the dataset id is the binding.",
+          "when_not_to_use": [
+            "A crawl belongs on node.source; a file outside the dataset store belongs on workspace_import first."
+          ],
+          "prerequisites": [
+            "A stored dataset id (upload, paste or import in the data panel)."
+          ],
           "steps": [
             "Upload or paste a file in the data panel and note its dataset id.",
             "Create 文件上传 and pick the dataset.",
@@ -308,9 +352,20 @@
               }
             }
           ],
+          "template": {
+            "type": "upload",
+            "params": {
+              "dataset_id": "ds_example",
+              "dataset_name": "comments.csv"
+            }
+          },
           "failures": [
             "No dataset_id: refused with engine.upload_no_file before the run.",
             "The dataset was deleted and no name/row-count replacement exists: the executor refuses instead of returning []."
+          ],
+          "acceptance": [
+            "The node emits as many rows as the dataset holds.",
+            "A missing dataset settles with a named refusal, not an empty table."
           ]
         },
         "tests": {
@@ -320,7 +375,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/upload.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/upload.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -329,7 +384,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "8b31d1809719e8b48d1798e73f80b3beaae08d7570fa079577f2b69c7d0a6ace",
+      "digest": "c7bb4e75b181ae30918625de5db0ad08dc97c5b967f852bfe90f9ad2193528c5",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -408,6 +463,14 @@
         "ai": {
           "tool": "",
           "summary": "断点续采 adopts rows an earlier run already stored. Blank ids mean “newest unfinished run of this workflow shape, fullest node”; a limit truncates the adopted table.",
+          "when_not_to_use": [
+            "Not a repair: a source that can run again is cheaper than adopting an older result.",
+            "Not for copying one node between canvases."
+          ],
+          "prerequisites": [
+            "An earlier run of this workflow shape that stored rows.",
+            "Optionally the run id and node id to adopt; blank means the automatic choice."
+          ],
           "steps": [
             "Pick a resumable run and node, or leave both blank for the automatic choice.",
             "Optionally set a row limit.",
@@ -423,9 +486,21 @@
               }
             }
           ],
+          "template": {
+            "type": "resume",
+            "params": {
+              "resume_run_id": "",
+              "resume_node_id": "",
+              "resume_limit": 0
+            }
+          },
           "failures": [
             "No resumable run: the executor logs resume.no_run and returns no rows.",
             "The picked node holds nothing and no node has rows: resume.empty."
+          ],
+          "acceptance": [
+            "The node emits the adopted rows and the run shows them as this node's output.",
+            "A run without stored rows reports resume.empty instead of zero rows."
           ]
         },
         "tests": {
@@ -435,7 +510,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/resume.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/resume.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -444,7 +519,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "f03a3798872df25f816121f0d3fd02fdb6b5280f373d7d5b82d5aee79e634e02",
+      "digest": "ccde31b5a4728dba1480c62cb6ff51b3d4d4d612783362d2d9d128f44147c104",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -592,6 +667,15 @@
         "ai": {
           "tool": "",
           "summary": "评论采集 walks the comments of the article links on one form, batch by batch, and emits the same comment table a 数据源 in comments mode produces (评论内容/评论时间/点赞数/文章URL …). The cursor records only the leading links it PROVED complete, so 继续 replays from the first hole.",
+          "when_not_to_use": [
+            "A platform mode that already emits comments belongs on node.source.",
+            "A post table that only needs a chart is not a comment crawl."
+          ],
+          "prerequisites": [
+            "One article link per line, or a title where the platform matrix declares names.",
+            "A saved login for each platform the links name; the wall is per account.",
+            "A comment budget when the crawl should stop early."
+          ],
           "steps": [
             "Paste article links (one per line); a 红果 title is accepted where the matrix declares names.",
             "Pick the login account — the comment wall is a per-account rate limit, which is why accounts exist.",
@@ -611,11 +695,24 @@
               }
             }
           ],
+          "template": {
+            "type": "comment",
+            "params": {
+              "urls": "https://www.zhihu.com/question/1/answer/2",
+              "comment_limit": 0,
+              "part_size": 50,
+              "format": "csv"
+            }
+          },
           "failures": [
             "No links: engine.comment_no_urls.",
             "The account holds no login for a platform a link names: engine.source_no_cookie_account.",
             "A @pool account with no saved login / all cooling: engine.source_pool_empty / _cooling.",
             "A walled or short link settles PARTIAL and keeps its cursor hole, so 继续 re-walks it."
+          ],
+          "acceptance": [
+            "The node stores the comment table with content/time/likes/article URL.",
+            "Every blocked link stays a cursor hole and is reported as PARTIAL."
           ]
         },
         "tests": {
@@ -625,7 +722,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/comment.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/comment.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -634,7 +731,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "dd7cc96af8ec15d66e68275f60cd4a7ed7dae4bf1a289e90f3879732fea6332c",
+      "digest": "fc2e6f89c41e2ac41c9eee8e10fdc2041b7747655077cac417b500e9f1e600f4",
       "manifest": {
         "identity": {
           "id": "process",
@@ -760,6 +857,14 @@
         "ai": {
           "tool": "",
           "summary": "处理 runs one operation over the upstream text column: cleaning, tokenize, word frequency, TF-IDF/TextRank, sentiment/emotion/tendency, NER, clustering, correlation and the qualitative coding operations. The operation selects both the result columns and the required inputs.",
+          "when_not_to_use": [
+            "A multi-step table pipeline belongs on node.analysis.",
+            "A reusable procedural step belongs on node.python."
+          ],
+          "prerequisites": [
+            "An upstream table with a text column.",
+            "For BERT operations: a model that is installed and runnable; an unrunnable one is refused by name."
+          ],
           "steps": [
             "Pick the operation; the panel shows only that operation’s fields.",
             "Pick the text column (正文 is the usual crawl column).",
@@ -783,10 +888,22 @@
               }
             }
           ],
+          "template": {
+            "type": "process",
+            "params": {
+              "operation": "clean",
+              "text_column": "正文",
+              "format": "csv"
+            }
+          },
           "failures": [
             "No operation: engine.process_no_op.",
             "Tokenize without a text column: engine.tokenize_no_column.",
             "An unknown operation/param value: the executor refuses with analysis.bad_option and the allowed values."
+          ],
+          "acceptance": [
+            "Validate is green and the emitted columns are the operation’s own.",
+            "A missing text column is named with the columns the table has."
           ]
         },
         "tests": {
@@ -796,7 +913,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/process.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/process.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -805,7 +922,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "8c7f74e8e77e8ef9a3904b11fe7582abaed60db4ca5adabe11ede817cb1f14ce",
+      "digest": "d83ae2671245b1e6c031687920111ca56bf3cfe9ede104412459f385af9a2114",
       "manifest": {
         "identity": {
           "id": "python",
@@ -898,6 +1015,15 @@
         "ai": {
           "tool": "",
           "summary": "Python 节点 runs one saved script from the account’s script library over the upstream rows. The script reads CIXI_INPUT and writes CIXI_OUTPUT (JSON Lines); the node stores its id, not code.",
+          "when_not_to_use": [
+            "When a built-in operation exists, use node.process first (capability-first policy).",
+            "Cloud mode has no Python and refuses this node by name."
+          ],
+          "prerequisites": [
+            "A script saved in the account script library.",
+            "Local or desktop mode with ai_allow_python on.",
+            "Upstream rows in the CIXI_INPUT JSONL contract."
+          ],
           "steps": [
             "Save or pick a script in the Python panel.",
             "Wire the rows in and set args (a JSON object the script reads from CIXI_ARGS).",
@@ -914,10 +1040,22 @@
               }
             }
           ],
+          "template": {
+            "type": "python",
+            "params": {
+              "script_id": "clean_links",
+              "args": "{}",
+              "timeout": 120
+            }
+          },
           "failures": [
             "Cloud mode: refused by name (ai.pythonCloud).",
             "No/unknown script: refused with ai.pythonUnknown.",
             "Bad args JSON: ai.pythonArgs; bad timeout/max_rows: ai.pythonBadNumber."
+          ],
+          "acceptance": [
+            "The node returns rows written to CIXI_OUTPUT and a zero exit code.",
+            "A failed script names its stderr instead of settling an empty table."
           ]
         },
         "tests": {
@@ -927,7 +1065,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/python.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/python.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -936,7 +1074,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "773537859aa10895f5196bde8ad1618470e0b798c3bc42e7acd04f96298d401c",
+      "digest": "daff9c02c3189df5f8db9fad29c82eaf8b2f6a039d7a2ee29ad82462e2cbac3a",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -1087,6 +1225,13 @@
         "ai": {
           "tool": "",
           "summary": "数据分析 runs an ordered pipeline of operators over one table: filter/select/rename/join/group, statistics, text analysis (keyword/topic/LDA) and chart-ready aggregates. Each operator declares the columns it reads and the columns it emits.",
+          "when_not_to_use": [
+            "One text operation belongs on node.process; a chart belongs on node.visualize."
+          ],
+          "prerequisites": [
+            "An upstream table.",
+            "Every column a step reads exists upstream; the step refuses by name otherwise."
+          ],
           "steps": [
             "Add steps in order; each step is {op, ...params}.",
             "A step that reads a column refuses by name when the column is absent upstream.",
@@ -1101,10 +1246,21 @@
               }
             }
           ],
+          "template": {
+            "type": "analysis",
+            "params": {
+              "operation": "drop_null",
+              "steps": "[{\"op\": \"drop_null\", \"columns\": \"正文\"}]"
+            }
+          },
           "failures": [
             "No steps and no operation: engine.analysis_no_op.",
             "An unknown operator/parameter: data_analysis.validate_step names it with the allowed values.",
             "A missing input column: the step refuses by name rather than guessing."
+          ],
+          "acceptance": [
+            "The output carries the last step’s columns.",
+            "A zero-row result from non-empty input is reported as engine.empty_output."
           ]
         },
         "tests": {
@@ -1114,7 +1270,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/analysis.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/analysis.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -1123,7 +1279,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "7dcaf4f2f4374b930c820849663ba251f65d20b12dd6fa6e7196dc82aaaf8409",
+      "digest": "e599c14e802732ff0f6534b808d9c92a007dfb67d0cbaf8a372dfc62af583f3c",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1214,6 +1370,13 @@
         "ai": {
           "tool": "",
           "summary": "分词 turns one text column into a word table: word/frequency pairs, bare words, or a single space-joined line. The upstream rows are the corpus; the node never reads a file itself.",
+          "when_not_to_use": [
+            "Cleaning or one text operation belongs on node.process.",
+            "Corpus statistics belong on node.analysis."
+          ],
+          "prerequisites": [
+            "An upstream table with a text column."
+          ],
           "steps": [
             "Wire a node that produces text rows into 分词.",
             "Pick the text column and an output mode.",
@@ -1229,10 +1392,22 @@
               }
             }
           ],
+          "template": {
+            "type": "tokenize",
+            "params": {
+              "text_column": "正文",
+              "top_n": "120",
+              "output_mode": "word_freq"
+            }
+          },
           "failures": [
             "No text column configured: refuses before the run with engine.tokenize_no_column.",
             "The column is absent from the upstream table: the executor names the column and the columns it saw.",
             "No upstream rows: the executor refuses instead of settling an empty table DONE."
+          ],
+          "acceptance": [
+            "The word table has word/frequency columns and no blank words.",
+            "An absent text column is named with the columns seen."
           ]
         },
         "tests": {
@@ -1242,7 +1417,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/tokenize.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/tokenize.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -1251,7 +1426,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "569c5954fe3502cee8c38d4f00c325db8c6486d01d871327c5396cd7d7bf134f",
+      "digest": "6a1f467932ea3ae82eb74036dd403a693d33848b4559cf279242eb2130061b14",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -2133,6 +2308,14 @@
         "ai": {
           "tool": "",
           "summary": "文献计量 builds a bibliometric network from a record table: co-occurrence, co-citation or coupling, with slice/look-back windows, top-N/G-index/threshold selection, LRF/MST/Pathfinder pruning, cluster labels (LLR/LSI/MI/TF-IDF), burst detection, structural variation, and five output shapes (nodes/edges/clusters/bursts/variation/dual_map).",
+          "when_not_to_use": [
+            "Merging several record tables belongs on node.fuse first.",
+            "Drawing the network belongs on node.visualize."
+          ],
+          "prerequisites": [
+            "A record table with the entity column the chosen network reads.",
+            "The year/title/reference columns only when the chosen network reads them."
+          ],
           "steps": [
             "Pick the entity type and the columns the record table really has.",
             "Choose the selection rule and the link measure; pruning is for a graph too dense to read.",
@@ -2154,6 +2337,15 @@
               }
             }
           ],
+          "template": {
+            "type": "biblio",
+            "params": {
+              "entity_type": "keyword",
+              "selection": "top_n",
+              "top_n": 50,
+              "output_shape": "nodes"
+            }
+          },
           "failures": [
             "An option outside its list: biblio.bad_option names the parameter and the allowed values.",
             "A number outside its range: biblio.bad_option (the validator states the range).",
@@ -2162,6 +2354,10 @@
             "Bursts on a coupling network: biblio.coupling_no_burst.",
             "An output shape whose switch is off: biblio.shape_needs_cluster/burst/variation.",
             "A baseline without a project: biblio.watch_needs_project; monitoring a non-entity shape: biblio.watch_needs_entity_table."
+          ],
+          "acceptance": [
+            "The chosen output shape exists and its node/edge/cluster/burst counts are reported.",
+            "An option outside its list is named with the allowed values."
           ]
         },
         "tests": {
@@ -2171,7 +2367,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/biblio.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/biblio.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -2180,7 +2376,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "1b9b1fa7f51d727025499dc79437ee6d944ba55a3d399297333f3248fa73cd50",
+      "digest": "1318897d6762d68b5bb9c74ddc0068825bf558d9cf0bc251bba9b43adefe4457",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -2348,6 +2544,13 @@
         "ai": {
           "tool": "",
           "summary": "采集校验 reads two tables: the promised list and the crawled result. It matches keys, compares the expected count (评论数) with the actual rows, and emits 采集状态/期望条数/实际条数/缺失条数/完成度.",
+          "when_not_to_use": [
+            "For an exact count over one table use dataset_query; this node compares two tables."
+          ],
+          "prerequisites": [
+            "Two tables: the promised list first and the crawl result second (or swap_tables).",
+            "Key columns that exist in both tables."
+          ],
           "steps": [
             "Wire the promised list in first and the crawl result in second (or set swap_tables).",
             "Name the list key, the result key and the expected-count column.",
@@ -2364,10 +2567,23 @@
               }
             }
           ],
+          "template": {
+            "type": "verify",
+            "params": {
+              "input_key_column": "链接",
+              "result_key_column": "文章URL",
+              "expected_count_column": "期望条数",
+              "output_mode": "gaps"
+            }
+          },
           "failures": [
             "Not exactly two data parents: engine.verify_two_inputs.",
             "Missing list/result key: engine.verify_need_list_col/result_col.",
             "A key column absent from its table: the executor names the column."
+          ],
+          "acceptance": [
+            "The output counts missing and short items per key.",
+            "Both key columns are named when absent."
           ]
         },
         "tests": {
@@ -2377,7 +2593,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/verify.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/verify.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -2386,7 +2602,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "8a88cd42884c1c0d9984478488ed52cd51e3da552377325fb9ee0e435174e588",
+      "digest": "02493c3b2b5c931c79f92371c4d0ca86012b4fdfede4124977e27b440bd9f3a2",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2587,6 +2803,13 @@
         "ai": {
           "tool": "",
           "summary": "文献融合 merges several source tables into one canonical record table: each role (entity, year, title, author, affiliation, text, reference, source) declares candidate column names, and the first candidate a source really has answers the role.",
+          "when_not_to_use": [
+            "Comment rows are not bibliographic records; use node.accumulate for repeated appends of one shape."
+          ],
+          "prerequisites": [
+            "One or more source tables.",
+            "At least the entity role must find a column; the other roles may stay empty."
+          ],
           "steps": [
             "Wire every source table in.",
             "Keep or edit the candidate column lists per role; at least the entity role must find a column.",
@@ -2602,10 +2825,22 @@
               }
             }
           ],
+          "template": {
+            "type": "fuse",
+            "params": {
+              "entity_columns": "关键词,标题",
+              "title_columns": "标题",
+              "keep_undated": true
+            }
+          },
           "failures": [
             "No input table: fuse.no_input.",
             "No entity candidate found: fuse.needs_entity names the node.",
             "Differing source columns are normalized per role; a missing role is left empty, never guessed."
+          ],
+          "acceptance": [
+            "One canonical table exists with a source column and the declared roles.",
+            "No entity candidate is refused as fuse.needs_entity."
           ]
         },
         "tests": {
@@ -2615,7 +2850,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/fuse.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/fuse.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -2624,7 +2859,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "fdd2c0506c84c8f0b4e1339d8b94e5d74cff03909bbac9534af63b0bc86cd0bc",
+      "digest": "159c8c6764d6b57b527caf6d28ed312b4a209f7d6ff105afd29ef40509d978da",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2708,6 +2943,14 @@
         "ai": {
           "tool": "",
           "summary": "数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every row; ``identity=columns`` appends only rows whose key columns are not already present.",
+          "when_not_to_use": [
+            "A standalone file belongs on node.output; a one-off result should not grow a lineage."
+          ],
+          "prerequisites": [
+            "Exactly one table producer upstream.",
+            "A lineage name that stays the same across runs.",
+            "Key columns when identity is columns."
+          ],
           "steps": [
             "Name the lineage (the same name across runs accumulates together).",
             "Choose row identity or key columns; key columns are required for the column mode.",
@@ -2723,10 +2966,22 @@
               }
             }
           ],
+          "template": {
+            "type": "accumulate",
+            "params": {
+              "lineage_name": "example-lineage",
+              "identity": "row",
+              "key_columns": ""
+            }
+          },
           "failures": [
             "Blank lineage name: engine.accumulate_no_name.",
             "Unknown identity or column mode without keys: engine.accumulate_bad_identity/no_keys.",
             "Not exactly one parent, or a non-table parent: engine.accumulate_one_parent/bad_parent."
+          ],
+          "acceptance": [
+            "The lineage grows by the rows (or the new keys) of this run.",
+            "A non-table or second parent is refused by name."
           ]
         },
         "tests": {
@@ -2736,7 +2991,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/accumulate.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/accumulate.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -2745,7 +3000,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "35934eeabbdc6c05bf6052108e76d08bcc904c85cf0357e0b8324e0b783b50ed",
+      "digest": "44d61a0290e8b7ee1da53df6d9fb632b38107e3df2dffd9f1f3cb1321bd061af",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -2924,6 +3179,15 @@
         "ai": {
           "tool": "",
           "summary": "可视化 builds one chart from the upstream rows: an ECharts option or a matplotlib image, plus optional LaTeX figure/table. The chart type decides which fields it reads; the fields it requires are refused before a run.",
+          "when_not_to_use": [
+            "Several charts into one PDF belong on node.compile.",
+            "A table export belongs on node.output; a chart is not a file save."
+          ],
+          "prerequisites": [
+            "An upstream table.",
+            "The fields the chosen chart declares; validate names a blank required box.",
+            "The engine this build serves (echarts or matplotlib)."
+          ],
           "steps": [
             "Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).",
             "Pick the x/y/value/label fields; a chart that needs no x says so.",
@@ -2940,10 +3204,23 @@
               }
             }
           ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "bar",
+              "x_field": "word",
+              "y_field": "frequency",
+              "engine": "echarts"
+            }
+          },
           "failures": [
             "A required field is blank: engine.chart_field_missing names the chart and the box.",
             "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
             "A box plot with neither x nor y: engine.chart_field_group_missing."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run and the LaTeX switches match the request.",
+            "A missing required field is named before the run."
           ]
         },
         "tests": {
@@ -2953,7 +3230,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/visualize.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/visualize.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -2962,7 +3239,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "bd52190386f5f21a6b3fcf5c4befbfbd0c9e1dc907d01e6bc3d2699452df6271",
+      "digest": "6258074515dea77dc663936a57b74d7ce67f974856e84627e867a95e66c7324f",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -3000,6 +3277,14 @@
         "ai": {
           "tool": "",
           "summary": "PDF 编译 collects the LaTeX emitted by visualize parents and compiles one document. It reads parent artifacts, not rows, and refuses an empty source instead of producing a blank PDF.",
+          "when_not_to_use": [
+            "One chart is saved directly; a table export belongs on node.output.",
+            "This node only assembles LaTeX parents, it does not read rows."
+          ],
+          "prerequisites": [
+            "At least one visualize parent.",
+            "That parent has LaTeX figure and/or table switched on."
+          ],
           "steps": [
             "Turn on 输出 LaTeX and/or LaTeX 表格 on every visualize parent.",
             "Wire those visualize nodes into PDF 编译.",
@@ -3011,10 +3296,18 @@
               "params": {}
             }
           ],
+          "template": {
+            "type": "compile",
+            "params": {}
+          },
           "failures": [
             "No parent: engine.compile_no_upstream.",
             "A parent is not a visualize node: engine.compile_bad_parent names it.",
             "A visualize parent has both LaTeX boxes off: engine.compile_source_both_off names it."
+          ],
+          "acceptance": [
+            "A PDF file exists for the run.",
+            "A parent that is not a visualize node or has both LaTeX boxes off is named."
           ]
         },
         "tests": {
@@ -3024,7 +3317,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/compile.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/compile.md",
           "version_hash": ""
         },
         "api_version": 1
@@ -3033,7 +3326,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "bfcbfc57ebce95f6d3964175cb8ce4835a237039aa43b1a10eaaafa77db56e34",
+      "digest": "f8853869317dcfaa46e8aba479ba11b472ddee24a524d4cf0b4322ab23abadaf",
       "manifest": {
         "identity": {
           "id": "output",
@@ -3114,6 +3407,13 @@
         "ai": {
           "tool": "",
           "summary": "保存 merges every incoming table into one file, or saves a PDF from visualize/compile parents. Column sets must match; the executor refuses a merge rather than exporting only the first table.",
+          "when_not_to_use": [
+            "Intermediate results stay on the canvas; a reusable growing table belongs on node.accumulate."
+          ],
+          "prerequisites": [
+            "Table parents with matching columns, or visualize/compile parents for a PDF.",
+            "A filename; the exporter appends the extension."
+          ],
           "steps": [
             "Wire one or more table producers into 保存 for a tabular export.",
             "For a PDF, choose format=pdf (or a .pdf filename) and wire visualize/compile parents only.",
@@ -3129,12 +3429,24 @@
               }
             }
           ],
+          "template": {
+            "type": "output",
+            "params": {
+              "operation": "save",
+              "format": "csv",
+              "filename": "export.csv"
+            }
+          },
           "failures": [
             "No parent: engine.output_no_upstream.",
             "A PDF save mixed with table parents: engine.output_pdf_mixed.",
             "A PDF save with no visualize/compile parent: engine.output_pdf_only_pdfable.",
             "Both a visualize and a compile PDF source: engine.output_pdf_two_sources.",
             "A table save fed only by a PDF source: engine.output_needs_pdf."
+          ],
+          "acceptance": [
+            "The exported file exists and its row count matches the merged input.",
+            "Mixed table and PDF parents are refused by name."
           ]
         },
         "tests": {
@@ -3144,7 +3456,7 @@
         },
         "docs": {
           "page": "docs/capabilities/nodes/output.md",
-          "skill": "",
+          "skill": "docs/capabilities/skills/nodes/output.md",
           "version_hash": ""
         },
         "api_version": 1

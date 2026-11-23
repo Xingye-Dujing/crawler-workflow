@@ -86,6 +86,10 @@ def capability_rows(manifest, root: Path = ROOT) -> list[dict]:
     page_ok = bool(page) and (root / page).is_file()
     rows.append(_row('docs', page_ok, page or 'no docs.page'))
 
+    if manifest.docs.skill:
+        skill_ok = (root / manifest.docs.skill).is_file()
+        rows.append(_row('skill', skill_ok, manifest.docs.skill))
+
     missing_contracts = [path for path in manifest.tests.contracts if not (root / path).is_file()]
     rows.append(
         _row('contracts', bool(manifest.tests.contracts) and not missing_contracts, ', '.join(missing_contracts))

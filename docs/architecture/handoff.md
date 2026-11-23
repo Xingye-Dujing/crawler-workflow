@@ -1,14 +1,15 @@
 # 交接与压缩检查点
 
-- 日期：2026-11-23
+- 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`22f9ef51 功能更新：框架 0.1.17（命令与压缩，P4.0 收口）`；框架仓库 `aef340c`
+- 最后提交：`97959ae3`（P4/P5 收口）；框架仓库 `630729a`（0.1.22）
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
 
 | 提交 | 内容 |
 |---|---|
+| 本次 | P6 第一片：16 个节点能力技能七段内容、L1/L2 目录、`skill_catalog`/`skill_load`、生成页面与门禁 |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
@@ -422,6 +423,30 @@
 - 本片验证：2324 passed（capabilities/analysis/biblio/crawlers/charts/update/ai/node-types API），
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
+
+## P6 第一片：能力技能目录（L1/L2）与七段内容（2026-11-24）
+
+- **清单第七段成为技能的唯一家**：`Ai` 新增 `when_not_to_use`/`prerequisites`/`template`/`acceptance`；
+  16 个节点清单全部补齐七段（何时用/何时不用含最近可混淆能力、前置、步骤、示例、模板、失败、验收）。
+  `Manifest.problems()` 对 `node` 拒绝缺段、模板 `type` 不符、模板参数超出枚举。
+- **派生而不是复制**：`capabilities_kernel/knowledge.py` 投影 **L1**（id/分组/一句话/何时用/何时不用/文档）
+  并渲染 **L2** 正文（七段 + 参数表 + 可达工具）；参数表在渲染时从 `manifest.params` 重读（测试改默认值
+  验证正文随之变化）。`ai/knowledge.py` 只加本地化标题与 `AIError` 具名拒绝。
+- **两个常备工具**：`skill_catalog`（`kind`/`query`/`limit`）与 `skill_load`（正文 + 模板 + 工具名）进入
+  `UNIVERSAL_TOOLS`，任何技能都能用；未知 kind 报 `ai.skillKindBad`，未知技能报 `ai.skillUnknown`。
+- **项目事实只放 L1**：`project_facts()` 增加“能力技能”一节（每技能一行摘要），正文按需展开，不占系统提示。
+- **生成物**：`gen_capabilities.py` 额外生成 `docs/capabilities/skills/index.md` 与每能力一页；页面与
+  `skill_load` 共用 `knowledge.render`，`docs/capabilities/` 也加入 `docs_search` 的文档根。
+- **门禁/测试**：完整性门禁要求七段并证明模板可被引擎接受（不得产生参数/矩阵拒绝）；生成物 freshness 覆盖
+  新页面；新增 `tests/unit/capabilities/test_skill_catalog.py`、`tests/unit/ai/test_knowledge_tools.py`；
+  `test_generate.py` 的固定产物集合改为“六个固定产物 + `docs/capabilities/skills/` 下的能力页”。
+- **验证**：按 2026-11-24 用户要求，小改动只跑相关域、不再每次全量——AI/能力/门禁/i18n **937 passed**，
+  同一批更早的 api+frontend+i18n **4638 passed**；`gen_capabilities.py --check` 通过；ruff 全绿；
+  product/tests 两档 pylint **10.00/10**。本片按新策略没有跑全量 fast（留给下一批收口）。
+- **测试策略（同时写入 AGENTS/practices/testing-lanes）**：小改动只跑它碰到的域 + 命名它的门禁；全量 fast 只在
+  大改动、跨域改动或一批（约 4 刀）收口时跑一次；已经证明过的文件不为文档换行重跑。
+- **未做（明确声明）**：算子/图表/平台技能要等 P7 把这三类清单化；`@技能` 强制加载、配方 FSM、工具分层路由
+  与严格模式仍是 P6 待办。
 
 ## P4/P5 收口：旧 AI 引擎与蓝图已删除（2026-11-23）
 

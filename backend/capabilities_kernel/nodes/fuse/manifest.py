@@ -57,6 +57,13 @@ MANIFEST = Manifest(
             'title, author, affiliation, text, reference, source) declares candidate column names, and the '
             'first candidate a source really has answers the role.'
         ),
+        when_not_to_use=(
+            'Comment rows are not bibliographic records; use node.accumulate for repeated appends of one shape.',
+        ),
+        prerequisites=(
+            'One or more source tables.',
+            'At least the entity role must find a column; the other roles may stay empty.',
+        ),
         steps=(
             'Wire every source table in.',
             'Keep or edit the candidate column lists per role; at least the entity role must find a column.',
@@ -72,12 +79,23 @@ MANIFEST = Manifest(
                 },
             },
         ),
+        template={
+            'type': 'fuse',
+            'params': {'entity_columns': '关键词,标题', 'title_columns': '标题', 'keep_undated': True},
+        },
         failures=(
             'No input table: fuse.no_input.',
             'No entity candidate found: fuse.needs_entity names the node.',
             'Differing source columns are normalized per role; a missing role is left empty, never guessed.',
         ),
+        acceptance=(
+            'One canonical table exists with a source column and the declared roles.',
+            'No entity candidate is refused as fuse.needs_entity.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_fuse_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/fuse.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/fuse.md',
+        skill='docs/capabilities/skills/nodes/fuse.md',
+    ),
 )

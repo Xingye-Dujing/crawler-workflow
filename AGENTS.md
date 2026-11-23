@@ -498,17 +498,22 @@ live-test slice, and `/smoke-verify` (loads the same-named skill).
 
 ## Change workflow (MANDATORY on every change)
 
-**How much to run is decided by what the change can break, not by ritual** (one full tier set is ~18 min).
+**How much to run is decided by what the change can break, not by ritual.** A full fast run costs ~14 minutes of the
+user's time, so it is a batch/closure tool, not a per-edit habit: **a small change runs only the cases it touches.**
 
 - **Lane A — docs, comments, the anchor**: `tests/unit/gates/test_doc_paths.py`, plus `ruff check` if a `.py` was touched.
 - **Lane B — a move / test-seam retargeting with unchanged behavior**: the moved module's cases + contract tests naming it +
-  `ruff check`/`format --check` on touched files. **Full fast suite + both pylint tiers once at the end of a ~4-knife batch.**
-- **Lane C — real behavior changes (run orchestration, resume/checkpoint, `runs.db`, UI, crawling, LLM boundary)**: full fast
-  always; device tier when UI/engine/LLM/crawling is touched; pylint at batch end.
+  `ruff check`/`format --check` on touched files.
+- **Lane C — one domain's behavior change**: that domain's own suite + the contract/gate tests that name it; the device tier
+  only when UI/engine/LLM/crawling was touched.
+- **A full fast run is for a big change or the end of a batch**, not every edit: once when a ~4-knife batch closes, when a
+  change crosses several domains, or at the closure gate. Both pylint tiers ride with that batch run.
+- **Do not test the world twice.** A file already proven green is not re-run because a doc line or a sibling module moved.
+  "不用那么严格" is about scope, not about the touched domain: prove that one, and let CI be the backstop.
 - **GitHub Actions on every push is the backstop** (fast + ruff + product/tests pylint on three systems, plus the browser
   and docker jobs; probes local-only), so a local batch run decides whether to push.
-- **The closure gate is NOT a lane**: any "it is done" claim = one full run of every tier, nothing deselected/skipped, no file
-  needing a change. Any edit restarts the loop.
+- **The closure gate is NOT a lane**: a "it is done" claim = one full fast run + the tiers the change touched, nothing
+  deselected/skipped, no file needing a change. Any edit restarts the loop.
 - **Edit**: OpenCode's `formatter` → `.opencode/hooks/format.mjs` auto-runs `ruff format` + `ruff check --fix` on touched
   `.py`; committed files still pass `ruff check`/`format --check` by hand.
 - **Delete what the change replaced.** Migration or refactor finished = the old function, branch, forwarding alias, test

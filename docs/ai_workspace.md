@@ -63,6 +63,14 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 `workflow`、`charts`、`report`、`research`、`python`、`conductor`、`skill_author`、`developer`。
 技能声明提示词、上下文来源、只读工具和所需能力；用户技能是数据，可 Fork/编辑/删除，不能包含代码或写操作。
 
+**能力技能（capability skill）**：每个能力（今天 16 个节点，之后是算子/图表/平台）在自己的清单第七段
+（`ai=Ai(...)`）声明七段技能内容：何时用/何时不用（含最近的可混淆技能）、前置、步骤、示例、模板 JSON、
+命名拒绝、验收。`capabilities_kernel.knowledge` 从清单投影 **L1 目录**（id/分组/一句话/何时用）并渲染
+**L2 正文**（参数表在渲染时从 `manifest.params` 重读，不会过期）；`ai.knowledge` 加上本地化标题与具名拒绝。
+模型通过两个常备工具按需展开：`skill_catalog`（检索/按 kind 过滤）与 `skill_load`（读全文 + 模板）。
+项目事实里只放 L1 一行摘要，正文不进系统提示。同一渲染函数也生成 `docs/capabilities/skills/` 页面，
+并随 `docs/capabilities/` 进入 `docs_search`；生成物由 `tools/gen_capabilities.py --check`  freshness 门禁。
+
 `catbus` 是本地技能（`local_only`，云端按名拒绝）：面对采集需求先问“建画布节点（第二后端选 catbus）”还是
 “AI 直接调 catbus 指令运行”，再用只读工具 `catbus_status` 分别探测采析绘适配器与全局 `catbus` CLI，
 缺哪样点名哪样、绝不自行安装。它的权威文档随仓库放在 `docs/catbus/`（来自 catbus 的 `.claude/skills/catbus/`），

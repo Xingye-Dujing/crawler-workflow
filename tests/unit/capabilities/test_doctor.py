@@ -23,7 +23,7 @@ class TestTheGreenReport:
     def test_every_pilot_row_is_checked_and_the_artifacts_are_fresh(self):
         rows = doctor.check_all()
         assert {(row['capability'], row['name']) for row in rows} >= {
-            ('node:tokenize', name) for name in ('structure', 'executor', 'port_hooks', 'docs', 'contracts')
+            ('node:tokenize', name) for name in ('structure', 'executor', 'port_hooks', 'docs', 'skill', 'contracts')
         }
         assert all(row['ok'] for row in rows), [row for row in rows if not row['ok']]
 
@@ -48,11 +48,16 @@ class TestAFailureIsNamed:
     def test_a_missing_contract_or_page_fails_its_row(self):
         broken = replace(
             _manifest(),
-            docs=replace(_manifest().docs, page='docs/capabilities/nodes/gone.md'),
+            docs=replace(
+                _manifest().docs,
+                page='docs/capabilities/nodes/gone.md',
+                skill='docs/capabilities/skills/nodes/gone.md',
+            ),
             tests=replace(_manifest().tests, contracts=('tests/unit/capabilities/gone.py',)),
         )
         rows = {row['name']: row for row in doctor.capability_rows(broken)}
         assert rows['docs']['ok'] is False and 'gone.md' in rows['docs']['detail']
+        assert rows['skill']['ok'] is False and 'skills/nodes/gone.md' in rows['skill']['detail']
         assert rows['contracts']['ok'] is False and 'gone.py' in rows['contracts']['detail']
 
     def test_a_broken_validator_fails_its_row(self):

@@ -58,8 +58,8 @@
         {
           "type": "source",
           "params": {
-            "platform": "weibo",
-            "mode": "search",
+            "platform": "zhihu",
+            "mode": "posts",
             "keyword": "人工智能",
             "target_count": 100,
             "account": "default"

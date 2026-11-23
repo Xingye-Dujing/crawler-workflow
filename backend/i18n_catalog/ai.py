@@ -144,6 +144,7 @@ ZH = {
     'ai.skillLocalOnly': '技能“{skill}”需要本机环境（本地 CLI 与运行时），云端不提供。',
     'ai.skillPythonLocal': '技能“{skill}”需要 Python 扩展：请在本机网页版/桌面版开启“允许 AI 执行 Python”。',
     'ai.skillUnknown': '未知技能：{skill}',
+    'ai.skillKindBad': '“{kind_name}”不是能力类型；可选：{kinds}。',
     'ai.skillBadTool': '技能“{skill}”引用了不存在的工具：{tool}',
     'ai.skillBadContext': '技能“{skill}”引用了不存在的上下文来源：{source}',
     'ai.toolRefused': '工具“{tool}”被拒绝：{reason}',
@@ -338,6 +339,7 @@ EN = {
         'Skill “{skill}” needs the Python extension; enable “Allow AI Python execution” on a local web or desktop host.'
     ),
     'ai.skillUnknown': 'Unknown skill: {skill}',
+    'ai.skillKindBad': '"{kind_name}" is not a capability kind; choose one of: {kinds}.',
     'ai.skillBadTool': 'Skill “{skill}” names a tool that does not exist: {tool}',
     'ai.skillBadContext': 'Skill “{skill}” names a context source that does not exist: {source}',
     'ai.toolRefused': 'Tool “{tool}” was refused: {reason}',

@@ -29,7 +29,7 @@ import argparse
 import json
 from pathlib import Path
 
-from capabilities_kernel import registry
+from capabilities_kernel import knowledge, registry
 from capabilities_kernel.manifest import KINDS
 from services.charts.registry import chart_profiles
 
@@ -288,16 +288,56 @@ def _docs_index() -> str:
         manifests = [manifest for manifest in _manifests() if manifest.identity.kind == kind]
         if not manifests:
             continue
-        lines += [f'## {kind}', '', '| id | 标题键 | 分组 | 文档 | 契约测试 | digest |', '|---|---|---|---|---|---|']
+        lines += [
+            f'## {kind}',
+            '',
+            '| id | 标题键 | 分组 | 文档 | 技能 | 契约测试 | digest |',
+            '|---|---|---|---|---|---|---|',
+        ]
         for manifest in manifests:
             page = manifest.docs.page
             link = f'[{page}](../{page.removeprefix("docs/")})' if page else ''
+            skill_link = f'[技能](skills/{kind}s/{manifest.identity.id}.md)'
             contracts = '<br>'.join(f'`{path}`' for path in manifest.tests.contracts) or ''
             digest = manifest.digest()[:12]
             ident = manifest.identity
-            lines.append(f'| {ident.id} | `{ident.title_key}` | {ident.category} | {link} | {contracts} | `{digest}` |')
+            lines.append(
+                f'| {ident.id} | `{ident.title_key}` | {ident.category} | {link} | {skill_link} | '
+                f'{contracts} | `{digest}` |',
+            )
         lines.append('')
     return '\n'.join(lines).rstrip() + '\n'
+
+
+def _skill_docs() -> dict[Path, str]:
+    """One page per capability skill plus its catalogue.
+
+    The page is rendered by the same ``knowledge.render`` the ``skill_load`` tool calls, so the
+    published body and the body a model reads are one derivation. A reader can also find them
+    through ``docs_search`` because ``docs/capabilities/`` is a document root.
+    """
+    pages: dict[Path, str] = {}
+    index = [
+        '# 能力技能目录（自动生成）',
+        '',
+        '> 由 `tools/gen_capabilities.py` 从清单的第七段生成，请勿手改。',
+        '> 运行时由 `capabilities_kernel.knowledge` 直接渲染同一份清单，页面不会比接口旧。',
+        '',
+        '| 技能 | 分组 | 一句话 | 何时使用 |',
+        '|---|---|---|---|',
+    ]
+    for manifest in _manifests():
+        ident = manifest.identity
+        address = knowledge.skill_id(manifest)
+        relative = manifest.docs.skill
+        pages[ROOT / relative] = knowledge.render(manifest)
+        index.append(
+            f'| [{address}]({ident.kind}s/{ident.id}.md) | {ident.category} | '
+            f'{manifest.ai.summary or ident.description} | {ident.when_to_use} |',
+        )
+    index.append('')
+    pages[ROOT / 'docs/capabilities/skills/index.md'] = '\n'.join(index)
+    return pages
 
 
 def render() -> dict[Path, str]:
@@ -310,7 +350,7 @@ def render() -> dict[Path, str]:
         'frontend_catalogue': _frontend_catalogue_js,
         'docs_index': _docs_index,
     }
-    return {ROOT / relative: renderers[name]() for relative, name in OUTPUTS.items()}
+    return {ROOT / relative: renderers[name]() for relative, name in OUTPUTS.items()} | _skill_docs()
 
 
 def write() -> list[Path]:

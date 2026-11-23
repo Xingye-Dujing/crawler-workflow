@@ -52,6 +52,15 @@ MANIFEST = Manifest(
             'optional LaTeX figure/table. The chart type decides which fields it reads; the fields it '
             'requires are refused before a run.'
         ),
+        when_not_to_use=(
+            'Several charts into one PDF belong on node.compile.',
+            'A table export belongs on node.output; a chart is not a file save.',
+        ),
+        prerequisites=(
+            'An upstream table.',
+            'The fields the chosen chart declares; validate names a blank required box.',
+            'The engine this build serves (echarts or matplotlib).',
+        ),
         steps=(
             'Pick the chart type (词云, 柱状图, 主题距离图, 文献共现, …).',
             'Pick the x/y/value/label fields; a chart that needs no x says so.',
@@ -63,12 +72,23 @@ MANIFEST = Manifest(
                 'params': {'chart_type': 'bar', 'x_field': 'word', 'y_field': 'frequency', 'engine': 'echarts'},
             },
         ),
+        template={
+            'type': 'visualize',
+            'params': {'chart_type': 'bar', 'x_field': 'word', 'y_field': 'frequency', 'engine': 'echarts'},
+        },
         failures=(
             'A required field is blank: engine.chart_field_missing names the chart and the box.',
             'A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).',
             'A box plot with neither x nor y: engine.chart_field_group_missing.',
         ),
+        acceptance=(
+            'The chart option or image exists for the run and the LaTeX switches match the request.',
+            'A missing required field is named before the run.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_visualize_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/visualize.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/visualize.md',
+        skill='docs/capabilities/skills/nodes/visualize.md',
+    ),
 )

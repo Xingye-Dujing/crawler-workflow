@@ -27,13 +27,16 @@ backend/capabilities_kernel/
 | 执行 | `Execution` | 懒加载的 `module:function`、控制台静默策略 |
 | 验证 | `Rule` | 运行前的声明式拒绝（`required_param`/`enum_param`/`upstream_required`/`no_input`/`requires_output`）、`validators` 指向的节点专属检查，以及可选的 `preflight`（对上游样本的数据检查） |
 | UI | `Ui` | 默认 schema 表单（可带 `hint_key`），或 `custom_renderer` 逃生口 |
-| AI | `Ai` | 工具名、摘要、步骤、可解析的模板 JSON、失败模式 |
+| AI | `Ai` | 七段技能：工具名、摘要、何时不用、前置、步骤、示例、模板 JSON、失败模式、验收 |
 | 测试 | `Tests` | 证明该能力的契约测试路径 |
-| 文档 | `Docs` | 说明页路径、生成的技能路径、文档哈希 |
+| 文档 | `Docs` | 说明页路径、生成的技能页路径、文档哈希 |
 
 > 文档哈希（ADR-002）由**生成物**承载，不写回清单：`docs/capabilities/index.md` 每行带该清单的 digest，
 > `generate.check()` 在清单变更而未重渲染时直接失败。把页面内容的哈希写进清单会让“改文档”变成“改清单再重渲染”，
-> 两类事实互相绑架；`Docs.version_hash` 留给 P6 生成的技能包（技能文件与其清单一起生成）。
+> 两类事实互相绑架；`Docs.version_hash` 保持为空（技能页由 `docs.skill` 声明路径，页面内容是清单第七段的渲染）。
+>
+> 技能正文不在文件里手写：`capabilities_kernel.knowledge` 的 L2 渲染在每次读取时从 `manifest.params` 重建参数表，
+> 所以页面和 `skill_load` 都不可能比清单旧。
 
 `Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、自定义设置表单的 renderer 确实在浏览器注册、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
 
@@ -88,7 +91,7 @@ backend/capabilities_kernel/
 
 ## 生成物（freshness gate）
 
-`python tools/gen_capabilities.py` 从清单渲染六个产物；`--check` 只比较字节：
+`python tools/gen_capabilities.py` 从清单渲染六个固定产物，外加每个能力技能一页（`docs/capabilities/skills/<kind>s/<id>.md`，路径由清单第九段 `docs.skill` 声明）与技能索引；`--check` 只比较字节：
 
 | 产物 | 用途 |
 |---|---|
@@ -98,6 +101,7 @@ backend/capabilities_kernel/
 | `backend/capabilities_kernel/generated/capability-schema.json` | 浏览器 schema 表单目录（数据形态，供 P2 渲染器/工具读取） |
 | `backend/static/js/node-types-fallback.js` | 同一目录的冷启动脚本：`index.html` 在 `node-types.js` 之前加载，画布不再手写类型/默认值表 |
 | `docs/capabilities/index.md` | 人类可读的能力索引 |
+| `docs/capabilities/skills/index.md` + `skills/<kind>s/<id>.md` | 能力技能的 L1 索引与 L2 七段正文；与 `skill_load` 共用 `capabilities_kernel.knowledge.render` |
 
 `tests/unit/gates/test_capability_completeness.py` 调用同一个 `generate.check()`：改了清单却忘记重新生成，CI 直接红，并打印 `run python tools/gen_capabilities.py`。渲染是确定性的（registry 顺序、dataclass 字段顺序、跨平台 LF），所以 Windows 与 Linux 比较的是同一串字节。
 
@@ -121,7 +125,7 @@ backend/capabilities_kernel/
 - `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为任何节点类型写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
-- 六个生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- 六个固定生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）与能力技能页面（`docs/capabilities/skills/`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
 - `tools/doctor.py`：同一组事实的逐项勾选（含 validator 可解析），`--capability node:<id>` 只看一个能力。
 
 ## 已迁移 / 还没迁移

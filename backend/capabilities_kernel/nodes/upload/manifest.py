@@ -49,6 +49,10 @@ MANIFEST = Manifest(
             '文件上传 turns one stored dataset into the same row table a crawl produces. Downstream nodes '
             'never know the difference; the dataset id is the binding.'
         ),
+        when_not_to_use=(
+            'A crawl belongs on node.source; a file outside the dataset store belongs on workspace_import first.',
+        ),
+        prerequisites=('A stored dataset id (upload, paste or import in the data panel).',),
         steps=(
             'Upload or paste a file in the data panel and note its dataset id.',
             'Create 文件上传 and pick the dataset.',
@@ -57,12 +61,23 @@ MANIFEST = Manifest(
         examples=(
             {'type': 'upload', 'params': {'dataset_id': 'ds_123', 'dataset_name': 'comments.csv', 'row_count': ''}},
         ),
+        template={
+            'type': 'upload',
+            'params': {'dataset_id': 'ds_example', 'dataset_name': 'comments.csv'},
+        },
         failures=(
             'No dataset_id: refused with engine.upload_no_file before the run.',
             'The dataset was deleted and no name/row-count replacement exists: the executor refuses '
             'instead of returning [].',
         ),
+        acceptance=(
+            'The node emits as many rows as the dataset holds.',
+            'A missing dataset settles with a named refusal, not an empty table.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_upload_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/upload.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/upload.md',
+        skill='docs/capabilities/skills/nodes/upload.md',
+    ),
 )

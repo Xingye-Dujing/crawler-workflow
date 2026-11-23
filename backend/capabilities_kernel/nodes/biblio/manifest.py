@@ -166,6 +166,14 @@ MANIFEST = Manifest(
             'pruning, cluster labels (LLR/LSI/MI/TF-IDF), burst detection, structural variation, and five '
             'output shapes (nodes/edges/clusters/bursts/variation/dual_map).'
         ),
+        when_not_to_use=(
+            'Merging several record tables belongs on node.fuse first.',
+            'Drawing the network belongs on node.visualize.',
+        ),
+        prerequisites=(
+            'A record table with the entity column the chosen network reads.',
+            'The year/title/reference columns only when the chosen network reads them.',
+        ),
         steps=(
             'Pick the entity type and the columns the record table really has.',
             'Choose the selection rule and the link measure; pruning is for a graph too dense to read.',
@@ -188,6 +196,10 @@ MANIFEST = Manifest(
                 },
             },
         ),
+        template={
+            'type': 'biblio',
+            'params': {'entity_type': 'keyword', 'selection': 'top_n', 'top_n': 50, 'output_shape': 'nodes'},
+        },
         failures=(
             'An option outside its list: biblio.bad_option names the parameter and the allowed values.',
             'A number outside its range: biblio.bad_option (the validator states the range).',
@@ -198,7 +210,14 @@ MANIFEST = Manifest(
             'A baseline without a project: biblio.watch_needs_project; monitoring a non-entity shape: '
             'biblio.watch_needs_entity_table.',
         ),
+        acceptance=(
+            'The chosen output shape exists and its node/edge/cluster/burst counts are reported.',
+            'An option outside its list is named with the allowed values.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_biblio_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/biblio.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/biblio.md',
+        skill='docs/capabilities/skills/nodes/biblio.md',
+    ),
 )

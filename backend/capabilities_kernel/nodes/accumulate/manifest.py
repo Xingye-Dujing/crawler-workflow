@@ -41,6 +41,12 @@ MANIFEST = Manifest(
             '数据累积 appends the rows passing through it into a named lineage. ``identity=row`` appends every '
             'row; ``identity=columns`` appends only rows whose key columns are not already present.'
         ),
+        when_not_to_use=('A standalone file belongs on node.output; a one-off result should not grow a lineage.',),
+        prerequisites=(
+            'Exactly one table producer upstream.',
+            'A lineage name that stays the same across runs.',
+            'Key columns when identity is columns.',
+        ),
         steps=(
             'Name the lineage (the same name across runs accumulates together).',
             'Choose row identity or key columns; key columns are required for the column mode.',
@@ -49,12 +55,23 @@ MANIFEST = Manifest(
         examples=(
             {'type': 'accumulate', 'params': {'lineage_name': '知乎评论', 'identity': 'row', 'key_columns': ''}},
         ),
+        template={
+            'type': 'accumulate',
+            'params': {'lineage_name': 'example-lineage', 'identity': 'row', 'key_columns': ''},
+        },
         failures=(
             'Blank lineage name: engine.accumulate_no_name.',
             'Unknown identity or column mode without keys: engine.accumulate_bad_identity/no_keys.',
             'Not exactly one parent, or a non-table parent: engine.accumulate_one_parent/bad_parent.',
         ),
+        acceptance=(
+            'The lineage grows by the rows (or the new keys) of this run.',
+            'A non-table or second parent is refused by name.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_accumulate_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/accumulate.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/accumulate.md',
+        skill='docs/capabilities/skills/nodes/accumulate.md',
+    ),
 )

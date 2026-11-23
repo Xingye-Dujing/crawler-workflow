@@ -74,6 +74,14 @@ MANIFEST = Manifest(
             'TF-IDF/TextRank, sentiment/emotion/tendency, NER, clustering, correlation and the qualitative '
             'coding operations. The operation selects both the result columns and the required inputs.'
         ),
+        when_not_to_use=(
+            'A multi-step table pipeline belongs on node.analysis.',
+            'A reusable procedural step belongs on node.python.',
+        ),
+        prerequisites=(
+            'An upstream table with a text column.',
+            'For BERT operations: a model that is installed and runnable; an unrunnable one is refused by name.',
+        ),
         steps=(
             'Pick the operation; the panel shows only that operation’s fields.',
             'Pick the text column (正文 is the usual crawl column).',
@@ -83,12 +91,23 @@ MANIFEST = Manifest(
             {'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文', 'format': 'csv'}},
             {'type': 'process', 'params': {'operation': 'tokenize', 'text_column': '正文', 'output_mode': 'word_freq'}},
         ),
+        template={
+            'type': 'process',
+            'params': {'operation': 'clean', 'text_column': '正文', 'format': 'csv'},
+        },
         failures=(
             'No operation: engine.process_no_op.',
             'Tokenize without a text column: engine.tokenize_no_column.',
             'An unknown operation/param value: the executor refuses with analysis.bad_option and the allowed values.',
         ),
+        acceptance=(
+            'Validate is green and the emitted columns are the operation’s own.',
+            'A missing text column is named with the columns the table has.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_process_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/process.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/process.md',
+        skill='docs/capabilities/skills/nodes/process.md',
+    ),
 )

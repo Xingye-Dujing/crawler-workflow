@@ -22,6 +22,7 @@ DOC_ROOTS = (
     'docs/analysis.md',
     'docs/crawler_rules.md',
     'docs/frontend_modules.md',
+    'docs/capabilities/',
     # The authoritative CatBus skill (copied from catbus/.claude/skills/catbus). A directory root
     # expands to every .md under it, so the catbus skill can read the one platform/workflow file it
     # needs without a second hand-written index here.
@@ -70,6 +71,14 @@ def project_facts() -> str:
         lines.append('## 节点')
         for plugin in PLUGINS.values():
             lines.append(f'- {plugin.type}：显示名键 {plugin.label_key}，分类 {plugin.category}')
+    except Exception:  # a partial install must not take the whole context down
+        pass
+    try:
+        from capabilities_kernel import knowledge
+
+        lines.append('## 能力技能')
+        lines.append('用 skill_catalog 检索、skill_load 读全文；每个能力都有前置/步骤/模板/失败/验收七段。')
+        lines.extend(knowledge.prompt_lines(limit=40))
     except Exception:  # a partial install must not take the whole context down
         pass
     try:

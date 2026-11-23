@@ -62,18 +62,31 @@ MANIFEST = Manifest(
     ui=Ui(hint_key='name.hint'),
     ai=Ai(
         summary='工作流命名 is pure metadata: it names the run and must feed a real node.',
+        when_not_to_use=('Not for naming the exported file: that is node.output.',),
+        prerequisites=('A canvas that holds at least one data-producing node downstream.',),
         steps=(
             'Put 工作流命名 at the head of the canvas (no incoming wire).',
             'Type the run name; a blank name is refused before the run and in history grouping.',
             'Wire it into the node whose work the name describes.',
         ),
         examples=({'type': 'name', 'params': {'workflow_name': '知乎评论 · 10 月', 'layout_order': ''}},),
+        template={
+            'type': 'name',
+            'params': {'workflow_name': 'example run', 'layout_order': ''},
+        },
         failures=(
             'Blank workflow_name: refused with engine.name_no_label.',
             'An incoming wire: refused with engine.name_not_head.',
             'No outgoing wire: refused with engine.name_no_downstream.',
         ),
+        acceptance=(
+            'Validate reports no error for this node.',
+            'The history panel groups the run under the typed name.',
+        ),
     ),
     tests=Tests(contracts=('tests/unit/capabilities/test_name_manifest.py',)),
-    docs=Docs(page='docs/capabilities/nodes/name.md'),
+    docs=Docs(
+        page='docs/capabilities/nodes/name.md',
+        skill='docs/capabilities/skills/nodes/name.md',
+    ),
 )
