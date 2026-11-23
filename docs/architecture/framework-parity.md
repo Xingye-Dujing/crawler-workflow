@@ -162,8 +162,7 @@ P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pendi
 ### P4 收口后的明确残留（不影响运行）
 
 - 旧 `data/users/<id>/ai.db` 历史会话/记忆/技能**不迁移**；新工作区从空开始（声明在 handoff）。
-- `backend/ai/tools.py` 仍保留“框架同名服务”的声明（adapter 的 `FRAMEWORK_TOOLS` 跳过）；清理归 P6 工具大扫除。
-- 框架 `apply_artifact` 宿主钩子未实现；前端产物走类型端点，直接调用 `/artifacts/<id>/apply` 会按名拒绝。
+- 框架 `apply_artifact` 宿主钩子未实现写入；前端产物走类型端点，直接调用 `/artifacts/<id>/apply` 会按名拒绝。
 
 ## 依赖与钉版
 
