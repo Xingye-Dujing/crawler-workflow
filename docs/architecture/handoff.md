@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`cd7eda6 功能更新：plan/build 模式与工具遮罩`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`1df4f91 功能更新：retry 还原原轮`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -62,6 +62,7 @@
 | `f21b5e8` | 框架 0.1.8（F13）：`HostAdapter.tools()` 构造时注册；重名按 `tool.builtinConflict` 拒绝 |
 | `61d8952` | 框架 0.1.9（F8）：多问题卡 `questions[]`（1–5），一张卡一次答复，答案按 `call_id` 对齐 |
 | `cd7eda6` | 框架 0.1.10（F9）：`agent_mode=plan` 遮罩写入工具（schema + 允许列表 + 执行处），meta 带 mode |
+| `1df4f91` | 框架 0.1.11（F3）：`retry` 从 user 行所属 turn 恢复 provider/model/skill，复用已存上下文块，不新增 user 行 |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
 | `06aa5735` | wheel 0.1.8（含 F12/F13）；rewrite-plan 勾选 F12/F13；handoff/README 记录第六片 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
@@ -406,6 +407,14 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第九片：retry 还原原轮（2026-11-23，框架 0.1.11）
+
+- `retry()` 用 user 行所属 turn 的 provider/model/skill 构造请求，而不是今天的默认值。
+- 重试分支不再重建上下文：provider 历史由 `replay_context()` 把该 user 行自己的 `meta.context_text` 放回，
+  重读实时 sources 会描述“现在”而不是被复现的那次运行；`meta.context.context_restored` 记录这一点。
+- 不新增 user 行；测试断言三件套（provider/model/skill）与单一 user 行。框架 192 条全绿。
+- 下一片：F10 attachment 接缝 → F11 → F14 → F15 → F16 → F18。
+
 ## P4.0 第八片：plan/build 模式（2026-11-23，框架 0.1.10）
 
 - `context_payload['agent_mode']` = `plan` / `build` / 空；未知词按 `mode.unknown` 拒绝，meta 事件带 `mode`。
@@ -544,7 +553,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第九片**：F3（retry 还原原轮）→ F10 → F11 → F14 → F15 → F16 → F18。
+8. **下一步：P4.0 第十片**：F10（attachment 接缝）→ F11 → F14 → F15 → F16 → F18。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 

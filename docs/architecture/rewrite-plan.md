@@ -154,7 +154,8 @@
 - [ ] **F16 LLM 行任务并发与限流**：一轮内工具调用仍有序——框架
 - [ ] **F18 命令与压缩**：通用命令注册表；框架提供 `/status` `/skills` `/mode` `/compact`（上下文压缩）；
   **`/init` 等认识宿主项目的命令由 host 注册**——框架
-- [ ] **F3 retry 还原原轮**：从 user 行 meta 恢复 provider/model/skill/context；重跑同一轮后续——框架
+- [x] **F3 retry 还原原轮**：从 user 行所属 turn 恢复 provider/model/skill，复用该行已存的上下文块（不重读实时
+  sources）；不新增 user 行（框架 0.1.11）
 - [ ] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架
 - [ ] **架构收口**：端口/适配器/`TurnFSM` 拆分（`store.py`/`agent.py`/`tools.py` 减重）
 - [ ] **通用性门禁**：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
