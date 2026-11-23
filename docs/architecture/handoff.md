@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`1df4f91 功能更新：retry 还原原轮`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`6fdb5712 功能更新：框架 0.1.11（retry 还原原轮）`；框架仓库 `1df4f91`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -63,6 +63,7 @@
 | `61d8952` | 框架 0.1.9（F8）：多问题卡 `questions[]`（1–5），一张卡一次答复，答案按 `call_id` 对齐 |
 | `cd7eda6` | 框架 0.1.10（F9）：`agent_mode=plan` 遮罩写入工具（schema + 允许列表 + 执行处），meta 带 mode |
 | `1df4f91` | 框架 0.1.11（F3）：`retry` 从 user 行所属 turn 恢复 provider/model/skill，复用已存上下文块，不新增 user 行 |
+| `6fdb5712` | wheel 0.1.11；rewrite-plan 勾选 F3；handoff/README 记录第九片，下一步 F10 |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
 | `06aa5735` | wheel 0.1.8（含 F12/F13）；rewrite-plan 勾选 F12/F13；handoff/README 记录第六片 |
 | `6f49c40e` | wheel 0.1.4；rewrite-plan 勾选邮箱、留出 steer；handoff/README 记录第三片 |
