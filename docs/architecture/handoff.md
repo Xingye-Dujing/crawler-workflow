@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`e99a6d8 功能更新：轮次脱离请求线程（runner、订阅、stop 命令）`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`30d1d5d 功能更新：待答期间的消息邮箱`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -54,6 +54,7 @@
 | `31b3c9ba` | 框架升到 0.1.1：`HostAdapter.turn_finished(summary)` 轮次完成通知（桌面弹窗/提示音的宿主接缝）；wheel 替换并更新 sha256；P4.0 增加 F17 |
 | `47496d0` | 框架 0.1.2（ADR-003 第一片）：`fsm.py` TurnFSM；`turns`/`turn_events`/`pending_calls`；answer 按 `call_id` 幂等并复用原 turn；重启保留待答问题、收尾半途 turn |
 | `e99a6d8` | 框架 0.1.3（ADR-003 第二片）：后台 `TurnRunner` + `subscribe(after)`；关流不停轮；`EVENT_PROTOCOL=1`；`turn_commands` 持久 stop；`bind_account`；`/turns/<id>` 与 `/turns/<id>/events` 重连路由 |
+| `30d1d5d` | 框架 0.1.4（ADR-003 第三片）：`turn_inbox` 邮箱——待答期间的新消息排队、`notice(turn.queued)`、带 `mailbox_id` 再发才执行 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
 
@@ -395,6 +396,15 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第三片：邮箱（2026-11-23，框架 0.1.4）
+
+- 待答期间发来的普通消息不再取消问题、也不再静默 settle：`ask()` 入 `turn_inbox`，返回
+  `notice(key=turn.queued, mailbox_id)` + `done(stop_reason=queued)`，问题原样保留。
+- `inbox(conversation_id)` 列出排队消息；客户端在问题答完后带 `context_payload={'mailbox_id': …}`（和自己的 Key）
+  再发一次，服务端 `take_inbox` 取走一次后执行——排队不替用户花钱，Key 永不入队。
+- 未知/已取走的 mailbox id 按 `turn.unknownMailbox` 拒绝；`delete_conversation` 一并清理。
+- 仍开放：`steer`（安全边界插入指引）与 F6–F16。
+
 ## P4.0 第二片：轮次脱离请求线程（2026-11-23，框架 0.1.3）
 
 - `ask()` 建 turn 后起后台 `TurnRunner`，自身只 `subscribe(after)`：关流、刷新、切会话都只结束订阅，答案仍落盘。
@@ -465,9 +475,9 @@
 5. **P4.0 第一片已完成**：框架 `turn_finished` 通知（`7323f2e`，0.1.1）；ADR-003 的 TurnFSM + `turns`/`turn_events`/
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
-7. **下一步：P4.0 第三片**：邮箱（待答期间的新消息排队下一回合）与 `steer`；然后是 F6–F16（权限策略引擎、
-   0=不限、多问题卡、模式、attachment、产物校验、run/step、注册收口、trace、供应商能力、并发），最后进 `ai_host`。
-   R10 Asset 物化可以并行，但不阻塞框架。
+7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
+8. **下一步：P4.0 第四片**：`steer`（安全边界插入指引）；然后 F6–F16（权限策略引擎、0=不限、多问题卡、模式、
+   attachment、产物校验、run/step、注册收口、trace、供应商能力、并发），最后进 `ai_host`。R10 Asset 物化可以并行。
 
 
 ## H11 的关键落点（避免重复调查）

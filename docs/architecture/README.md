@@ -30,7 +30,7 @@ rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲�
 ## 状态
 
 - 当前阶段：**P4.0 框架完善**（P1 内核骨架、P2 全量节点迁移、P3 验证完整化已完成）
-- P4.0 已落地两片（框架 0.1.3）：TurnFSM + `turns`/`turn_events`/`pending_calls`、重启恢复；后台 runner +
-  订阅续传 + 持久 stop。邮箱、steer 与 F6–F16 仍开放
+- P4.0 已落地三片（框架 0.1.4）：TurnFSM + 持久事件 + 重启恢复；后台 runner + 订阅续传 + 持久 stop；待答消息邮箱。
+  `steer` 与 F6–F16 仍开放
 - 已确认的 10 个方向决策见 [rewrite-plan.md](rewrite-plan.md#已确认的决策)
 - 一个勾选项只有在“代码 + 测试 + 文档/技能 + 门禁 + 收口”全部通过后才能打勾

@@ -120,10 +120,10 @@ F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host ada
 
 P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
 
-**进度（2026-11-23，框架 0.1.3）**：TurnFSM、`turns`/`turn_events`（`seq` 单调，`after=seq` 重放）、`pending_calls`
-持久化、`answer(call_id)` 幂等、重启恢复、**后台 runner + 订阅**（关流不停轮）、`EVENT_PROTOCOL=1`、`turn_commands`
-持久 stop、`bind_account` 线程绑定、`/turns/<id>` 与 `/turns/<id>/events` 重连路由均已落地并有测试；**下一片**是
-邮箱（待答期间的新消息排队）与 `steer`，随后是 F6–F16 的其余通用能力。
+**进度（2026-11-23，框架 0.1.4）**：TurnFSM、`turns`/`turn_events`、`pending_calls`、幂等 answer、重启恢复、
+后台 runner + 订阅续传、`EVENT_PROTOCOL=1`、持久 stop、`bind_account`、重连路由、**邮箱**（待答期间的新消息排队，
+带 `mailbox_id` 再发才执行）均已落地并有测试；**下一片**是 `steer`，随后是 F6–F16（策略引擎、0=不限、多问题卡、
+模式、attachment、产物校验、run/step、注册收口、trace、供应商能力、并发）。
 
 ## 依赖与钉版
 
