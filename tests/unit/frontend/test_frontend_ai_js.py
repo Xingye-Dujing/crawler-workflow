@@ -117,7 +117,7 @@ class TestRuntimeSurfaces:
         out = _run_workspace()['artifactPreview']
         assert out['button'] is True and out['clicked'] is True, 'the card button did not reach the handler'
         request = out['request']
-        assert request and request['url'] == '/api/ai/artifacts/preview'
+        assert request and request['url'] == '/api/ai/ws/artifacts/preview'
         assert request['body']['kind'] == 'workflow_draft'
         assert request['body']['current']['nodes'][0]['params']['workflow_name'] == 'current'
         assert out['toggles'] == ['ai-preview-0', 'ai-preview-1']
@@ -138,7 +138,7 @@ class TestRuntimeSurfaces:
         artifact card uses — the page holds no second event table."""
         out = _run_workspace()['monitorBuilder']
         assert out['button'] is True and out['clicked'] is True, 'the sidebar has no working builder door'
-        assert '/api/ai/monitors/catalog' in out['urls'], 'the builder did not ask the server for names'
+        assert '/api/ai/ws/monitors/catalog' in out['urls'], 'the builder did not ask the server for names'
         assert out['eventOptions'] == ['run.started', 'run.finished']
         arm = out['arm']
         assert arm and arm['conversation_id'] == 'c-new'
@@ -344,9 +344,9 @@ class TestWorkspaceRepaintAndDelegation:
         assert gate['listed'] is True, 'the side panel did not show the grant it was given'
         assert gate['button'] is True, 'the grant row has no revoke button'
         assert gate['click'] == ['ds1'], gate['click']
-        assert gate['requests'] == [{'url': '/api/ai/conversations/c1/dataset-grants/ds1', 'method': 'DELETE'}], gate[
-            'requests'
-        ]
+        assert gate['requests'] == [{'url': '/api/ai/ws/conversations/c1/dataset-grants/ds1', 'method': 'DELETE'}], (
+            gate['requests']
+        )
         assert gate['after'] == [], 'the revoked grant stayed in the panel'
 
     def test_opening_the_studio_from_outside_opens_the_panel(self):

@@ -135,7 +135,7 @@ const AIStudio = {
 
     async loadMemory(host) {
         try {
-            const response = await fetch('/api/ai/memories');
+            const response = await fetch('/api/ai/ws/memories');
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'memories unavailable');
             host._memories = data.memories || [];
@@ -151,7 +151,7 @@ const AIStudio = {
         const text = String(box?.value || '').trim();
         if (!text) return;
         try {
-            const response = await fetch('/api/ai/memories', {
+            const response = await fetch('/api/ai/ws/memories', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ text }),
@@ -168,7 +168,7 @@ const AIStudio = {
 
     async deleteMemory(host, memoryId) {
         try {
-            await fetch('/api/ai/memories/' + encodeURIComponent(memoryId), { method: 'DELETE' });
+            await fetch('/api/ai/ws/memories/' + encodeURIComponent(memoryId), { method: 'DELETE' });
             await this.loadMemory(host);
         } catch (error) {
             host._toast(error.message);
@@ -233,8 +233,8 @@ const AIStudio = {
         if (!body) return;
         try {
             const [status, listing] = await Promise.all([
-                fetch('/api/ai/python/status').then((response) => response.json()),
-                fetch('/api/ai/python/scripts').then((response) => response.json()),
+                fetch('/api/ai/ws/python/status').then((response) => response.json()),
+                fetch('/api/ai/ws/python/scripts').then((response) => response.json()),
             ]);
             const report = status.report || {};
             const line = report.available
@@ -271,7 +271,7 @@ const AIStudio = {
 
     async editPython(host, scriptId) {
         try {
-            const response = await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId));
+            const response = await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId));
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'not found');
             host._pythonScript = data.script;
@@ -296,7 +296,7 @@ const AIStudio = {
             code: read('code')?.value || '',
         };
         try {
-            const response = await fetch('/api/ai/python/scripts', {
+            const response = await fetch('/api/ai/ws/python/scripts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -313,7 +313,7 @@ const AIStudio = {
 
     async deletePython(host, scriptId) {
         try {
-            await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId), { method: 'DELETE' });
+            await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId), { method: 'DELETE' });
             AIWorkspace.openStudio('python');
         } catch (error) {
             host._toast(error.message);
@@ -322,7 +322,7 @@ const AIStudio = {
 
     async forkPython(host, scriptId) {
         try {
-            const response = await fetch('/api/ai/python/scripts/' + encodeURIComponent(scriptId) + '/fork', {
+            const response = await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId) + '/fork', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: scriptId + '_mine' }),
@@ -350,7 +350,7 @@ const AIStudio = {
         const scriptId = document.getElementById('ai-python-run-id')?.value || '';
         if (output) output.textContent = I18n.t('ai.pythonRunning');
         try {
-            const response = await fetch('/api/ai/python/run', {
+            const response = await fetch('/api/ai/ws/python/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ script_id: scriptId, rows, args, max_rows: 200 }),
@@ -368,7 +368,7 @@ const AIStudio = {
     async installPython(host) {
         if (!(await host._confirm(I18n.t('ai.pythonDownloadConfirm')))) return;
         try {
-            const response = await fetch('/api/ai/python/install', {
+            const response = await fetch('/api/ai/ws/python/install', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ allow_download: true }),

@@ -87,6 +87,45 @@ def _error(exc: WorkspaceError):
     return jsonify(payload), 400
 
 
+def _legacy_events(events):
+    """The frontend's wire names, mapped once at the host edge (the engine stays canonical).
+
+    ``text_delta``/``thinking_delta`` were ``text``/``thinking`` on the old stream; tool rows were
+    ``tool_start``/``tool_result`` with ``id`` and ``ok``. Mapping here keeps the engine's event
+    catalog untouched and can be deleted with the old panel.
+    """
+    for event in events:
+        kind = event.get('type')
+        if kind == 'text_delta':
+            yield {**event, 'type': 'text'}
+        elif kind == 'thinking_delta':
+            yield {**event, 'type': 'thinking'}
+        elif kind == 'tool_start':
+            yield {
+                **event,
+                'type': 'tool_start',
+                'id': event.get('call_id') or '',
+                'name': event.get('tool') or '',
+                'arguments': event.get('arguments') or {},
+            }
+        elif kind == 'tool_result':
+            ok = not event.get('is_error')
+            payload = {**event, 'type': 'tool_result', 'id': event.get('call_id') or '', 'ok': ok}
+            if ok:
+                payload['result'] = event.get('content')
+            else:
+                payload['error'] = event.get('content')
+            yield payload
+        elif kind == 'error':
+            yield {**event, 'error': event.get('message') or event.get('error') or ''}
+        elif kind == 'citation':
+            yield {**event, 'type': 'citation', 'citation': event.get('payload') or {}}
+        elif kind == 'server_tool':
+            yield {**event, 'type': 'server_tool', 'block': event.get('payload') or {}}
+        else:
+            yield event
+
+
 def _not_found(kind: str, reason: str):
     return jsonify({'ok': False, 'error': kind, 'key': kind, 'reason': reason}), 404
 
@@ -128,7 +167,8 @@ def create_blueprint(manager):
             conversation_id=str(payload.get('conversation_id') or ''),
             account=account(),
             host=request.host_url.rstrip('/'),
-            skill=str(payload.get('skill') or ''),
+            # The old panel's "auto" is not a skill id; the framework's default (general) is.
+            skill='' if str(payload.get('skill') or '') in ('', 'auto') else str(payload.get('skill')),
             provider=str(payload.get('provider') or ''),
             model=str(payload.get('model') or ''),
             api_key=provider_key(),
@@ -145,10 +185,10 @@ def create_blueprint(manager):
                     payload.get('attachments'), workspace=workspace, account=account()
                 )
             if payload.get('stream') is False:
-                events = list(workspace.ask(req))
-                text = ''.join(str(item.get('text') or '') for item in events if item.get('type') == 'text_delta')
+                events = list(_legacy_events(workspace.ask(req)))
+                text = ''.join(str(item.get('text') or '') for item in events if item.get('type') == 'text')
                 return jsonify({'ok': True, 'events': events, 'text': text})
-            return Response(_sse(workspace.ask(req)), mimetype='text/event-stream')
+            return Response(_sse(_legacy_events(workspace.ask(req))), mimetype='text/event-stream')
         except WorkspaceError as exc:
             return _error(exc)
 
@@ -258,7 +298,25 @@ def create_blueprint(manager):
             return _not_found('conversation.unknown', conversation_id)
         messages = workspace.store.list_messages(conversation_id)
         skill = next((item['meta'].get('skill') for item in messages if (item.get('meta') or {}).get('skill')), '')
-        return jsonify({'ok': True, 'conversation': {**row, 'skill': skill}, 'messages': messages})
+        from ai import dataset_access
+
+        return jsonify(
+            {
+                'ok': True,
+                'conversation': {**row, 'skill': skill},
+                'messages': messages,
+                'dataset_grants': dataset_access.active(conversation_id),
+            }
+        )
+
+    @blueprint.delete('/conversations/<conversation_id>/dataset-grants/<dataset_id>')
+    def revoke_dataset_grant(conversation_id, dataset_id):
+        from ai import dataset_access
+
+        if not manager.workspace(account()).store.get_conversation(conversation_id, account()):
+            return _not_found('conversation.unknown', conversation_id)
+        dataset_access.revoke(conversation_id, dataset_id)
+        return jsonify({'ok': True, 'dataset_grants': dataset_access.active(conversation_id)})
 
     @blueprint.patch('/conversations/<conversation_id>')
     def patch_conversation(conversation_id):
@@ -284,7 +342,10 @@ def create_blueprint(manager):
 
     @blueprint.delete('/conversations/<conversation_id>')
     def delete_conversation(conversation_id):
+        from ai import dataset_access
+
         manager.workspace(account()).store.delete_conversation(conversation_id, account())
+        dataset_access.revoke(conversation_id)
         return jsonify({'ok': True})
 
     @blueprint.get('/memories')
@@ -345,8 +406,8 @@ def create_blueprint(manager):
                 str(payload.get('conversation_id') or ''), account(), provider_key()
             )
             if payload.get('stream') is False:
-                return jsonify({'ok': True, 'events': list(events)})
-            return Response(_sse(events), mimetype='text/event-stream')
+                return jsonify({'ok': True, 'events': list(_legacy_events(events))})
+            return Response(_sse(_legacy_events(events)), mimetype='text/event-stream')
         except WorkspaceError as exc:
             return _error(exc)
 
@@ -928,8 +989,8 @@ def create_blueprint(manager):
                 api_key=provider_key(),
             )
             if payload.get('stream') is False:
-                return jsonify({'ok': True, 'events': list(events)})
-            return Response(_sse(events), mimetype='text/event-stream')
+                return jsonify({'ok': True, 'events': list(_legacy_events(events))})
+            return Response(_sse(_legacy_events(events)), mimetype='text/event-stream')
         except WorkspaceError as exc:
             return _error(exc)
 

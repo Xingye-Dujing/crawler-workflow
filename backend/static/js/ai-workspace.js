@@ -5,6 +5,10 @@
  * A turn is a transcript plus an agent trace; the composer sends a canonical request and every
  * provider is reduced to the same event names by the server.
  */
+/* The framework-backed AI surface. The old `/api/ai` blueprint is retired at the end of the
+ * cutover; one constant keeps every call on the new routes. */
+const AI_BASE = '/api/ai/ws';
+
 /* The host label keys are also spelled here so the i18n reachability gate sees the literal keys;
  * the server's `runtime.label_key` remains the value shown, this table only maps kind → key. */
 const AI_RUNTIME_KEYS = {
@@ -508,7 +512,7 @@ const AIWorkspace = {
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         if (!provider || !provider.local_only || provider.requires_key) return;
         try {
-            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/models');
+            const response = await fetch(AI_BASE + '/providers/' + encodeURIComponent(this._provider) + '/models');
             const data = await response.json();
             const models = Array.isArray(data.models) ? data.models : [];
             if (!data.ok || !models.length) return;
@@ -573,7 +577,7 @@ const AIWorkspace = {
         this._bootstrapSeq = (this._bootstrapSeq || 0) + 1;
         const seq = this._bootstrapSeq;
         try {
-            const response = await fetch('/api/ai/bootstrap?provider=' + encodeURIComponent(provider) + '&model=' + encodeURIComponent(model));
+            const response = await fetch(AI_BASE + '/bootstrap?provider=' + encodeURIComponent(provider) + '&model=' + encodeURIComponent(model));
             const data = await response.json();
             if (seq !== this._bootstrapSeq) return;
             this._bootstrap = data;
@@ -844,7 +848,7 @@ const AIWorkspace = {
     async _loadRefs() {
         this._refTimer = null;
         try {
-            const response = await fetch('/api/ai/references?q=' + encodeURIComponent(this._refQuery || ''));
+            const response = await fetch(AI_BASE + '/references?q=' + encodeURIComponent(this._refQuery || ''));
             const data = await response.json();
             this._refResults = data.ok ? (data.references || []) : [];
         } catch (error) {
@@ -1243,7 +1247,7 @@ const AIWorkspace = {
         const key = AISettings.keyFor(provider);
         if (key) {
             try {
-                const response = await fetch('/api/ai/providers/' + encodeURIComponent(provider) + '/balance', {
+                const response = await fetch(AI_BASE + '/providers/' + encodeURIComponent(provider) + '/balance', {
                     headers: { 'X-Provider-Key': key },
                 });
                 const data = await response.json();
@@ -1256,7 +1260,7 @@ const AIWorkspace = {
         }
         if (this._conversationId) {
             try {
-                const response = await fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId) + '/usage');
+                const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId) + '/usage');
                 const data = await response.json();
                 this._convoUsage = data.ok ? data.usage : null;
             } catch (error) {
@@ -1517,7 +1521,7 @@ const AIWorkspace = {
         host.hidden = false;
         host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.choose')) + '…</div>';
         try {
-            const response = await fetch('/api/ai/workspace/browse?path=' + encodeURIComponent(path || ''));
+            const response = await fetch(AI_BASE + '/workspace/browse?path=' + encodeURIComponent(path || ''));
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
             this._folderState = data;
@@ -1573,7 +1577,7 @@ const AIWorkspace = {
         if (!host) return;
         host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.pickWaiting')) + '</div>';
         try {
-            const response = await fetch('/api/ai/workspace/pick', {
+            const response = await fetch(AI_BASE + '/workspace/pick', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ start: (this._folderState && this._folderState.path) || '' }),
@@ -1592,7 +1596,7 @@ const AIWorkspace = {
 
     async _setFolder(path) {
         try {
-            const response = await fetch('/api/ai/workspace', {
+            const response = await fetch(AI_BASE + '/workspace', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: path || '' }),
@@ -1736,7 +1740,7 @@ const AIWorkspace = {
         });
         if (answer !== true) return false;
         try {
-            const response = await fetch('/api/ai/rerun', {
+            const response = await fetch(AI_BASE + '/rerun', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1772,7 +1776,7 @@ const AIWorkspace = {
         body.setAttribute('data-loading', '1');
         body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoading')) + '</div>';
         try {
-            const response = await fetch('/api/ai/skills/' + encodeURIComponent(id));
+            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id));
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || ('HTTP ' + response.status));
             const skill = data.skill || {};
@@ -1846,7 +1850,7 @@ const AIWorkspace = {
         this._sending = true;
         this._setSending(true);
         try {
-            await this._stream('/api/ai/retry', { conversation_id: this._conversationId, api_key: key });
+            await this._stream(AI_BASE + '/retry', { conversation_id: this._conversationId, api_key: key });
         } catch (error) {
             if (error.name !== 'AbortError') this._renderError(error.message);
         } finally {
@@ -2314,10 +2318,10 @@ const AIWorkspace = {
         const query = this._dom.input?.value || '';
         const context = AIContext.collect();
         try {
-            let endpoint = '/api/ai/context';
+            let endpoint = AI_BASE + '/context';
             let body = { query, context };
             if (this._conversationId) {
-                endpoint = '/api/ai/conversations/' + encodeURIComponent(this._conversationId) + '/context';
+                endpoint = AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId) + '/context';
             }
             const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
             const data = await response.json();
@@ -2346,7 +2350,7 @@ const AIWorkspace = {
            clicked next. Every await below is preceded by one token check; the last click wins. */
         const token = (this._selectToken = (this._selectToken || 0) + 1);
         try {
-            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id));
+            const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id));
             const data = await response.json();
             if (token !== this._selectToken) return;
             if (!data.ok) {
@@ -2421,7 +2425,7 @@ const AIWorkspace = {
         while (Date.now() < deadline) {
             if (this._sending || (adopted && this._conversationId && this._conversationId !== conversationId)) break;
             try {
-                const resp = await fetch('/api/ai/conversations/' + encodeURIComponent(conversationId));
+                const resp = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(conversationId));
                 const data = await resp.json();
                 if (!data.ok) break;
                 const messages = data.messages || [];
@@ -3085,7 +3089,7 @@ const AIWorkspace = {
             agent_mode: this._agentMode || 'build',
         };
         try {
-            await this._stream('/api/ai/chat', body);
+            await this._stream(AI_BASE + '/chat', body);
         } catch (error) {
             if (error.name !== 'AbortError') this._renderError(error.message);
         } finally {
@@ -3155,7 +3159,7 @@ const AIWorkspace = {
         if (typeof showDialog !== 'function') return;
         let catalog;
         try {
-            catalog = (await fetch('/api/ai/monitors/catalog').then((reply) => reply.json())).catalog || {};
+            catalog = (await fetch(AI_BASE + '/monitors/catalog').then((reply) => reply.json())).catalog || {};
         } catch (error) {
             this._toast(I18n.t('ai.monitor.failed') + ': ' + error.message);
             return;
@@ -3202,7 +3206,7 @@ const AIWorkspace = {
         };
         try {
             const conversationId = await this._ensureConversation();
-            const response = await fetch('/api/ai/monitors', {
+            const response = await fetch(AI_BASE + '/monitors', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -3226,7 +3230,7 @@ const AIWorkspace = {
         if (!artifact) return;
         try {
             const conversationId = await this._ensureConversation();
-            const response = await fetch('/api/ai/monitors', {
+            const response = await fetch(AI_BASE + '/monitors', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -3247,7 +3251,7 @@ const AIWorkspace = {
 
     async _disarmMonitor(monitorId) {
         try {
-            await fetch('/api/ai/monitors/' + encodeURIComponent(monitorId), { method: 'DELETE' });
+            await fetch(AI_BASE + '/monitors/' + encodeURIComponent(monitorId), { method: 'DELETE' });
         } catch (error) {
             /* the row may already be retired; the list refresh below tells the truth */
         }
@@ -3259,7 +3263,7 @@ const AIWorkspace = {
     async _loadDatasetGrants() {
         if (!this._conversationId) return;
         try {
-            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId));
+            const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId));
             const data = await response.json();
             if (!data.ok) return;
             this._grants = data.dataset_grants || [];
@@ -3276,7 +3280,7 @@ const AIWorkspace = {
         this._renderSide();
         try {
             const response = await fetch(
-                '/api/ai/conversations/' + encodeURIComponent(this._conversationId) +
+                AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId) +
                 '/dataset-grants/' + encodeURIComponent(datasetId),
                 { method: 'DELETE' }
             );
@@ -3698,7 +3702,7 @@ const AIWorkspace = {
         this._ensureAssistant();
         this._paintAssistant();
         try {
-            await this._stream('/api/ai/answer', {
+            await this._stream(AI_BASE + '/answer', {
                 conversation_id: this._conversationId,
                 message_id: current.messageId || current.questionMessageId,
                 question_id: current.questionId,
@@ -3720,7 +3724,7 @@ const AIWorkspace = {
         this._turnEnded = true;
         if (this._abort) this._abort.abort();
         try {
-            await fetch('/api/ai/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: this._conversationId }) });
+            await fetch(AI_BASE + '/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: this._conversationId }) });
         } catch (e) {
             /* stopping is best-effort; the stream abort already closed the page side */
         }
@@ -3768,7 +3772,7 @@ const AIWorkspace = {
             if (this._sessionQuery) params.set('q', this._sessionQuery);
             if (this._showArchived) params.set('archived', '1');
             const suffix = params.toString() ? '?' + params.toString() : '';
-            const response = await fetch('/api/ai/conversations' + suffix);
+            const response = await fetch(AI_BASE + '/conversations' + suffix);
             const data = await response.json();
             if (data.ok && this._bootstrap) {
                 this._bootstrap.conversations = data.conversations || [];
@@ -3783,7 +3787,7 @@ const AIWorkspace = {
         const row = (this._bootstrap?.conversations || []).find((item) => item.id === id);
         if (!row) return;
         try {
-            await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+            await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ pinned: !row.pinned }),
@@ -3799,7 +3803,7 @@ const AIWorkspace = {
         if (!row) return;
         const archiving = !row.archived;
         try {
-            await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+            await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ archived: archiving }),
@@ -3828,7 +3832,7 @@ const AIWorkspace = {
             format = choice;
         }
         const link = document.createElement('a');
-        link.href = '/api/ai/conversations/' + encodeURIComponent(id) + '/export?format=' + encodeURIComponent(format);
+        link.href = AI_BASE + '/conversations/' + encodeURIComponent(id) + '/export?format=' + encodeURIComponent(format);
         link.setAttribute('download', '');
         link.rel = 'noopener';
         document.body.appendChild(link);
@@ -3885,7 +3889,7 @@ const AIWorkspace = {
             : draft;
         const currentNodes = current && Array.isArray(current.nodes) ? current.nodes : [];
         try {
-            const response = await fetch('/api/ai/artifacts/preview', {
+            const response = await fetch(AI_BASE + '/artifacts/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ kind, payload: artifact.payload || {}, current }),
@@ -3993,7 +3997,7 @@ const AIWorkspace = {
         if (!artifact) return;
         const text = String((artifact.payload || {}).text || '').trim();
         if (!text) return;
-        fetch('/api/ai/memories', {
+        fetch(AI_BASE + '/memories', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
@@ -4013,7 +4017,7 @@ const AIWorkspace = {
         const artifact = (this._artifactsById || {})[id] || this._artifactById(id);
         if (!artifact) return;
         try {
-            const prepared = await fetch('/api/ai/chart/preview', {
+            const prepared = await fetch(AI_BASE + '/chart/preview', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ spec: artifact.payload || {} }),
@@ -4036,7 +4040,7 @@ const AIWorkspace = {
     async _deleteConversation(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
+            const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id), { method: 'DELETE' });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data.ok === false) throw new Error(data.error || 'HTTP ' + response.status);
             if (this._conversationId === id) this.newChat();
@@ -4050,7 +4054,7 @@ const AIWorkspace = {
         const title = await this._prompt(I18n.t('ai.renamePrompt'), '');
         if (!title) return;
         try {
-            const response = await fetch('/api/ai/conversations/' + encodeURIComponent(id), {
+            const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id), {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title }),
@@ -4110,7 +4114,7 @@ const AIWorkspace = {
     async _refreshModels() {
         const key = AISettings.keyFor(this._provider);
         try {
-            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/models', {
+            const response = await fetch(AI_BASE + '/providers/' + encodeURIComponent(this._provider) + '/models', {
                 headers: { 'X-Provider-Key': key },
             });
             const data = await response.json();
@@ -4130,7 +4134,7 @@ const AIWorkspace = {
         const result = this._dom.panel.querySelector('[data-ai-test-result]');
         if (result) result.textContent = I18n.t('ai.testing');
         try {
-            const response = await fetch('/api/ai/providers/' + encodeURIComponent(this._provider) + '/test', {
+            const response = await fetch(AI_BASE + '/providers/' + encodeURIComponent(this._provider) + '/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ model: this._model, api_key: key }),
@@ -4182,7 +4186,7 @@ const AIWorkspace = {
 
     async _loadSkillForEdit(id) {
         try {
-            const response = await fetch('/api/ai/skills/' + encodeURIComponent(id));
+            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id));
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'skill not found');
             this._editingSkill = { ...data.skill, builtin: !!data.skill.builtin };
@@ -4211,7 +4215,7 @@ const AIWorkspace = {
             ask_policy: this._dom.panel.querySelector('[data-ai-skill-field="ask_policy"]')?.value || 'auto',
         };
         try {
-            const response = await fetch('/api/ai/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const response = await fetch(AI_BASE + '/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'save failed');
             this._editingSkill = null;
@@ -4225,7 +4229,7 @@ const AIWorkspace = {
 
     async _forkSkill(id) {
         try {
-            const response = await fetch('/api/ai/skills/' + encodeURIComponent(id) + '/fork', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id) + '/fork', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'fork failed');
             await this._loadBootstrap();
@@ -4239,7 +4243,7 @@ const AIWorkspace = {
     async _deleteSkill(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            await fetch('/api/ai/skills/' + encodeURIComponent(id), { method: 'DELETE' });
+            await fetch(AI_BASE + '/skills/' + encodeURIComponent(id), { method: 'DELETE' });
             await this._loadBootstrap();
             this.openStudio();
         } catch (error) {
@@ -4249,7 +4253,7 @@ const AIWorkspace = {
 
     async _togglePlugin(id, enabled) {
         try {
-            await fetch('/api/ai/plugins/' + encodeURIComponent(id) + '/enable', {
+            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id) + '/enable', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ enabled }),
@@ -4264,7 +4268,7 @@ const AIWorkspace = {
     async _deletePlugin(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            await fetch('/api/ai/plugins/' + encodeURIComponent(id), { method: 'DELETE' });
+            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id), { method: 'DELETE' });
             await this._loadBootstrap();
             this.openStudio();
         } catch (error) {
@@ -4285,7 +4289,7 @@ const AIWorkspace = {
         const permissions = (payload.permissions || []).join(', ');
         if (!(await this._confirm((payload.name || payload.id || '') + '\n' + I18n.t('ai.pluginPermissions') + ': ' + permissions))) return;
         try {
-            const response = await fetch('/api/ai/plugins/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const response = await fetch(AI_BASE + '/plugins/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'install failed');
             await this._loadBootstrap();
@@ -4332,7 +4336,7 @@ const AIWorkspace = {
        (especially a node trace) keeps the model that actually belongs to it. */
     _rememberConversationModel() {
         if (!this._conversationId) return;
-        fetch('/api/ai/conversations/' + encodeURIComponent(this._conversationId), {
+        fetch(AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ provider: this._provider, model: this._model }),
@@ -4436,7 +4440,7 @@ const AIWorkspace = {
                     form.append('conversation_id', conversationId);
                     form.append('provider', this._provider);
                     form.append('api_key', apiKey);
-                    const response = await fetch('/api/ai/files', { method: 'POST', body: form });
+                    const response = await fetch(AI_BASE + '/files', { method: 'POST', body: form });
                     const data = await response.json();
                     if (!data.ok) throw new Error(data.error || 'upload failed');
                     if (data.dataset) {
@@ -4518,7 +4522,7 @@ const AIWorkspace = {
 
     async _ensureConversation() {
         if (this._conversationId) return this._conversationId;
-        const response = await fetch('/api/ai/conversations', {
+        const response = await fetch(AI_BASE + '/conversations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ provider: this._provider, model: this._model, skill: this._skill || 'auto' }),
@@ -4537,7 +4541,7 @@ const AIWorkspace = {
         this._attachments = this._attachments.filter((row) => row.id !== id);
         this._renderAttachments();
         try {
-            await fetch('/api/ai/files/' + encodeURIComponent(id), {
+            await fetch(AI_BASE + '/files/' + encodeURIComponent(id), {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ api_key: AISettings.keyFor(this._provider) }),

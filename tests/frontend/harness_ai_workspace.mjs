@@ -1539,7 +1539,7 @@ sandbox.fetch = async (url, options) => {
         url: String(url),
         body: options && options.body ? JSON.parse(String(options.body)) : null,
     });
-    if (String(url).indexOf('/api/ai/monitors/catalog') >= 0) {
+    if (String(url).indexOf('/api/ai/ws/monitors/catalog') >= 0) {
         return {
             json: async () => ({
                 ok: true,
@@ -1587,7 +1587,7 @@ sandbox.fetch = realFetchMonitor;
 sandbox.showDialog = realShowDialogMonitor;
 
 const armRequest = monitorRequests.find(
-    (row) => row.url.indexOf('/api/ai/monitors') >= 0 && row.url.indexOf('/catalog') < 0
+    (row) => row.url.indexOf('/api/ai/ws/monitors') >= 0 && row.url.indexOf('/catalog') < 0
 );
 out.monitorBuilder = {
     button: !!newMonitorButton,

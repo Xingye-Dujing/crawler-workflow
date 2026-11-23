@@ -164,6 +164,13 @@ class TestTheSurface:
         assert missing.status_code == 404
         assert client.get('/api/ai/ws/plugins').get_json()['ok'] is True
 
+    def test_the_wire_names_are_the_frontend_ones(self, client):
+        """The host maps canonical engine events to the names the existing panel parses."""
+        body = _chat(client, 'hello').get_json()
+        types = [item['type'] for item in body['events']]
+        assert 'text' in types
+        assert 'text_delta' not in types
+
     def test_a_node_trace_is_listed_and_openable(self, client, manager, monkeypatch):
         import services.llm_trace as trace
 

@@ -183,7 +183,7 @@ const workflow = {
         let conv = null;
         while (Date.now() < deadline) {
             try {
-                const resp = await fetch('/api/ai/traces/' + encodeURIComponent(runId));
+                const resp = await fetch('/api/ai/ws/traces/' + encodeURIComponent(runId));
                 const data = await resp.json();
                 const traces = data.conversations || [];
                 if (traces.length) {

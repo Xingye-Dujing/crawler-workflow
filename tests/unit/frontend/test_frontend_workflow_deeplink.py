@@ -34,7 +34,7 @@ def test_query_loader_can_reveal_the_node_trace_conversation():
     # The old global session scan opened a stale trace from an earlier run; the per-run route does
     # not. It must not wait for "2 messages" either: a traditional trace has only its intro until
     # settlement.
-    assert "'/api/ai/traces/'" in source
+    assert "'/api/ai/ws/traces/'" in source
     assert 'message_count' not in source, 'a quiet traditional trace never reaches 2 messages'
     # The workspace must be opened onto that specific conversation, not the remembered one.
     workspace = (JS / 'ai-workspace.js').read_text(encoding='utf-8')

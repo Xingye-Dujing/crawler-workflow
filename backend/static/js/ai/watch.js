@@ -52,13 +52,13 @@ const AIWatch = {
         this._busy = true;
         try {
             const query = conversationId ? '?pending=1&conversation_id=' + encodeURIComponent(conversationId) : '?pending=1';
-            const response = await fetch('/api/ai/monitors/events' + query);
+            const response = await fetch('/api/ai/ws/monitors/events' + query);
             const data = await response.json();
             for (const event of data.events || []) {
                 const handled = await AIWorkspace.deliverMonitor(event);
                 if (handled) {
                     this._attempts.delete(event.id);
-                    await fetch('/api/ai/monitors/events/' + encodeURIComponent(event.id) + '/ack', { method: 'POST' });
+                    await fetch('/api/ai/ws/monitors/events/' + encodeURIComponent(event.id) + '/ack', { method: 'POST' });
                     continue;
                 }
                 const tries = (this._attempts.get(event.id) || 0) + 1;
@@ -70,7 +70,7 @@ const AIWatch = {
                 }
                 this._attempts.delete(event.id);
                 AIWorkspace._toast(I18n.t('ai.monitor.undeliverable'));
-                await fetch('/api/ai/monitors/events/' + encodeURIComponent(event.id) + '/ack', { method: 'POST' });
+                await fetch('/api/ai/ws/monitors/events/' + encodeURIComponent(event.id) + '/ack', { method: 'POST' });
             }
         } catch (error) {
             /* A poll failure is retried on the next tick; it must never break the page. */
