@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`aa8bb1af 功能更新：框架 0.1.12（附件接缝）`；框架仓库 `2511b09`
+- 最后提交：`e2a60b3 功能更新：产物校验与预览注册`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -64,6 +64,7 @@
 | `cd7eda6` | 框架 0.1.10（F9）：`agent_mode=plan` 遮罩写入工具（schema + 允许列表 + 执行处），meta 带 mode |
 | `1df4f91` | 框架 0.1.11（F3）：`retry` 从 user 行所属 turn 恢复 provider/model/skill，复用已存上下文块，不新增 user 行 |
 | `2511b09` | 框架 0.1.12（F10）：附件接缝（宿主抽取文本/内联图片，框架按能力路由）；修复用户消息在每次 provider 请求中被重复追加 |
+| `e2a60b3` | 框架 0.1.13（F11）：`ArtifactRegistry` + HostAdapter 校验/预览声明；提案与 apply 各校验一次，未声明 kind 标 `unvalidated` |
 | `aa8bb1af` | wheel 0.1.12；rewrite-plan 勾选 F10；handoff/README 记录第十片，下一步 F11 |
 | `6fdb5712` | wheel 0.1.11；rewrite-plan 勾选 F3；handoff/README 记录第九片，下一步 F10 |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
@@ -410,6 +411,17 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第十一片：产物校验与预览（2026-11-23，框架 0.1.13）
+
+- `ArtifactRegistry`：`HostAdapter.artifact_validators()`（kind → `payload -> list[str]`）与
+  `artifact_previews()`（kind → `payload -> dict`）在构造时注册。
+- `present_artifact` 先校验：有问题 → 错误 tool_result `artifact.invalid`，**不落库**；通过后存库，事件带
+  `preview` 与 `unvalidated`（未声明的 kind 如实标为未校验，交给宿主按纯文本渲染）。
+- `apply_artifact` **再次**校验（payload 现在是什么就是什么），失败按名拒绝，宿主永远拿不到坏 payload；
+  预览构建失败不影响卡片呈现。
+- 测试：有效/无效/未声明 kind、apply 前复检、有效产物只交给宿主一次；201 条全绿。
+- 下一片：F14 trace → F15 供应商能力 → F16 并发 → F18 命令/压缩。
+
 ## P4.0 第十片：附件接缝（2026-11-23，框架 0.1.12）
 
 - `attachments.prepare()`：宿主通过 `context_payload['attachments']` 交来 `{name, text, image, file_id}`；文本有界并
@@ -568,7 +580,7 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第十一片**：F11（产物 validator/preview）→ F14 → F15 → F16 → F18。
+8. **下一步：P4.0 第十二片**：F14（OTel trace）→ F15 → F16 → F18。
    **P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、双路径开关、薄门面。
    R10 Asset 物化可以并行。
 

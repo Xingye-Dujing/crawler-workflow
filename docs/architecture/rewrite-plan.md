@@ -148,7 +148,8 @@
   移除（执行处再次拒绝），meta 带 `mode`；未知模式按 `mode.unknown` 拒绝（框架 0.1.10）
 - [x] **F10 attachment 接缝**：`context_payload['attachments']` 收“已抽取文本 + 内联图片”；文本随 user 行持久化，
   图片仅在 `vision`+`inline_images` 时以内联部件发送，否则按名拒绝；host 负责抽取（框架 0.1.12）
-- [ ] **F11 产物 validator/preview 注册**：通用注册表；preview 由 Host UI adapter 实现——框架
+- [x] **F11 产物 validator/preview 注册**：`HostAdapter.artifact_validators()/artifact_previews()`；提案与 apply 各
+  校验一次，失败按 `artifact.invalid` 拒绝；未声明 kind 标记 `unvalidated`；预览失败不影响呈现（框架 0.1.13）
 - [ ] **F14 OTel GenAI trace 表 + trace 树**：事件只含 id/状态/计数——框架
 - [ ] **F15 结构化输出 / thinking 控制**：能力声明 + 不支持按名拒绝；Ollama `think:false` 保持——框架
 - [ ] **F16 LLM 行任务并发与限流**：一轮内工具调用仍有序——框架
