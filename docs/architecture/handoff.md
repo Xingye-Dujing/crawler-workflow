@@ -426,6 +426,16 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P6 第四片：配方进度条与跳过（前端，2026-11-24）
+
+- 输入框上方新增 `#ai-recipe` 步骤条：标题、`第 n/N 步`、每步记号（✓ 完成 / ● 当前 / ↷ 跳过 / 失败色）；
+  状态**只来自服务端**——`recipe` 事件实时更新，切换会话时 `GET /recipes?conversation_id=` 重读，完成即隐藏。
+- “跳过此步”只调 `POST /recipes/skip`，不推进本地状态；服务端把用户选择记为 `skipped`，工具证据不会被伪造。
+- 双语键 `ai.recipe.progress`/`ai.recipe.skip`；CSS 用现有 token，无新主题；`node --check` 通过。
+- 测试：真实 `ai-workspace.js` + DOM stub 新场景（可见/3 步/当前 1/完成 1/进度 2/3/跳过按钮与调用；
+  完成状态隐藏），前端用例 **82 passed**。
+- **未做**：从面板**开始**新配方（当前由模型 `recipe_start` 或 API 开始）；每节点配方随 P7。
+
 ## P6 第三片：配方 FSM 与工具遮罩（框架 0.1.24，2026-11-24）
 
 - **框架 `agent_workspace/recipes.py`**：宿主声明有序步骤（每步一个工具 + 前序 `requires` + `produces`），

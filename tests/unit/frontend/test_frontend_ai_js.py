@@ -673,6 +673,23 @@ class TestWorkspaceRepaintAndDelegation:
         assert out['sameNode'] is True, 'an unchanged paint rebuilt the DOM'
 
 
+class TestTheRecipeStrip:
+    """The server's run state draws the strip; the skip button records a choice, it never advances."""
+
+    def test_the_live_step_and_skip_come_from_server_state(self):
+        out = _run_workspace()['recipe']
+        assert out['visible'] is True
+        assert out['steps'] == 3
+        assert out['current'] == 1
+        assert out['done'] == 1
+        assert out['progress'] is True, 'the step counter did not read 2/3'
+        assert out['skipFound'] is True
+        assert out['skip'] is True
+
+    def test_a_done_run_hides_the_strip(self):
+        assert _run_workspace()['recipeDone']['hidden'] is True
+
+
 class TestTheReferenceMenuSurface:
     """The @ picker floats over the transcript; an invalid token made its background transparent."""
 

@@ -103,6 +103,59 @@
 .ai-refs:not(:empty) {
   margin-bottom: 6px;
 }
+/* The live recipe run: a step strip above the composer (server state, never a guess). */
+.ai-recipe {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line2);
+  border-radius: var(--radius);
+}
+.ai-recipe[hidden] {
+  display: none;
+}
+.ai-recipe-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ai-recipe-head strong {
+  font-size: 12px;
+}
+.ai-recipe-head .ai-hint {
+  flex: 1;
+}
+.ai-recipe-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ai-recipe-step {
+  padding: 1px 6px;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.ai-recipe-step.is-current {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+.ai-recipe-step.is-done {
+  color: var(--text-dim);
+}
+.ai-recipe-step.is-skipped {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+.ai-recipe-step.is-failed {
+  color: var(--danger, var(--text));
+}
+.ai-recipe-skip {
+  font-size: 11px;
+}
 .ai-ref-chip {
   display: inline-flex;
   align-items: center;

@@ -1831,6 +1831,51 @@ workspace._sending = false;
 workspace._streamConversation = '';
 workspace._streamTurnId = '';
 
+/* The recipe strip: the server's run state is the only source; the skip button records a choice
+   instead of advancing anything in the browser. */
+workspace._conversationId = 'c1';
+workspace._recipe = {
+    run_id: 'rr1',
+    recipe_id: 'workflow_build',
+    title: '建一条可运行的工作流',
+    status: 'running',
+    step_index: 1,
+    current: { id: 'propose', title: '提交工作流产物卡', tool: 'present_artifact' },
+    steps: [
+        { id: 'schema', title: '读词汇', tool: 'workflow_schema', status: 'done' },
+        { id: 'propose', title: '提交产物卡', tool: 'present_artifact', status: 'current' },
+        { id: 'validate', title: '校验', tool: 'workflow_validate', status: 'pending' },
+    ],
+};
+workspace._renderRecipe();
+const recipeBox = workspace._dom.recipe;
+const recipeText = String(recipeBox.innerHTML || '');
+const skipButton = recipeBox.querySelector('[data-ai-recipe-skip]');
+calls.length = 0;
+workspace._skipRecipeStep = async () => calls.push('recipe-skip');
+if (skipButton) dispatchOn(workspace._dom.root, 'click', { target: skipButton });
+out.recipe = {
+    visible: recipeBox.hidden !== true,
+    steps: recipeBox.querySelectorAll('.ai-recipe-step').length,
+    current: recipeBox.querySelectorAll('.ai-recipe-step.is-current').length,
+    done: recipeBox.querySelectorAll('.ai-recipe-step.is-done').length,
+    progress: recipeText.includes('2/3'),
+    skipFound: !!skipButton,
+    skip: calls.includes('recipe-skip'),
+};
+
+workspace._onEvent({
+    type: 'recipe',
+    status: 'done',
+    step_index: 3,
+    steps: [
+        { id: 'schema', title: '读词汇', status: 'done' },
+        { id: 'propose', title: '提交产物卡', status: 'done' },
+        { id: 'validate', title: '校验', status: 'done' },
+    ],
+});
+out.recipeDone = { hidden: recipeBox.hidden === true };
+
 fs.writeFileSync(1, JSON.stringify(out));
 
 

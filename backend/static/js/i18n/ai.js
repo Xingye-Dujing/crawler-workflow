@@ -103,6 +103,8 @@
         /* `@` references: the composer names what this account already has. */
         'ai.refsTitle': 'Reference',
         'ai.refsEmpty': 'Nothing to reference yet',
+        'ai.recipe.progress': 'Step {index}/{total}',
+        'ai.recipe.skip': 'Skip this step',
         'ai.resizeSessions': 'Resize the conversations column',
         'ai.resizeSide': 'Resize the context column',
         'ai.ref.dataset': 'Dataset',
@@ -551,6 +553,8 @@
         'ai.contextSource.code': '源码',
         'ai.refsTitle': '引用',
         'ai.refsEmpty': '还没有可引用的对象',
+        'ai.recipe.progress': '第 {index}/{total} 步',
+        'ai.recipe.skip': '跳过此步',
         'ai.resizeSessions': '拖动调整会话栏宽度',
         'ai.resizeSide': '拖动调整上下文栏宽度',
         'ai.ref.dataset': '数据集',

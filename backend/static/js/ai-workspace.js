@@ -50,6 +50,8 @@ const AIWorkspace = {
     _messages: [],
     _current: null,
     _plan: [],
+    /* The conversation's live recipe run, as the server last reported it (never guessed). */
+    _recipe: null,
     _usage: null,
     _contextMeta: null,
     /* Row grants this conversation holds: the server's answer, never a browser preference. A
@@ -109,6 +111,7 @@ const AIWorkspace = {
             fullBtn: 'ai-full-btn',
             attachments: 'ai-attachments',
             refs: 'ai-refs',
+            recipe: 'ai-recipe',
             refMenu: 'ai-ref-menu',
             cmdMenu: 'ai-cmd-menu',
             attachBtn: 'ai-attach-btn',
@@ -1010,6 +1013,73 @@ const AIWorkspace = {
             '<span>' + AIRender.escape(row.label || row.id) + '</span>' +
             '<button type="button" class="ai-attachment-x" data-ai-remove-ref="' + AIRender.escape(row.kind + '|' + row.id) + '" aria-label="Remove ' + AIRender.escape(row.label || row.id) + '">×</button></span>'
         ).join('');
+    },
+
+    /* ── recipes ─────────────────────────────────────────────────────────── */
+
+    async _loadRecipe() {
+        const conversationId = this._conversationId;
+        if (!conversationId) {
+            this._recipe = null;
+            this._renderRecipe();
+            return;
+        }
+        try {
+            const response = await fetch(AI_BASE + '/recipes?conversation_id=' + encodeURIComponent(conversationId));
+            const data = await response.json();
+            if (this._conversationId !== conversationId) return;
+            this._recipe = data && data.ok ? (data.active || null) : this._recipe;
+        } catch (error) {
+            /* A picker that cannot answer leaves the last state; it is not the run's truth. */
+        }
+        this._renderRecipe();
+    },
+
+    _renderRecipe() {
+        const box = this._dom.recipe;
+        if (!box) return;
+        const state = this._recipe;
+        if (!state || state.status !== 'running' || !state.steps || !state.steps.length) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+        }
+        const total = state.steps.length;
+        const current = Math.min(total, (Number(state.step_index) || 0) + 1);
+        const known = ['done', 'skipped', 'current', 'failed', 'pending'];
+        const chips = state.steps.map((step, index) => {
+            const status = String(step.status || 'pending');
+            const tone = known.includes(status) ? status : 'pending';
+            const marker = status === 'done' ? '✓' : (status === 'skipped' ? '↷' : (status === 'current' ? '●' : String(index + 1)));
+            return '<span class="ai-recipe-step is-' + tone + '" title="' + AIRender.escape(String(step.tool || '')) + '">' +
+                AIRender.escape(marker + ' ' + String(step.title || step.id || '')) + '</span>';
+        }).join('');
+        box.innerHTML =
+            '<div class="ai-recipe-head">' +
+            '<strong>' + AIRender.escape(String(state.title || state.recipe_id || '')) + '</strong>' +
+            '<span class="ai-hint">' + AIRender.escape(I18n.t('ai.recipe.progress', { index: current, total: total })) + '</span>' +
+            '<button type="button" class="ai-ghost ai-recipe-skip" data-ai-recipe-skip="1">' +
+            AIRender.escape(I18n.t('ai.recipe.skip')) + '</button></div>' +
+            '<div class="ai-recipe-steps">' + chips + '</div>';
+        box.hidden = false;
+    },
+
+    async _skipRecipeStep() {
+        const conversationId = this._conversationId;
+        if (!conversationId || !this._recipe) return;
+        try {
+            const response = await fetch(AI_BASE + '/recipes/skip', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversation_id: conversationId }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data.ok === false) throw new Error(data.error || 'HTTP ' + response.status);
+            this._recipe = data.recipe || null;
+            this._renderRecipe();
+        } catch (error) {
+            this._toast(error.message || I18n.t('ai.error'));
+        }
     },
 
     _renderContextBar() {
@@ -1951,8 +2021,12 @@ const AIWorkspace = {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-revoke-grant],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-revoke-grant],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory],[data-ai-recipe-skip]');
         if (!target) return;
+        if (target.hasAttribute('data-ai-recipe-skip')) {
+            this._skipRecipeStep();
+            return;
+        }
         if (target.hasAttribute('data-ai-suggest')) {
             this._skill = target.getAttribute('data-ai-suggest');
             AISettings.save({ skill: this._skill });
@@ -2396,6 +2470,7 @@ const AIWorkspace = {
             this._renderMessages(data.pending_questions || []);
             this._renderSessions();
             this._renderSide();
+            this._loadRecipe();
             this._loadSpend();
             if (this._dom.title) {
                 this._dom.title.textContent = data.conversation.title || I18n.t('ai.title');
@@ -3440,8 +3515,13 @@ const AIWorkspace = {
             this._schedulePaint(current);
             return;
         }
-        if (type === 'plan') {
-            this._plan = event.steps || [];
+        if (type === 'recipe') {
+            /* The server owns the run; this event is its current step. A done run hides the strip. */
+            this._recipe = event;
+            this._renderRecipe();
+            return;
+        }
+        if (type === 'plan') {            this._plan = event.steps || [];
             const current = this._ensureAssistant();
             current.blocks.push({ type: 'plan', steps: this._plan });
             this._schedulePaint(current);
@@ -3754,6 +3834,8 @@ const AIWorkspace = {
         this._contextMeta = null;
         this._grants = [];
         this._attachments = [];
+        this._recipe = null;
+        this._renderRecipe();
         this._mode = 'chat';
         /* A new chat must leave whatever panel was open: the welcome hint is drawn into the
            transcript, and a hidden transcript would look like nothing happened. */

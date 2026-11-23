@@ -238,7 +238,8 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   `recipe.stepTool` 拒绝；步骤完成只认服务端拿到的工具结果，失败留步，用户主动跳步由 `recipe_skip` 记为
   `skipped`。`ChatRequest.recipe_id` 开始配方（`recipe_start` 控制工具同效），事件 `recipe` 携带步骤进度。
   产品当前两条：`workflow_build`（读词汇 → 工作流产物卡 → 同引擎校验）与 `dataset_answer`（列 → 样本 →
-  精确聚合）；API `GET /api/ai/ws/recipes`、`POST /recipes/start`、`POST /recipes/skip`。
+  精确聚合）；API `GET /api/ai/ws/recipes`、`POST /recipes/start`、`POST /recipes/skip`。前端在输入框上方画
+  步骤条（当前步/完成/跳过），跳过按钮只调用 `/recipes/skip`，不推进本地状态。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
 
