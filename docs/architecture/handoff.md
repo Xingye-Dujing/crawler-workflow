@@ -423,6 +423,17 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4 接入第二片：/api/ai/ws 新表面（2026-11-23）
+
+- `backend/ai_host/manager.py`：每账号一个 `AgentWorkspace`，目录 `users/<id>/ai_workspace`（**不复用旧 ai.db**）；
+  `close()` 先结束 runner 再关库。
+- `backend/api/ai_workspace.py`：`/api/ai/ws` 的 `/chat`（SSE/非流式）、`/turns/<id>`、`/turns/<id>/events`
+  （`after`/`Last-Event-ID`）、`/turns/<id>/steps|trace`、`/pending`、`/inbox`、`/answer` `/stop` `/steer` `/command`。
+- `app.py` 在 `runtime/flags.py` 的 `ai_workspace` 开关（默认开，owner=P4 AI 接入，remove_by=2027-03-01）下注册；
+  旧 `/api/ai` 原样保留。
+- 测试：裸 Flask + 临时账号根跑通 chat → turn → 重放 → command / stop / steer / pending；旧 app 启动用例不受影响。
+- 仍待：附件抽取、设置映射、`/init`、parity 矩阵、旧引擎删除。
+
 ## P4 接入第一片：ai_host 宿主适配器（2026-11-23）
 
 - `backend/ai_host/`：`CaiXiHuiHost(DefaultHostAdapter)` 把领域事实/工具/技能以**委托**方式交给框架：

@@ -137,7 +137,8 @@
   `user` 行加入本轮并发 `steer` 事件；最后边界之后到达的指引进邮箱作为下一轮（框架 0.1.5）
 - [x] **F6 权限/审批策略引擎**：`ToolSpec.always_ask` + `policy.PolicyEngine`；`mutating` 在 auto 关闭时确认，
   `always_ask`（删除/覆盖/资源授权）永远确认且不接受 session 授权（框架 0.1.6）
-- [ ] **F7 限制语义 0=不限 + usage meter**：跟随模型窗口与用户设置；真实占用可读——框架
+- [x] **F7 限制语义 0=不限 + usage meter**：`context.max_chars`/`replay_chars`/两类 token 预算取 0 不设框架上限；
+  `max_tokens=0` 不下发；usage 由框架按真实 token 记录（框架 0.1.18）
 - [x] **F12 工具步骤记录 + 幂等**：`agent_steps`（调用前 `running`、结束 `done`/`error` + 结果）；同一
   `(turn_id, call_id)` 重放不重跑；崩溃遗留的 `running` 启动时标 `interrupted` 且不再执行（框架 0.1.7）
 - [x] **F13 注册收口**：`HostAdapter.tools()` 在构造时注册；与内置/控制/宿主工具重名按 `tool.builtinConflict`
@@ -170,13 +171,15 @@
 ### P4 接入（只做采析绘的领域翻译与注册）
 
 - [ ] `backend/ai_host/` HostAdapter：facts/sources/tools/skills/resolvers/artifacts/UI adapter
-  （进行中：facts/tools/skills 已委托；resolvers/artifacts/UI/命令仍待）
+  （进行中：facts/tools/skills/artifact validators 已委托；resolvers/previews/UI/命令仍待）
+- [ ] `backend/api/ai.py` 改为 `AgentWorkspace` 的薄 HTTP/SSE 适配
+  （进行中：`/api/ai/ws` 新表面已建，旧路由保留至 parity）
 - [ ] 领域技能与工具迁移（18 技能 / 47 工具）、工作流/产物工具、源码阅读工具
 - [ ] **本地附件抽取**（pdf/docx/pptx/xlsx/csv/txt/html）与图片内联数据；框架只收结果
 - [ ] **限制设置迁移**：把采析绘设置映射到框架的 0=不限语义（语义在框架，映射在 host）
 - [ ] **`/init` 等宿主命令注册**；框架的 `/status` `/skills` `/mode` `/compact` 只在 host 暴露入口
 - [ ] parity matrix：每个旧功能在新框架有等价/更强测试
-- [ ] `runtime/flags.py` 双路径开关（owner/remove_by），parity 绿后删旧路径
+- [x] `runtime/flags.py` 双路径开关（`ai_workspace`，默认开，owner/remove_by=2027-03-01）
 - [ ] `backend/ai/` 改为薄门面；删重复引擎模块
 - **DoD**：旧 AI 功能全部在新框架跑通；旧 `backend/ai` 无业务逻辑；AI 会话关闭/切换不中断；question 不再“找不到消息”。
 
