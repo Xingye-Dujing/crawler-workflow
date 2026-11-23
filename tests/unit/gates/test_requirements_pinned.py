@@ -148,6 +148,7 @@ _IMPORT_NAMES = {
 #: Top-level packages of this repository, never third-party dependencies.
 _LOCAL_PACKAGES = {
     'ai',
+    'ai_host',
     'analyzers',
     'api',
     'app',
@@ -211,6 +212,10 @@ def test_a_function_level_third_party_import_is_declared_for_the_runtime():
     declared = set()
     for path in (RUNTIME, OPTIONAL):
         declared.update(name for name, _version, _marker in _entries(path))
+        # A vendored wheel declares its distribution in its filename+METADATA, not in a name==version
+        # line; the packaged runtime carries the same wheel, so its imports are declared too.
+        for _number, filename in _wheel_entries(path):
+            declared.add(_wheel_metadata(REPO / 'vendor' / filename)[0].lower().replace('_', '-'))
     imported = set()
     for path in (REPO / 'backend').rglob('*.py'):
         if any(part.startswith('.venv') or part == '__pycache__' for part in path.parts):

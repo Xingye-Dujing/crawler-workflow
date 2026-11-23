@@ -26,6 +26,7 @@ REPO = Path(__file__).resolve().parents[3]
 _PROJECT_DIRS = (
     'api',
     'ai',
+    'ai_host',
     'extensions',
     'analyzers',
     'capabilities',
