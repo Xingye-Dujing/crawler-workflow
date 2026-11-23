@@ -397,6 +397,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4 归属复核（2026-11-23）
+
+rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接入”。按“换一个宿主是否也需要”重新归类：
+
+- **移到 P4.0（框架）**：SSE 续传/后台 turn、限制语义 0=不限 + usage meter、`/status` `/skills` `/mode` `/compact`
+  （新增 F18；`/init` 仍留 host）、provider 结构化输出/thinking 能力声明、并发与限流、run/turn 记录与幂等恢复、
+  权限策略引擎、OTel trace、多问题卡、plan/build、attachment 接缝、产物 validator/preview、retry 还原原轮。
+- **留在 P4 接入（host）**：ai_host、领域技能/工具、工作流/产物/源码工具、本地附件抽取、设置项到框架语义的映射、
+  `/init` 注册、旧前端事件名映射、parity 矩阵、双路径开关、薄门面。
+- **共享但一侧一半**：`answer` 用框架 `call_id`，旧前端 `question_id`/`message_id` 的派生属 host 的 HTTP 层；
+  附件由 host 抽取文本，框架只收结果。
+
 ## P4.0 第三片：邮箱（2026-11-23，框架 0.1.4）
 
 - 待答期间发来的普通消息不再取消问题、也不再静默 settle：`ask()` 入 `turn_inbox`，返回
@@ -477,8 +489,9 @@
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第四片**：`steer`（安全边界插入指引）；然后 F6–F16（权限策略引擎、0=不限、多问题卡、模式、
-   attachment、产物校验、run/step、注册收口、trace、供应商能力、并发），最后进 `ai_host`。R10 Asset 物化可以并行。
+8. **下一步：P4.0 第四片**：`steer`；随后按 F6（权限策略）→ F12（run/step 幂等）→ F13（注册收口）→ F8/F9/F10/F11/F14/F15/F16/F18/F3
+   的顺序补齐框架。**P4 接入只保留 host 领域翻译**：ai_host、领域技能/工具、本地附件抽取、设置映射、`/init`、parity、
+   双路径开关、薄门面。R10 Asset 物化可以并行。
 
 
 ## H11 的关键落点（避免重复调查）

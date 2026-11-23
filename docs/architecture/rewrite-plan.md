@@ -108,54 +108,68 @@
 > adapter。框架必须保持宿主无关、可扩展；不为采析绘在框架里加领域分支。允许重构框架，必要时重写单层。清单与
 > 验收见 [framework-parity.md](framework-parity.md#框架先行p40先补齐通用能力再迁-host)。
 
+**归类标准（决定一项工作属于 P4.0 还是 P4 接入）**：换一个宿主是否也需要？
+
+- **是 → P4.0 框架完善**：回合生命周期、事件协议、审批/权限策略、限制语义、命令与压缩、attachment 接缝、
+  产物校验接缝、run/step 记录、trace、供应商能力、并发、通知接缝。
+- **否 → P4 接入**：只依赖采析绘的节点/数据集/工作流/图表/平台/账号/本地文件/UI 的部分。宿主侧只做“翻译与注册”，
+  不复制框架的引擎逻辑。
+
 ### P4.0 框架完善（先行）
 
-- [ ] F1–F4 持久化与恢复：`pending_calls` 表 + rehydrate、回答按 `call_id` 幂等、未答问题不被新消息取消、
-  邮箱、retry 还原原轮、事件 `seq`/`Last-Event-ID` 续传
-- [x] **ADR-003 TurnFSM**：`agent_workspace/fsm.py` 通用状态机 + `turns`/`turn_events`/`pending_calls`；
-  非法转换按名拒绝，转换表穷举测试（框架 0.1.2）
-- [x] **ADR-003 runner**：`ask()` 建 turn 后由后台 `TurnRunner` 执行；事件带 `seq`+`v` 落盘；`subscribe(after)` /
-  `/turns/<id>/events`（`after`/`Last-Event-ID`）可断线续传；关流不停轮（框架 0.1.3）
-- [x] **ADR-003 answer/stop 命令**：`answer` 按 `call_id` 幂等并复用原 turn；`stop` 先写 `turn_commands` 再由 runner
-  取走；重复答案按名拒绝（框架 0.1.3）
-- [ ] **ADR-003 steer**：运行中插入指引只在安全边界注入（`turn_commands` 已有表结构，缺的是注入语义）
-- [x] **ADR-003 邮箱**：待答期间的新消息排队（`turn_inbox`），问题原样保留；带 `mailbox_id` 再发一次才执行，
-  Key 永不入队（框架 0.1.4）
-- [x] **ADR-003 重启恢复**：启动 rehydrate `pending_calls`；未完成 turn 收尾为 `interrupted`，`awaiting_user`
-  保留；已过期/取消的问题按名回答而不是 404（框架 0.1.2）
-- [ ] **ADR-003 RecipeFSM**：`recipe_runs` + 每步证据（工具结果/产物/验证 id）；勾选只由服务端证据决定（P6 使用）
-- [ ] **R10 Asset 物化**：`core.asset.DataAsset` 接到运行输出（id/origin/sha256/parents + 已有 `schema_hash`），
-  血缘与增量缓存读同一份身份（P3 的 `node_schema` 是形状半部）
-- [ ] **双路径开关**：`ai_host` 与旧 `backend/ai` 并存期间在 `runtime/flags.py` 声明开关（owner/remove_by），
-  parity 绿后删旧路径——ADR-001 的要求，不能以“直接替换”绕过
-- [ ] F5–F7 后台 turn 与断线恢复、审批/权限策略引擎（destructive 永远要人批、先授权再建资源）、限制语义
-  0=不限 + usage meter
-- [ ] F8–F10 多问题卡（≤5）、plan/build 模式 + 工具遮罩、attachment 接缝（已抽取文本与内联图片）
-- [ ] F11–F12 产物 validator/preview 注册、`agent_runs`/`agent_steps` + 崩溃恢复与幂等
-- [ ] F13–F16 工具/技能注册收口、OTel GenAI trace、供应商能力声明、LLM 行任务并发与限流
-- [x] F17 轮次完成通知接缝：`HostAdapter.turn_finished(summary)` 每次 `ask()` 一次，带状态与 ≤240 字预览；
-  弹窗/提示音由宿主决定，钩子异常不打断轮次（框架 0.1.1）
-- [ ] 架构收口：端口/适配器/`TurnFSM` 拆分；框架测试全绿；重建 wheel 并升版本
-- [ ] 通用性门禁：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
-- **DoD**：F1–F17 全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
+**已完成（框架 0.1.4）**
 
-### P4 接入
+- [x] wheel 钉版、CI 安装、dev editable（`vendor/README.md`）
+- [x] **TurnFSM**：`agent_workspace/fsm.py`，非法转换按名拒绝（0.1.2）
+- [x] **持久事件**：`turns`/`turn_events`（`seq` 单调、`v=EVENT_PROTOCOL`），`subscribe(after)` 与
+  `/turns/<id>/events`（`after`/`Last-Event-ID`）续传（0.1.2/0.1.3）
+- [x] **turn 与 HTTP/SSE 解耦**：后台 runner，关流/刷新/切会话不停轮（0.1.3）
+- [x] **持久中断**：`pending_calls` + 重启 rehydrate；`answer` 按 `call_id` 幂等并复用原 turn（0.1.2）
+- [x] **stop 命令**：`turn_commands` 持久，runner 在安全边界取走（0.1.3）
+- [x] **邮箱**：待答期间的新消息排队，带 `mailbox_id` 再发才执行，Key 不入队（0.1.4）
+- [x] **重启恢复**：半途 turn 收尾 `interrupted`，`awaiting_user` 保留（0.1.2）
+- [x] **完成通知**：`HostAdapter.turn_finished(summary)`，弹窗/提示音由宿主决定（0.1.1）
+- [x] **线程账号绑定**：`HostAdapter.bind_account()`，runner 启动即绑定（0.1.3）
 
-- [x] 构建/钉版 agent-workspace wheel；CI 安装（`vendor/` + `requirements.txt`；本地 dev editable 见
-  `vendor/README.md`）
-- [ ] `backend/ai_host/` HostAdapter
-- [ ] `backend/ai/` 改为薄门面；删重复引擎模块
+**待框架实现（按依赖顺序）**
+
+- [ ] **steer**：运行中插入指引只在安全边界注入（`turn_commands` 已有表结构，缺注入语义）
+- [ ] **F6 权限/审批策略引擎**：工具声明 permission/destructive；“删除永远要人批”“同参数 once/session”；
+  “先授权再建资源”（如 `request_dataset_access`）走同一暂停通道——这是通用能力，放框架
+- [ ] **F7 限制语义 0=不限 + usage meter**：跟随模型窗口与用户设置；真实占用可读——框架
+- [ ] **F12 run/step 记录 + 崩溃恢复幂等**：`agent_runs`/`agent_steps`；同一 `tool_use` 不重复执行——框架
+- [ ] **F13 注册收口**：`host.tools()` 初始化即注册；id 冲突按名拒绝；技能白名单过滤——框架
+- [ ] **F8 多问题卡**：`questions[]`（≤5）通用 schema，答案按 `call_id` 回填——框架
+- [ ] **F9 plan/build 模式**：通用字段 + 工具遮罩，host 只提供模式文案——框架
+- [ ] **F10 attachment 接缝**：接收“已抽取文本 + 内联图片”两路；`files`/`vision`/`inline_images` 三个能力位——框架
+  （**抽取实现留在 host**，见 P4 接入）
+- [ ] **F11 产物 validator/preview 注册**：通用注册表；preview 由 Host UI adapter 实现——框架
+- [ ] **F14 OTel GenAI trace 表 + trace 树**：事件只含 id/状态/计数——框架
+- [ ] **F15 结构化输出 / thinking 控制**：能力声明 + 不支持按名拒绝；Ollama `think:false` 保持——框架
+- [ ] **F16 LLM 行任务并发与限流**：一轮内工具调用仍有序——框架
+- [ ] **F18 命令与压缩**：通用命令注册表；框架提供 `/status` `/skills` `/mode` `/compact`（上下文压缩）；
+  **`/init` 等认识宿主项目的命令由 host 注册**——框架
+- [ ] **F3 retry 还原原轮**：从 user 行 meta 恢复 provider/model/skill/context；重跑同一轮后续——框架
+- [ ] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架
+- [ ] **架构收口**：端口/适配器/`TurnFSM` 拆分（`store.py`/`agent.py`/`tools.py` 减重）
+- [ ] **通用性门禁**：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
+
+- **DoD**：上述全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
+
+### P4 接入（只做采析绘的领域翻译与注册）
+
+- [ ] `backend/ai_host/` HostAdapter：facts/sources/tools/skills/resolvers/artifacts/UI adapter
+- [ ] 领域技能与工具迁移（18 技能 / 47 工具）、工作流/产物工具、源码阅读工具
+- [ ] **本地附件抽取**（pdf/docx/pptx/xlsx/csv/txt/html）与图片内联数据；框架只收结果
+- [ ] **限制设置迁移**：把采析绘设置映射到框架的 0=不限语义（语义在框架，映射在 host）
+- [ ] **`/init` 等宿主命令注册**；框架的 `/status` `/skills` `/mode` `/compact` 只在 host 暴露入口
 - [ ] parity matrix：每个旧功能在新框架有等价/更强测试
-- [ ] TurnFSM + 持久化 question + answer by question_id + mailbox
-- [ ] SSE seq/resume；后台 turn；关闭/切换/刷新恢复
-- [ ] 限制设置迁移；0=不限；usage meter
-- [ ] `/compact` `/init` `/status` `/skills` `/mode`
-- [ ] provider 能力：structured output/thinking control；Ollama `think:false`
-- [ ] 附件抽取；并发；工作流/产物工具；源码阅读工具
-- [ ] Run/Turn 事件溯源 + checkpoint + 幂等恢复
-- [ ] 能力权限模型 + 工具策略引擎
-- [ ] OTel GenAI trace 表 + trace 树
+- [ ] `runtime/flags.py` 双路径开关（owner/remove_by），parity 绿后删旧路径
+- [ ] `backend/ai/` 改为薄门面；删重复引擎模块
 - **DoD**：旧 AI 功能全部在新框架跑通；旧 `backend/ai` 无业务逻辑；AI 会话关闭/切换不中断；question 不再“找不到消息”。
+
+> 归属备忘：`answer` 用框架的 `call_id`；旧前端的 `question_id`/`message_id` 派生是**host 的 HTTP 层**职责。
+> 事件名与前端 wire protocol 的映射也放 host（框架只保证 `EVENT_PROTOCOL` 版本与 `seq`）。
 
 ## P5 框架前端（2-3 周）
 

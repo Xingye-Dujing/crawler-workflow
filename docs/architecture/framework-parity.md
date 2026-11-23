@@ -12,6 +12,8 @@
 | AgentWorkspace 门面（ask/retry/answer/stop/bootstrap/conversations/memories/artifacts/files/scripts/plugins/monitors/usage） | `agent_workspace/service.py` |
 | Provider catalog + DeepSeek/Ollama/OpenAI-compatible/OpenRouter/OpenCode Go/offline complete | `agent_workspace/providers/` |
 | 一轮多行、tool_use/tool_result 配对、streaming 落盘、interrupted 恢复 | `agent_workspace/agent.py` |
+| 轮次持久化：TurnFSM、`turns`/`turn_events`/`turn_commands`/`turn_inbox`、后台 runner + 订阅续传 + 持久 stop | `agent_workspace/fsm.py` / `service.py` / `store.py` |
+| 宿主提醒：`turn_finished(summary)`（桌面弹窗/提示音接缝） | `agent_workspace/host.py` / `service.py` |
 | 上下文 sources、预算、脱敏、逐轮重放 | `agent_workspace/context.py` |
 | 只读工具 + 控制工具 + 审批 + 产物 | `agent_workspace/tools.py` / `agent.py` |
 | 声明式插件（skill/provider/tool pack） | `agent_workspace/plugins.py` |
@@ -100,8 +102,13 @@ adapters/        HTTP/SSE 绑定（Flask 等），只做序列化
 | F15 | 结构化输出 / thinking 控制 | 部分 | 能力声明 + 不支持按名拒绝；Ollama `think:false` 保持 |
 | F16 | 并发 | 串行 | LLM 行任务可并发、按供应商限流；一轮内工具调用仍有序 |
 | F17 | 轮次完成通知接缝 | 无 | `HostAdapter.turn_finished(summary)`：每次 `ask()` 结束后一次，`completed`/`paused`/`cancelled`/`error`/`aborted` + ≤240 字预览；宿主决定桌面弹窗/提示音，异常不打断轮次 |
+| F18 | 命令与上下文压缩 | 无 | 通用命令注册表；框架提供 `/status` `/skills` `/mode` `/compact`，`/init` 等认识宿主项目的命令由 host 注册 |
 
-F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host adapter 前完成；F13–F17 可以与 host 并行。
+F1–F5 是“不修就要带病迁移”的前置项；F6–F16、F18 在写 host adapter 前完成；F17 已与 host 并行落地。
+
+**归类标准（决定一项 P4 要求放 P4.0 还是接入）**：换一个宿主是否也需要？是 → 框架（回合、事件、策略、限制、
+命令、attachment 接缝、产物校验、run/step、trace、供应商能力、并发）；否 → host（节点/数据集/工作流/图表/平台/
+账号/本地文件/UI，以及旧前端事件名映射）。
 
 ### ADR-003 的硬性要求（P4.0 必须兑现）
 
@@ -120,10 +127,9 @@ F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host ada
 
 P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
 
-**进度（2026-11-23，框架 0.1.4）**：TurnFSM、`turns`/`turn_events`、`pending_calls`、幂等 answer、重启恢复、
-后台 runner + 订阅续传、`EVENT_PROTOCOL=1`、持久 stop、`bind_account`、重连路由、**邮箱**（待答期间的新消息排队，
-带 `mailbox_id` 再发才执行）均已落地并有测试；**下一片**是 `steer`，随后是 F6–F16（策略引擎、0=不限、多问题卡、
-模式、attachment、产物校验、run/step、注册收口、trace、供应商能力、并发）。
+**进度（2026-11-23，框架 0.1.4）**：F1、F2、F4、F5、F17 已完成；`turn_commands` 的 answer/stop 已落地；邮箱已落地。
+**下一片**是 steer，随后按 F6 → F12 → F13 → F8 → F9 → F10 → F11 → F14 → F15 → F16 → F18 → F3 的顺序补齐；
+F6（策略）与 F12（run/step）是 host adapter 的前置，其余可与 host 并行。
 
 ## 依赖与钉版
 
