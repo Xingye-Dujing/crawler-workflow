@@ -183,12 +183,70 @@ def create_blueprint(manager):
     def providers():
         return jsonify({'ok': True, 'providers': manager.workspace(account()).providers(account())})
 
+    @blueprint.get('/providers/<provider_id>/models')
+    def provider_models(provider_id):
+        try:
+            models = manager.workspace(account()).models(provider_id, provider_key(), account())
+            return jsonify({'ok': True, 'models': models, 'provider': provider_id})
+        except WorkspaceError as exc:
+            return _error(exc)
+
+    @blueprint.get('/providers/<provider_id>/balance')
+    def provider_balance(provider_id):
+        try:
+            return jsonify(manager.workspace(account()).balance(provider_id, provider_key(), account()))
+        except WorkspaceError as exc:
+            if exc.key == 'provider.noBalance':
+                # The panel hides the block instead of showing a zero balance.
+                return jsonify({'ok': True, 'supported': False, 'provider': provider_id})
+            return _error(exc)
+
+    @blueprint.post('/providers/<provider_id>/test')
+    def provider_test(provider_id):
+        payload = body()
+        try:
+            return jsonify(
+                manager.workspace(account()).test_provider(
+                    provider_id, str(payload.get('model') or ''), provider_key(), account()
+                )
+            )
+        except WorkspaceError as exc:
+            return jsonify({'ok': False, 'error': exc.message, 'kind': exc.kind, 'key': exc.key}), 200
+
     @blueprint.get('/conversations')
     def conversations():
         rows = manager.workspace(account()).store.list_conversations(
-            account(), limit=int(request.args.get('limit') or 50)
+            account(),
+            query=str(request.args.get('q') or ''),
+            archived=str(request.args.get('archived') or '') in ('1', 'true'),
+            limit=int(request.args.get('limit') or 50),
+            offset=int(request.args.get('offset') or 0),
         )
         return jsonify({'ok': True, 'conversations': rows})
+
+    @blueprint.get('/conversations/<conversation_id>')
+    def conversation(conversation_id):
+        workspace = manager.workspace(account())
+        row = workspace.store.get_conversation(conversation_id, account())
+        if not row:
+            return _not_found('conversation.unknown', conversation_id)
+        return jsonify({'ok': True, 'conversation': row, 'messages': workspace.store.list_messages(conversation_id)})
+
+    @blueprint.patch('/conversations/<conversation_id>')
+    def patch_conversation(conversation_id):
+        payload = body()
+        fields = {key: payload[key] for key in ('title', 'pinned', 'archived') if key in payload}
+        row = manager.workspace(account()).store.patch_conversation(conversation_id, account(), **fields)
+        return jsonify({'ok': True, 'conversation': row})
+
+    @blueprint.post('/conversations/<conversation_id>/context')
+    def conversation_context(conversation_id):
+        payload = body()
+        return jsonify(
+            manager.workspace(account()).context_preview(
+                str(payload.get('query') or ''), account(), payload.get('context') or {}
+            )
+        )
 
     @blueprint.post('/conversations')
     def create_conversation():
@@ -309,6 +367,13 @@ def create_blueprint(manager):
     @blueprint.delete('/skills/<skill_id>')
     def delete_skill(skill_id):
         return jsonify({'ok': manager.workspace(account()).delete_skill(account(), skill_id)})
+
+    @blueprint.get('/skills/<skill_id>')
+    def skill_detail(skill_id):
+        found = manager.workspace(account()).skills.get(skill_id, account())
+        if not found:
+            return _not_found('skill.unknown', skill_id)
+        return jsonify({'ok': True, 'skill': found.to_public()})
 
     @blueprint.post('/skills/<skill_id>/fork')
     def fork_skill(skill_id):

@@ -106,6 +106,26 @@ class TestTheSurface:
         assert body['result']['tools'] > 0
         assert body['result']['skills'] > 0
 
+    def test_provider_models_balance_and_test(self, client):
+        assert client.get('/api/ai/ws/providers/complete/models').get_json()['ok'] is True
+        balance = client.get('/api/ai/ws/providers/complete/balance').get_json()
+        assert balance['ok'] is True and balance['supported'] is False
+        tested = client.post('/api/ai/ws/providers/complete/test', json={'model': ''}).get_json()
+        assert tested['ok'] is True and 'latency_ms' in tested
+
+    def test_conversation_detail_patch_and_context(self, client):
+        body = _chat(client, 'hello').get_json()
+        conversation_id = next(item['conversation_id'] for item in body['events'] if item['type'] == 'meta')
+        detail = client.get(f'/api/ai/ws/conversations/{conversation_id}').get_json()
+        assert detail['ok'] is True and detail['messages']
+        renamed = client.patch(f'/api/ai/ws/conversations/{conversation_id}', json={'title': 'Renamed'})
+        assert renamed.get_json()['conversation']['title'] == 'Renamed'
+        assert isinstance(
+            client.post(f'/api/ai/ws/conversations/{conversation_id}/context', json={'query': 'x'}).get_json(), dict
+        )
+        skill = client.get('/api/ai/ws/skills/general').get_json()
+        assert skill['ok'] is True and skill['skill']['id'] == 'general'
+
     def test_conversations_memories_artifacts_settings_and_usage(self, client):
         created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
         conversation_id = created['conversation']['id']
