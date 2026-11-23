@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`aef340c 问题修复：trace 顺序按插入顺序`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`22f9ef51 功能更新：框架 0.1.17（命令与压缩，P4.0 收口）`；框架仓库 `aef340c`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -70,6 +70,7 @@
 | `8ed62f4` | 框架 0.1.16（F16）：`chat_once` 按供应商限流（`max_parallel`/设置/本地串行） |
 | `cc589d3` | 框架 0.1.17（F18）：`CommandRegistry` + `/status` `/skills` `/mode` `/compact`；host 可注册 `/init`，重名拒绝 |
 | `aef340c` | 修复 trace 顺序：按 rowid 插入顺序，避免同一微秒的 span 排序漂移 |
+| `22f9ef51` | wheel 0.1.17；rewrite-plan 勾选 F18，P4.0 全部完成；handoff/README 记录第十五片与 P4 接入 |
 | `6c894ccb` | wheel 0.1.16；rewrite-plan 勾选 F16；handoff/README 记录第十四片，P4.0 只剩 F18 |
 | `fa7d965d` | wheel 0.1.15；rewrite-plan 勾选 F15；handoff/README 记录第十三片，下一步 F16 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
