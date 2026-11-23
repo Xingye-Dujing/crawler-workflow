@@ -24,18 +24,35 @@ def _sse(events):
         yield f'data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n'
 
 
-def _attachments(raw) -> list[dict]:
+def _attachments(raw, workspace=None, account: str = '') -> list[dict]:
     """Host-side extraction: the browser sends bytes, the framework only ever sees text/images.
 
     ``[{'name': 'a.pdf', 'data': '<base64>'}]`` is extracted here with ``ai.file_text``; an entry with
-    ``text`` or ``image`` is passed through unchanged, so a client that already extracted can skip
-    the upload. Every failure becomes a named refusal, never an empty document.
+    ``text`` or ``image`` is passed through unchanged; a bare file id is resolved from the stored file
+    row (the panel uploads first, then names the ids). Every failure becomes a named refusal, never
+    an empty document.
     """
     from ai import file_text
     from ai.errors import AIError as LegacyError
 
     found = []
     for item in raw or []:
+        if isinstance(item, str) and item:
+            if workspace is None:
+                raise AgentError('attachment.unknownFile', kind='not_found', key='attachment.unknownFile', reason=item)
+            row = workspace.store.get_file(item)
+            if not row or row.get('account') != account:
+                raise AgentError('attachment.unknownFile', kind='not_found', key='attachment.unknownFile', reason=item)
+            meta = row.get('meta') or {}
+            found.append(
+                {
+                    'name': str(row.get('name') or ''),
+                    'text': str(meta.get('text') or ''),
+                    'image': str(meta.get('image') or ''),
+                    'file_id': str(row.get('id') or ''),
+                }
+            )
+            continue
         if not isinstance(item, dict):
             raise AgentError('attachment.badShape', kind='bad_request', key='attachment.badShape')
         entry = {'name': str(item.get('name') or '')}
@@ -124,7 +141,9 @@ def create_blueprint(manager):
         workspace = manager.workspace(account())
         try:
             if payload.get('attachments'):
-                req.context_payload['attachments'] = _attachments(payload.get('attachments'))
+                req.context_payload['attachments'] = _attachments(
+                    payload.get('attachments'), workspace=workspace, account=account()
+                )
             if payload.get('stream') is False:
                 events = list(workspace.ask(req))
                 text = ''.join(str(item.get('text') or '') for item in events if item.get('type') == 'text_delta')
@@ -449,20 +468,57 @@ def create_blueprint(manager):
     def files():
         workspace = manager.workspace(account())
         if request.method == 'POST':
-            payload = body()
+            if request.files.get('file') is None:
+                payload = body()
+                return jsonify(
+                    {
+                        'ok': True,
+                        'file': workspace.add_file(
+                            account(),
+                            str(payload.get('name') or ''),
+                            str(payload.get('path') or ''),
+                            int(payload.get('size') or 0),
+                            str(payload.get('conversation_id') or ''),
+                        ),
+                    }
+                )
+            upload = request.files['file']
+            data = upload.read()
+            name = upload.filename or 'file'
+            mime = upload.mimetype or ''
+            conversation_id = str(request.form.get('conversation_id') or '')
+            text = ''
+            image = ''
+            if mime.startswith('image/'):
+                image = 'data:' + (mime or 'image/png') + ';base64,' + base64.b64encode(data).decode()
+            else:
+                from ai import file_text
+                from ai.errors import AIError as HostError
+
+                try:
+                    extracted = file_text.extract(name, data)
+                except HostError as exc:
+                    return _host_refusal(exc)
+                text = str(extracted.get('text') or '')
+            row = workspace.add_file(
+                account(), name, '', len(data), conversation_id, {'text': text, 'image': image, 'mime': mime}
+            )
             return jsonify(
                 {
                     'ok': True,
-                    'file': workspace.add_file(
-                        account(),
-                        str(payload.get('name') or ''),
-                        str(payload.get('path') or ''),
-                        int(payload.get('size') or 0),
-                        str(payload.get('conversation_id') or ''),
-                    ),
+                    'attachment': {
+                        'id': row['id'],
+                        'name': name,
+                        'size': len(data),
+                        'kind': 'image' if image else 'text',
+                    },
                 }
             )
         return jsonify({'ok': True, 'files': workspace.files(account(), request.args.get('conversation_id', ''))})
+
+    @blueprint.get('/conversations/<conversation_id>/files')
+    def conversation_files(conversation_id):
+        return jsonify({'ok': True, 'attachments': manager.workspace(account()).files(account(), conversation_id)})
 
     @blueprint.delete('/files/<file_id>')
     def delete_file(file_id):

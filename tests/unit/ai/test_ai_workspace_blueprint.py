@@ -140,6 +140,24 @@ class TestTheSurface:
         rerun = client.post('/api/ai/ws/rerun', json={'conversation_id': 'nope', 'run_id': 'r', 'node_id': 'n'})
         assert rerun.status_code == 404
 
+    def test_a_uploaded_file_can_be_attached_by_id(self, client):
+        import io
+
+        conversation = client.post('/api/ai/ws/conversations', json={'title': 'Files'}).get_json()
+        conversation_id = conversation['conversation']['id']
+        response = client.post(
+            '/api/ai/ws/files',
+            data={'file': (io.BytesIO(b'hello from the document'), 'note.txt'), 'conversation_id': conversation_id},
+            content_type='multipart/form-data',
+        ).get_json()
+        assert response['ok'] is True
+        attachment = response['attachment']
+        body = _chat(client, 'read it', conversation_id=conversation_id, attachments=[attachment['id']]).get_json()
+        assert body['ok'] is True
+        assert 'hello from the document' in body['text']
+        listed = client.get(f'/api/ai/ws/conversations/{conversation_id}/files').get_json()['attachments']
+        assert [row['id'] for row in listed] == [attachment['id']]
+
     def test_conversations_memories_artifacts_settings_and_usage(self, client):
         created = client.post('/api/ai/ws/conversations', json={'title': 'T'}).get_json()
         conversation_id = created['conversation']['id']
