@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`5f99f6a 功能更新：OTel GenAI trace 与 trace 树`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`c6d392d7 功能更新：框架 0.1.14（OTel trace）`；框架仓库 `5f99f6a`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -66,6 +66,7 @@
 | `2511b09` | 框架 0.1.12（F10）：附件接缝（宿主抽取文本/内联图片，框架按能力路由）；修复用户消息在每次 provider 请求中被重复追加 |
 | `e2a60b3` | 框架 0.1.13（F11）：`ArtifactRegistry` + HostAdapter 校验/预览声明；提案与 apply 各校验一次，未声明 kind 标 `unvalidated` |
 | `5f99f6a` | 框架 0.1.14（F14）：`agent_traces` OTel GenAI span + trace 树；best-effort、无正文 |
+| `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
 | `3708da31` | wheel 0.1.13；rewrite-plan 勾选 F11；handoff/README 记录第十一片，下一步 F14 |
 | `aa8bb1af` | wheel 0.1.12；rewrite-plan 勾选 F10；handoff/README 记录第十片，下一步 F11 |
 | `6fdb5712` | wheel 0.1.11；rewrite-plan 勾选 F3；handoff/README 记录第九片，下一步 F10 |
