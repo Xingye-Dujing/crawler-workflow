@@ -114,11 +114,12 @@
   邮箱、retry 还原原轮、事件 `seq`/`Last-Event-ID` 续传
 - [x] **ADR-003 TurnFSM**：`agent_workspace/fsm.py` 通用状态机 + `turns`/`turn_events`/`pending_calls`；
   非法转换按名拒绝，转换表穷举测试（框架 0.1.2）
-- [ ] **ADR-003 runner**：`POST` 只建 turn 即返回；常驻 `TurnRunner` 执行并把事件带 `seq` 落盘；SSE 只是
-  `after=seq` 的订阅，断线/刷新/切会话不影响；`EVENT_PROTOCOL=1`（**下一片**；事件已落盘，缺的是脱离请求线程）
-- [ ] **ADR-003 命令**：`answer` 按 `call_id`（服务端派生 `message_id`）、`stop`、`steer` 写 `turn_commands`，
-  runner 在安全边界消费；重复答案按名拒绝（answer 幂等已落地，命令表随 runner）
-- [ ] **ADR-003 邮箱**：待答期间的普通新消息排队下一回合；插入指引只在安全边界注入；不再静默取消待答问题
+- [x] **ADR-003 runner**：`ask()` 建 turn 后由后台 `TurnRunner` 执行；事件带 `seq`+`v` 落盘；`subscribe(after)` /
+  `/turns/<id>/events`（`after`/`Last-Event-ID`）可断线续传；关流不停轮（框架 0.1.3）
+- [x] **ADR-003 answer/stop 命令**：`answer` 按 `call_id` 幂等并复用原 turn；`stop` 先写 `turn_commands` 再由 runner
+  取走；重复答案按名拒绝（框架 0.1.3）
+- [ ] **ADR-003 steer**：运行中插入指引只在安全边界注入（`turn_commands` 已有表结构，缺的是注入语义）
+- [ ] **ADR-003 邮箱**：待答期间的普通新消息排队下一回合；当前先按 `turn.awaitingUser` 拒绝，不再静默取消
 - [x] **ADR-003 重启恢复**：启动 rehydrate `pending_calls`；未完成 turn 收尾为 `interrupted`，`awaiting_user`
   保留；已过期/取消的问题按名回答而不是 404（框架 0.1.2）
 - [ ] **ADR-003 RecipeFSM**：`recipe_runs` + 每步证据（工具结果/产物/验证 id）；勾选只由服务端证据决定（P6 使用）

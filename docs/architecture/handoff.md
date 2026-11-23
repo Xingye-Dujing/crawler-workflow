@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`860e6e85 修改：删除节点目录空置的旧字面表与合并函数`；框架仓库 `47496d0`
+- 最后提交：`e99a6d8 功能更新：轮次脱离请求线程（runner、订阅、stop 命令）`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -53,6 +53,7 @@
 | `8b6cc478` | P4 依赖：`vendor/agent_workspace-0.1.0-py3-none-any.whl` 钉版；`requirements.txt` 以仓库根相对路径引用；`deploy/Dockerfile` 复制 `vendor/` 并从 `/app` 安装；requirements 门禁校验 wheel 名/METADATA/唯一声明 |
 | `31b3c9ba` | 框架升到 0.1.1：`HostAdapter.turn_finished(summary)` 轮次完成通知（桌面弹窗/提示音的宿主接缝）；wheel 替换并更新 sha256；P4.0 增加 F17 |
 | `47496d0` | 框架 0.1.2（ADR-003 第一片）：`fsm.py` TurnFSM；`turns`/`turn_events`/`pending_calls`；answer 按 `call_id` 幂等并复用原 turn；重启保留待答问题、收尾半途 turn |
+| `e99a6d8` | 框架 0.1.3（ADR-003 第二片）：后台 `TurnRunner` + `subscribe(after)`；关流不停轮；`EVENT_PROTOCOL=1`；`turn_commands` 持久 stop；`bind_account`；`/turns/<id>` 与 `/turns/<id>/events` 重连路由 |
 | `5b2281ff` | wheel 0.1.2；AGENTS/architecture README 增加“每次先读架构文档”；补 ADR-002 的 custom_renderer 门禁与文档哈希说明；rewrite-plan 勾选 TurnFSM/重启恢复，补 R10 与双路径开关 |
 | `860e6e85` | 删除 `nodes/catalog.py` 空置的旧字面表 `_DECLARED` 与 `_with_kernel_nodes`；16 个节点全部由清单投影 |
 
@@ -394,6 +395,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第二片：轮次脱离请求线程（2026-11-23，框架 0.1.3）
+
+- `ask()` 建 turn 后起后台 `TurnRunner`，自身只 `subscribe(after)`：关流、刷新、切会话都只结束订阅，答案仍落盘。
+- 事件带 `seq` 与 `v=EVENT_PROTOCOL`；`subscribe(turn_id, after)` 与 Flask 路由 `/turns/<id>`、
+  `/turns/<id>/events`（`after` / `Last-Event-ID` / `?stream=0`）提供重连与重放。
+- `stop` 先写 `turn_commands`，runner 在轮次边界取走并置取消位；没有活动 runner 返回 `False`。`answer` 复用原
+  `turn_id`，重复答案按 `question.unknown` 拒绝。
+- `HostAdapter.bind_account(account)`：runner 线程启动先绑定账号数据根（线程继承不到宿主上下文）。
+- `close()` 先停活动轮次并 join 再关 store——否则后台写会撞上临时目录清理（本片实测到一次 access violation）。
+- 待答期间的新消息改为按名 `turn.awaitingUser` 拒绝，不再静默 settle 成 skipped；排队邮箱是下一片。
+- 测试：163 条全绿（新增 runner/订阅/stop/bind_account/重连路由/关流不停轮）。
+
 ## P4.0 第一片：TurnFSM + 持久事件 + 中断恢复（2026-11-23）
 
 按 ADR-003 先落数据模型，不先写 runner（避免“先做界面再改表”）：
@@ -451,8 +464,9 @@
 4. **P4 依赖已完成**：wheel 钉版 + 门禁 + 镜像安装路径（`8b6cc478`）。
 5. **P4.0 第一片已完成**：框架 `turn_finished` 通知（`7323f2e`，0.1.1）；ADR-003 的 TurnFSM + `turns`/`turn_events`/
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
-6. **下一步：P4.0 runner 片**：`POST` 只建 turn 即返回；常驻 `TurnRunner` 执行、事件带 `seq` 落盘、SSE 只是
-   `after=seq` 订阅；`turn_commands` 承载 stop/steer；随后是邮箱与事件 `EVENT_PROTOCOL=1`/`Last-Event-ID`。
+6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
+7. **下一步：P4.0 第三片**：邮箱（待答期间的新消息排队下一回合）与 `steer`；然后是 F6–F16（权限策略引擎、
+   0=不限、多问题卡、模式、attachment、产物校验、run/step、注册收口、trace、供应商能力、并发），最后进 `ai_host`。
    R10 Asset 物化可以并行，但不阻塞框架。
 
 
