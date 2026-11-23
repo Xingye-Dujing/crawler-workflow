@@ -31,7 +31,11 @@ backend/capabilities_kernel/
 | 测试 | `Tests` | 证明该能力的契约测试路径 |
 | 文档 | `Docs` | 说明页路径、生成的技能路径、文档哈希 |
 
-`Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
+> 文档哈希（ADR-002）由**生成物**承载，不写回清单：`docs/capabilities/index.md` 每行带该清单的 digest，
+> `generate.check()` 在清单变更而未重渲染时直接失败。把页面内容的哈希写进清单会让“改文档”变成“改清单再重渲染”，
+> 两类事实互相绑架；`Docs.version_hash` 留给 P6 生成的技能包（技能文件与其清单一起生成）。
+
+`Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、自定义设置表单的 renderer 确实在浏览器注册、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
 
 ## 数据 preflight：样本、身份与缓存
 

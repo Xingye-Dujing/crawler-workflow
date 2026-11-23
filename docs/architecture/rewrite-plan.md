@@ -112,6 +112,20 @@
 
 - [ ] F1–F4 持久化与恢复：`pending_calls` 表 + rehydrate、回答按 `call_id` 幂等、未答问题不被新消息取消、
   邮箱、retry 还原原轮、事件 `seq`/`Last-Event-ID` 续传
+- [x] **ADR-003 TurnFSM**：`agent_workspace/fsm.py` 通用状态机 + `turns`/`turn_events`/`pending_calls`；
+  非法转换按名拒绝，转换表穷举测试（框架 0.1.2）
+- [ ] **ADR-003 runner**：`POST` 只建 turn 即返回；常驻 `TurnRunner` 执行并把事件带 `seq` 落盘；SSE 只是
+  `after=seq` 的订阅，断线/刷新/切会话不影响；`EVENT_PROTOCOL=1`（**下一片**；事件已落盘，缺的是脱离请求线程）
+- [ ] **ADR-003 命令**：`answer` 按 `call_id`（服务端派生 `message_id`）、`stop`、`steer` 写 `turn_commands`，
+  runner 在安全边界消费；重复答案按名拒绝（answer 幂等已落地，命令表随 runner）
+- [ ] **ADR-003 邮箱**：待答期间的普通新消息排队下一回合；插入指引只在安全边界注入；不再静默取消待答问题
+- [x] **ADR-003 重启恢复**：启动 rehydrate `pending_calls`；未完成 turn 收尾为 `interrupted`，`awaiting_user`
+  保留；已过期/取消的问题按名回答而不是 404（框架 0.1.2）
+- [ ] **ADR-003 RecipeFSM**：`recipe_runs` + 每步证据（工具结果/产物/验证 id）；勾选只由服务端证据决定（P6 使用）
+- [ ] **R10 Asset 物化**：`core.asset.DataAsset` 接到运行输出（id/origin/sha256/parents + 已有 `schema_hash`），
+  血缘与增量缓存读同一份身份（P3 的 `node_schema` 是形状半部）
+- [ ] **双路径开关**：`ai_host` 与旧 `backend/ai` 并存期间在 `runtime/flags.py` 声明开关（owner/remove_by），
+  parity 绿后删旧路径——ADR-001 的要求，不能以“直接替换”绕过
 - [ ] F5–F7 后台 turn 与断线恢复、审批/权限策略引擎（destructive 永远要人批、先授权再建资源）、限制语义
   0=不限 + usage meter
 - [ ] F8–F10 多问题卡（≤5）、plan/build 模式 + 工具遮罩、attachment 接缝（已抽取文本与内联图片）

@@ -7,6 +7,20 @@ Rules loaded into **every** session. Each rule is bare; the **why/evidence** is 
 **采集端（crawler/platform）规则拆到 [`docs/crawler_rules.md`](docs/crawler_rules.md)**：改爬虫、其列或真站断言前，先读该
 文件，再读 `docs/crawler_notes.md` 对应小节。
 
+## Read the architecture docs first (every session, before the handoff)
+
+Read, in this order: [`docs/architecture/README.md`](docs/architecture/README.md) →
+[ADR-001](docs/architecture/ADR-001-kernel-replacement.md) →
+[ADR-002](docs/architecture/ADR-002-capability-manifest.md) →
+[ADR-003](docs/architecture/ADR-003-durable-state.md), then
+[`docs/architecture/handoff.md`](docs/architecture/handoff.md) and the open boxes in
+[`docs/architecture/rewrite-plan.md`](docs/architecture/rewrite-plan.md). They hold the accepted decisions,
+the target contract and the durable-state rules; the code may lag them on purpose. A change that
+contradicts an ADR is a decision to record (a “已确认的决策” row or a new ADR), never a shortcut to take
+silently. It is the same obligation as reading the compressed handoff: a session that skipped them
+re-implements, or undoes, what was already decided. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) remains
+the map of today's code.
+
 ## Project
 
 采析绘 (crawler_workflow): Flask + zero-build vanilla-JS; crawls 9 social platforms + CNKI export (instagram

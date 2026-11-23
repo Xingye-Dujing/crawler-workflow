@@ -9,6 +9,7 @@ tomorrow is covered the day it lands, with no edit here.
 """
 
 import ast
+import re
 import sys
 from pathlib import Path
 
@@ -95,6 +96,33 @@ class TestAManifestIsWhole:
 def _manifest_modules():
     schema = KERNEL / 'manifest.py'
     return sorted(path for path in KERNEL.rglob('manifest.py') if path != schema and '__pycache__' not in path.parts)
+
+
+class TestTheFrontendKnowsEveryCustomForm:
+    """ADR-002's "UI renderer 是否存在": a custom form names a renderer the browser registers.
+
+    The panel refuses an unknown id at open time, which is the right runtime behaviour — but a
+    capability that ships without its form would only be discovered by the user who opens it. The
+    ids are registered by ``registerSettingsRenderer('<id>', …)`` in the shipped JS, so the gate
+    asks that exact set.
+    """
+
+    REGISTERED = re.compile(r"registerSettingsRenderer\(\s*'([a-z0-9_]+)'")
+
+    def test_every_custom_renderer_is_registered_in_the_shipped_javascript(self):
+        sources = (BACKEND / 'static' / 'js').rglob('*.js')
+        registered = {
+            identifier
+            for path in sources
+            for identifier in self.REGISTERED.findall(path.read_text(encoding='utf-8', errors='replace'))
+        }
+        assert registered, 'the scan found no registered settings renderer at all'
+        missing = {
+            manifest.ui.custom_renderer
+            for manifest in MANIFESTS
+            if manifest.ui.form == 'custom' and manifest.ui.custom_renderer not in registered
+        }
+        assert not missing, f'custom settings renderers nobody registers: {sorted(missing)}'
 
 
 class TestManifestsStayLight:

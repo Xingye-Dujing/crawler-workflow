@@ -19,7 +19,7 @@ requests==2.34.2
 # which shadows the wheel in that venv. Install from the REPOSITORY ROOT: a relative path in a
 # requirements file resolves against the working directory, and
 # tests/unit/gates/test_requirements_pinned.py refuses a wheel whose file, name or metadata drifts.
-vendor/agent_workspace-0.1.1-py3-none-any.whl
+vendor/agent_workspace-0.1.2-py3-none-any.whl
 # Directly imported by tools/record_demo.py to close ONLY the browser processes the recorder opened.
 psutil==7.2.2
 websocket-client==1.9.0

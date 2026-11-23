@@ -103,6 +103,27 @@ adapters/        HTTP/SSE 绑定（Flask 等），只做序列化
 
 F1–F4 是“不修就要带病迁移”的前置项；F5–F12 在写 host adapter 前完成；F13–F17 可以与 host 并行。
 
+### ADR-003 的硬性要求（P4.0 必须兑现）
+
+[ADR-003](ADR-003-durable-state.md) 把“关闭面板 / 切换会话 / 刷新 / 重启都不影响 AI 工作”定成持久状态机。
+框架侧的实现口径如下，一项都不能漏：
+
+| ADR 要求 | 框架落点 | 验收 |
+|---|---|---|
+| **TurnFSM**：`new → context → streaming → tool → awaiting_user → streaming → settled\|interrupted` | `agent_workspace/fsm.py`：通用 `machine()`/`require()`，非法移动按机器名 + 两端状态拒绝 | 穷举每张表所有合法与非法转换 |
+| **turn 与 HTTP/SSE 解耦**：POST 建 turn 即返回 `turn_id`；常驻 runner 执行；SSE 只是订阅 | `ai_turns` 行 + `TurnRunner`；`ask()` = 建 turn + 订阅 | 断开订阅后 runner 继续跑完并写事件 |
+| **事件是事实，命令是直接调用**：`answer`/`stop`/`steer` 写 `turn_commands`，runner 在安全边界消费 | `ai_events(seq)` + `turn_commands` | 重连 `after=seq` 不缺不重；命令不经过事件总线 |
+| **中断即 checkpoint**：`ask_user_question`/`request_approval` 是持久 interrupt | `pending_calls` 表 + 启动 rehydrate；`answer` 只按 `call_id`，服务端派生 `message_id` | 重启、刷新、切会话后仍可答；重复答案按名拒绝 |
+| **新消息进邮箱**：默认“排队下一回合”；“插入指引”只在安全边界注入；不再静默取消待答问题 | `turn_inbox` + runner 安全边界 | 待答期间发消息不丢、不取消问题，答完后按序执行 |
+| **事件协议版本化**：迁移期不能直接换名 | `EVENT_PROTOCOL = 1`；事件带 `v`/`seq`；旧前端可解析 | wire 契约测试 |
+| **RecipeFSM**：每步要求证据（工具结果 / 产物 / 验证通过 id），跳步按名拒绝 | `recipe_runs` + 证据表（P6 使用） | 勾选只由服务端证据决定 |
+
+P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pending_calls`，随后是 runner、命令与邮箱。
+
+**进度（2026-11-23，框架 0.1.2）**：TurnFSM、`turns`/`turn_events`（`seq` 单调，`after=seq` 重放）、`pending_calls`
+持久化、`answer(call_id)` 幂等、重启保留 `awaiting_user` / 收尾 `interrupted` 已落地并有测试；**下一片**是常驻
+runner（F5）、`turn_commands`（F6 的 answer/stop/steer）、邮箱（F2），以及事件 `v` 字段与 `Last-Event-ID`。
+
 ## 依赖与钉版
 
 - 框架没有 index 发布：`vendor/agent_workspace-<version>-py3-none-any.whl` 是钉版产物，`requirements.txt`

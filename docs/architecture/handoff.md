@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`31b3c9ba 功能更新：框架升到 0.1.1 并记录轮次完成通知接缝`
+- 最后提交：`47496d0 功能更新：TurnFSM、持久事件与中断恢复（ADR-003）`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -52,6 +52,7 @@
 | `ec8faf20` | P3 第四片：`Manifest.postcheck`（`postcheck(node, rows, inputs)`）；运行循环在节点 DONE 后打一行控制台，不改状态；analysis 非空输入产出 0 行报 `engine.empty_output` |
 | `8b6cc478` | P4 依赖：`vendor/agent_workspace-0.1.0-py3-none-any.whl` 钉版；`requirements.txt` 以仓库根相对路径引用；`deploy/Dockerfile` 复制 `vendor/` 并从 `/app` 安装；requirements 门禁校验 wheel 名/METADATA/唯一声明 |
 | `31b3c9ba` | 框架升到 0.1.1：`HostAdapter.turn_finished(summary)` 轮次完成通知（桌面弹窗/提示音的宿主接缝）；wheel 替换并更新 sha256；P4.0 增加 F17 |
+| `47496d0` | 框架 0.1.2（ADR-003 第一片）：`fsm.py` TurnFSM；`turns`/`turn_events`/`pending_calls`；answer 按 `call_id` 幂等并复用原 turn；重启保留待答问题、收尾半途 turn |
 
 ## P1 第一片：能力内核 + tokenize pilot（2026-11-22）
 
@@ -391,6 +392,35 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第一片：TurnFSM + 持久事件 + 中断恢复（2026-11-23）
+
+按 ADR-003 先落数据模型，不先写 runner（避免“先做界面再改表”）：
+
+- 框架 `agent_workspace/fsm.py`：`TURN` 表 `new→context→streaming→tool→awaiting_user→streaming→settled|interrupted`；
+  `require()` 对非法移动按“机器名 + 两端状态”拒绝；测试逐对穷举合法/非法。
+- `store.py` 新增 `turns`（状态/停止原因/解析后的 provider/model/skill）、`turn_events`（`seq = MAX(seq)+1`）、
+  `pending_calls`（call_id/conversation/account/turn/kind/tool/args/provider/model/skill）。删会话时一并清理。
+- `service.ask()`：每轮建行、逐事件落盘并推进状态；`answer()` 复用 pending 行的 `turn_id`，`_resume` 在同一把锁里
+  `claim` 一次 → 重复答案按 `question.unknown` 拒绝；重启时 `settle_interrupted_turns()` 只收尾真正半途的 turn，
+  `awaiting_user` 保留。新增公开读：`turn()`/`turn_events(after)`/`pending()`。
+- 待答期间的普通新消息仍按旧行为 settle 为 skipped（邮箱是下一片）；`answer` 对已结算的 call 现在按名拒绝，不再
+  静默开新轮。
+- 同时补 ADR-002 的一个门禁缺口：`test_capability_completeness.py` 现在拒绝“清单指向浏览器未注册的
+  `custom_renderer`”；`capabilities-kernel.md` 说明文档哈希由生成物 digest 承载（写回清单会让文档与清单互相绑架）。
+- 仍开放：runner（脱离请求线程）、`turn_commands`（stop/steer）、邮箱、事件 `v`/`Last-Event-ID`、R10 Asset、
+  `ai_host` 双路径开关。
+
+### 对照 ADR-001/002/003 的复核（2026-11-23）
+
+- **ADR-001**：P1–P3 都是逐域迁移，旧节点表已删除（`nodes/catalog.py` 现在只是清单投影）；P4 的“双路径开关”此前
+  只写在 parity 文档的流程里，现已变成 rewrite-plan 的未勾选项，接入时必须在 `runtime/flags.py` 声明。
+- **ADR-002**：九段、注册表、六类生成物与 freshness 门禁都在；**缺的两个门禁已处理**——自定义表单 renderer 现在
+  会被门禁核对（浏览器里没有人 `registerSettingsRenderer` 的 id 直接红）；“文档哈希”按“生成物携带清单 digest”
+  解释并写进 `capabilities-kernel.md`（写回清单是反向依赖）。技能七段属于 P6，保持未勾选。
+- **ADR-003**：TurnFSM、事件 seq、pending 持久化、重启恢复已落地；runner、命令表、邮箱、事件版本号仍未勾选，
+  顺序写在 rewrite-plan。
+- **R10**：`DataAsset` 仍只有骨架；`node_schema` 是形状半部，物化列入 P4 未勾选项，不能算 P3 已完成。
+
 ## P4.0 决策：框架先完善，再接入（2026-11-23）
 
 用户追加约束：**AI 框架可能还不完善；先按通用标准把框架补到能承载采析绘的全部 AI 功能，再做接入。框架必须保持
@@ -416,10 +446,11 @@
 3. **P3 第四片已完成**：`Manifest.postcheck` + 运行循环的控制台告警；analysis 0 行检查。P3 清单全部勾选。
    见“P3 第四片”。
 4. **P4 依赖已完成**：wheel 钉版 + 门禁 + 镜像安装路径（`8b6cc478`）。
-5. **P4.0 第一项已完成（F17）**：框架 `turn_finished` 通知接缝（框架 `7323f2e`，0.1.1）。
-6. **下一步：P4.0 框架完善 F1–F4**：`pending_calls` 持久化与 rehydrate、`answer(call_id)` 幂等、未答问题不被新消息
-   取消 + 邮箱、retry 还原原轮、事件 `seq`/续传。框架测试全绿后重建 wheel，再更新本仓库的 parity 与测试。
-   `core.asset.DataAsset` 物化可以并行，但不阻塞框架。
+5. **P4.0 第一片已完成**：框架 `turn_finished` 通知（`7323f2e`，0.1.1）；ADR-003 的 TurnFSM + `turns`/`turn_events`/
+   `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
+6. **下一步：P4.0 runner 片**：`POST` 只建 turn 即返回；常驻 `TurnRunner` 执行、事件带 `seq` 落盘、SSE 只是
+   `after=seq` 订阅；`turn_commands` 承载 stop/steer；随后是邮箱与事件 `EVENT_PROTOCOL=1`/`Last-Event-ID`。
+   R10 Asset 物化可以并行，但不阻塞框架。
 
 
 ## H11 的关键落点（避免重复调查）

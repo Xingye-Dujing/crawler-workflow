@@ -4,6 +4,9 @@
 
 ## 先读什么
 
+**每次会话第一步**（与读压缩交接文档同等义务）：本目录的 README → ADR-001/002/003 → handoff →
+rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲突的改动必须先写成决策，不能默默绕过。
+
 1. [ADR-001：内核替换，而不是推倒重来](ADR-001-kernel-replacement.md)
 2. [ADR-002：能力清单（Manifest）与完整性门禁](ADR-002-capability-manifest.md)
 3. [ADR-003：持久状态机与中断恢复](ADR-003-durable-state.md)
@@ -26,6 +29,8 @@
 
 ## 状态
 
-- 当前阶段：**P2 节点内核全量**（P1 内核骨架已完成：manifest/registry/generator/doctor/FSM/events/flags/Asset）
+- 当前阶段：**P4.0 框架完善**（P1 内核骨架、P2 全量节点迁移、P3 验证完整化已完成）
+- 首个 P4.0 切片已落地（框架 0.1.2）：`fsm.py` 的 TurnFSM、`turns`/`turn_events`/`pending_calls`、
+  重启保留待答问题；runner/命令/邮箱仍开放
 - 已确认的 10 个方向决策见 [rewrite-plan.md](rewrite-plan.md#已确认的决策)
 - 一个勾选项只有在“代码 + 测试 + 文档/技能 + 门禁 + 收口”全部通过后才能打勾
