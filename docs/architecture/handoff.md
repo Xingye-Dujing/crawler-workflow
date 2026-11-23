@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`8ed62f4 功能更新：行任务并发按供应商限流`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`6c894ccb 功能更新：框架 0.1.16（行任务并发限流）`；框架仓库 `8ed62f4`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -68,6 +68,7 @@
 | `5f99f6a` | 框架 0.1.14（F14）：`agent_traces` OTel GenAI span + trace 树；best-effort、无正文 |
 | `13d9937` | 框架 0.1.15（F15）：`structured_output` 能力 + `output_schema`；OpenAI 兼容映射 `response_format`，未声明按名拒绝 |
 | `8ed62f4` | 框架 0.1.16（F16）：`chat_once` 按供应商限流（`max_parallel`/设置/本地串行） |
+| `6c894ccb` | wheel 0.1.16；rewrite-plan 勾选 F16；handoff/README 记录第十四片，P4.0 只剩 F18 |
 | `fa7d965d` | wheel 0.1.15；rewrite-plan 勾选 F15；handoff/README 记录第十三片，下一步 F16 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
 | `3708da31` | wheel 0.1.13；rewrite-plan 勾选 F11；handoff/README 记录第十一片，下一步 F14 |
