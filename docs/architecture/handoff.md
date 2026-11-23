@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`e2a60b3 功能更新：产物校验与预览注册`（框架仓库）；本仓库见下表最新一行
+- 最后提交：`3708da31 功能更新：框架 0.1.13（产物校验与预览）`；框架仓库 `e2a60b3`
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -65,6 +65,7 @@
 | `1df4f91` | 框架 0.1.11（F3）：`retry` 从 user 行所属 turn 恢复 provider/model/skill，复用已存上下文块，不新增 user 行 |
 | `2511b09` | 框架 0.1.12（F10）：附件接缝（宿主抽取文本/内联图片，框架按能力路由）；修复用户消息在每次 provider 请求中被重复追加 |
 | `e2a60b3` | 框架 0.1.13（F11）：`ArtifactRegistry` + HostAdapter 校验/预览声明；提案与 apply 各校验一次，未声明 kind 标 `unvalidated` |
+| `3708da31` | wheel 0.1.13；rewrite-plan 勾选 F11；handoff/README 记录第十一片，下一步 F14 |
 | `aa8bb1af` | wheel 0.1.12；rewrite-plan 勾选 F10；handoff/README 记录第十片，下一步 F11 |
 | `6fdb5712` | wheel 0.1.11；rewrite-plan 勾选 F3；handoff/README 记录第九片，下一步 F10 |
 | `c23175bf` | wheel 0.1.9；rewrite-plan 勾选 F8；handoff/README 记录第七片，下一步 F9 |
