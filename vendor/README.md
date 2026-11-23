@@ -2,13 +2,13 @@
 
 Committed dependency artifacts, for a package that has no index release.
 
-## `agent_workspace-0.1.16-py3-none-any.whl`
+## `agent_workspace-0.1.17-py3-none-any.whl`
 
 | | |
 |---|---|
-| distribution | `agent-workspace` 0.1.16 |
+| distribution | `agent-workspace` 0.1.17 |
 | built from | the agent-workspace framework checkout, `pip wheel --no-deps -w dist .` |
-| sha256 | `e24265995768d06478f2d294639ec208e4f0f91a4549b27c718991b8c14f9bfe` |
+| sha256 | `d63a8b319f39c2d20cee9689051978b74631dc79b013af6ad8b8987653d39de9` |
 
 `requirements.txt` names this file by a path relative to the repository root, so `pip install -r
 requirements.txt` installs exactly these bytes. A development checkout of the framework can shadow

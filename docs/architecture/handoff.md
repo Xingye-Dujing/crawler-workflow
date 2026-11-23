@@ -2,7 +2,7 @@
 
 - 日期：2026-11-23
 - 分支：`main`
-- 最后提交：`6c894ccb 功能更新：框架 0.1.16（行任务并发限流）`；框架仓库 `8ed62f4`
+- 最后提交：`aef340c 问题修复：trace 顺序按插入顺序`（框架仓库）；本仓库见下表最新一行
 - 工作区：干净（`git status --short` 无输出）
 
 ## 已完成（每个一类改动一个 commit）
@@ -68,6 +68,8 @@
 | `5f99f6a` | 框架 0.1.14（F14）：`agent_traces` OTel GenAI span + trace 树；best-effort、无正文 |
 | `13d9937` | 框架 0.1.15（F15）：`structured_output` 能力 + `output_schema`；OpenAI 兼容映射 `response_format`，未声明按名拒绝 |
 | `8ed62f4` | 框架 0.1.16（F16）：`chat_once` 按供应商限流（`max_parallel`/设置/本地串行） |
+| `cc589d3` | 框架 0.1.17（F18）：`CommandRegistry` + `/status` `/skills` `/mode` `/compact`；host 可注册 `/init`，重名拒绝 |
+| `aef340c` | 修复 trace 顺序：按 rowid 插入顺序，避免同一微秒的 span 排序漂移 |
 | `6c894ccb` | wheel 0.1.16；rewrite-plan 勾选 F16；handoff/README 记录第十四片，P4.0 只剩 F18 |
 | `fa7d965d` | wheel 0.1.15；rewrite-plan 勾选 F15；handoff/README 记录第十三片，下一步 F16 |
 | `c6d392d7` | wheel 0.1.14；rewrite-plan 勾选 F14；handoff/README 记录第十二片，下一步 F15 |
@@ -418,6 +420,18 @@
   208 passed（node plugins + node-types API + capabilities），ruff 全绿。
 
 
+## P4.0 第十五片：命令与压缩（2026-11-23，框架 0.1.17 —— P4.0 收口）
+
+- `CommandRegistry`：框架 `/status`（会话/最近 turn/pending/inbox/usage/mode）、`/skills`、`/mode`
+  （写会话偏好，下一轮默认遵守）、`/compact`（清旧 user 行的 `context_text`，不改写转录）；宿主用
+  `HostAdapter.commands()` 注册 `/init` 等，重名按 `command.duplicate` 拒绝。
+- Flask 增加 `POST /command`（name/args/conversation_id）。
+- 同一轮的两个 provider span 可能共享 `started_at` 的微秒，trace 树曾因此漂移；改为 rowid 插入顺序（`aef340c`），
+  测试连跑 10 次稳定。
+- **P4.0 至此全部完成（F1–F18）**。框架 0.1.17，220 条测试全绿。
+- 下一步：P4 接入（`backend/ai_host`）——HostAdapter 领域实现、领域技能/工具、本地附件抽取、设置映射、`/init`、
+  parity、双路径开关、薄门面。
+
 ## P4.0 第十四片：行任务并发（2026-11-23，框架 0.1.16）
 
 - `chat_once` 走每供应商信号量：`ProviderSpec.max_parallel` → 设置 `providers.max_parallel`（默认 4）；`local_only`
@@ -612,8 +626,9 @@ rewrite-plan 的 P4 清单原先混着“框架通用能力”和“采析绘接
    `pending_calls` + 幂等 answer + 重启恢复（框架 `47496d0`，0.1.2）。
 6. **P4.0 第二片已完成**：后台 runner + 订阅续传 + 持久 stop + `bind_account` + 重连路由（框架 `e99a6d8`，0.1.3）。
 7. **P4.0 第三片已完成**：邮箱（待答期间的新消息排队，带 `mailbox_id` 再发才执行）（框架 `30d1d5d`，0.1.4）。
-8. **下一步：P4.0 第十五片（最后一片）**：F18 命令注册表 + `/status` `/skills` `/mode` `/compact`（`/init` 留 host）。
-   完成后 P4.0 收口，进入 `backend/ai_host`。R10 Asset 物化可以并行。
+8. **P4.0 已完成（框架 0.1.17，F1–F18 全勾）**。下一步进入 **P4 接入**：`backend/ai_host`（HostAdapter 的 facts/
+   sources/tools/skills/resolvers/artifacts/UI）→ 领域技能/工具迁移 → 本地附件抽取 → 设置映射 → `/init` →
+   parity → `runtime/flags.py` 双路径开关 → 删旧引擎/薄门面。R10 Asset 物化可以并行。
 
 
 ## H11 的关键落点（避免重复调查）

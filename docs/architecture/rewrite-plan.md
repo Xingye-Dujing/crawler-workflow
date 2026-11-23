@@ -156,8 +156,9 @@
   `response_format`，未声明按 `capability.refused` 拒绝；`thinking` 同规则；Ollama 的 `think:false` 保持（框架 0.1.15）
 - [x] **F16 LLM 行任务并发**：`chat_once` 按供应商信号量限流（`max_parallel` → 设置 `providers.max_parallel`），
   `local_only` 固定串行；轮次工具调用仍有序（框架 0.1.16）
-- [ ] **F18 命令与压缩**：通用命令注册表；框架提供 `/status` `/skills` `/mode` `/compact`（上下文压缩）；
-  **`/init` 等认识宿主项目的命令由 host 注册**——框架
+- [x] **F18 命令与压缩**：`CommandRegistry` + `/status` `/skills` `/mode` `/compact`；`/mode` 写会话偏好、下一轮
+  生效；`/compact` 清旧 user 行的 `context_text`（不改写转录）；宿主经 `HostAdapter.commands()` 注册 `/init`
+  等（重名按 `command.duplicate` 拒绝）（框架 0.1.17）
 - [x] **F3 retry 还原原轮**：从 user 行所属 turn 恢复 provider/model/skill，复用该行已存的上下文块（不重读实时
   sources）；不新增 user 行（框架 0.1.11）
 - [ ] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架
