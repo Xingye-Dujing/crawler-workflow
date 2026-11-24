@@ -18,10 +18,11 @@ from pathlib import Path
 from capabilities_kernel.chart import ChartSpec
 from capabilities_kernel.manifest import API_VERSION, KINDS, Manifest
 from capabilities_kernel.operator import OperatorManifest
+from capabilities_kernel.platform import PlatformManifest
 
-#: The manifest types a kind may declare. ``node``/``platform`` … are the nine-section ``Manifest``;
-#: ``operator`` adds the analysis-step sections and ``chart`` the field/engine contract.
-MANIFEST_TYPES = (Manifest, OperatorManifest, ChartSpec)
+#: The manifest types a kind may declare. ``node`` is the nine-section ``Manifest``; ``operator``
+#: adds the analysis-step sections, ``chart`` the field/engine contract, ``platform`` the crawl modes.
+MANIFEST_TYPES = (Manifest, OperatorManifest, ChartSpec, PlatformManifest)
 
 #: The capability tree. Tests point this at a temporary directory to prove duplicate/id/version
 #: refusals without writing into the checkout.

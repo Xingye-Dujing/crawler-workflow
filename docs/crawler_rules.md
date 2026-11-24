@@ -13,9 +13,9 @@
   `engine/workflow.py::validate` 拒绝；`GET /api/capabilities` 把同一份描述交给面板。新平台/模式是**一条矩阵项**，
   不是四个文件里的 `if platform == …`。字段标签是前端键、必填名是后端键（`field.*`），由
   `test_frontend_contract.py::TestCrawlMatrixParity` 对齐；字段名会进内联处理器，不匹配 `/^[\w.-]{1,64}$/` 的整项丢弃。
-- **平台是插件，共享层不认识任何一个站。** `crawlers/platforms/<id>/` 与 `capabilities/platforms/<id>.py` 是站点
+- **平台是插件，共享层不认识任何一个站。** `crawlers/platforms/<id>/` 与 `capabilities_kernel/platforms/<id>/manifest.py` 是站点
   事实的唯一住处（选择器、端点、页面内 JS、列名、节奏基线、表单给哪个开关）；`crawlers/engine/`、`crawlers/core/`、
-  `crawlers/commenting/`、`capabilities/fields.py` 里不得出现按平台名分支的代码。共享工厂可以收一个通用参数，由
+  `crawlers/commenting/`、`capabilities_kernel/platforms/_fields.py` 里不得出现按平台名分支的代码。共享工厂可以收一个通用参数，由
   平台文件传自己的答案（如 `comment_mode(..., replies=True)`）；平台专属逻辑出现在共享模块就是架构缺陷。
 - **没有平台自己的用户旋钮。** 站点基线（卡片等待、滚动预算、卡住轮数）可以放在平台旁边，但必须经
   `crawlers/engine/pacing.py` 消费（`nap`/`scroll_scale`/`scroll_interval`/`expand_scale`/`click_scale`/

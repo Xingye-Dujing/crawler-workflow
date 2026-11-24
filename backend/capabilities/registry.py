@@ -19,14 +19,15 @@ crawls instead.
 import re
 from dataclasses import replace
 
+from capabilities_kernel.platform import Field, Mode, PlatformManifest
+from capabilities_kernel.platforms._fields import BACKEND_CATBUS, BACKEND_SELENIUM, BACKENDS, FILE_FIELDS, RECOLLECT
+
 from capabilities.catbus import (
     CATBUS_FIELD_TEMPLATES,
     CATBUS_MODE_LABELS,
     CATBUS_ONLY_PLATFORMS,
     CATBUS_ONLY_REGIONS,
 )
-from capabilities.fields import BACKEND_CATBUS, BACKEND_SELENIUM, BACKENDS, FILE_FIELDS, RECOLLECT
-from capabilities.model import Capability, Field, Mode
 from capabilities.platforms import CAPABILITIES
 from capabilities.requirements import requirement_label_key, requirement_met
 from i18n import t
@@ -274,7 +275,7 @@ def catbus_run_errors(platform: str, mode_key: str) -> list[str]:
     return [why or t('catbus.noRunnableCell', platform=label)]
 
 
-def capability(platform: str) -> Capability | None:
+def capability(platform: str) -> PlatformManifest | None:
     return _BY_PLATFORM.get(str(platform or ''))
 
 

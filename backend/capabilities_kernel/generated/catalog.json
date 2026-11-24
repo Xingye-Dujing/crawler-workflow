@@ -13198,6 +13198,4913 @@
         },
         "api_version": 1
       }
+    },
+    {
+      "kind": "platform",
+      "id": "zhihu",
+      "digest": "38438ce0f99d9e3b3760b6542509cb33b852197be658d9da2dd43bdb2146b151",
+      "manifest": {
+        "identity": {
+          "id": "zhihu",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.zhihu",
+          "category": "cn",
+          "order": 10,
+          "description": "知乎：关键词搜索（可展开全文）、创作者回答、站内热榜、问题/回答评论（含楼中楼）。",
+          "when_to_use": "要分析知乎的问答语料、某个作者的回答，或一个问题下的评论互动。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectPosts",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "full_body",
+                "control": "checkbox",
+                "label_key": "settings.fullBody",
+                "default": true,
+                "hint_key": "settings.fullBodyHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHintZhihu",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "https://www.zhihu.com/people/<id>",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "hot",
+            "label_key": "settings.collectHot",
+            "handler": "hot",
+            "fields": [
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 30,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "zhihu",
+                "placeholder": "https://www.zhihu.com/question/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.includeReplies",
+                "default": true,
+                "hint_key": "settings.includeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": true,
+        "execution": {
+          "handler": "crawlers.platforms.zhihu.crawler:ZhihuCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "知乎：关键词搜索（可展开全文）、创作者回答、站内热榜、问题/回答评论（含楼中楼）。",
+          "when_not_to_use": [
+            "热榜只有 30 条且需要登录；匿名浏览会被 401 拒绝。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: posts, author, hot, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `zhihu` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "zhihu",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "zhihu",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/zhihu.md",
+          "skill": "docs/capabilities/skills/platforms/zhihu.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "weibo",
+      "digest": "0082fe165b641ef9997c401b30c26e0f4a6e6b6d071d5a86b05fbea7487df6e7",
+      "manifest": {
+        "identity": {
+          "id": "weibo",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.weibo",
+          "category": "cn",
+          "order": 20,
+          "description": "微博：关键词搜索（可限定起止时间）、某个 UID 的微博、热搜榜、微博评论（含楼中楼）。",
+          "when_to_use": "舆情事件研究的主力语料：搜索 + 时间窗，或按账号追踪。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectPosts",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "start_time",
+                "control": "text",
+                "label_key": "settings.startTime",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "end_time",
+                "control": "text",
+                "label_key": "settings.endTime",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHintWeibo",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "https://weibo.com/u/<UID>",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "hot",
+            "label_key": "settings.collectHot",
+            "handler": "hot",
+            "fields": [
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": false,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "weibo",
+                "placeholder": "https://weibo.com/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.includeReplies",
+                "default": true,
+                "hint_key": "settings.includeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentFetchHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": true,
+        "serial_only": true,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.weibo.crawler:WeiboCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "微博：关键词搜索（可限定起止时间）、某个 UID 的微博、热搜榜、微博评论（含楼中楼）。",
+          "when_not_to_use": [
+            "热搜是匿名接口，不需要登录；其他模式必须用能保持登录态的浏览器。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: posts, author, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `weibo` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "weibo",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "weibo",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty.",
+            "This platform is serial-only: two sessions at once is a login wall (the gate forces 真排队)."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/weibo.md",
+          "skill": "docs/capabilities/skills/platforms/weibo.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "xiaohongshu",
+      "digest": "ef5c7331cc69b3efee7e58ef8872b1520cb0f1204a708c2c96251ef30d030364",
+      "manifest": {
+        "identity": {
+          "id": "xiaohongshu",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.xiaohongshu",
+          "category": "cn",
+          "order": 30,
+          "description": "小红书：关键词搜索笔记（可带前 N 条评论预览），或对笔记链接采集评论。",
+          "when_to_use": "消费决策/种草类语料，或某篇笔记下的评论互动。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectPosts",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_preview",
+                "control": "number",
+                "label_key": "settings.commentPreview",
+                "default": 5,
+                "hint_key": "settings.commentPreviewHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "xiaohongshu",
+                "placeholder": "https://www.xiaohongshu.com/explore/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.includeReplies",
+                "default": true,
+                "hint_key": "settings.includeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": true,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.xiaohongshu.crawler:XiaohongshuCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "小红书：关键词搜索笔记（可带前 N 条评论预览），或对笔记链接采集评论。",
+          "when_not_to_use": [
+            "搜索结果页会滚动，无头模式更容易被重定向到登录页。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: posts, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `xiaohongshu` and `collect` one of: `posts`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "xiaohongshu",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "xiaohongshu",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/xiaohongshu.md",
+          "skill": "docs/capabilities/skills/platforms/xiaohongshu.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "wechat",
+      "digest": "37144fd1185623f5aba601a2cd1470908bac18c953d0cdb26c532c446a4b5da8",
+      "manifest": {
+        "identity": {
+          "id": "wechat",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.wechat",
+          "category": "cn",
+          "order": 40,
+          "description": "微信公众号：粘贴文章链接，逐篇打开并保存正文。",
+          "when_to_use": "已有公众号文章链接清单，需要正文语料时。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.articleUrls",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.urls",
+                "default": "",
+                "hint_key": "settings.urlsHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "",
+                "placeholder": "https://mp.weixin.qq.com/s/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.wechatLimitsNote",
+            "action_key": "settings.wechatLimitsBtn",
+            "action_js": "explainWechatLimits",
+            "collects": "page_per_row",
+            "needs_session": false,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.wechat.crawler:WechatCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "微信公众号：粘贴文章链接，逐篇打开并保存正文。",
+          "when_not_to_use": [
+            "它不搜索、不翻页、不需要登录；要发现文章请先用别的方式拿到链接。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `wechat` and `collect` one of: `posts`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "wechat",
+                "collect": "posts",
+                "urls": "https://example.com/item/1"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "wechat",
+              "collect": "posts",
+              "urls": "https://example.com/item/1"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/wechat.md",
+          "skill": "docs/capabilities/skills/platforms/wechat.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "bilibili",
+      "digest": "ff835752b3207892de31f993a3f28c4d0043f2d309775f2ad1a6c80bcabcb63f",
+      "manifest": {
+        "identity": {
+          "id": "bilibili",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.bilibili",
+          "category": "cn",
+          "order": 50,
+          "description": "哔哩哔哩：关键词搜索视频、UP 主的投稿、热门/排行榜、视频评论（含楼中楼）。",
+          "when_to_use": "以视频为载体的舆情或创作者研究；评论来自 reply API，结构稳定。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectVideos",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_read",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHintBili",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "https://space.bilibili.com/<UID>",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "hot",
+            "label_key": "settings.collectHot",
+            "handler": "hot",
+            "fields": [
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "board",
+                "control": "select",
+                "label_key": "settings.hotBoard",
+                "default": "popular",
+                "hint_key": "",
+                "options": [
+                  [
+                    "popular",
+                    "settings.hotBoardPopular"
+                  ],
+                  [
+                    "ranking",
+                    "settings.hotBoardRanking"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.board",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "bilibili",
+                "placeholder": "https://www.bilibili.com/video/BV...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.includeReplies",
+                "default": true,
+                "hint_key": "settings.includeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentFetchHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": true,
+        "execution": {
+          "handler": "crawlers.platforms.bilibili.crawler:BilibiliCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "哔哩哔哩：关键词搜索视频、UP 主的投稿、热门/排行榜、视频评论（含楼中楼）。",
+          "when_not_to_use": [
+            "热门与排行是同一模式里的一个选择，不是两种采集。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: posts, author, hot, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `bilibili` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "bilibili",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "bilibili",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/bilibili.md",
+          "skill": "docs/capabilities/skills/platforms/bilibili.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "douyin",
+      "digest": "712f3cc90e765a540ffc66dfd55891dc525cb821e3e2b6f1703cfaf8d9e3a5eb",
+      "manifest": {
+        "identity": {
+          "id": "douyin",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.douyin",
+          "category": "cn",
+          "order": 60,
+          "description": "抖音：某个创作者的主页视频、热榜、视频评论（含楼中楼）。",
+          "when_to_use": "短视频平台的热点与评论研究。"
+        },
+        "modes": [
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHintDouyin",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "https://www.douyin.com/user/<sec_uid>",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "modal_per_row",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "hot",
+            "label_key": "settings.collectHot",
+            "handler": "hot",
+            "fields": [
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "douyin",
+                "placeholder": "https://www.douyin.com/video/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.includeReplies",
+                "default": true,
+                "hint_key": "settings.includeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": true,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.douyin.crawler:DouyinCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "抖音：某个创作者的主页视频、热榜、视频评论（含楼中楼）。",
+          "when_not_to_use": [
+            "无头的投递浏览器经常被验证码中间页挡住；用你自己的浏览器配置更可靠。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: author, hot, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `douyin` and `collect` one of: `author`, `hot`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "douyin",
+                "collect": "author",
+                "author": "@handle"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "douyin",
+              "collect": "author",
+              "author": "@handle"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/douyin.md",
+          "skill": "docs/capabilities/skills/platforms/douyin.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "hongguo",
+      "digest": "13c4328dc03159d0ad62ea169d8dd6afc19547f585d052b9f78bd99b7fa1dc10",
+      "manifest": {
+        "identity": {
+          "id": "hongguo",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.hongguo",
+          "category": "cn",
+          "order": 70,
+          "description": "红果短剧：四个匿名热播榜，以及只能在桌面客户端里跑的评论采集。",
+          "when_to_use": "短剧赛道研究；榜单是匿名的，评论需要 Windows 桌面客户端。"
+        },
+        "modes": [
+          {
+            "key": "hot",
+            "label_key": "settings.collectHot",
+            "handler": "hot",
+            "fields": [
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "board",
+                "control": "select",
+                "label_key": "settings.hotBoard",
+                "default": "hot_drama",
+                "hint_key": "",
+                "options": [
+                  [
+                    "hot_drama",
+                    "settings.hotBoardHongguoDrama"
+                  ],
+                  [
+                    "hot_real_drama",
+                    "settings.hotBoardHongguoReal"
+                  ],
+                  [
+                    "hot_ai_drama",
+                    "settings.hotBoardHongguoAi"
+                  ],
+                  [
+                    "hot_comic_drama",
+                    "settings.hotBoardHongguoComic"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.board",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": false,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.hgCommentUrls",
+                "default": "",
+                "hint_key": "settings.hgCommentUrlsHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "hongguo",
+                "placeholder": "https://hongguoduanju.com/detail?series_id=…（或每行一个剧名）",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": true
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "episode_count",
+                "control": "number",
+                "label_key": "settings.hgEpisodeCount",
+                "default": 10,
+                "hint_key": "settings.hgEpisodeCountHint",
+                "options": [],
+                "minimum": 1,
+                "maximum": 200,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "include_replies",
+                "control": "checkbox",
+                "label_key": "settings.hgIncludeReplies",
+                "default": true,
+                "hint_key": "settings.hgIncludeRepliesHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "harvest_timeout",
+                "control": "number",
+                "label_key": "settings.hgHarvestTimeout",
+                "default": 90,
+                "hint_key": "settings.hgHarvestTimeoutHint",
+                "options": [],
+                "minimum": 10,
+                "maximum": 600,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.hgCommentNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "external_app",
+            "needs_session": false,
+            "requires": "windows_desktop"
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.hongguo.crawler:HongguoCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "红果短剧：四个匿名热播榜，以及只能在桌面客户端里跑的评论采集。",
+          "when_not_to_use": [
+            "评论采集在 Linux/macOS/云端没有可驱动的东西，面板会按名不提供。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `hongguo` and `collect` one of: `hot`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "hongguo",
+                "collect": "hot"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "hongguo",
+              "collect": "hot"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/hongguo.md",
+          "skill": "docs/capabilities/skills/platforms/hongguo.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "cnki",
+      "digest": "068edf53f0299e85d2b3a23ed5ee932a6d4dd9be680f244bd9ef06b7f861918d",
+      "manifest": {
+        "identity": {
+          "id": "cnki",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.cnki",
+          "category": "cn",
+          "order": 80,
+          "description": "中国知网：关键词检索，勾选结果并下载 RefWorks 导出，得到文献表。",
+          "when_to_use": "文献计量分析的起点：用主题词把一批文献记录取回来。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectLiterature",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.cnkiNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_read",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": true,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.cnki.crawler:CnkiCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "中国知网：关键词检索，勾选结果并下载 RefWorks 导出，得到文献表。",
+          "when_not_to_use": [
+            "它不是通用网页采集；没有文献分析需求时用别的平台。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 国内.",
+            "A saved login for the modes that need one: posts.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `cnki` and `collect` one of: `posts`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "cnki",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "cnki",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/cnki.md",
+          "skill": "docs/capabilities/skills/platforms/cnki.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "youtube",
+      "digest": "a6f4bfeed47c1b8922b884df95042e682b35acab27264c37c980bdf7a6d7a575",
+      "manifest": {
+        "identity": {
+          "id": "youtube",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.youtube",
+          "category": "overseas",
+          "order": 90,
+          "description": "YouTube：关键词搜索、频道视频、视频评论；每条可额外请求点赞数与发布时间。",
+          "when_to_use": "海外平台的视频语料与评论研究。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectPosts",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "with_facts",
+                "control": "checkbox",
+                "label_key": "settings.withFacts",
+                "default": true,
+                "hint_key": "settings.withFactsHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "@handle",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "with_facts",
+                "control": "checkbox",
+                "label_key": "settings.withFacts",
+                "default": true,
+                "hint_key": "settings.withFactsHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "settings.fetchQuietNote",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "youtube",
+                "placeholder": "https://www.youtube.com/watch?v=...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentFetchHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "fetch",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.youtube.crawler:YouTubeCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "YouTube：关键词搜索、频道视频、视频评论；每条可额外请求点赞数与发布时间。",
+          "when_not_to_use": [
+            "国内网络通常无法直接访问；需要海外出口。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 海外（需要对应的网络出口）.",
+            "A saved login for the modes that need one: posts, author, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `youtube` and `collect` one of: `posts`, `author`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "youtube",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "youtube",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/youtube.md",
+          "skill": "docs/capabilities/skills/platforms/youtube.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "platform",
+      "id": "twitter",
+      "digest": "2bd9f4ac2afea34a5456c683bc3d172b67d2d5e1b9adeb5b1bb6241220517f6e",
+      "manifest": {
+        "identity": {
+          "id": "twitter",
+          "kind": "platform",
+          "version": "1.0.0",
+          "title_key": "platform.twitter",
+          "category": "overseas",
+          "order": 100,
+          "description": "X / Twitter：关键词搜索、用户时间线、推文回复（需要登录）。",
+          "when_to_use": "海外舆情、名人/机构账号的发言与回复。"
+        },
+        "modes": [
+          {
+            "key": "posts",
+            "label_key": "settings.collectPosts",
+            "handler": "search",
+            "fields": [
+              {
+                "key": "keyword",
+                "control": "text",
+                "label_key": "settings.keyword",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.keyword",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "author",
+            "label_key": "settings.collectAuthor",
+            "handler": "author",
+            "fields": [
+              {
+                "key": "author",
+                "control": "text",
+                "label_key": "settings.author",
+                "default": "",
+                "hint_key": "settings.authorHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "@handle",
+                "name_key": "field.author",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "target_count",
+                "control": "number",
+                "label_key": "settings.targetCount",
+                "default": 50,
+                "hint_key": "",
+                "options": [],
+                "minimum": 1,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "posts",
+            "note_key": "",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          },
+          {
+            "key": "comments",
+            "label_key": "settings.collectComments",
+            "handler": "comments",
+            "fields": [
+              {
+                "key": "urls",
+                "control": "textarea",
+                "label_key": "settings.commentUrls",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": true,
+                "coerce": "urls",
+                "links_of": "twitter",
+                "placeholder": "https://x.com/.../status/...",
+                "name_key": "field.urls",
+                "fed_by": "input_column",
+                "accepts_names": false
+              },
+              {
+                "key": "input_column",
+                "control": "text",
+                "label_key": "settings.inputColumn",
+                "default": "",
+                "hint_key": "settings.inputColumnHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_limit",
+                "control": "number",
+                "label_key": "settings.commentLimit",
+                "default": 0,
+                "hint_key": "settings.commentLimitHint",
+                "options": [],
+                "minimum": 0,
+                "maximum": null,
+                "required": false,
+                "coerce": "number",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_start",
+                "control": "text",
+                "label_key": "settings.commentStart",
+                "default": "",
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-01-01",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "comment_end",
+                "control": "text",
+                "label_key": "settings.commentEnd",
+                "default": "",
+                "hint_key": "settings.commentTimeHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "2026-12-31",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "per_article_file",
+                "control": "checkbox",
+                "label_key": "settings.perArticleFile",
+                "default": false,
+                "hint_key": "",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "backend",
+                "control": "select",
+                "label_key": "field.backend",
+                "default": "selenium",
+                "hint_key": "settings.backendHint",
+                "options": [
+                  [
+                    "selenium",
+                    "settings.backendSelenium"
+                  ],
+                  [
+                    "catbus",
+                    "settings.backendCatbus"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.backend",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "catbus_account",
+                "control": "text",
+                "label_key": "field.catbusAccount",
+                "default": "",
+                "hint_key": "settings.catbusAccountHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.catbusAccount",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "account",
+                "control": "select",
+                "label_key": "field.account",
+                "default": "default",
+                "hint_key": "",
+                "options": [
+                  [
+                    "default",
+                    "cookies.accountDefault"
+                  ]
+                ],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "text",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "field.account",
+                "fed_by": "",
+                "accepts_names": false
+              },
+              {
+                "key": "recrawl",
+                "control": "checkbox",
+                "label_key": "settings.recrawl",
+                "default": false,
+                "hint_key": "settings.recrawlHint",
+                "options": [],
+                "minimum": null,
+                "maximum": null,
+                "required": false,
+                "coerce": "bool",
+                "links_of": "",
+                "placeholder": "",
+                "name_key": "",
+                "fed_by": "",
+                "accepts_names": false
+              }
+            ],
+            "rows": "comments",
+            "note_key": "settings.commentHint",
+            "action_key": "",
+            "action_js": "",
+            "collects": "dom_scroll",
+            "needs_session": true,
+            "requires": ""
+          }
+        ],
+        "profile_recommended": false,
+        "serial_only": false,
+        "parallel_recommended": false,
+        "execution": {
+          "handler": "crawlers.platforms.twitter.crawler:TwitterCrawler",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "source",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "X / Twitter：关键词搜索、用户时间线、推文回复（需要登录）。",
+          "when_not_to_use": [
+            "国内网络通常无法直接访问；评论需要登录会话。"
+          ],
+          "prerequisites": [
+            "A network this platform answers from: 海外（需要对应的网络出口）.",
+            "A saved login for the modes that need one: posts, author, comments.",
+            "Every required box of the chosen mode filled (or fed from an upstream column)."
+          ],
+          "steps": [
+            "Put a `source` node with `platform` `twitter` and `collect` one of: `posts`, `author`, `comments`.",
+            "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+            "A mode this machine cannot run is refused by name before the run starts."
+          ],
+          "examples": [
+            {
+              "type": "source",
+              "params": {
+                "platform": "twitter",
+                "collect": "posts",
+                "keyword": "关键词"
+              }
+            }
+          ],
+          "template": {
+            "type": "source",
+            "params": {
+              "platform": "twitter",
+              "collect": "posts",
+              "keyword": "关键词"
+            }
+          },
+          "failures": [
+            "A required box left blank: the refusal names the field (engine.source names it once).",
+            "A link that belongs to another platform: the comment walk refuses it by name.",
+            "A login wall or risk page: the crawl names it and the run is not silently empty."
+          ],
+          "acceptance": [
+            "The node produced rows, or the refusal named the reason (login wall / risk / captcha)."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_platform_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/platforms/twitter.md",
+          "skill": "docs/capabilities/skills/platforms/twitter.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
     }
   ],
   "matrix": [
@@ -14777,6 +19684,196 @@
         "tests/unit/capabilities/test_chart_manifests.py"
       ],
       "docs": "docs/capabilities/charts/map.md"
+    },
+    {
+      "kind": "platform",
+      "id": "zhihu",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/zhihu.md"
+    },
+    {
+      "kind": "platform",
+      "id": "weibo",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/weibo.md"
+    },
+    {
+      "kind": "platform",
+      "id": "xiaohongshu",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/xiaohongshu.md"
+    },
+    {
+      "kind": "platform",
+      "id": "wechat",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/wechat.md"
+    },
+    {
+      "kind": "platform",
+      "id": "bilibili",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/bilibili.md"
+    },
+    {
+      "kind": "platform",
+      "id": "douyin",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/douyin.md"
+    },
+    {
+      "kind": "platform",
+      "id": "hongguo",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/hongguo.md"
+    },
+    {
+      "kind": "platform",
+      "id": "cnki",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/cnki.md"
+    },
+    {
+      "kind": "platform",
+      "id": "youtube",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/youtube.md"
+    },
+    {
+      "kind": "platform",
+      "id": "twitter",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_platform_manifests.py"
+      ],
+      "docs": "docs/capabilities/platforms/twitter.md"
     }
   ]
 }

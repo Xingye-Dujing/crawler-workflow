@@ -39,10 +39,11 @@ one registration line — never a new `if` in shared code. A change that adds an
 a defect, not a shortcut.
 
 - **Platform crawlers are plugins.** `backend/crawlers/platforms/<id>/` (`crawler.py`, `comments.py`, `rows.py`, …)
-  and `backend/capabilities/platforms/<id>.py` (that platform's modes, fields, advice, region) are the ONLY homes for
+  and `backend/capabilities_kernel/platforms/<id>/manifest.py` (that platform's modes, fields, advice, region) are the
+  ONLY homes for
   site facts: selectors, endpoints, in-page JS, column names, pacing baselines, which field a form offers. Shared
-  modules (`crawlers/engine/`, `crawlers/core/`, `crawlers/commenting/`, `capabilities/fields.py`,
-  `capabilities/model.py`, `nodes/executors/comment.py`) never branch on, or hardcode, a platform. A shared factory
+  modules (`crawlers/engine/`, `crawlers/core/`, `crawlers/commenting/`, `capabilities_kernel/platforms/_fields.py`,
+  `capabilities_kernel/platform.py`, `nodes/executors/comment.py`) never branch on, or hardcode, a platform. A shared factory
   may accept a generic parameter; the platform file passes its own answer (`comment_mode(..., replies=True)`).
 - **Crawl backends**: `crawlers/backends/` + the adapter's own `capabilities` manifest; never copy cells, columns or
   identity keys into a Python table. Ledger, cursor and login are keyed per backend.
@@ -53,11 +54,12 @@ a defect, not a shortcut.
   type's facts go in its manifest — never back into the shared tables. A manifest imports only the standard library
   and the kernel: `nodes.catalog` reads manifests while parsing a DAG, so pandas/Selenium here cost every start.
   All node types are migrated; `capabilities_kernel/nodes/tokenize/manifest.py` was the pilot (see
-  `docs/architecture/capabilities-kernel.md`). Analysis operators and chart types are their own
-  kinds: `capabilities_kernel/operators/<id>/manifest.py` declares a step's reads/writes/policy and
-  `capabilities_kernel/charts/<id>/manifest.py` a chart's fields/engine flags; the analysis tables
-  (`STEP_PARAMS`, the write tables, `OPS`, `LLM_OPS`) and `services.charts.registry.SPECS` are their
-  projections.
+  `docs/architecture/capabilities-kernel.md`). Analysis operators, chart types and platforms are
+  their own kinds: `capabilities_kernel/operators/<id>/manifest.py` declares a step's
+  reads/writes/policy, `capabilities_kernel/charts/<id>/manifest.py` a chart's fields/engine flags,
+  and `capabilities_kernel/platforms/<id>/manifest.py` a platform's modes/fields; the analysis tables
+  (`STEP_PARAMS`, the write tables, `OPS`, `LLM_OPS`), `services.charts.registry.SPECS` and
+  `capabilities.platforms.CAPABILITIES` are their projections.
   `tools/gen_capabilities.py` renders the five artifacts and `tools/doctor.py` prints the same checks; a manifest change
   without a re-render is a red freshness gate, never a stale catalog.
 - **Node types**: one capability manifest (`capabilities_kernel/nodes/<type>/manifest.py`, including its settings form)

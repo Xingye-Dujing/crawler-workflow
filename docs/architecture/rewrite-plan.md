@@ -221,7 +221,7 @@
 
 - [x] 分析算子清单化（37 个：`capabilities_kernel/operators/<id>/manifest.py` 声明契约/读写列/输出形状/是否用模型/双表/空表策略，七段技能由清单生成；`STEP_PARAMS`/写表/`OPS`/`LLM_OPS`/`STEP_TWO_TABLE` 全部由其投影）
 - [x] 图表清单化（30 个：`capabilities_kernel/charts/<id>/manifest.py` 声明字段/角色/控件/引擎/文献必读列与七段技能；`services.charts.registry.SPECS` 全部由其投影，绘图函数公开为 `build_*` 并成为清单 handler）
-- [ ] 11 个平台清单化
+- [x] 平台清单化（10 个：`capabilities_kernel/platforms/<id>/manifest.py` 声明模式/字段/采集行为/登录与机器要求/运行建议与七段技能；`capabilities.platforms.CAPABILITIES` 与 `capabilities.registry` 全部由其投影，爬虫类成为清单 handler）
 - [ ] 面板/停靠/设置清单化
 - [ ] 多表面生成：OpenAPI / MCP server / CLI / UI / AI 工具 / 文档
 - [ ] 同一清单的七个表面一致性门禁

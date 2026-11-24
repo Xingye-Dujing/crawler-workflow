@@ -183,7 +183,8 @@ class ChartSpec:
     def postcheck(self) -> str:
         return ''
 
-    def param(self, name: str) -> ParamSpec | None:
+    def param(self, _name: str) -> ParamSpec | None:
+        """A chart has no flat parameter list; its parameters are its fields."""
         return None
 
     # ─── Generated artifacts and the gate ───

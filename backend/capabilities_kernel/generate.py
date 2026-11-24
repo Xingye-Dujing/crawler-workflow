@@ -396,6 +396,67 @@ def _chart_docs() -> dict[Path, str]:
     }
 
 
+def _platform_page(manifest) -> str:
+    """One platform's documentation page: its modes, the fields each asks and its advice."""
+    ident = manifest.identity
+    lines = [
+        f'# {ident.id}（{manifest.region}）',
+        '',
+        '> 由 `tools/gen_capabilities.py` 从 `backend/capabilities_kernel/platforms/` 的清单生成，请勿手改。',
+        f'> 技能正文：`{manifest.docs.skill}`；机器可读：`backend/capabilities_kernel/generated/catalog.json`。',
+        '',
+        manifest.ai.summary or ident.description,
+        '',
+        '## 何时使用',
+        '',
+        ident.when_to_use or '（未声明）',
+        '',
+    ]
+    if manifest.ai.when_not_to_use:
+        lines += ['不要用于：', '']
+        lines += [f'- {item}' for item in manifest.ai.when_not_to_use]
+        lines.append('')
+    advice = [
+        name
+        for name, value in (
+            ('建议用你自己的浏览器配置', manifest.profile_recommended),
+            ('必须串行（真排队）', manifest.serial_only),
+            ('推荐并行', manifest.parallel_recommended),
+        )
+        if value
+    ]
+    if advice:
+        lines += ['## 运行建议', ''] + [f'- {item}' for item in advice] + ['']
+    lines += ['## 采集模式', '']
+    for mode in manifest.modes:
+        session = '需要登录' if mode.needs_session else '匿名'
+        lines.append(
+            f'### `{mode.key}`（{mode.label_key}）',
+        )
+        lines.append(f'- 产出：{mode.rows}；屏幕行为：`{mode.collects}`；{session}。')
+        if mode.requires:
+            lines.append(f'- 本机要求：`{mode.requires}`（不满足时面板按名不提供）。')
+        required = [field.key for field in mode.fields if field.required]
+        optional = [field.key for field in mode.fields if not field.required]
+        if required:
+            lines.append('- 必填：' + '、'.join(f'`{key}`' for key in required))
+        if optional:
+            lines.append('- 可选：' + '、'.join(f'`{key}`' for key in optional))
+        lines.append('')
+    lines += ['## 契约测试', '']
+    lines += [f'- `{path}`' for path in manifest.tests.contracts]
+    return '\n'.join(lines).rstrip() + '\n'
+
+
+def _platform_docs() -> dict[Path, str]:
+    """One documentation page per platform, beside its generated skill page."""
+    return {
+        ROOT / manifest.docs.page: _platform_page(manifest)
+        for manifest in registry.manifests('platform')
+        if manifest.docs.page
+    }
+
+
 def _docs_index() -> str:
     lines = [
         '# 能力目录（自动生成）',
@@ -475,6 +536,7 @@ def render() -> dict[Path, str]:
         | _skill_docs()
         | _operator_docs()
         | _chart_docs()
+        | _platform_docs()
     )
 
 

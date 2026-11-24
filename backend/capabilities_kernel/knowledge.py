@@ -29,6 +29,8 @@ KIND_TOOLS = {
     'operator': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
     # A chart is reached through the visualize node's chart_type, the same way.
     'chart': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
+    # A platform is reached through the source node's platform + collect pair.
+    'platform': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
 }
 
 _WORD = re.compile(r'[A-Za-z0-9_]{3,}')

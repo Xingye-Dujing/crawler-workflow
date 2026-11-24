@@ -158,7 +158,10 @@ backend/capabilities_kernel/
 
 P7 第一类：37 个分析算子已全部迁到 `capabilities_kernel/operators/<id>/`（见上一节）；P7 第二类：30 个图表类型
 在 `capabilities_kernel/charts/<id>/`，`services.charts.registry.SPECS` 是其投影（字段词汇在
-`charts/_fields.py`，绘图函数是清单的 handler）；还剩平台一类。
+`charts/_fields.py`，绘图函数是清单的 handler）；P7 第三类：10 个平台在
+`capabilities_kernel/platforms/<id>/`，`capabilities.platforms.CAPABILITIES` 与
+`capabilities.registry` 是其投影（社交矩阵的字段/模式工厂在 `platforms/_fields.py`，
+爬虫类 `crawlers.platforms.<id>.crawler:<Class>` 是清单 handler）。
 
 ## 图表清单（`chart` kind）
 
@@ -170,6 +173,16 @@ P7 第一类：37 个分析算子已全部迁到 `capabilities_kernel/operators/
 与 `docs/capabilities/skills/charts/<id>.md`。`chart_manifest()` 对 `biblio` 家族默认 `echarts_only=True`
 （文献图都是网络/布局图，没有 matplotlib 孪生），与原 `_biblio()` 同一条规则。`tests/unit/capabilities/
 test_chart_manifests.py` 钉住“投影 == 清单、handler 就是 BUILDERS 里那一个、模板满足自己的字段契约”。
+
+## 平台清单（`platform` kind）
+
+`PlatformManifest`（`capabilities_kernel/platform.py`）把旧的 `Capability`/`Mode`/`Field` 三个值类型搬进
+kernel，再补九段：identity 的 `category` 就是 `cn`/`overseas`，`execution.handler` 是这个平台的爬虫类
+（`crawlers.platforms.<id>.crawler:<Class>`，doctor 因此能逐个核对“这个平台的爬虫还在”），
+`profile_recommended`/`serial_only`/`parallel_recommended` 保留为实测建议。模式与字段仍由
+`platforms/_fields.py` 的共享原子/工厂组合（搜索帖、作者时间线、站内榜、评论），`platform_manifest()`
+从每个模式的必填框推导技能的前置/步骤/失败/验收与 `source` 节点模板。`Field.value_from` 的
+`core.refs` 导入被延迟到方法内：`core.refs` 会拉 pandas，而清单在解析画布时就要加载。
 
 ## 已迁移的例子
 

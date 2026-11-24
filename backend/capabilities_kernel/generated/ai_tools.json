@@ -4052,6 +4052,286 @@
       "params": {},
       "emit_columns": "",
       "read_columns": ""
+    },
+    {
+      "capability": "platform:zhihu",
+      "tool": "",
+      "summary": "知乎：关键词搜索（可展开全文）、创作者回答、站内热榜、问题/回答评论（含楼中楼）。",
+      "steps": [
+        "Put a `source` node with `platform` `zhihu` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "zhihu",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:weibo",
+      "tool": "",
+      "summary": "微博：关键词搜索（可限定起止时间）、某个 UID 的微博、热搜榜、微博评论（含楼中楼）。",
+      "steps": [
+        "Put a `source` node with `platform` `weibo` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "weibo",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty.",
+        "This platform is serial-only: two sessions at once is a login wall (the gate forces 真排队)."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:xiaohongshu",
+      "tool": "",
+      "summary": "小红书：关键词搜索笔记（可带前 N 条评论预览），或对笔记链接采集评论。",
+      "steps": [
+        "Put a `source` node with `platform` `xiaohongshu` and `collect` one of: `posts`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "xiaohongshu",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:wechat",
+      "tool": "",
+      "summary": "微信公众号：粘贴文章链接，逐篇打开并保存正文。",
+      "steps": [
+        "Put a `source` node with `platform` `wechat` and `collect` one of: `posts`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "wechat",
+            "collect": "posts",
+            "urls": "https://example.com/item/1"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:bilibili",
+      "tool": "",
+      "summary": "哔哩哔哩：关键词搜索视频、UP 主的投稿、热门/排行榜、视频评论（含楼中楼）。",
+      "steps": [
+        "Put a `source` node with `platform` `bilibili` and `collect` one of: `posts`, `author`, `hot`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "bilibili",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:douyin",
+      "tool": "",
+      "summary": "抖音：某个创作者的主页视频、热榜、视频评论（含楼中楼）。",
+      "steps": [
+        "Put a `source` node with `platform` `douyin` and `collect` one of: `author`, `hot`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "douyin",
+            "collect": "author",
+            "author": "@handle"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:hongguo",
+      "tool": "",
+      "summary": "红果短剧：四个匿名热播榜，以及只能在桌面客户端里跑的评论采集。",
+      "steps": [
+        "Put a `source` node with `platform` `hongguo` and `collect` one of: `hot`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "hongguo",
+            "collect": "hot"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:cnki",
+      "tool": "",
+      "summary": "中国知网：关键词检索，勾选结果并下载 RefWorks 导出，得到文献表。",
+      "steps": [
+        "Put a `source` node with `platform` `cnki` and `collect` one of: `posts`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "cnki",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:youtube",
+      "tool": "",
+      "summary": "YouTube：关键词搜索、频道视频、视频评论；每条可额外请求点赞数与发布时间。",
+      "steps": [
+        "Put a `source` node with `platform` `youtube` and `collect` one of: `posts`, `author`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "youtube",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "platform:twitter",
+      "tool": "",
+      "summary": "X / Twitter：关键词搜索、用户时间线、推文回复（需要登录）。",
+      "steps": [
+        "Put a `source` node with `platform` `twitter` and `collect` one of: `posts`, `author`, `comments`.",
+        "Fill the mode’s required boxes; a comment walk takes the article/video links.",
+        "A mode this machine cannot run is refused by name before the run starts."
+      ],
+      "examples": [
+        {
+          "type": "source",
+          "params": {
+            "platform": "twitter",
+            "collect": "posts",
+            "keyword": "关键词"
+          }
+        }
+      ],
+      "failures": [
+        "A required box left blank: the refusal names the field (engine.source names it once).",
+        "A link that belongs to another platform: the comment walk refuses it by name.",
+        "A login wall or risk page: the crawl names it and the run is not silently empty."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
     }
   ]
 }

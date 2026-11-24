@@ -100,3 +100,18 @@
 | concentric | `chart.concentric` | biblio | [docs/capabilities/charts/concentric.md](../capabilities/charts/concentric.md) | [技能](skills/charts/concentric.md) | `tests/unit/capabilities/test_chart_manifests.py` | `7851e664cceb` |
 | wordcloud | `chart.wordcloud` | console | [docs/capabilities/charts/wordcloud.md](../capabilities/charts/wordcloud.md) | [技能](skills/charts/wordcloud.md) | `tests/unit/capabilities/test_chart_manifests.py` | `937cdc660045` |
 | map | `chart.map` | console | [docs/capabilities/charts/map.md](../capabilities/charts/map.md) | [技能](skills/charts/map.md) | `tests/unit/capabilities/test_chart_manifests.py` | `0106a27109a4` |
+
+## platform
+
+| id | 标题键 | 分组 | 文档 | 技能 | 契约测试 | digest |
+|---|---|---|---|---|---|---|
+| zhihu | `platform.zhihu` | cn | [docs/capabilities/platforms/zhihu.md](../capabilities/platforms/zhihu.md) | [技能](skills/platforms/zhihu.md) | `tests/unit/capabilities/test_platform_manifests.py` | `38438ce0f99d` |
+| weibo | `platform.weibo` | cn | [docs/capabilities/platforms/weibo.md](../capabilities/platforms/weibo.md) | [技能](skills/platforms/weibo.md) | `tests/unit/capabilities/test_platform_manifests.py` | `0082fe165b64` |
+| xiaohongshu | `platform.xiaohongshu` | cn | [docs/capabilities/platforms/xiaohongshu.md](../capabilities/platforms/xiaohongshu.md) | [技能](skills/platforms/xiaohongshu.md) | `tests/unit/capabilities/test_platform_manifests.py` | `ef5c7331cc69` |
+| wechat | `platform.wechat` | cn | [docs/capabilities/platforms/wechat.md](../capabilities/platforms/wechat.md) | [技能](skills/platforms/wechat.md) | `tests/unit/capabilities/test_platform_manifests.py` | `37144fd11856` |
+| bilibili | `platform.bilibili` | cn | [docs/capabilities/platforms/bilibili.md](../capabilities/platforms/bilibili.md) | [技能](skills/platforms/bilibili.md) | `tests/unit/capabilities/test_platform_manifests.py` | `ff835752b320` |
+| douyin | `platform.douyin` | cn | [docs/capabilities/platforms/douyin.md](../capabilities/platforms/douyin.md) | [技能](skills/platforms/douyin.md) | `tests/unit/capabilities/test_platform_manifests.py` | `712f3cc90e76` |
+| hongguo | `platform.hongguo` | cn | [docs/capabilities/platforms/hongguo.md](../capabilities/platforms/hongguo.md) | [技能](skills/platforms/hongguo.md) | `tests/unit/capabilities/test_platform_manifests.py` | `13c4328dc031` |
+| cnki | `platform.cnki` | cn | [docs/capabilities/platforms/cnki.md](../capabilities/platforms/cnki.md) | [技能](skills/platforms/cnki.md) | `tests/unit/capabilities/test_platform_manifests.py` | `068edf53f029` |
+| youtube | `platform.youtube` | overseas | [docs/capabilities/platforms/youtube.md](../capabilities/platforms/youtube.md) | [技能](skills/platforms/youtube.md) | `tests/unit/capabilities/test_platform_manifests.py` | `a6f4bfeed47c` |
+| twitter | `platform.twitter` | overseas | [docs/capabilities/platforms/twitter.md](../capabilities/platforms/twitter.md) | [技能](skills/platforms/twitter.md) | `tests/unit/capabilities/test_platform_manifests.py` | `2bd9f4ac2afe` |

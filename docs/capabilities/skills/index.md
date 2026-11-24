@@ -88,3 +88,13 @@
 | [chart.concentric](charts/concentric.md) | biblio | 同心环图：按节点首次出现年份分环，环上扇区表示各年出现量。 | 要看“新词何时进入、老词何时退场”的首现结构。 |
 | [chart.wordcloud](charts/wordcloud.md) | console | 词云：词语按权重放大排布，一眼看出高频词。 | 分词结果的直观展示，尤其是报告首页的“关键词印象”。 |
 | [chart.map](charts/map.md) | console | 地图图：按地区名称把数值铺到地图上，颜色深浅表示大小。 | 语料带地区维度（IP 归属、用户城市）时。 |
+| [platform.zhihu](platforms/zhihu.md) | cn | 知乎：关键词搜索（可展开全文）、创作者回答、站内热榜、问题/回答评论（含楼中楼）。 | 要分析知乎的问答语料、某个作者的回答，或一个问题下的评论互动。 |
+| [platform.weibo](platforms/weibo.md) | cn | 微博：关键词搜索（可限定起止时间）、某个 UID 的微博、热搜榜、微博评论（含楼中楼）。 | 舆情事件研究的主力语料：搜索 + 时间窗，或按账号追踪。 |
+| [platform.xiaohongshu](platforms/xiaohongshu.md) | cn | 小红书：关键词搜索笔记（可带前 N 条评论预览），或对笔记链接采集评论。 | 消费决策/种草类语料，或某篇笔记下的评论互动。 |
+| [platform.wechat](platforms/wechat.md) | cn | 微信公众号：粘贴文章链接，逐篇打开并保存正文。 | 已有公众号文章链接清单，需要正文语料时。 |
+| [platform.bilibili](platforms/bilibili.md) | cn | 哔哩哔哩：关键词搜索视频、UP 主的投稿、热门/排行榜、视频评论（含楼中楼）。 | 以视频为载体的舆情或创作者研究；评论来自 reply API，结构稳定。 |
+| [platform.douyin](platforms/douyin.md) | cn | 抖音：某个创作者的主页视频、热榜、视频评论（含楼中楼）。 | 短视频平台的热点与评论研究。 |
+| [platform.hongguo](platforms/hongguo.md) | cn | 红果短剧：四个匿名热播榜，以及只能在桌面客户端里跑的评论采集。 | 短剧赛道研究；榜单是匿名的，评论需要 Windows 桌面客户端。 |
+| [platform.cnki](platforms/cnki.md) | cn | 中国知网：关键词检索，勾选结果并下载 RefWorks 导出，得到文献表。 | 文献计量分析的起点：用主题词把一批文献记录取回来。 |
+| [platform.youtube](platforms/youtube.md) | overseas | YouTube：关键词搜索、频道视频、视频评论；每条可额外请求点赞数与发布时间。 | 海外平台的视频语料与评论研究。 |
+| [platform.twitter](platforms/twitter.md) | overseas | X / Twitter：关键词搜索、用户时间线、推文回复（需要登录）。 | 海外舆情、名人/机构账号的发言与回复。 |

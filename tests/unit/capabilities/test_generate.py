@@ -36,7 +36,14 @@ class TestTheRenderedSet:
         extra = names - fixed
         assert extra, 'no capability page was rendered'
         assert all(
-            path.startswith(('docs/capabilities/skills/', 'docs/capabilities/operators/', 'docs/capabilities/charts/'))
+            path.startswith(
+                (
+                    'docs/capabilities/skills/',
+                    'docs/capabilities/operators/',
+                    'docs/capabilities/charts/',
+                    'docs/capabilities/platforms/',
+                )
+            )
             for path in extra
         ), sorted(extra)
 

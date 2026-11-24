@@ -6,8 +6,8 @@ module holds only what exists solely on the second engine — and the platform/r
 for platforms no browser crawler covers.
 """
 
-from capabilities.fields import AUTHOR, BACKEND_FIELDS, BOARD, COMMENT_LIMIT, KEYWORD, TARGET
-from capabilities.model import Field
+from capabilities_kernel.platform import Field
+from capabilities_kernel.platforms._fields import AUTHOR, BACKEND_FIELDS, BOARD, COMMENT_LIMIT, KEYWORD, TARGET
 
 # ─── CatBus 独有模式的字段 ──────────────────────────────────────────────
 # CatBus 清单只声明参数名（``room``/``folder``/``series``…），按钮长什么样是采析绘的事：
