@@ -8,7 +8,7 @@ from .base import ChartRequest, builder
 
 
 @builder('scatter')
-def _scatter(cls, base: dict, req: ChartRequest) -> dict:
+def build_scatter(cls, base: dict, req: ChartRequest) -> dict:
     """Two numeric fields on value axes; the tooltip names the columns."""
     if not req.x or not req.y:
         raise ChartConfigError('Scatter chart requires both x and y fields')
@@ -48,7 +48,7 @@ def _scatter(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('heatmap')
-def _heatmap(cls, base: dict, req: ChartRequest) -> dict:
+def build_heatmap(cls, base: dict, req: ChartRequest) -> dict:
     """Two category fields against an aggregated value, painted by the shared heatmap frame."""
     if not req.x or not req.y:
         raise ChartConfigError('Heatmap requires two category fields (x and y)')
@@ -60,7 +60,7 @@ def _heatmap(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('model_agreement')
-def _model_agreement(cls, base: dict, req: ChartRequest) -> dict:
+def build_model_agreement(cls, base: dict, req: ChartRequest) -> dict:
     """Pairwise label agreement between models, drawn as a square heatmap.
 
     Reads the tidy multi-model table by its 模型 / 标签 / 原行 columns (overridable through
@@ -77,7 +77,7 @@ def _model_agreement(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('sankey')
-def _sankey(cls, base: dict, req: ChartRequest) -> dict:
+def build_sankey(cls, base: dict, req: ChartRequest) -> dict:
     """Weighted flows from field ``x`` to field ``y``."""
     if not req.x or not req.y:
         raise ChartConfigError('Sankey diagram requires a source field (x) and a target field (y)')
@@ -112,7 +112,7 @@ def _sankey(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('network')
-def _network(cls, base: dict, req: ChartRequest) -> dict:
+def build_network(cls, base: dict, req: ChartRequest) -> dict:
     """Force-directed co-occurrence/flow graph.
 
     ``center_node`` keeps only that node's ego-network (it, its neighbours and the edges among

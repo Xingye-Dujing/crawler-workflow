@@ -19,7 +19,7 @@ from .base import ChartRequest, builder
 
 
 @builder('pie')
-def _pie(cls, base: dict, req: ChartRequest) -> dict:
+def build_pie(cls, base: dict, req: ChartRequest) -> dict:
     """Share-of-total pie; the legend sits on the right, labels on the slices."""
     if not req.x:
         raise ChartConfigError('Pie chart requires a category field (x)')
@@ -73,7 +73,7 @@ def _pie(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('histogram')
-def _histogram(cls, base: dict, req: ChartRequest) -> dict:
+def build_histogram(cls, base: dict, req: ChartRequest) -> dict:
     """Binned counts of one numeric column (``x``); the bin labels are the category axis."""
     if not req.x:
         raise ChartConfigError('Histogram requires a numeric field (x)')
@@ -112,7 +112,7 @@ def _histogram(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('box')
-def _box(cls, base: dict, req: ChartRequest) -> dict:
+def build_box(cls, base: dict, req: ChartRequest) -> dict:
     """Box plot, grouped (``x`` category + ``y`` value) or single-column (``x`` numeric).
 
     A NAMED field that the table does not hold is refused by name, never swapped for a different
@@ -186,7 +186,7 @@ def _box(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('wordcloud')
-def _wordcloud(cls, base: dict, req: ChartRequest) -> dict:
+def build_wordcloud(cls, base: dict, req: ChartRequest) -> dict:
     """Word cloud; ``tokenize`` splits ``x`` with jieba instead of aggregating it whole.
 
     ``wordcloud_style`` is a deliberate fallback, unlike the parameters that choose *data* or
@@ -234,7 +234,7 @@ def _wordcloud(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('map')
-def _map(cls, base: dict, req: ChartRequest) -> dict:
+def build_map(cls, base: dict, req: ChartRequest) -> dict:
     """China GeoJSON choropleth of ``x`` region names weighted by ``value_field``/``y``."""
     if not req.x:
         raise ChartConfigError('Map chart requires a region-name field (x)')

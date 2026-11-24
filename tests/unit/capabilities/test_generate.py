@@ -35,9 +35,10 @@ class TestTheRenderedSet:
         assert fixed <= names
         extra = names - fixed
         assert extra, 'no capability page was rendered'
-        assert all(path.startswith(('docs/capabilities/skills/', 'docs/capabilities/operators/')) for path in extra), (
-            sorted(extra)
-        )
+        assert all(
+            path.startswith(('docs/capabilities/skills/', 'docs/capabilities/operators/', 'docs/capabilities/charts/'))
+            for path in extra
+        ), sorted(extra)
 
     def test_rendering_twice_is_byte_identical(self):
         first = {str(path): text for path, text in generate.render().items()}

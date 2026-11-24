@@ -29,7 +29,7 @@ def _category_axes(base: dict, labels: list) -> None:
 
 
 @builder('bar')
-def _bar(cls, base: dict, req: ChartRequest) -> dict:
+def build_bar(cls, base: dict, req: ChartRequest) -> dict:
     """Vertical bars; ``annotations`` draws the event markers on the first series."""
     if not req.x:
         raise ChartConfigError('bar chart requires a category field (x)')
@@ -54,7 +54,7 @@ def _bar(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('line')
-def _line(cls, base: dict, req: ChartRequest) -> dict:
+def build_line(cls, base: dict, req: ChartRequest) -> dict:
     """Smoothed line with the gradient area fill; ``annotations`` as on bar."""
     if not req.x:
         raise ChartConfigError('line chart requires a category field (x)')
@@ -95,7 +95,7 @@ def _line(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('dual_line')
-def _dual_line(cls, base: dict, req: ChartRequest) -> dict:
+def build_dual_line(cls, base: dict, req: ChartRequest) -> dict:
     """Two magnitudes on one time axis (``y`` left, ``y2`` right).
 
     A LIST of y-axes is what makes ECharts draw two scales; the right axis carries no grid lines,
@@ -177,7 +177,7 @@ def _dual_line(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('stack_pct')
-def _stack_pct(cls, base: dict, req: ChartRequest) -> dict:
+def build_stack_pct(cls, base: dict, req: ChartRequest) -> dict:
     """100% stacked shares: ``stack_fields`` (comma-separated) each contribute a bar per category.
 
     Each period is normalised to 100%, so the figure reads as shares whether the source columns

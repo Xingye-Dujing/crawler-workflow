@@ -58,3 +58,33 @@
 | [operator.sentiment_evolution](operators/sentiment_evolution.md) | time | 按时间列聚合情感标签，输出每期正/中/负占比、总量与可选的情感指数。 | 要画情感演化曲线：时间 × 正负比例 × 强度。 |
 | [operator.forecast](operators/forecast.md) | time | 用移动平均、Holt 或 Holt-Winters 对一条曲线外推若干期，并给出区间。 | 情感演化曲线需要往后看几期（预测区间是模型给的，不是事实）。 |
 | [operator.alert](operators/alert.md) | time | 按连续涨跌、摆动幅度、升温与量能规则，在曲线上标出二次爆发预警点。 | 要在情感/热度曲线上自动指出“需要人工复核的时刻”。 |
+| [chart.bar](charts/bar.md) | console | 柱状图：每个类别一根柱子，柱长表示聚合后的数值。 | 类别之间比大小：各平台发帖量、高频词、各主题文档数。 |
+| [chart.line](charts/line.md) | console | 折线图：按有序类别（通常是时间）连成趋势线。 | 看随时间或阶段的走势：每日发帖量、情感指数曲线。 |
+| [chart.dual_line](charts/dual_line.md) | console | 双轴折线图：左右两条 Y 轴各画一条曲线，量纲不同也能同图比较。 | 同时看“热度（条数）”与“情感指数（-1~1）”这类量纲不同的两条曲线。 |
+| [chart.stack_pct](charts/stack_pct.md) | console | 百分比堆叠柱：每个类别的几列占比堆成 100%，看构成变化。 | 正/中/负情感占比随时间或阶段的变化。 |
+| [chart.topic_map](charts/topic_map.md) | console | 主题距离图：每个主题一个气泡，位置是主题间距离，大小是文档占比。 | 主题距离图：看哪些主题彼此接近、哪个主题占比最大。 |
+| [chart.topic_terms](charts/topic_terms.md) | console | 显著词图：每个主题里最有区分度的词，及其总体频率与主题内频率。 | 显著词图：说明每个主题真正独特的词，而不是全语料高频词。 |
+| [chart.pie](charts/pie.md) | console | 饼图：一个整体被分成几份，扇面角度表示占比。 | 少量类别（约 6 个以内）的份额构成，如情感分布。 |
+| [chart.scatter](charts/scatter.md) | console | 散点图：两个数值列做坐标，看相关关系与离群点。 | 两个数值的关系：点赞与评论、两个模型的得分、热度与情感指数。 |
+| [chart.histogram](charts/histogram.md) | console | 直方图：把一个数值列分箱，画出每个区间的数量分布。 | 看一个数值的分布形状：点赞数的长尾、长度的集中区间。 |
+| [chart.box](charts/box.md) | console | 箱线图：按类别展示数值的中位数、四分位与离群值。 | 比较不同类别的分布形状，而不只是均值：各平台点赞分布。 |
+| [chart.heatmap](charts/heatmap.md) | console | 热力图：两个类别轴交叉成单元格，颜色深浅表示聚合值。 | 两个维度交叉的强度：阶段 × 主题、平台 × 情感。 |
+| [chart.model_agreement](charts/model_agreement.md) | console | 模型一致性矩阵：每个模型对每条数据给出的标签是否一致。 | 多个情感/倾向模型对同一份语料比较，找出分歧样本。 |
+| [chart.sankey](charts/sankey.md) | console | 桑基图：来源到目标的带权流向，带宽表示流量。 | 主题流向、平台到情感的去向、阶段之间的转移。 |
+| [chart.network](charts/network.md) | console | 关系网络：来源/目标/权重三列画成节点与连线，可居中一个关键节点。 | 回复网络、词语共现、作者互动。 |
+| [chart.knowledge_graph](charts/knowledge_graph.md) | biblio | 文献知识图谱：节点按共现坐标布局，连线宽度表示共现强度。 | 文献分析之后的主题/关键词共现图谱。 |
+| [chart.cluster_timeline](charts/cluster_timeline.md) | biblio | 聚类时间线：每条聚类一行，横轴是首年到末年。 | 看各主题簇的活跃年代与延续长度。 |
+| [chart.burst](charts/burst.md) | biblio | 突现词图：每个节点标出突现的起止年份与强度。 | 找出某一时期突然升温的关键词。 |
+| [chart.timezone](charts/timezone.md) | biblio | 时区图：每个节点按年份序列铺开，颜色表示该年的出现量。 | 看单个关键词在每一年是否出现、出现多少。 |
+| [chart.circular](charts/circular.md) | biblio | 环形共现图：节点沿圆周排布，连线表示共现关系。 | 共现关系多、力导向布局容易挤成一团时。 |
+| [chart.landscape](charts/landscape.md) | biblio | 聚类景观图：把每个聚类画成一块区域，块内是它的成员节点。 | 用一页说明文献由哪几个研究板块构成。 |
+| [chart.biblio_heatmap](charts/biblio_heatmap.md) | biblio | 文献热力图：聚类 × 年份的单元格热度，看各板块何时活跃。 | 比较多个聚类在不同年份的强度。 |
+| [chart.graph3d](charts/graph3d.md) | biblio | 三维共现图：在三个坐标上展开节点，用深度缓解平面拥挤。 | 共现关系密集、二维图互相遮挡时。 |
+| [chart.variation](charts/variation.md) | biblio | 变化图：每个节点的起止年与结构变化，用颜色标记上升/下降。 | 看关键词在研究周期内是升温还是退场。 |
+| [chart.dual_map](charts/dual_map.md) | biblio | 双层图：左右两层各自成簇，中间用流量连线表示跨层对应。 | 把“施引/被引”或“方法/主题”两层结构放在一张图里。 |
+| [chart.geo_map](charts/geo_map.md) | biblio | 文献地理分布图：把各节点的频次铺到内置底图的分区上。 | 文献数据带有地区维度时。 |
+| [chart.sentiment_overlay](charts/sentiment_overlay.md) | biblio | 情感叠加图：节点按情感分布着色，看研究板块的情绪倾向。 | 文献分析时填了情感映射，想在图谱上区分正负。 |
+| [chart.topic_overlay](charts/topic_overlay.md) | biblio | 话题叠加图：节点按话题分布着色，看各研究板块的话题构成。 | 文献分析时填了话题映射，想在图谱上看话题归属。 |
+| [chart.concentric](charts/concentric.md) | biblio | 同心环图：按节点首次出现年份分环，环上扇区表示各年出现量。 | 要看“新词何时进入、老词何时退场”的首现结构。 |
+| [chart.wordcloud](charts/wordcloud.md) | console | 词云：词语按权重放大排布，一眼看出高频词。 | 分词结果的直观展示，尤其是报告首页的“关键词印象”。 |
+| [chart.map](charts/map.md) | console | 地图图：按地区名称把数值铺到地图上，颜色深浅表示大小。 | 语料带地区维度（IP 归属、用户城市）时。 |

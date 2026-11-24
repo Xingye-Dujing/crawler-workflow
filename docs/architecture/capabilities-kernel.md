@@ -156,7 +156,20 @@ backend/capabilities_kernel/
 `nodes.executors.source.validate_node` 回答。
 前端表单与 `canvas.js`/`runs.js` 的第二套规则在 P2 后续切片删除。
 
-P7 第一类：37 个分析算子已全部迁到 `capabilities_kernel/operators/<id>/`（见上一节）；还剩图表、平台两类。
+P7 第一类：37 个分析算子已全部迁到 `capabilities_kernel/operators/<id>/`（见上一节）；P7 第二类：30 个图表类型
+在 `capabilities_kernel/charts/<id>/`，`services.charts.registry.SPECS` 是其投影（字段词汇在
+`charts/_fields.py`，绘图函数是清单的 handler）；还剩平台一类。
+
+## 图表清单（`chart` kind）
+
+`ChartManifest`（`capabilities_kernel/chart.py`）沿用旧的 `ChartSpec` 字段（`family`/`echarts_only`/
+`latex_buildable`/`reads`/`defaults`/`fields`/`any_of`/`controls`/`hint_key`/`tokenize_compatible`，以及
+`key`/`label_key`/`no_x` 三个属性），再补九段：identity 的槽位是面板顺序（`order` 10…300），`execution.handler`
+是真正画图的函数（控制台图 `services.charts.options.*:build_<id>`、文献图 `services.biblio.charts.*`），
+第七段由字段契约机械推导（模板填每个必填框与 `any_of` 组成员），第九段生成 `docs/capabilities/charts/<id>.md`
+与 `docs/capabilities/skills/charts/<id>.md`。`chart_manifest()` 对 `biblio` 家族默认 `echarts_only=True`
+（文献图都是网络/布局图，没有 matplotlib 孪生），与原 `_biblio()` 同一条规则。`tests/unit/capabilities/
+test_chart_manifests.py` 钉住“投影 == 清单、handler 就是 BUILDERS 里那一个、模板满足自己的字段契约”。
 
 ## 已迁移的例子
 

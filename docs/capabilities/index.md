@@ -65,3 +65,38 @@
 | sentiment_evolution | `op.sentiment_evolution` | time | [docs/capabilities/operators/sentiment_evolution.md](../capabilities/operators/sentiment_evolution.md) | [技能](skills/operators/sentiment_evolution.md) | `tests/unit/capabilities/test_operator_manifests.py` | `2538499f3b94` |
 | forecast | `op.forecast` | time | [docs/capabilities/operators/forecast.md](../capabilities/operators/forecast.md) | [技能](skills/operators/forecast.md) | `tests/unit/capabilities/test_operator_manifests.py` | `42edd1977234` |
 | alert | `op.alert` | time | [docs/capabilities/operators/alert.md](../capabilities/operators/alert.md) | [技能](skills/operators/alert.md) | `tests/unit/capabilities/test_operator_manifests.py` | `feb98169f594` |
+
+## chart
+
+| id | 标题键 | 分组 | 文档 | 技能 | 契约测试 | digest |
+|---|---|---|---|---|---|---|
+| bar | `chart.bar` | console | [docs/capabilities/charts/bar.md](../capabilities/charts/bar.md) | [技能](skills/charts/bar.md) | `tests/unit/capabilities/test_chart_manifests.py` | `f5a2c7c9b387` |
+| line | `chart.line` | console | [docs/capabilities/charts/line.md](../capabilities/charts/line.md) | [技能](skills/charts/line.md) | `tests/unit/capabilities/test_chart_manifests.py` | `16f82fbe2a04` |
+| dual_line | `chart.dual_line` | console | [docs/capabilities/charts/dual_line.md](../capabilities/charts/dual_line.md) | [技能](skills/charts/dual_line.md) | `tests/unit/capabilities/test_chart_manifests.py` | `15dfbb068f8b` |
+| stack_pct | `chart.stack_pct` | console | [docs/capabilities/charts/stack_pct.md](../capabilities/charts/stack_pct.md) | [技能](skills/charts/stack_pct.md) | `tests/unit/capabilities/test_chart_manifests.py` | `b53a6aa65303` |
+| topic_map | `chart.topic_map` | console | [docs/capabilities/charts/topic_map.md](../capabilities/charts/topic_map.md) | [技能](skills/charts/topic_map.md) | `tests/unit/capabilities/test_chart_manifests.py` | `dcd1865be089` |
+| topic_terms | `chart.topic_terms` | console | [docs/capabilities/charts/topic_terms.md](../capabilities/charts/topic_terms.md) | [技能](skills/charts/topic_terms.md) | `tests/unit/capabilities/test_chart_manifests.py` | `90d141bbc159` |
+| pie | `chart.pie` | console | [docs/capabilities/charts/pie.md](../capabilities/charts/pie.md) | [技能](skills/charts/pie.md) | `tests/unit/capabilities/test_chart_manifests.py` | `3702656cbf3a` |
+| scatter | `chart.scatter` | console | [docs/capabilities/charts/scatter.md](../capabilities/charts/scatter.md) | [技能](skills/charts/scatter.md) | `tests/unit/capabilities/test_chart_manifests.py` | `feb519763932` |
+| histogram | `chart.histogram` | console | [docs/capabilities/charts/histogram.md](../capabilities/charts/histogram.md) | [技能](skills/charts/histogram.md) | `tests/unit/capabilities/test_chart_manifests.py` | `74d4789a884b` |
+| box | `chart.box` | console | [docs/capabilities/charts/box.md](../capabilities/charts/box.md) | [技能](skills/charts/box.md) | `tests/unit/capabilities/test_chart_manifests.py` | `83e0d5d7dd9c` |
+| heatmap | `chart.heatmap` | console | [docs/capabilities/charts/heatmap.md](../capabilities/charts/heatmap.md) | [技能](skills/charts/heatmap.md) | `tests/unit/capabilities/test_chart_manifests.py` | `23aabaf58f11` |
+| model_agreement | `chart.model_agreement` | console | [docs/capabilities/charts/model_agreement.md](../capabilities/charts/model_agreement.md) | [技能](skills/charts/model_agreement.md) | `tests/unit/capabilities/test_chart_manifests.py` | `f7e0c5420283` |
+| sankey | `chart.sankey` | console | [docs/capabilities/charts/sankey.md](../capabilities/charts/sankey.md) | [技能](skills/charts/sankey.md) | `tests/unit/capabilities/test_chart_manifests.py` | `1177d4f686c9` |
+| network | `chart.network` | console | [docs/capabilities/charts/network.md](../capabilities/charts/network.md) | [技能](skills/charts/network.md) | `tests/unit/capabilities/test_chart_manifests.py` | `61f27bc55c9f` |
+| knowledge_graph | `chart.knowledge_graph` | biblio | [docs/capabilities/charts/knowledge_graph.md](../capabilities/charts/knowledge_graph.md) | [技能](skills/charts/knowledge_graph.md) | `tests/unit/capabilities/test_chart_manifests.py` | `a40752bedbcd` |
+| cluster_timeline | `chart.cluster_timeline` | biblio | [docs/capabilities/charts/cluster_timeline.md](../capabilities/charts/cluster_timeline.md) | [技能](skills/charts/cluster_timeline.md) | `tests/unit/capabilities/test_chart_manifests.py` | `8b3fab742eb7` |
+| burst | `chart.burst` | biblio | [docs/capabilities/charts/burst.md](../capabilities/charts/burst.md) | [技能](skills/charts/burst.md) | `tests/unit/capabilities/test_chart_manifests.py` | `0f2263a0960b` |
+| timezone | `chart.timezone` | biblio | [docs/capabilities/charts/timezone.md](../capabilities/charts/timezone.md) | [技能](skills/charts/timezone.md) | `tests/unit/capabilities/test_chart_manifests.py` | `874082a60bd9` |
+| circular | `chart.circular` | biblio | [docs/capabilities/charts/circular.md](../capabilities/charts/circular.md) | [技能](skills/charts/circular.md) | `tests/unit/capabilities/test_chart_manifests.py` | `be1debc4f123` |
+| landscape | `chart.landscape` | biblio | [docs/capabilities/charts/landscape.md](../capabilities/charts/landscape.md) | [技能](skills/charts/landscape.md) | `tests/unit/capabilities/test_chart_manifests.py` | `cc9838239c4f` |
+| biblio_heatmap | `chart.biblio_heatmap` | biblio | [docs/capabilities/charts/biblio_heatmap.md](../capabilities/charts/biblio_heatmap.md) | [技能](skills/charts/biblio_heatmap.md) | `tests/unit/capabilities/test_chart_manifests.py` | `a738bbbc50a1` |
+| graph3d | `chart.graph3d` | biblio | [docs/capabilities/charts/graph3d.md](../capabilities/charts/graph3d.md) | [技能](skills/charts/graph3d.md) | `tests/unit/capabilities/test_chart_manifests.py` | `27f56092dfc3` |
+| variation | `chart.variation` | biblio | [docs/capabilities/charts/variation.md](../capabilities/charts/variation.md) | [技能](skills/charts/variation.md) | `tests/unit/capabilities/test_chart_manifests.py` | `0d564fae27ad` |
+| dual_map | `chart.dual_map` | biblio | [docs/capabilities/charts/dual_map.md](../capabilities/charts/dual_map.md) | [技能](skills/charts/dual_map.md) | `tests/unit/capabilities/test_chart_manifests.py` | `1bb070b72102` |
+| geo_map | `chart.geo_map` | biblio | [docs/capabilities/charts/geo_map.md](../capabilities/charts/geo_map.md) | [技能](skills/charts/geo_map.md) | `tests/unit/capabilities/test_chart_manifests.py` | `c2c291d0e58b` |
+| sentiment_overlay | `chart.sentiment_overlay` | biblio | [docs/capabilities/charts/sentiment_overlay.md](../capabilities/charts/sentiment_overlay.md) | [技能](skills/charts/sentiment_overlay.md) | `tests/unit/capabilities/test_chart_manifests.py` | `3c752e14dc68` |
+| topic_overlay | `chart.topic_overlay` | biblio | [docs/capabilities/charts/topic_overlay.md](../capabilities/charts/topic_overlay.md) | [技能](skills/charts/topic_overlay.md) | `tests/unit/capabilities/test_chart_manifests.py` | `75ffffeed5b6` |
+| concentric | `chart.concentric` | biblio | [docs/capabilities/charts/concentric.md](../capabilities/charts/concentric.md) | [技能](skills/charts/concentric.md) | `tests/unit/capabilities/test_chart_manifests.py` | `7851e664cceb` |
+| wordcloud | `chart.wordcloud` | console | [docs/capabilities/charts/wordcloud.md](../capabilities/charts/wordcloud.md) | [技能](skills/charts/wordcloud.md) | `tests/unit/capabilities/test_chart_manifests.py` | `937cdc660045` |
+| map | `chart.map` | console | [docs/capabilities/charts/map.md](../capabilities/charts/map.md) | [技能](skills/charts/map.md) | `tests/unit/capabilities/test_chart_manifests.py` | `0106a27109a4` |

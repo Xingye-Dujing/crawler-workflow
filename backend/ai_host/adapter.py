@@ -224,7 +224,7 @@ class CaiXiHuiHost(DefaultHostAdapter):
         from runtime import stores
 
         rows: list[dict] = []
-        for skill in knowledge.catalog(limit=40)['skills']:
+        for skill in knowledge.catalog(limit=knowledge.MAX_LIMIT)['skills']:
             rows.append({'kind': 'skill', 'id': skill['id'], 'label': skill['title'], 'detail': skill['category']})
         for dataset in stores.get_dataset_store().list_datasets(limit=60):
             rows.append(

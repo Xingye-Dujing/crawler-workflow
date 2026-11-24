@@ -89,11 +89,18 @@ class TestTheWorkspaceBoots:
 
 class TestTheReferenceSeam:
     def test_the_picker_offers_every_capability_skill(self, host):
+        from capabilities_kernel import knowledge as kernel
+        from capabilities_kernel import registry
+
+        expected = {kernel.skill_id(manifest) for kind in kernel.KINDS for manifest in registry.manifests(kind)}
         rows = host.reference_candidates('default')
         skills = {row['id']: row for row in rows if row['kind'] == 'skill'}
-        assert len(skills) >= 16
+        assert set(skills) == expected
         assert skills['node.tokenize']['detail'] == 'process'
         assert skills['node.tokenize']['label'] == 'tokenize'
+        # An operator and a chart are capabilities too: the picker never truncates one kind away.
+        assert 'operator.drop_null' in skills
+        assert 'chart.bar' in skills
 
     def test_a_skill_reference_is_the_body_skill_load_returns(self, host):
         from ai import knowledge

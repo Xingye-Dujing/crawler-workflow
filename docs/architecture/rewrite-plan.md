@@ -220,7 +220,7 @@
 ## P7 其它域（3-4 周）
 
 - [x] 分析算子清单化（37 个：`capabilities_kernel/operators/<id>/manifest.py` 声明契约/读写列/输出形状/是否用模型/双表/空表策略，七段技能由清单生成；`STEP_PARAMS`/写表/`OPS`/`LLM_OPS`/`STEP_TWO_TABLE` 全部由其投影）
-- [ ] 30 个图表清单化
+- [x] 图表清单化（30 个：`capabilities_kernel/charts/<id>/manifest.py` 声明字段/角色/控件/引擎/文献必读列与七段技能；`services.charts.registry.SPECS` 全部由其投影，绘图函数公开为 `build_*` 并成为清单 handler）
 - [ ] 11 个平台清单化
 - [ ] 面板/停靠/设置清单化
 - [ ] 多表面生成：OpenAPI / MCP server / CLI / UI / AI 工具 / 文档

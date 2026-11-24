@@ -27,6 +27,8 @@ KIND_TOOLS = {
     'node': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
     # An operator is reached through the analysis node's steps, so the same three verbs teach it.
     'operator': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
+    # A chart is reached through the visualize node's chart_type, the same way.
+    'chart': ('workflow_schema', 'apply_workflow', 'workflow_validate'),
 }
 
 _WORD = re.compile(r'[A-Za-z0-9_]{3,}')
@@ -81,7 +83,7 @@ def l1(manifest: Manifest) -> dict:
 
 def l2(manifest: Manifest) -> dict:
     """The level-2 record: the seven sections plus the fresh parameter projection."""
-    return {
+    record = {
         'prerequisites': list(manifest.ai.prerequisites),
         'steps': list(manifest.ai.steps),
         'examples': list(manifest.ai.examples),
@@ -111,6 +113,20 @@ def l2(manifest: Manifest) -> dict:
         'docs': manifest.docs.page,
         'contracts': list(manifest.tests.contracts),
     }
+    if getattr(manifest, 'fields', ()):
+        defaults = dict(getattr(manifest, 'defaults', ()))
+        record['fields'] = [
+            {
+                'name': spec.name,
+                'role': spec.role,
+                'required': spec.required,
+                'required_when': spec.required_when,
+                'default': defaults.get(spec.name, ''),
+                'control': spec.control,
+            }
+            for spec in manifest.fields
+        ]
+    return record
 
 
 def find(identifier: str, kind: str = '') -> Manifest | None:
@@ -181,6 +197,17 @@ def _params_table(manifest: Manifest) -> list[str]:
     return lines
 
 
+def _fields_table(manifest) -> list[str]:
+    """A chart's boxes, read from the manifest now (the chart layer's own vocabulary)."""
+    defaults = dict(getattr(manifest, 'defaults', ()))
+    lines = ['| field | role | required | default | control |', '|---|---|---|---|---|']
+    for spec in manifest.fields:
+        required = 'yes' if spec.required else (f'when {spec.required_when}' if spec.required_when else '')
+        default = f'`{defaults[spec.name]}`' if spec.name in defaults else ''
+        lines.append(f'| `{spec.name}` | {spec.role} | {required} | {default} | {spec.control} |')
+    return lines
+
+
 def render(manifest: Manifest, title: str = '') -> str:
     """The seven-section skill body, with the parameter table read from the manifest now.
 
@@ -217,6 +244,9 @@ def render(manifest: Manifest, title: str = '') -> str:
         ]
     lines += ['## Parameters', '']
     lines += _params_table(manifest)
+    if getattr(manifest, 'fields', ()):
+        lines += ['', '## Fields', '']
+        lines += _fields_table(manifest)
     lines += ['', '## Failure modes', '']
     lines += _bullets(manifest.ai.failures)
     lines += ['', '## Acceptance', '']

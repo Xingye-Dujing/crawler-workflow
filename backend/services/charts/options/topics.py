@@ -24,7 +24,7 @@ def _numbers(series: pd.Series, column: str) -> pd.Series:
 
 
 @builder('topic_map')
-def _topic_map(cls, base: dict, req: ChartRequest) -> dict:
+def build_topic_map(cls, base: dict, req: ChartRequest) -> dict:
     """Intertopic distance map: bubbles at (PC1, PC2), area carrying the topic's prevalence.
 
     ``x``/``y`` are refused by name; the label and size fields must hold the same line. A field
@@ -108,7 +108,7 @@ def _topic_map(cls, base: dict, req: ChartRequest) -> dict:
 
 
 @builder('topic_terms')
-def _topic_terms(cls, base: dict, req: ChartRequest) -> dict:
+def build_topic_terms(cls, base: dict, req: ChartRequest) -> dict:
     """Salient terms of one topic: corpus-wide frequency (``y``) beside within-topic (``y2``)."""
     if not req.x:
         raise ChartConfigError('Salient terms chart requires a term field (x)')

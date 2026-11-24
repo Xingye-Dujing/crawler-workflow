@@ -63,10 +63,9 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 `workflow`、`charts`、`report`、`research`、`python`、`conductor`、`skill_author`、`developer`。
 技能声明提示词、上下文来源、只读工具和所需能力；用户技能是数据，可 Fork/编辑/删除，不能包含代码或写操作。
 
-**能力技能（capability skill）**：每个能力（16 个节点与 37 个分析算子，之后是图表/平台）在自己的清单第七段
+**能力技能（capability skill）**：每个能力（16 个节点、37 个分析算子与 30 个图表类型，之后是平台）在自己的清单第七段
 （`ai=Ai(...)`）声明七段技能内容：何时用/何时不用（含最近的可混淆技能）、前置、步骤、示例、模板 JSON、
-命名拒绝、验收。算子的前置/步骤/失败/验收由 `OperatorManifest` 的读写契约机械推导（模板从必填框生成），
-人工只写“选它/别选它”的话。`capabilities_kernel.knowledge` 从清单投影 **L1 目录**（id/分组/一句话/何时用）并渲染
+命名拒绝、验收。算子与图表的前置/步骤/失败/验收由各自契约机械推导（模板从必填框生成），人工只写“选它/别选它”的话。`capabilities_kernel.knowledge` 从清单投影 **L1 目录**（id/分组/一句话/何时用）并渲染
 **L2 正文**（参数表在渲染时从 `manifest.params` 重读，不会过期）；`ai.knowledge` 加上本地化标题与具名拒绝。
 模型通过两个常备工具按需展开：`skill_catalog`（检索/按 kind 过滤）与 `skill_load`（读全文 + 模板）。
 项目事实里只放 L1 一行摘要（节点；算子已在合法词汇表里逐条列出，不重复进前缀），正文不进系统提示。同一渲染函数也生成 `docs/capabilities/skills/` 页面，

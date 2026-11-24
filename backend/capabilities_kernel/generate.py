@@ -347,6 +347,55 @@ def _operator_docs() -> dict[Path, str]:
     }
 
 
+def _chart_page(manifest) -> str:
+    """One chart type's documentation page: its fields, its shape and where its skill is."""
+    ident = manifest.identity
+    lines = [
+        f'# {ident.id}（{manifest.family}）',
+        '',
+        '> 由 `tools/gen_capabilities.py` 从 `backend/capabilities_kernel/charts/` 的清单生成，请勿手改。',
+        f'> 技能正文：`{manifest.docs.skill}`；机器可读：`backend/capabilities_kernel/generated/catalog.json`。',
+        '',
+        manifest.ai.summary or ident.description,
+        '',
+        '## 何时使用',
+        '',
+        ident.when_to_use or '（未声明）',
+        '',
+    ]
+    if manifest.ai.when_not_to_use:
+        lines += ['不要用于：', '']
+        lines += [f'- {item}' for item in manifest.ai.when_not_to_use]
+        lines.append('')
+    lines += ['## 字段', '', '| 字段 | 角色 | 必填 | 默认列 | 控件 |', '|---|---|---|---|---|']
+    defaults = dict(manifest.defaults)
+    for field in manifest.fields:
+        default = f'`{defaults[field.name]}`' if field.name in defaults else ''
+        required = '是' if field.required else (f'当 {field.required_when} 已填' if field.required_when else '')
+        lines.append(f'| `{field.name}` | {field.role} | {required} | {default} | {field.control} |')
+    if not manifest.fields:
+        lines.append('| — | — | — | — | — |')
+    lines += ['', '## 输出形状', '', 'ECharts/matplotlib 图（可另出 LaTeX 图/表），不是一张数据表。', '']
+    lines += ['## 引擎', '']
+    lines.append('- 仅 ECharts' if manifest.echarts_only else '- ECharts 与 matplotlib 都能画')
+    lines.append('- 有 LaTeX 孪生图/表' if manifest.latex_buildable else '- 没有 LaTeX 孪生图（只出现在一致性矩阵）')
+    if manifest.reads:
+        lines.append('- 文献列：' + '、'.join(f'`{column}`' for column in manifest.reads))
+    lines.append('')
+    lines += ['## 契约测试', '']
+    lines += [f'- `{path}`' for path in manifest.tests.contracts]
+    return '\n'.join(lines).rstrip() + '\n'
+
+
+def _chart_docs() -> dict[Path, str]:
+    """One documentation page per chart type, beside its generated skill page."""
+    return {
+        ROOT / manifest.docs.page: _chart_page(manifest)
+        for manifest in registry.manifests('chart')
+        if manifest.docs.page
+    }
+
+
 def _docs_index() -> str:
     lines = [
         '# 能力目录（自动生成）',
@@ -421,7 +470,12 @@ def render() -> dict[Path, str]:
         'frontend_catalogue': _frontend_catalogue_js,
         'docs_index': _docs_index,
     }
-    return {ROOT / relative: renderers[name]() for relative, name in OUTPUTS.items()} | _skill_docs() | _operator_docs()
+    return (
+        {ROOT / relative: renderers[name]() for relative, name in OUTPUTS.items()}
+        | _skill_docs()
+        | _operator_docs()
+        | _chart_docs()
+    )
 
 
 def write() -> list[Path]:

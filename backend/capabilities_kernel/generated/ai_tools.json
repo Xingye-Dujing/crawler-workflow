@@ -3242,6 +3242,816 @@
       },
       "emit_columns": "",
       "read_columns": ""
+    },
+    {
+      "capability": "chart:bar",
+      "tool": "",
+      "summary": "柱状图：每个类别一根柱子，柱长表示聚合后的数值。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `bar`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column.",
+        "Optional controls: annotations."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "bar",
+            "x_field": "分类"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:line",
+      "tool": "",
+      "summary": "折线图：按有序类别（通常是时间）连成趋势线。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `line`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column.",
+        "Optional controls: annotations."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "line",
+            "x_field": "分类"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:dual_line",
+      "tool": "",
+      "summary": "双轴折线图：左右两条 Y 轴各画一条曲线，量纲不同也能同图比较。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `dual_line`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column.",
+        "`y2_field` reads a value column.",
+        "Optional controls: annotations."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "dual_line",
+            "x_field": "分类",
+            "y2_field": "数值"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:stack_pct",
+      "tool": "",
+      "summary": "百分比堆叠柱：每个类别的几列占比堆成 100%，看构成变化。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `stack_pct`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column.",
+        "`stack_fields` reads a list column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "stack_pct",
+            "x_field": "分类",
+            "stack_fields": "积极占比, 中性占比, 消极占比"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:topic_map",
+      "tool": "",
+      "summary": "主题距离图：每个主题一个气泡，位置是主题间距离，大小是文档占比。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `topic_map`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a coordinate column.",
+        "`y_field` reads a coordinate column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "topic_map",
+            "x_field": "pc1",
+            "y_field": "pc2",
+            "label_field": "topic",
+            "value_field": "prevalence_pct"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:topic_terms",
+      "tool": "",
+      "summary": "显著词图：每个主题里最有区分度的词，及其总体频率与主题内频率。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `topic_terms`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column.",
+        "`y_field` reads a value column.",
+        "`y2_field` reads a value column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "topic_terms",
+            "x_field": "term",
+            "y_field": "overall_freq",
+            "y2_field": "within_freq"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:pie",
+      "tool": "",
+      "summary": "饼图：一个整体被分成几份，扇面角度表示占比。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `pie`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "pie",
+            "x_field": "分类"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:scatter",
+      "tool": "",
+      "summary": "散点图：两个数值列做坐标，看相关关系与离群点。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `scatter`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a value column.",
+        "`y_field` reads a value column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "scatter",
+            "x_field": "数值",
+            "y_field": "数值"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:histogram",
+      "tool": "",
+      "summary": "直方图：把一个数值列分箱，画出每个区间的数量分布。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `histogram`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a value column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "histogram",
+            "x_field": "数值"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:box",
+      "tool": "",
+      "summary": "箱线图：按类别展示数值的中位数、四分位与离群值。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `box`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "box",
+            "x_field": "分类",
+            "y_field": "数值"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric.",
+        "A required group left entirely blank: engine.chart_field_group_missing."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:heatmap",
+      "tool": "",
+      "summary": "热力图：两个类别轴交叉成单元格，颜色深浅表示聚合值。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `heatmap`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a category2 column.",
+        "`y_field` reads a category2 column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "heatmap",
+            "x_field": "分类2",
+            "y_field": "分类2"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:model_agreement",
+      "tool": "",
+      "summary": "模型一致性矩阵：每个模型对每条数据给出的标签是否一致。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `model_agreement`.",
+        "Fill each required box with a column of the upstream table.",
+        "`model_field` reads a column column.",
+        "`id_field` reads a column column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "model_agreement",
+            "model_field": "模型",
+            "id_field": "原行"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:sankey",
+      "tool": "",
+      "summary": "桑基图：来源到目标的带权流向，带宽表示流量。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `sankey`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a source column.",
+        "`y_field` reads a target column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "sankey",
+            "x_field": "来源",
+            "y_field": "目标"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:network",
+      "tool": "",
+      "summary": "关系网络：来源/目标/权重三列画成节点与连线，可居中一个关键节点。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `network`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a source column.",
+        "`y_field` reads a target column.",
+        "Optional controls: center_node."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "network",
+            "x_field": "来源",
+            "y_field": "目标"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:knowledge_graph",
+      "tool": "",
+      "summary": "文献知识图谱：节点按共现坐标布局，连线宽度表示共现强度。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `knowledge_graph`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "knowledge_graph"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:cluster_timeline",
+      "tool": "",
+      "summary": "聚类时间线：每条聚类一行，横轴是首年到末年。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `cluster_timeline`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "cluster_timeline"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:burst",
+      "tool": "",
+      "summary": "突现词图：每个节点标出突现的起止年份与强度。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `burst`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "burst"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:timezone",
+      "tool": "",
+      "summary": "时区图：每个节点按年份序列铺开，颜色表示该年的出现量。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `timezone`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "timezone"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:circular",
+      "tool": "",
+      "summary": "环形共现图：节点沿圆周排布，连线表示共现关系。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `circular`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "circular"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:landscape",
+      "tool": "",
+      "summary": "聚类景观图：把每个聚类画成一块区域，块内是它的成员节点。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `landscape`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "landscape"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:biblio_heatmap",
+      "tool": "",
+      "summary": "文献热力图：聚类 × 年份的单元格热度，看各板块何时活跃。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `biblio_heatmap`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "biblio_heatmap"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:graph3d",
+      "tool": "",
+      "summary": "三维共现图：在三个坐标上展开节点，用深度缓解平面拥挤。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `graph3d`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "graph3d"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:variation",
+      "tool": "",
+      "summary": "变化图：每个节点的起止年与结构变化，用颜色标记上升/下降。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `variation`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "variation"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:dual_map",
+      "tool": "",
+      "summary": "双层图：左右两层各自成簇，中间用流量连线表示跨层对应。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `dual_map`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "dual_map"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:geo_map",
+      "tool": "",
+      "summary": "文献地理分布图：把各节点的频次铺到内置底图的分区上。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `geo_map`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "geo_map"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:sentiment_overlay",
+      "tool": "",
+      "summary": "情感叠加图：节点按情感分布着色，看研究板块的情绪倾向。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `sentiment_overlay`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "sentiment_overlay"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:topic_overlay",
+      "tool": "",
+      "summary": "话题叠加图：节点按话题分布着色，看各研究板块的话题构成。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `topic_overlay`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "topic_overlay"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:concentric",
+      "tool": "",
+      "summary": "同心环图：按节点首次出现年份分环，环上扇区表示各年出现量。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `concentric`.",
+        "Fill each required box with a column of the upstream table."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "concentric"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:wordcloud",
+      "tool": "",
+      "summary": "词云：词语按权重放大排布，一眼看出高频词。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `wordcloud`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a text column.",
+        "Optional controls: tokenize, wordcloud_style."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "wordcloud",
+            "x_field": "文本"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
+    },
+    {
+      "capability": "chart:map",
+      "tool": "",
+      "summary": "地图图：按地区名称把数值铺到地图上，颜色深浅表示大小。",
+      "steps": [
+        "Set the visualize node’s `chart_type` to `map`.",
+        "Fill each required box with a column of the upstream table.",
+        "`x_field` reads a geo column."
+      ],
+      "examples": [
+        {
+          "type": "visualize",
+          "params": {
+            "chart_type": "map",
+            "x_field": "地区"
+          }
+        }
+      ],
+      "failures": [
+        "A required box is blank: engine.chart_field_missing names the chart and the box.",
+        "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+        "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+      ],
+      "params": {},
+      "emit_columns": "",
+      "read_columns": ""
     }
   ]
 }

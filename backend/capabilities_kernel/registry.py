@@ -15,12 +15,13 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+from capabilities_kernel.chart import ChartSpec
 from capabilities_kernel.manifest import API_VERSION, KINDS, Manifest
 from capabilities_kernel.operator import OperatorManifest
 
-#: The manifest types a kind may declare. ``node``/``chart``/``platform`` … are the nine-section
-#: ``Manifest``; ``operator`` adds the analysis-specific sections in ``capabilities_kernel.operator``.
-MANIFEST_TYPES = (Manifest, OperatorManifest)
+#: The manifest types a kind may declare. ``node``/``platform`` … are the nine-section ``Manifest``;
+#: ``operator`` adds the analysis-step sections and ``chart`` the field/engine contract.
+MANIFEST_TYPES = (Manifest, OperatorManifest, ChartSpec)
 
 #: The capability tree. Tests point this at a temporary directory to prove duplicate/id/version
 #: refusals without writing into the checkout.

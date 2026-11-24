@@ -9961,6 +9961,3243 @@
         },
         "api_version": 1
       }
+    },
+    {
+      "kind": "chart",
+      "id": "bar",
+      "digest": "f5a2c7c9b3870b40ee37fbda3f357d39f2e0375c3c963e62b1b8ecc6389cfdf6",
+      "manifest": {
+        "identity": {
+          "id": "bar",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.bar",
+          "category": "console",
+          "order": 10,
+          "description": "柱状图：每个类别一根柱子，柱长表示聚合后的数值。",
+          "when_to_use": "类别之间比大小：各平台发帖量、高频词、各主题文档数。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderValue",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [
+          "annotations"
+        ],
+        "hint_key": "",
+        "tokenize_compatible": true,
+        "execution": {
+          "handler": "services.charts.options.series:build_bar",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "柱状图：每个类别一根柱子，柱长表示聚合后的数值。",
+          "when_not_to_use": [
+            "类别多到看不清（十几类以上）时改用表格或折线；看份额用饼图/百分比堆叠。",
+            "时间连续且点多时用折线图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `y_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `bar`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column.",
+            "Optional controls: annotations."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "bar",
+                "x_field": "分类"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "bar",
+              "x_field": "分类"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/bar.md",
+          "skill": "docs/capabilities/skills/charts/bar.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "line",
+      "digest": "16f82fbe2a04df3f19d6055b4ee34d1dff0f9f5f0212c2305f890c66493e506c",
+      "manifest": {
+        "identity": {
+          "id": "line",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.line",
+          "category": "console",
+          "order": 20,
+          "description": "折线图：按有序类别（通常是时间）连成趋势线。",
+          "when_to_use": "看随时间或阶段的走势：每日发帖量、情感指数曲线。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderValue",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [
+          "annotations"
+        ],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.series:build_line",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "折线图：按有序类别（通常是时间）连成趋势线。",
+          "when_not_to_use": [
+            "类别之间没有顺序时用柱状图；两条量纲不同的曲线用双轴折线。",
+            "只有一个时间点或类别时用柱状图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `y_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `line`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column.",
+            "Optional controls: annotations."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "line",
+                "x_field": "分类"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "line",
+              "x_field": "分类"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/line.md",
+          "skill": "docs/capabilities/skills/charts/line.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "dual_line",
+      "digest": "15dfbb068f8b3aee6e90514ea99ace1d99c5cbe2b7e4af24e3fbc659b125eb89",
+      "manifest": {
+        "identity": {
+          "id": "dual_line",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.dual_line",
+          "category": "console",
+          "order": 30,
+          "description": "双轴折线图：左右两条 Y 轴各画一条曲线，量纲不同也能同图比较。",
+          "when_to_use": "同时看“热度（条数）”与“情感指数（-1~1）”这类量纲不同的两条曲线。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderValue",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          },
+          {
+            "name": "y2_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.y2Field",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderRightAxis",
+            "hint_key": "",
+            "control": "agg2",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [
+          "annotations"
+        ],
+        "hint_key": "hint.dualLine",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.series:build_dual_line",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "双轴折线图：左右两条 Y 轴各画一条曲线，量纲不同也能同图比较。",
+          "when_not_to_use": [
+            "两条曲线量纲相同时用普通折线，双轴容易被误读成同一刻度。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `y_field`（value，可选）, `y2_field`（value，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `dual_line`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column.",
+            "`y2_field` reads a value column.",
+            "Optional controls: annotations."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "dual_line",
+                "x_field": "分类",
+                "y2_field": "数值"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "dual_line",
+              "x_field": "分类",
+              "y2_field": "数值"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/dual_line.md",
+          "skill": "docs/capabilities/skills/charts/dual_line.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "stack_pct",
+      "digest": "b53a6aa653033b324b53921c99165e39f186b69671264ca223da34954961b270",
+      "manifest": {
+        "identity": {
+          "id": "stack_pct",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.stack_pct",
+          "category": "console",
+          "order": 40,
+          "description": "百分比堆叠柱：每个类别的几列占比堆成 100%，看构成变化。",
+          "when_to_use": "正/中/负情感占比随时间或阶段的变化。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "stack_fields",
+            "role": "list",
+            "required": true,
+            "label_key": "settings.stackFields",
+            "placeholder": "积极占比, 中性占比, 消极占比",
+            "placeholder_key": "",
+            "hint_key": "hint.stackFields",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.series:build_stack_pct",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "百分比堆叠柱：每个类别的几列占比堆成 100%，看构成变化。",
+          "when_not_to_use": [
+            "没有被拆成几列占比时用普通柱状图；要看总量而不是构成时不适合。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `stack_fields`（list，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `stack_pct`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column.",
+            "`stack_fields` reads a list column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "stack_pct",
+                "x_field": "分类",
+                "stack_fields": "积极占比, 中性占比, 消极占比"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "stack_pct",
+              "x_field": "分类",
+              "stack_fields": "积极占比, 中性占比, 消极占比"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/stack_pct.md",
+          "skill": "docs/capabilities/skills/charts/stack_pct.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "topic_map",
+      "digest": "dcd1865be0896d708797b4d6de9aa494c1984aa811ba33d7bfade4ebf6059c42",
+      "manifest": {
+        "identity": {
+          "id": "topic_map",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.topic_map",
+          "category": "console",
+          "order": 50,
+          "description": "主题距离图：每个主题一个气泡，位置是主题间距离，大小是文档占比。",
+          "when_to_use": "主题距离图：看哪些主题彼此接近、哪个主题占比最大。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "coordinate",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "coordinate",
+            "required": true,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "label_field",
+            "role": "label",
+            "required": false,
+            "label_key": "settings.labelField",
+            "placeholder": "",
+            "placeholder_key": "",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [
+          [
+            "x_field",
+            "pc1"
+          ],
+          [
+            "y_field",
+            "pc2"
+          ],
+          [
+            "label_field",
+            "topic"
+          ],
+          [
+            "value_field",
+            "prevalence_pct"
+          ]
+        ],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.topics:build_topic_map",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "主题距离图：每个主题一个气泡，位置是主题间距离，大小是文档占比。",
+          "when_not_to_use": [
+            "要看每个主题的词用显著词图；没有 pc1/pc2 列时先用分析节点生成。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（coordinate，必填）, `y_field`（coordinate，必填）, `label_field`（label，可选）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `topic_map`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a coordinate column.",
+            "`y_field` reads a coordinate column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "topic_map",
+                "x_field": "pc1",
+                "y_field": "pc2",
+                "label_field": "topic",
+                "value_field": "prevalence_pct"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "topic_map",
+              "x_field": "pc1",
+              "y_field": "pc2",
+              "label_field": "topic",
+              "value_field": "prevalence_pct"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/topic_map.md",
+          "skill": "docs/capabilities/skills/charts/topic_map.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "topic_terms",
+      "digest": "90d141bbc159cd51403071555ff91feada050074e381bafa5a9ce53c3b31999e",
+      "manifest": {
+        "identity": {
+          "id": "topic_terms",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.topic_terms",
+          "category": "console",
+          "order": 60,
+          "description": "显著词图：每个主题里最有区分度的词，及其总体频率与主题内频率。",
+          "when_to_use": "显著词图：说明每个主题真正独特的词，而不是全语料高频词。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y2_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.y2Field",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderRightAxis",
+            "hint_key": "",
+            "control": "agg2",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [
+          [
+            "x_field",
+            "term"
+          ],
+          [
+            "y_field",
+            "overall_freq"
+          ],
+          [
+            "y2_field",
+            "within_freq"
+          ]
+        ],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.topics:build_topic_terms",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "显著词图：每个主题里最有区分度的词，及其总体频率与主题内频率。",
+          "when_not_to_use": [
+            "要看主题在平面上的位置用主题距离图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `y_field`（value，必填）, `y2_field`（value，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `topic_terms`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column.",
+            "`y_field` reads a value column.",
+            "`y2_field` reads a value column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "topic_terms",
+                "x_field": "term",
+                "y_field": "overall_freq",
+                "y2_field": "within_freq"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "topic_terms",
+              "x_field": "term",
+              "y_field": "overall_freq",
+              "y2_field": "within_freq"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/topic_terms.md",
+          "skill": "docs/capabilities/skills/charts/topic_terms.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "pie",
+      "digest": "3702656cbf3a7acca11c6db8228da6d62c7290b3f65433beb90b4244b57d15c6",
+      "manifest": {
+        "identity": {
+          "id": "pie",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.pie",
+          "category": "console",
+          "order": 70,
+          "description": "饼图：一个整体被分成几份，扇面角度表示占比。",
+          "when_to_use": "少量类别（约 6 个以内）的份额构成，如情感分布。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderValue",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": true,
+        "execution": {
+          "handler": "services.charts.options.distributions:build_pie",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "饼图：一个整体被分成几份，扇面角度表示占比。",
+          "when_not_to_use": [
+            "类别多或需要精确比较大小时用柱状图；份额为负无法画面积。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，必填）, `y_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `pie`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "pie",
+                "x_field": "分类"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "pie",
+              "x_field": "分类"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/pie.md",
+          "skill": "docs/capabilities/skills/charts/pie.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "scatter",
+      "digest": "feb519763932faccb0d522795c0b1c31e2cc44321bffe070e52b459bd66acec2",
+      "manifest": {
+        "identity": {
+          "id": "scatter",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.scatter",
+          "category": "console",
+          "order": 80,
+          "description": "散点图：两个数值列做坐标，看相关关系与离群点。",
+          "when_to_use": "两个数值的关系：点赞与评论、两个模型的得分、热度与情感指数。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.relations:build_scatter",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "散点图：两个数值列做坐标，看相关关系与离群点。",
+          "when_not_to_use": [
+            "只有一个数值列时看分布用直方图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（value，必填）, `y_field`（value，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `scatter`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a value column.",
+            "`y_field` reads a value column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "scatter",
+                "x_field": "数值",
+                "y_field": "数值"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "scatter",
+              "x_field": "数值",
+              "y_field": "数值"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/scatter.md",
+          "skill": "docs/capabilities/skills/charts/scatter.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "histogram",
+      "digest": "74d4789a884ba6d796942e29aa0eec42f88b4ee6fe4ce077aa6a752325550848",
+      "manifest": {
+        "identity": {
+          "id": "histogram",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.histogram",
+          "category": "console",
+          "order": 90,
+          "description": "直方图：把一个数值列分箱，画出每个区间的数量分布。",
+          "when_to_use": "看一个数值的分布形状：点赞数的长尾、长度的集中区间。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "value",
+            "required": true,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderNumeric",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.distributions:build_histogram",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "直方图：把一个数值列分箱，画出每个区间的数量分布。",
+          "when_not_to_use": [
+            "要看两个数值的关系用散点图；要按类别比较用柱状图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（value，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `histogram`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a value column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "histogram",
+                "x_field": "数值"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "histogram",
+              "x_field": "数值"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/histogram.md",
+          "skill": "docs/capabilities/skills/charts/histogram.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "box",
+      "digest": "83e0d5d7dd9cde136806bd84b692c321c1ce1feac8015290caf5d558c3d350ea",
+      "manifest": {
+        "identity": {
+          "id": "box",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.box",
+          "category": "console",
+          "order": 100,
+          "description": "箱线图：按类别展示数值的中位数、四分位与离群值。",
+          "when_to_use": "比较不同类别的分布形状，而不只是均值：各平台点赞分布。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category",
+            "required": false,
+            "label_key": "settings.xField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": "y_field"
+          },
+          {
+            "name": "y_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.yField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderValue",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [
+          [
+            "x_field",
+            "y_field"
+          ]
+        ],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.distributions:build_box",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "箱线图：按类别展示数值的中位数、四分位与离群值。",
+          "when_not_to_use": [
+            "只需要均值或总量时用柱状图；样本极少时箱线图没有意义。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category，可选（y_field 已填时必填））, `y_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `box`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "box",
+                "x_field": "分类",
+                "y_field": "数值"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "box",
+              "x_field": "分类",
+              "y_field": "数值"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric.",
+            "A required group left entirely blank: engine.chart_field_group_missing."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/box.md",
+          "skill": "docs/capabilities/skills/charts/box.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "heatmap",
+      "digest": "23aabaf58f11f3b736d6bc91546f4fb8c9dca2f44fbe55a63b9da0f77838cc34",
+      "manifest": {
+        "identity": {
+          "id": "heatmap",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.heatmap",
+          "category": "console",
+          "order": 110,
+          "description": "热力图：两个类别轴交叉成单元格，颜色深浅表示聚合值。",
+          "when_to_use": "两个维度交叉的强度：阶段 × 主题、平台 × 情感。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "category2",
+            "required": true,
+            "label_key": "settings.xFieldCat1",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "category2",
+            "required": true,
+            "label_key": "settings.yFieldCat2",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderCategory",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": false,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.relations:build_heatmap",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "热力图：两个类别轴交叉成单元格，颜色深浅表示聚合值。",
+          "when_not_to_use": [
+            "只有一个维度时用柱状图或折线图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（category2，必填）, `y_field`（category2，必填）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `heatmap`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a category2 column.",
+            "`y_field` reads a category2 column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "heatmap",
+                "x_field": "分类2",
+                "y_field": "分类2"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "heatmap",
+              "x_field": "分类2",
+              "y_field": "分类2"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/heatmap.md",
+          "skill": "docs/capabilities/skills/charts/heatmap.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "model_agreement",
+      "digest": "f7e0c54202836a9a68831924a0582df3c096afd8445b41fc4160af8357dbacbd",
+      "manifest": {
+        "identity": {
+          "id": "model_agreement",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.model_agreement",
+          "category": "console",
+          "order": 120,
+          "description": "模型一致性矩阵：每个模型对每条数据给出的标签是否一致。",
+          "when_to_use": "多个情感/倾向模型对同一份语料比较，找出分歧样本。"
+        },
+        "fields": [
+          {
+            "name": "model_field",
+            "role": "column",
+            "required": true,
+            "label_key": "settings.modelField",
+            "placeholder": "",
+            "placeholder_key": "",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "agreement_label_field",
+            "role": "column",
+            "required": false,
+            "label_key": "settings.agreementLabelField",
+            "placeholder": "emotion / tendency / sentiment",
+            "placeholder_key": "",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "id_field",
+            "role": "column",
+            "required": true,
+            "label_key": "settings.idField",
+            "placeholder": "",
+            "placeholder_key": "",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": false,
+        "reads": [],
+        "defaults": [
+          [
+            "model_field",
+            "模型"
+          ],
+          [
+            "id_field",
+            "原行"
+          ]
+        ],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "hint.modelAgreement",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.relations:build_model_agreement",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "模型一致性矩阵：每个模型对每条数据给出的标签是否一致。",
+          "when_not_to_use": [
+            "只用一个模型时没有“一致性”可看。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `model_field`（column，必填）, `agreement_label_field`（column，可选）, `id_field`（column，必填）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `model_agreement`.",
+            "Fill each required box with a column of the upstream table.",
+            "`model_field` reads a column column.",
+            "`id_field` reads a column column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "model_agreement",
+                "model_field": "模型",
+                "id_field": "原行"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "model_agreement",
+              "model_field": "模型",
+              "id_field": "原行"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/model_agreement.md",
+          "skill": "docs/capabilities/skills/charts/model_agreement.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "sankey",
+      "digest": "1177d4f686c92341f00cbd977719d437c301379fe02a73c3e1e599d45a40c446",
+      "manifest": {
+        "identity": {
+          "id": "sankey",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.sankey",
+          "category": "console",
+          "order": 130,
+          "description": "桑基图：来源到目标的带权流向，带宽表示流量。",
+          "when_to_use": "主题流向、平台到情感的去向、阶段之间的转移。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "source",
+            "required": true,
+            "label_key": "settings.sourceField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderSource",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "target",
+            "required": true,
+            "label_key": "settings.targetField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderTarget",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.relations:build_sankey",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "桑基图：来源到目标的带权流向，带宽表示流量。",
+          "when_not_to_use": [
+            "没有“从哪到哪”的两列时用柱状图或热力图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（source，必填）, `y_field`（target，必填）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `sankey`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a source column.",
+            "`y_field` reads a target column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "sankey",
+                "x_field": "来源",
+                "y_field": "目标"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "sankey",
+              "x_field": "来源",
+              "y_field": "目标"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/sankey.md",
+          "skill": "docs/capabilities/skills/charts/sankey.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "network",
+      "digest": "61f27bc55c9fddec07423fc702c57767fd3dac193863a7badc12a8688e13c2bc",
+      "manifest": {
+        "identity": {
+          "id": "network",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.network",
+          "category": "console",
+          "order": 140,
+          "description": "关系网络：来源/目标/权重三列画成节点与连线，可居中一个关键节点。",
+          "when_to_use": "回复网络、词语共现、作者互动。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "source",
+            "required": true,
+            "label_key": "settings.sourceField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderSource",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "y_field",
+            "role": "target",
+            "required": true,
+            "label_key": "settings.targetField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderTarget",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "agg",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [
+          "center_node"
+        ],
+        "hint_key": "",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.relations:build_network",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "关系网络：来源/目标/权重三列画成节点与连线，可居中一个关键节点。",
+          "when_not_to_use": [
+            "只要看两两流向的带宽用桑基图；边太多时网络会变成毛线球。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（source，必填）, `y_field`（target，必填）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `network`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a source column.",
+            "`y_field` reads a target column.",
+            "Optional controls: center_node."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "network",
+                "x_field": "来源",
+                "y_field": "目标"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "network",
+              "x_field": "来源",
+              "y_field": "目标"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/network.md",
+          "skill": "docs/capabilities/skills/charts/network.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "knowledge_graph",
+      "digest": "a40752bedbcd7c8c995f0e586992d053dd12932c083fa465c930e42a48e85385",
+      "manifest": {
+        "identity": {
+          "id": "knowledge_graph",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.knowledge_graph",
+          "category": "biblio",
+          "order": 150,
+          "description": "文献知识图谱：节点按共现坐标布局，连线宽度表示共现强度。",
+          "when_to_use": "文献分析之后的主题/关键词共现图谱。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "x",
+          "y",
+          "连接",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.graph:knowledge_graph",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "文献知识图谱：节点按共现坐标布局，连线宽度表示共现强度。",
+          "when_not_to_use": [
+            "普通评论语料的词共现用关系网络；没有 biblio 节点写出的列时无法绘制。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `x`, `y`, `连接`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `knowledge_graph`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "knowledge_graph"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "knowledge_graph"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/knowledge_graph.md",
+          "skill": "docs/capabilities/skills/charts/knowledge_graph.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "cluster_timeline",
+      "digest": "8b3fab742eb7c7e42c757948998d321b79a670d3697f65d62f4970c11b068598",
+      "manifest": {
+        "identity": {
+          "id": "cluster_timeline",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.cluster_timeline",
+          "category": "biblio",
+          "order": 160,
+          "description": "聚类时间线：每条聚类一行，横轴是首年到末年。",
+          "when_to_use": "看各主题簇的活跃年代与延续长度。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "聚类",
+          "聚类标签",
+          "首年",
+          "末年",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.timeline:cluster_timeline",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "聚类时间线：每条聚类一行，横轴是首年到末年。",
+          "when_not_to_use": [
+            "需要单节点的突现年份用突现图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `聚类`, `聚类标签`, `首年`, `末年`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `cluster_timeline`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "cluster_timeline"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "cluster_timeline"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/cluster_timeline.md",
+          "skill": "docs/capabilities/skills/charts/cluster_timeline.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "burst",
+      "digest": "0f2263a0960b5b0aec6a73a5c115980403f6a05e1dee71e1b8e5571744ac8761",
+      "manifest": {
+        "identity": {
+          "id": "burst",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.burst",
+          "category": "biblio",
+          "order": 170,
+          "description": "突现词图：每个节点标出突现的起止年份与强度。",
+          "when_to_use": "找出某一时期突然升温的关键词。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "突现起始",
+          "突现结束",
+          "突现强度"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.timeline:burst",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "突现词图：每个节点标出突现的起止年份与强度。",
+          "when_not_to_use": [
+            "看整体聚类年代跨度的聚簇时间线更合适。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `突现起始`, `突现结束`, `突现强度`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `burst`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "burst"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "burst"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/burst.md",
+          "skill": "docs/capabilities/skills/charts/burst.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "timezone",
+      "digest": "874082a60bd934f5dadbaa86fcb33eb72d9d769ce773499df13531fe7fe9c84f",
+      "manifest": {
+        "identity": {
+          "id": "timezone",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.timezone",
+          "category": "biblio",
+          "order": 180,
+          "description": "时区图：每个节点按年份序列铺开，颜色表示该年的出现量。",
+          "when_to_use": "看单个关键词在每一年是否出现、出现多少。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "年份序列",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.timeline:timezone",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "时区图：每个节点按年份序列铺开，颜色表示该年的出现量。",
+          "when_not_to_use": [
+            "要按簇汇总用聚类时间线。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `年份序列`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `timezone`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "timezone"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "timezone"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/timezone.md",
+          "skill": "docs/capabilities/skills/charts/timezone.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "circular",
+      "digest": "be1debc4f12350f64120046ef6d09a58bdc6c9e34bedb0c2b5998e31cb734712",
+      "manifest": {
+        "identity": {
+          "id": "circular",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.circular",
+          "category": "biblio",
+          "order": 190,
+          "description": "环形共现图：节点沿圆周排布，连线表示共现关系。",
+          "when_to_use": "共现关系多、力导向布局容易挤成一团时。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "连接",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.graph:circular",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "环形共现图：节点沿圆周排布，连线表示共现关系。",
+          "when_not_to_use": [
+            "要看聚类分组用知识图谱或聚类景观图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `连接`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `circular`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "circular"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "circular"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/circular.md",
+          "skill": "docs/capabilities/skills/charts/circular.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "landscape",
+      "digest": "cc9838239c4f4d1244364aabcb2d33a7461514116376a134bfd16bf76b7571a7",
+      "manifest": {
+        "identity": {
+          "id": "landscape",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.landscape",
+          "category": "biblio",
+          "order": 200,
+          "description": "聚类景观图：把每个聚类画成一块区域，块内是它的成员节点。",
+          "when_to_use": "用一页说明文献由哪几个研究板块构成。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "聚类",
+          "聚类标签",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.timeline:landscape",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "聚类景观图：把每个聚类画成一块区域，块内是它的成员节点。",
+          "when_not_to_use": [
+            "要看板块随年代的变化用聚类时间线或热力图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `聚类`, `聚类标签`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `landscape`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "landscape"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "landscape"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/landscape.md",
+          "skill": "docs/capabilities/skills/charts/landscape.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "biblio_heatmap",
+      "digest": "a738bbbc50a14eb669a780897626ef3199cc25f3bcef4172e38e3f7e5d856b8f",
+      "manifest": {
+        "identity": {
+          "id": "biblio_heatmap",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.biblio_heatmap",
+          "category": "biblio",
+          "order": 210,
+          "description": "文献热力图：聚类 × 年份的单元格热度，看各板块何时活跃。",
+          "when_to_use": "比较多个聚类在不同年份的强度。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "聚类",
+          "聚类标签",
+          "年份序列",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.timeline:biblio_heatmap",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "文献热力图：聚类 × 年份的单元格热度，看各板块何时活跃。",
+          "when_not_to_use": [
+            "只看单个节点逐年出现用时区图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `聚类`, `聚类标签`, `年份序列`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `biblio_heatmap`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "biblio_heatmap"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "biblio_heatmap"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/biblio_heatmap.md",
+          "skill": "docs/capabilities/skills/charts/biblio_heatmap.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "graph3d",
+      "digest": "27f56092dfc3493127cfaa1b5fd4b005d896aa19141fd1ab8d3a0f82127f5df7",
+      "manifest": {
+        "identity": {
+          "id": "graph3d",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.graph3d",
+          "category": "biblio",
+          "order": 220,
+          "description": "三维共现图：在三个坐标上展开节点，用深度缓解平面拥挤。",
+          "when_to_use": "共现关系密集、二维图互相遮挡时。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "x",
+          "y",
+          "连接",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.graph:graph3d",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "三维共现图：在三个坐标上展开节点，用深度缓解平面拥挤。",
+          "when_not_to_use": [
+            "要印刷或静态截图时用二维知识图谱，三维在纸上无法阅读。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `x`, `y`, `连接`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `graph3d`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "graph3d"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "graph3d"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/graph3d.md",
+          "skill": "docs/capabilities/skills/charts/graph3d.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "variation",
+      "digest": "0d564fae27ad5c9e9d378a3c921d550637a4f7c3732fed076877a576f53bed58",
+      "manifest": {
+        "identity": {
+          "id": "variation",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.variation",
+          "category": "biblio",
+          "order": 230,
+          "description": "变化图：每个节点的起止年与结构变化，用颜色标记上升/下降。",
+          "when_to_use": "看关键词在研究周期内是升温还是退场。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "起始年",
+          "结束年",
+          "结构变化"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.maps:variation",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "变化图：每个节点的起止年与结构变化，用颜色标记上升/下降。",
+          "when_not_to_use": [
+            "要看突现强度与区间用突现词图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `起始年`, `结束年`, `结构变化`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `variation`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "variation"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "variation"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/variation.md",
+          "skill": "docs/capabilities/skills/charts/variation.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "dual_map",
+      "digest": "1bb070b721028c81e259ff7b384e20605a75e510718ba5e42abebd87628b21e9",
+      "manifest": {
+        "identity": {
+          "id": "dual_map",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.dual_map",
+          "category": "biblio",
+          "order": 240,
+          "description": "双层图：左右两层各自成簇，中间用流量连线表示跨层对应。",
+          "when_to_use": "把“施引/被引”或“方法/主题”两层结构放在一张图里。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "map",
+          "source",
+          "target",
+          "weight"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.maps:dual_map",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "双层图：左右两层各自成簇，中间用流量连线表示跨层对应。",
+          "when_not_to_use": [
+            "只有一层结构时用知识图谱。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `map`, `source`, `target`, `weight`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `dual_map`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "dual_map"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "dual_map"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/dual_map.md",
+          "skill": "docs/capabilities/skills/charts/dual_map.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "geo_map",
+      "digest": "c2c291d0e58bbe571fc3368919d1b260aeb070e10a71387d25a7462231804353",
+      "manifest": {
+        "identity": {
+          "id": "geo_map",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.geo_map",
+          "category": "biblio",
+          "order": 250,
+          "description": "文献地理分布图：把各节点的频次铺到内置底图的分区上。",
+          "when_to_use": "文献数据带有地区维度时。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.maps:geo_map",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "文献地理分布图：把各节点的频次铺到内置底图的分区上。",
+          "when_not_to_use": [
+            "普通语料的地区热度用地图图，它读的是你自己的地区列。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `geo_map`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "geo_map"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "geo_map"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/geo_map.md",
+          "skill": "docs/capabilities/skills/charts/geo_map.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "sentiment_overlay",
+      "digest": "3c752e14dc68d642d88fbc8dc2d37dc9112f4271200045f1471903736a79f189",
+      "manifest": {
+        "identity": {
+          "id": "sentiment_overlay",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.sentiment_overlay",
+          "category": "biblio",
+          "order": 260,
+          "description": "情感叠加图：节点按情感分布着色，看研究板块的情绪倾向。",
+          "when_to_use": "文献分析时填了情感映射，想在图谱上区分正负。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "情感分布"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.overlay:sentiment_overlay",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "情感叠加图：节点按情感分布着色，看研究板块的情绪倾向。",
+          "when_not_to_use": [
+            "没有情感分布列时无法着色；普通情感演化用折线图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `情感分布`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `sentiment_overlay`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "sentiment_overlay"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "sentiment_overlay"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/sentiment_overlay.md",
+          "skill": "docs/capabilities/skills/charts/sentiment_overlay.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "topic_overlay",
+      "digest": "75ffffeed5b60636e388c60b980c308da0b8b9835b2fe7946dd4ed81b3614c48",
+      "manifest": {
+        "identity": {
+          "id": "topic_overlay",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.topic_overlay",
+          "category": "biblio",
+          "order": 270,
+          "description": "话题叠加图：节点按话题分布着色，看各研究板块的话题构成。",
+          "when_to_use": "文献分析时填了话题映射，想在图谱上看话题归属。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "话题分布"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.overlay:topic_overlay",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "话题叠加图：节点按话题分布着色，看各研究板块的话题构成。",
+          "when_not_to_use": [
+            "没有话题分布列时无法着色；话题模型结果用主题距离图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `话题分布`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `topic_overlay`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "topic_overlay"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "topic_overlay"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/topic_overlay.md",
+          "skill": "docs/capabilities/skills/charts/topic_overlay.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "concentric",
+      "digest": "7851e664cceb84977733e372636538126f825c01c7c4b034cf1acacddd6e9ee4",
+      "manifest": {
+        "identity": {
+          "id": "concentric",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.concentric",
+          "category": "biblio",
+          "order": 280,
+          "description": "同心环图：按节点首次出现年份分环，环上扇区表示各年出现量。",
+          "when_to_use": "要看“新词何时进入、老词何时退场”的首现结构。"
+        },
+        "fields": [],
+        "family": "biblio",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [
+          "节点",
+          "年份序列",
+          "频次"
+        ],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "biblio.ui.chartHint",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.biblio.charts.graph:concentric",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "同心环图：按节点首次出现年份分环，环上扇区表示各年出现量。",
+          "when_not_to_use": [
+            "逐节点看年份用时间线/时区图更直接。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "Columns written by 文献分析: `节点`, `年份序列`, `频次`."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `concentric`.",
+            "Fill each required box with a column of the upstream table."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "concentric"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "concentric"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/concentric.md",
+          "skill": "docs/capabilities/skills/charts/concentric.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "wordcloud",
+      "digest": "937cdc660045e60c3232235eb5e8abb953fc673fc0819b54e73a7dfa2639c623",
+      "manifest": {
+        "identity": {
+          "id": "wordcloud",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.wordcloud",
+          "category": "console",
+          "order": 290,
+          "description": "词云：词语按权重放大排布，一眼看出高频词。",
+          "when_to_use": "分词结果的直观展示，尤其是报告首页的“关键词印象”。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "text",
+            "required": true,
+            "label_key": "settings.textField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderText",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [
+          "tokenize",
+          "wordcloud_style"
+        ],
+        "hint_key": "",
+        "tokenize_compatible": true,
+        "execution": {
+          "handler": "services.charts.options.distributions:build_wordcloud",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "词云：词语按权重放大排布，一眼看出高频词。",
+          "when_not_to_use": [
+            "要精确比较词频用柱状图或表格；词太多时词云会看不清。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（text，必填）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `wordcloud`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a text column.",
+            "Optional controls: tokenize, wordcloud_style."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "wordcloud",
+                "x_field": "文本"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "wordcloud",
+              "x_field": "文本"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/wordcloud.md",
+          "skill": "docs/capabilities/skills/charts/wordcloud.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
+    },
+    {
+      "kind": "chart",
+      "id": "map",
+      "digest": "0106a27109a49c90aa4a2c1f9f10225674db7def3fd4b88d824dd26e4a5e501d",
+      "manifest": {
+        "identity": {
+          "id": "map",
+          "kind": "chart",
+          "version": "1.0.0",
+          "title_key": "chart.map",
+          "category": "console",
+          "order": 300,
+          "description": "地图图：按地区名称把数值铺到地图上，颜色深浅表示大小。",
+          "when_to_use": "语料带地区维度（IP 归属、用户城市）时。"
+        },
+        "fields": [
+          {
+            "name": "x_field",
+            "role": "geo",
+            "required": true,
+            "label_key": "settings.regionField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderGeo",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          },
+          {
+            "name": "value_field",
+            "role": "value",
+            "required": false,
+            "label_key": "settings.valueField",
+            "placeholder": "",
+            "placeholder_key": "settings.fieldPlaceholderWeight",
+            "hint_key": "",
+            "control": "",
+            "required_when": ""
+          }
+        ],
+        "family": "console",
+        "echarts_only": true,
+        "latex_buildable": true,
+        "reads": [],
+        "defaults": [],
+        "any_of": [],
+        "controls": [],
+        "hint_key": "hint.mapRegionNames",
+        "tokenize_compatible": false,
+        "execution": {
+          "handler": "services.charts.options.distributions:build_map",
+          "quiet": false
+        },
+        "ui": {
+          "form": "custom",
+          "custom_renderer": "visualize",
+          "defaults_from": "",
+          "hint_key": ""
+        },
+        "ai": {
+          "tool": "",
+          "summary": "地图图：按地区名称把数值铺到地图上，颜色深浅表示大小。",
+          "when_not_to_use": [
+            "地区名与内置底图不一致时会落空；没有地区列时用柱状图。"
+          ],
+          "prerequisites": [
+            "An upstream table (the visualize node’s input).",
+            "These boxes: `x_field`（geo，必填）, `value_field`（value，可选）."
+          ],
+          "steps": [
+            "Set the visualize node’s `chart_type` to `map`.",
+            "Fill each required box with a column of the upstream table.",
+            "`x_field` reads a geo column."
+          ],
+          "examples": [
+            {
+              "type": "visualize",
+              "params": {
+                "chart_type": "map",
+                "x_field": "地区"
+              }
+            }
+          ],
+          "template": {
+            "type": "visualize",
+            "params": {
+              "chart_type": "map",
+              "x_field": "地区"
+            }
+          },
+          "failures": [
+            "A required box is blank: engine.chart_field_missing names the chart and the box.",
+            "A chart type this build does not serve: engine.chart_unknown (the declared default is the fix).",
+            "A value/coordinate column that holds no number at all: engine.chart_column_not_numeric."
+          ],
+          "acceptance": [
+            "The chart option or image exists for the run.",
+            "A missing required box is named before the run."
+          ]
+        },
+        "tests": {
+          "contracts": [
+            "tests/unit/capabilities/test_chart_manifests.py"
+          ]
+        },
+        "docs": {
+          "page": "docs/capabilities/charts/map.md",
+          "skill": "docs/capabilities/skills/charts/map.md",
+          "version_hash": ""
+        },
+        "api_version": 1
+      }
     }
   ],
   "matrix": [
@@ -10970,6 +14207,576 @@
         "tests/unit/capabilities/test_operator_manifests.py"
       ],
       "docs": "docs/capabilities/operators/alert.md"
+    },
+    {
+      "kind": "chart",
+      "id": "bar",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/bar.md"
+    },
+    {
+      "kind": "chart",
+      "id": "line",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/line.md"
+    },
+    {
+      "kind": "chart",
+      "id": "dual_line",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/dual_line.md"
+    },
+    {
+      "kind": "chart",
+      "id": "stack_pct",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/stack_pct.md"
+    },
+    {
+      "kind": "chart",
+      "id": "topic_map",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/topic_map.md"
+    },
+    {
+      "kind": "chart",
+      "id": "topic_terms",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/topic_terms.md"
+    },
+    {
+      "kind": "chart",
+      "id": "pie",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/pie.md"
+    },
+    {
+      "kind": "chart",
+      "id": "scatter",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/scatter.md"
+    },
+    {
+      "kind": "chart",
+      "id": "histogram",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/histogram.md"
+    },
+    {
+      "kind": "chart",
+      "id": "box",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/box.md"
+    },
+    {
+      "kind": "chart",
+      "id": "heatmap",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/heatmap.md"
+    },
+    {
+      "kind": "chart",
+      "id": "model_agreement",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/model_agreement.md"
+    },
+    {
+      "kind": "chart",
+      "id": "sankey",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/sankey.md"
+    },
+    {
+      "kind": "chart",
+      "id": "network",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/network.md"
+    },
+    {
+      "kind": "chart",
+      "id": "knowledge_graph",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/knowledge_graph.md"
+    },
+    {
+      "kind": "chart",
+      "id": "cluster_timeline",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/cluster_timeline.md"
+    },
+    {
+      "kind": "chart",
+      "id": "burst",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/burst.md"
+    },
+    {
+      "kind": "chart",
+      "id": "timezone",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/timezone.md"
+    },
+    {
+      "kind": "chart",
+      "id": "circular",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/circular.md"
+    },
+    {
+      "kind": "chart",
+      "id": "landscape",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/landscape.md"
+    },
+    {
+      "kind": "chart",
+      "id": "biblio_heatmap",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/biblio_heatmap.md"
+    },
+    {
+      "kind": "chart",
+      "id": "graph3d",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/graph3d.md"
+    },
+    {
+      "kind": "chart",
+      "id": "variation",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/variation.md"
+    },
+    {
+      "kind": "chart",
+      "id": "dual_map",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/dual_map.md"
+    },
+    {
+      "kind": "chart",
+      "id": "geo_map",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/geo_map.md"
+    },
+    {
+      "kind": "chart",
+      "id": "sentiment_overlay",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/sentiment_overlay.md"
+    },
+    {
+      "kind": "chart",
+      "id": "topic_overlay",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/topic_overlay.md"
+    },
+    {
+      "kind": "chart",
+      "id": "concentric",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/concentric.md"
+    },
+    {
+      "kind": "chart",
+      "id": "wordcloud",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/wordcloud.md"
+    },
+    {
+      "kind": "chart",
+      "id": "map",
+      "checks": [
+        "structure",
+        "executor",
+        "port_hooks",
+        "validators",
+        "preflight",
+        "postcheck",
+        "docs",
+        "contracts",
+        "title_keys"
+      ],
+      "contract_tests": [
+        "tests/unit/capabilities/test_chart_manifests.py"
+      ],
+      "docs": "docs/capabilities/charts/map.md"
     }
   ]
 }
