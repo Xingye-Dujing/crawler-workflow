@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`7101f4b0 功能更新：分析面板 37/37——anti_join 迁完，P7 面板清单化收口`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`d00374ff 功能更新：P8 第一片——测试价值清单与门禁`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 第一片：测试价值清单与门禁（2026-11-24）
+
+- `tools/test_inventory.py`：`ast` 扫描 `tests/**`（**434 文件 / 8555 用例定义**），逐文件统计
+  用例数、无断言、skip/skipif、xfail，渲染 `docs/testing/value-inventory.md`；`--check` 比字节。
+- 门禁 `tests/unit/gates/test_test_inventory.py`：页面陈旧即红；“无断言又没写理由”即红；**无断言总数
+  钉成 33**（新增一处就失败，逼作者补断言或写理由并改数字）；skip 只允许 OS/环境事实。
+- 现状：**10 个 skip 全部是 OS/环境事实**（POSIX 可执行位、macOS `ps`、Windows `MessageBoxW`、
+  Node 未装、POSIX mode bits）；**33 条无断言**逐文件写明理由（“不得抛异常”“与副本比较”“由 helper
+  断言”），P8 下一步把它们改写成显式断言并缩小这个数。
+- 顺带修掉一个检测 bug：`parametrize` 里的 `'st-skipped'` 曾被当成 skip 标记（skip 数从 11 修正为 10）。
+- 验证：门禁 4 passed；`--check` 通过；ruff 全绿；文档/引号门禁 14 passed。
 
 ## P7 收口：分析面板 37/37（2026-11-24）
 
