@@ -83,3 +83,7 @@ pip-build-*/
 pip-install-*/
 pip-unpack-*/
 pip-ephem-wheel-cache-*/
+
+# ─── Mutation sweep output ───
+# A reading, regenerated per run (never a committed page: survivors move with the code).
+reports/

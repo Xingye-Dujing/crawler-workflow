@@ -63,7 +63,7 @@
 | # | 事实 | 验收 |
 |---|---|---|
 | R9 | ~~`ai-workspace.js` 4446 行；无单文件预算门禁~~ **已完成（`3df480fd`）** | 拆成 kernel/features/render；单文件 ≤600 行门禁绿（`tests/js_budget.py`，`SCOPE` 一处声明） |
-| R10 | 没有 nightly mutation | CI 夜间任务跑变异并给出分数 |
+| R10 | ~~没有 nightly mutation~~ **已完成（2026-11-25）** | `tools/mutation_sweep.py`（模块 ↔ 拥有它的测试成对声明，在副本里逐处变异）+ `.github/workflows/nightly.yml` 每日读数 |
 
 ## P0 基线 + 热修列车（进行中）
 

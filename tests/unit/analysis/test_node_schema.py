@@ -83,6 +83,87 @@ class TestComputeColumns:
         assert compute_columns(nodes, [])['a'] == ['阶段']
 
 
+class TestTheGraphWalk:
+    """The traversal itself: fan-in unions, dangling wires, cycles, order, parameter hooks.
+
+    A mutation sweep over ``nodes/schema.py`` is what put these here: the column rules were
+    well covered, the walk that feeds them was not — a duplicated union column, a wire naming a
+    node that is not on the canvas, a cycle, and the "no hook" answer all survived silently.
+    """
+
+    @staticmethod
+    def _tokenize(node_id: str, mode: str) -> dict:
+        return {'id': node_id, 'type': 'tokenize', 'params': {'text_column': '正文', 'output_mode': mode}}
+
+    def test_a_fan_in_union_lists_a_shared_column_once(self):
+        nodes = {
+            'a': self._tokenize('a', 'word_freq'),
+            'b': self._tokenize('b', 'words_only'),
+            'p': {'id': 'p', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+        }
+        cols = compute_columns(nodes, [{'from': 'a', 'to': 'p'}, {'from': 'b', 'to': 'p'}])
+        assert cols['p'][:2] == ['word', 'frequency'], 'the union keeps the wire order'
+        assert cols['p'].count('word') == 1, 'a column both parents carry appears once'
+
+    def test_a_wire_to_a_node_that_is_not_on_the_canvas_is_ignored(self):
+        """A dangling wire must not become an EXTRA parent: it would make the child unknown."""
+        nodes = {
+            't': self._tokenize('t', 'csv_line'),
+            'p': {'id': 'p', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+        }
+        cols = compute_columns(
+            nodes,
+            [{'from': 'ghost', 'to': 'p'}, {'from': 't', 'to': 'p'}, {'from': 't', 'to': 'ghost'}],
+        )
+        assert cols['p'] is not None, 'the real parent answers; the ghost must not'
+        assert cols['p'][0] == 'words'
+
+    def test_a_cycle_still_gives_every_node_an_entry(self):
+        nodes = {
+            'a': {'id': 'a', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+            'b': {'id': 'b', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+        }
+        cols = compute_columns(nodes, [{'from': 'a', 'to': 'b'}, {'from': 'b', 'to': 'a'}])
+        assert set(cols) == {'a', 'b'}
+
+    def test_the_order_is_the_graphs_not_the_dicts(self):
+        """A diamond proves the queue is really topological: with the dict written backwards, a
+        broken queue still returns every node but in the wrong order — and a child computed
+        before its second parent would be answered from half a table."""
+        nodes = {
+            'd': {'id': 'd', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+            'c': {'id': 'c', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+            'b': {'id': 'b', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+            'a': self._tokenize('a', 'csv_line'),
+        }
+        connections = [
+            {'from': 'a', 'to': 'b'},
+            {'from': 'a', 'to': 'c'},
+            {'from': 'b', 'to': 'd'},
+            {'from': 'c', 'to': 'd'},
+        ]
+        assert list(compute_columns(nodes, connections)) == ['a', 'b', 'c', 'd']
+
+    def test_a_chain_is_answered_parent_first_whatever_the_dict_order(self):
+        nodes = {
+            'p': {'id': 'p', 'type': 'process', 'params': {'operation': 'clean', 'text_column': '正文'}},
+            't': self._tokenize('t', 'word_freq'),
+        }
+        assert list(compute_columns(nodes, [{'from': 't', 'to': 'p'}])) == ['t', 'p']
+
+    def test_param_errors_asks_the_plugin_and_answers_empty_without_one(self):
+        """A type with no hook answers ``[]``; a hook's own problems come through whole."""
+        from nodes.schema import param_errors
+
+        nodes = {
+            't': self._tokenize('t', 'word_freq'),
+            'a': {'id': 'a', 'type': 'analysis', 'params': {'steps': {'op': 'lda'}}},
+        }
+        found = param_errors(nodes)
+        assert found['t'] == []
+        assert [item['code'] for item in found['a']] == ['steps_shape']
+
+
 class TestTheShapeTheCanvasActuallyStores:
     """Every case here is a verbatim flat node from ``data/workflows/*.json``.
 

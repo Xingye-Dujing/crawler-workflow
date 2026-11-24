@@ -170,6 +170,11 @@ repository root.
 
 ## How tests are written here
 
+- **A green case is not yet a case that notices.** `tools/mutation_sweep.py` breaks one decision at a
+  time (a comparison's negation, `and`↔`or`, a dropped `not`, a number off by one next to a comparison)
+  in a declared module and runs the test file that owns it; a survivor is a blind spot named by
+  `file:line`, and the sweep is a **reading, not a gate** (`docs/testing/mutation.md`, nightly
+  `.github/workflows/nightly.yml`). Fix a real survivor in the test, never in the product code.
 - **A case earns its runtime by proving something, and the suite says so on one page.**
   `python tools/test_inventory.py` renders `docs/testing/value-inventory.md` (per file: cases,
   no-assert, skips, xfail); `tests/unit/gates/test_test_inventory.py` refuses a stale page, a case

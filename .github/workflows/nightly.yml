@@ -1,0 +1,69 @@
+name: nightly
+
+# One reading a day, on Linux only: **mutation testing** answers a question the fast tier cannot.
+# A green suite says "nothing failed"; a mutation sweep says "these decisions were actually
+# checked" — it breaks one comparison / boolean op / `not` at a time and asks the owning test file
+# to notice. Survivors are a READING, not a failure: some mutants are equivalent, and the sweep's
+# job is to name the blind spots (`docs/testing/mutation.md`), not to block a merge.
+#
+# Why it is not on every push: one pytest run per mutant is minutes of runner time, and the answer
+# moves with the code, so a nightly snapshot is the honest cadence. Why Ubuntu only: the mutants
+# and their tests are pure Python; the three-system gate lives in `ci.yml`.
+#
+# The job FAILS only when the sweep itself breaks (a target that no longer parses, a missing test
+# file, a mutant whose tests cannot run) — that is a stale declaration, not a survivor.
+
+on:
+  schedule:
+    # 18:20 UTC = 02:20 in UTC+8, after the working day and before the next one.
+    - cron: '20 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The sweep copies the tree into a throwaway folder and runs pytest there; nothing in this job
+  # may depend on a browser, a daemon or an account.
+  PYTHONDONTWRITEBYTECODE: '1'
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Create the venv the project mandates
+        run: python -m venv .venv
+
+      - name: Install declared dependencies
+        run: .venv/bin/python -m pip install --upgrade pip -r requirements.txt
+
+      # The sweep runs `sys.executable -m pytest` inside the copy, so it must be the venv's
+      # interpreter — the same one the fast tier uses, on the same platform.
+      - name: Mutation sweep
+        run: .venv/bin/python tools/mutation_sweep.py --out reports/mutation.md --json reports/mutation.json
+
+      - name: Publish the reading
+        if: always()
+        run: |
+          {
+            echo '## 变异扫描 / mutation sweep'
+            echo
+            cat reports/mutation.md || echo 'no report: the sweep did not finish'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mutation-report
+          path: |
+            reports/mutation.md
+            reports/mutation.json
+          if-no-files-found: warn

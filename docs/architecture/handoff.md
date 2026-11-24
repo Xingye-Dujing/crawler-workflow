@@ -15,7 +15,37 @@
 - 分支：`main`
 - 最后提交：`44af8e05 重构：严格模式工具预算——排序没话可说时不裁剪（框架 0.1.29）`（已推 GitHub + Gitee，CI 触发）；
   框架仓库 `7887558`（0.1.29）
-- 工作区：R1（列契约 + `Ports.opaque`）与 P5 收尾改动在本地未提交
+- 工作区：R10（变异扫描 + 夜间工作流）改动在本地未提交
+
+## R10：夜间变异扫描（2026-11-25）
+
+`rewrite-plan` 的 R10 是“没有 nightly mutation”。做成一件事：`tools/mutation_sweep.py` + 每日工作流。
+
+- **只改决定**：比较取反（`==`↔`!=`、`<`↔`>=`、`in`↔`not in`、`is`↔`is not`）、`and`↔`or`、去掉 `not`、
+  比较旁的常数 +1。文档字符串、日志文案、类型注解、普通算术都不是变异点——改了也不改变可观察行为，
+  存活说明不了测试好坏。
+- **配对是断言，不是覆盖率**：`DEFAULT_TARGETS` 声明“模块 ↔ 拥有它的那个测试文件”。首批三个：
+  `core/values.py` ↔ `foundation/test_utils.py`、`sessions/verdict.py` ↔ `sessions/test_session_verdict.py`、
+  `nodes/schema.py` ↔ `analysis/test_node_schema.py`。
+- **只在副本里变异**：整棵树（backend/tests/docs/tools/vendor/pytest.ini/requirements.txt，约 100 MB）
+  复制一次到临时目录，每个变异写一份文件、跑一次 `pytest -x`、再恢复；进程被杀也污染不到用户源码。
+  就地改再 `finally` 恢复的做法少一次复制，却可能留下一个变异——不值得。
+- **存活是读数，不是失败**：等价变异天然存在（反过来的比较没有输入能区分）。所以工具退出码只在
+  “扫描自己坏了”（模块解析失败、测试文件不存在、某个变异的 pytest 退出码不是 0/1）时非 0；
+  报告写到 `reports/`（git 忽略），夜间工作流把它贴进 job summary 并上传 artifact。
+- **为什么不用 mutmut**：它要往 venv 里装一个新依赖（还可能带下 pytest 版本），而这里需要的变异集合
+  很小、要的是“模块 ↔ 测试”的成对声明与中文报告；用标准库 `ast` 写 230 行比引入一个会漂移的
+  工具更符合这个仓库的门禁习惯。同一份判据也让它可测：`tests/unit/tools/test_mutation_sweep.py`
+  用合成小仓库证明“被检查的变异死、没被检查的变异活着”，以及扫描不动 checkout 的字节。
+
+性能：Windows 上三个目标全量 **34 个变异约 1.5 分钟**（每个变异一次 pytest，2–4 秒）；`--limit N` 用于冒烟。
+
+**第一次读数的价值**：首跑 34 个变异只捕获 11 个。`core/values.py` 是 0/10——配对写错了文件，而那些
+“到处都是的数值读取”根本没有单元测试（守卫全绿只是因为没人调用）；`nodes/schema.py` 是 13/20——列规则
+有测试、喂它的图遍历没有（重复列、悬空连线、环、无钩子的 `param_errors`）。补了
+`tests/unit/foundation/test_values.py`（30 条）与 `test_node_schema.py::TestTheGraphWalk`（5 条）之后
+**34/34**。`sessions/verdict.py` 原本就 4/4，不需要动。这正是 R10 想要的东西：不是“CI 多了个任务”，
+而是三个以前没人看见的盲区变成了文件里的断言。
 
 ## R1：列契约只有一个答案，看不见的表要说出理由（2026-11-25）
 

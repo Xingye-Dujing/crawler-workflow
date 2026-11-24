@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**453**
-- 用例（定义数，参数化会展开成更多次运行）：**8746**
+- 文件：**455**
+- 用例（定义数，参数化会展开成更多次运行）：**8784**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -186,7 +186,7 @@
 | `tests/unit/analysis/test_ner.py` | 38 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_node_plugins.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_node_results_apply.py` | 3 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_node_schema.py` | 27 | 0 | 0 | 0 |
+| `tests/unit/analysis/test_node_schema.py` | 33 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_operator_cache_measure.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_qualitative_coding.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_quantitative_cache_scope.py` | 4 | 0 | 0 | 0 |
@@ -320,6 +320,7 @@
 | `tests/unit/foundation/test_properties.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_times.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_utils.py` | 44 | 0 | 0 | 0 |
+| `tests/unit/foundation/test_values.py` | 19 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_accounts.py` | 20 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_ai_boundary.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_ai_js.py` | 83 | 0 | 0 | 0 |
@@ -457,6 +458,7 @@
 | `tests/unit/tools/test_ci_lint_tiers.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/tools/test_fetch_assets.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/tools/test_migrate_accounts.py` | 6 | 0 | 0 | 0 |
+| `tests/unit/tools/test_mutation_sweep.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/tools/test_prune_gitee_releases.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/tools/test_publish_gitee.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/tools/test_release_components.py` | 3 | 0 | 0 | 0 |
