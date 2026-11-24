@@ -14,11 +14,10 @@ degrades to a general mode — a comparison with fewer models is a different que
 import os
 
 import pandas as pd
-from api.config import default_model_path_for
-from api.config import read_model_registry as _model_registry
-from api.http import _safe_float, _safe_int
 from core.refs import as_bool
 from core.refs import split_columns as _split_columns
+from core.values import safe_float as _safe_float
+from core.values import safe_int as _safe_int
 from runtime.state import add_log
 
 from analyzers import (
@@ -56,6 +55,8 @@ from services.analysis.process import (
     sentiment_thresholds,
 )
 from services.coding import codebooks
+from services.models.catalog import default_model_path_for
+from services.models.catalog import legacy_rows as _model_registry
 
 
 def validate_node(node: dict, _context) -> list[dict]:

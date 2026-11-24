@@ -228,10 +228,10 @@ def _bert_state() -> dict:
     if importlib.util.find_spec('onnxruntime') is None:
         return {'state': 'missing', 'reason_key': 'env.bertRuntimeMissing', 'reason_params': {}}
     try:
-        from api.config import read_model_registry
+        from services.models.catalog import legacy_rows
     except ImportError:
         return {'state': 'unknown', 'reason_key': 'env.bertNoModels', 'reason_params': {}}
-    rows = [row for row in read_model_registry() if row.get('operation') in ('sentiment', 'emotion', 'tendency')]
+    rows = [row for row in legacy_rows() if row.get('operation') in ('sentiment', 'emotion', 'tendency')]
     if not rows:
         return {'state': 'degraded', 'reason_key': 'env.bertNoModels', 'reason_params': {}}
     roots = [Path(Config.DATA_DIR).parent, Path.cwd()]

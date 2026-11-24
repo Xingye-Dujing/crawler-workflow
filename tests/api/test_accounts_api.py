@@ -450,7 +450,7 @@ class TestAccountLifecycle:
 
     def test_delete_refuses_while_that_accounts_cookie_window_is_open(self, admin_client):
         """The account's Chrome profile is in use; moving its tree would fail (and strand it)."""
-        from sessions.routes import _COOKIE_JOB
+        from api.sessions import _COOKIE_JOB
 
         bob = _create(admin_client, 'bob').get_json()['user']
         previous = dict(_COOKIE_JOB)
@@ -547,7 +547,7 @@ class TestAnotherAccountsRunIsNotYours:
             execution_state['run_id'] = ''
 
     def test_another_accounts_cookie_job_is_invisible_and_not_answerable(self, admin_client):
-        from sessions.routes import _COOKIE_JOB
+        from api.sessions import _COOKIE_JOB
 
         previous = dict(_COOKIE_JOB)
         _COOKIE_JOB.update(
@@ -577,7 +577,7 @@ class TestAnotherAccountsRunIsNotYours:
     def test_a_finished_cookie_job_stays_owner_only(self, admin_client):
         """``active`` going False must not publish the job: the probed URL, the account label and
         the console lines are still the answer that account paid a browser for."""
-        from sessions.routes import _COOKIE_JOB
+        from api.sessions import _COOKIE_JOB
 
         previous = dict(_COOKIE_JOB)
         _COOKIE_JOB.update(
@@ -935,7 +935,7 @@ class TestTheProfileTemplateIsAnOperatorAction:
         assert 'admin' in refused.get_json()['error'].lower()
 
     def test_an_admin_may_rebuild_it(self, admin_client, monkeypatch):
-        import sessions.routes as routes
+        import api.sessions as routes
 
         monkeypatch.setattr(routes, 'ensure_profile_template', lambda force=False: {'ok': True, 'stubbed': True})
         response = _post(admin_client, '/api/browser/profiles/template', {'force': False})

@@ -15,13 +15,13 @@ from core.refs import (
     MAX_FILENAME_BYTES,
     MAX_FILENAME_LENGTH,
     as_bool,
-    df_to_csv_string,
     export_stamp,
     extract_number,
-    merge_results,
     sanitize_filename,
     window_tag,
 )
+
+from services.datasets.frames import df_to_csv_string, merge_results
 
 pytestmark = pytest.mark.unit
 

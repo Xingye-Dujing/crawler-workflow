@@ -25,9 +25,8 @@ rewiring.
 from __future__ import annotations
 
 import pandas as pd
-from api.http import _safe_int
 from core.refs import as_bool
-from core.refs import json_safe_records as _json_safe_records
+from core.values import safe_int as _safe_int
 from runtime.state import add_log
 
 from crawlers.engine.counters import has_count, parse_count
@@ -35,6 +34,7 @@ from i18n import t
 from nodes.context import NodeCall, node_params
 from nodes.labels import node_label, parent_label
 from services.analysis.matching import COUNT_MODES, key_counts, value_key
+from services.datasets.frames import json_safe_records as _json_safe_records
 
 #: The report's appended columns. They are a data contract: a downstream chart, a filter or
 #: a re-crawl feed reads these names, so renaming one is a breaking change and is pinned by

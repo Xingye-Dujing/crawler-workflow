@@ -17,17 +17,18 @@ import uuid
 
 import pandas as pd
 from core.atomic import replace as atomic_replace
-from core.refs import json_safe_records as _json_safe_records
 from core.refs import sanitize_filename
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify
 from runtime import paths
 from runtime.state import _results_snapshot, execution_state, run_is_foreign
 from runtime.stores import _load_dataset, get_run_store
 
-from api.http import _bad_body, _bad_param, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body
 from api.resolution import _durable_node_rows, _resolve_dataframe
 from i18n import get_lang, t
 from services.charts import pdf
+from services.datasets.frames import json_safe_records as _json_safe_records
 from services.reports import jobs
 
 

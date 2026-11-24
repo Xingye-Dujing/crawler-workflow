@@ -266,21 +266,25 @@ def upload_limit_mb(default: int = 64) -> int:
     return min(max(1, value), 10 * 1024)
 
 
+#: What the composition root must re-read after a save (a Flask config value, in practice).
+#: Registered by ``app.py`` instead of imported here: ``runtime`` must not import ``app``, and a
+#: save triggered from an API route, a preset or a test has to reach the same hook either way.
+_APPLY_HOOKS: list = []
+
+
+def on_saved(hook) -> None:
+    """Run *hook(patch)* after every successful settings write."""
+    _APPLY_HOOKS.append(hook)
+
+
 def _apply_side_effects(patch: dict) -> None:
     """Invalidate what a save just changed, once per store write."""
     if {'catbus_cli', 'catbus_node'} & set(patch or {}):
         from services.ingest import catbus
 
         catbus.reset_probe_cache()
-    if 'max_upload_mb' in (patch or {}):
-        # Flask reads ``MAX_CONTENT_LENGTH`` per request, so a save can apply at once. Ask the
-        # SAME reader boot used: a save must not silently drop the env override or the clamp.
-        try:
-            from app import app
-
-            app.config['MAX_CONTENT_LENGTH'] = upload_limit_mb() * 1024 * 1024
-        except Exception:
-            pass  # an import-time/test double without the Flask app still saves the value
+    for hook in _APPLY_HOOKS:
+        hook(patch)
 
 
 # ─── Save ───────────────────────────────────────────────────────────────────

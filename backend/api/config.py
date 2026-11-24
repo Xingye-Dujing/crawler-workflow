@@ -59,7 +59,9 @@ def list_models():
     """Registered fine-tuned models by friendly NAME, so the bert-mode picker can show “网暴模型”
     instead of a bare path. A missing or malformed registry is an empty list, never an error — a
     node with no named models still accepts a path."""
-    return jsonify({'ok': True, 'models': read_model_registry()})
+    from services.models import catalog
+
+    return jsonify({'ok': True, 'models': catalog.legacy_rows()})
 
 
 @bp.route('/api/models/catalog', methods=['GET'])
@@ -78,37 +80,3 @@ def list_model_catalog():
             'runtime': probe.runtime_state(include_cuda=True),
         }
     )
-
-
-def read_model_registry() -> list:
-    """The legacy four-key registry view, now derived from the model catalogue.
-
-    One reader shared by the picker and the executor (``default_model_path_for``), so the friendly
-    name the panel shows and the model a default bert run actually loads can never disagree. A
-    missing/malformed file is an empty list, never an error.
-    """
-    from services.models import catalog
-
-    return catalog.legacy_rows()
-
-
-def default_model_path_for(operation: str) -> str:
-    """The registry path of the FIRST model tagged ``operation``, or ``''`` when none is registered.
-
-    This is what makes a default ``bert`` node actually mean bert: when a node names no model, the
-    executor resolves the operation's registered default here (registry order is the operator's
-    preference — e.g. the “推荐” tendency model is listed first). ``''`` means "nothing to load",
-    which the executor treats as bert-unavailable and degrades to the general mode with a printed line.
-    """
-    want = str(operation or '').strip()
-    from services.models import catalog
-
-    # A measured default in a manifest wins; the hand-edited registry stays the fallback so an old
-    # deployment with no manifests keeps exactly the behaviour it had before.
-    declared = catalog.default_for_declared(want)
-    if declared:
-        return declared
-    for model in read_model_registry():
-        if model['operation'] == want:
-            return model['path']
-    return ''

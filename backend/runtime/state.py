@@ -1,7 +1,7 @@
 """Shared process state that the run pipeline mutates in place.
 
 This lives in ``runtime/`` — not in ``app.py`` — so the HTTP layer (the ``api`` Blueprints and
-``sessions/routes.py``) and the test harness can import the ONE object each of them is about
+``api/sessions.py``) and the test harness can import the ONE object each of them is about
 without importing the whole Flask module. ``runtime/__init__`` explains the layer.
 
 The contract that makes moving these out of ``app.py`` safe: **every value here is mutated in

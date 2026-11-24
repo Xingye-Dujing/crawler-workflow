@@ -47,7 +47,7 @@ $env:CIXI_DRIVER_PATH='C:\path\to\chromedriver.exe'
 | 要加的东西 | 位置 | 禁止 |
 |---|---|---|
 | 平台模式/字段 | `capabilities_kernel/platforms/<id>/manifest.py` + `crawlers/platforms/<id>/` | 在节点/前端加矩阵没有的选项 |
-| 节点类型 | `nodes/catalog.py` + `nodes/executors/<type>.py` + 注册表 | 前端另写节点表 |
+| 节点类型 | `capabilities_kernel/nodes/<type>/manifest.py` + `nodes/executors/<type>.py` | 前端另写节点表；在 `catalog.py` 加字面表 |
 | 分析算子 | `services/analysis/ops/<op>.py` + 契约/`LLM_OPS` | 静默降级 |
 | 图表 | `services/charts/registry.py` 一条 `ChartSpec` | 改渲染不声明读取列 |
 | 设置项 | `runtime/settings_schema.py` 一条 `Setting` | 平台模块直接读设置 |
@@ -56,8 +56,10 @@ $env:CIXI_DRIVER_PATH='C:\path\to\chromedriver.exe'
 | 前端行为 | `backend/static/js/<domain>.js` + `splits.json` | 新文件不登记 |
 | AI 供应商/工具/技能/插件 | `backend/ai/*` + `backend/extensions/` | 前端第二份模型表 |
 
-依赖方向：`core` → 仅标准库；`services` 可依赖 `core`；`engine`/`api` 不反向；`engine/` 不 import `app`；
-`backend/` 不用 `backend.` 前缀导入。
+依赖方向由 `tests/unit/gates/test_import_direction.py` 执行：`core` 只 import 标准库与 `i18n`（一处已登记的例外）；
+`services` 可依赖 `core`；**只有 `api/` 与 `app` 可以 import `api.*`**（服务层不碰 HTTP）；
+`engine/` 不 import `app`；`backend/` 不用 `backend.` 前缀导入。HTTP 路由只写在 `api/`
+（`test_http_surface.py`）。
 
 ## 4. 三系统与两部署
 

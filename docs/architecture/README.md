@@ -13,6 +13,7 @@ rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲�
 4. [能力内核（P1 骨架）](capabilities-kernel.md) —— 清单、注册表、pilot 落点
 5. [问题台账](problem-ledger.md) —— 每个用户问题属于“直接修 / 重构 / 已决策”
 6. [实施计划](rewrite-plan.md) —— Workbuddy 式勾选，未过验收不打勾
+7. [架构改进计划](improvement-plan.md) —— W0–W7：还剩哪些结构债、每笔怎么还、用哪个门禁证明
 
 ## 十条长期原则
 
@@ -32,5 +33,8 @@ rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲�
 - 当前阶段：**P6 技能/工具/小模型**（P1 内核骨架、P2 全量节点迁移、P3 验证完整化、P4/P5 AI 框架与接入已完成）
 - **P4.0 已全部完成（框架 0.1.17，F1–F18）**；P4 接入与 P5 前端切换已收口（`/api/ai/ws` 是唯一 AI 表面）。
   P6 第一片已完成：16 个节点能力技能的 L1/L2 目录、`skill_catalog`/`skill_load`、生成页面与门禁
+- **W0/W1 已完成（2026-11-24）**：清单与代码校准；导入方向 / 模块预算 / HTTP 表面 / 死模块四个门禁上线，
+  `core/values.py`、`services/datasets/frames.py`、`api/sessions.py`、`api/pool.py` 落位。见
+  [improvement-plan.md](improvement-plan.md)
 - 已确认的 10 个方向决策见 [rewrite-plan.md](rewrite-plan.md#已确认的决策)
 - 一个勾选项只有在“代码 + 测试 + 文档/技能 + 门禁 + 收口”全部通过后才能打勾

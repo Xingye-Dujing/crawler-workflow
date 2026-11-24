@@ -19,14 +19,12 @@ from api.data import bp as data_bp
 from api.diagnostics import bp as diagnostics_bp
 from api.exports import bp as exports_bp
 from api.history import bp as history_bp
-from api.http import (
-    _safe_int,
-)
 from api.lexicon import bp as lexicon_bp
 from api.llm import bp as llm_bp
 from api.locks import bp as locks_bp
 from api.node_types import bp as node_types_bp
 from api.phases import bp as phases_bp
+from api.pool import bp as pool_bp
 from api.processes import bp as processes_bp
 from api.project import bp as project_bp
 from api.report import bp as report_bp
@@ -34,6 +32,7 @@ from api.reusable import bp as reusable_bp
 from api.run_compare import bp as run_compare_bp
 from api.runs import bp as runs_bp
 from api.schedules import bp as schedules_bp
+from api.sessions import bp as sessions_bp
 from api.settings import bp as settings_bp
 from api.stats import bp as stats_bp
 from api.studio import bp as studio_bp
@@ -46,15 +45,15 @@ from core.config import Config
 from core.refs import (
     comment_platforms,
 )
+from core.values import safe_int as _safe_int
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from nodes import registry as node_registry
-from runtime.settings import get_setting, upload_limit_mb
+from runtime.settings import get_setting, on_saved, upload_limit_mb
 from runtime.state import (
     _push_log,
 )
 from scheduling import clock
-from sessions.routes import bp as sessions_bp
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -62,7 +61,6 @@ from engine import run_schedule
 from engine.logger import setup_logger
 from i18n import audit, set_lang, t
 from services.accounts.errors import AccountError
-from services.pool.routes import bp as pool_bp
 from services.runs.queue import (
     load_pending_queue,
 )
@@ -278,6 +276,21 @@ def _upload_limit_mb(default: int = 64) -> int:
 UPLOAD_LIMIT_MB = _upload_limit_mb()
 app.config['MAX_CONTENT_LENGTH'] = UPLOAD_LIMIT_MB * 1024 * 1024
 
+
+def _apply_upload_limit(patch: dict) -> None:
+    """Re-read the ceiling after a settings save, from the SAME reader boot used.
+
+    ``MAX_CONTENT_LENGTH`` used to be written from ``runtime.settings``, which imported this
+    module back (``runtime`` → ``app``). The composition root owns the Flask object, so it
+    registers the side effect instead: a save from any caller reaches it, and the layer that
+    knows about Flask is the only one that touches Flask.
+    """
+    if 'max_upload_mb' in (patch or {}):
+        app.config['MAX_CONTENT_LENGTH'] = upload_limit_mb() * 1024 * 1024
+
+
+on_saved(_apply_upload_limit)
+
 logger = setup_logger(
     Config.LOG_DIR,
     max_bytes=max(1, int(get_setting('log_max_mb'))) * 1024 * 1024,
@@ -482,7 +495,7 @@ def __getattr__(name):
         # ``app.get_crawler`` into the source executor at call time, and ~40 pre-split tests
         # patch it here). The cookie routes moved out, so nothing in this file calls it any
         # more; answering from the package keeps a patch on THIS name meaning the same thing
-        # without making ``sessions.routes`` import the app module.
+        # without making ``api/sessions.py`` import the app module.
         import crawlers
 
         return getattr(crawlers, name)
@@ -612,7 +625,7 @@ node_registry.load_builtin_executors()
 # ─── Blueprints ────────────────────────────────────────────────
 #
 # Every URL except the page itself is a Blueprint module (``backend/api/*.py`` plus
-# ``sessions/routes.py``), and they are registered HERE rather than in their own module: the
+# ``api/sessions.py``), and they are registered HERE rather than in their own module: the
 # app-level ``before_request`` (origin guard, no-store, language pin), the error handlers and CORS
 # then wrap them and no path changes. Which module owns which cluster is in ``docs/ARCHITECTURE.md``
 # — this list is the wiring, not the map, and the order is the order the routes were added to the
@@ -642,7 +655,7 @@ app.register_blueprint(report_bp)
 
 
 # The login-state cluster (``/api/cookies/*``, ``/api/profiles/delete``, ``/api/browser/profiles``)
-# is ``sessions/routes.py``; ``/api/config`` and ``/api/models`` are ``api/config.py``.
+# is ``api/sessions.py``; ``/api/config`` and ``/api/models`` are ``api/config.py``.
 app.register_blueprint(sessions_bp)
 # The account/exit pool's read side and its levers: which login and which exit are usable
 # now, and the human overrides that clear a cooldown or retire an exit.

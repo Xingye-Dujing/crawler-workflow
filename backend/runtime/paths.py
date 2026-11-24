@@ -124,9 +124,9 @@ def model_registry_json() -> str:
     """``data/model_registry.json`` — the trained models one machine offers, system-level.
 
     The filename lives HERE because two readers need to agree on it: the picker
-    (``api/config.read_model_registry``) shows the friendly name, the analysis executor looks the
-    path back up. Spelled twice, a move means the 模型对比 chart quietly groups by folder basename
-    instead of the name the operator registered — a label that is no longer the user's word.
+    (``services.models.catalog.legacy_rows``) shows the friendly name, the analysis executor looks
+    the path back up. Spelled twice, a move means the 模型对比 chart quietly groups by folder
+    basename instead of the name the operator registered — a label that is no longer the user's word.
     """
     return os.path.join(Config.DATA_DIR, 'model_registry.json')
 

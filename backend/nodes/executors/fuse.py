@@ -10,13 +10,13 @@ import contextlib
 
 import pandas as pd
 from core.refs import as_bool
-from core.refs import json_safe_records as _json_safe_records
 from runtime import paths
 from runtime.state import add_log
 
 from i18n import t
 from nodes.context import NodeCall, node_params, split_panel_columns
 from services.biblio import fuse
+from services.datasets.frames import json_safe_records as _json_safe_records
 
 
 def validate_node(node: dict, _context) -> list[dict]:

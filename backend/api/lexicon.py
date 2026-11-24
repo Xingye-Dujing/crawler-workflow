@@ -10,11 +10,12 @@ write bumps the store version (so the analyzers reload their cached stopword set
 import logging
 
 from core.refs import as_bool
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify, request
 from runtime import policy
 from runtime.stores import get_lexicon_store
 
-from api.http import _bad_body, _bad_param, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body
 from i18n import t
 from services.analysis.lexicon import reload_userdict
 from services.analysis.lexicon_store import KINDS

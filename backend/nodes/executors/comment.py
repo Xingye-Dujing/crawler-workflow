@@ -16,8 +16,8 @@ import time
 
 import capabilities.registry as capabilities
 import pandas as pd
-from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
+from core.values import safe_int as _safe_int
 from runtime import gate, paths, phases
 from runtime.state import add_log, ambient, execution_state, stop_requested
 from selenium.common.exceptions import WebDriverException

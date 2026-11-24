@@ -16,8 +16,43 @@
 - 最后提交：`816a0d1e 功能更新：P8 尾巴——消费者契约测试 + 性质测试（顺带修出两个真 bug）`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
 
-## P8 尾巴：消费者契约 + 性质测试（2026-11-24）
+## W0/W1：清单校准 + 分层门禁（2026-11-24）
 
+**读这两份**：[`improvement-plan.md`](improvement-plan.md)（W0–W7 与取舍）、
+[`rewrite-plan.md`](rewrite-plan.md) 的“未完成清单（2026-11-24 校准）”。
+
+- **W0 校准**：勾掉 7 项代码已完成但未勾的（RecipeFSM/H3b/H15/H21/工具覆盖门禁/完整性门禁/P9 版本与 CI）；
+  把真正未完成的收成 R1–R10（契约未铺满、框架两层、评测三件、前端与变异测试）。
+  `best_practices.md` §3 节点类型改回清单流程，依赖方向改成由门禁执行。
+- **W1 四个门禁**（`tests/unit/gates/`）：
+  - `test_import_graph.py`：只有 `api/` 与 `app.py` 可 import `api.*`；任何模块不得 import `app`；
+    `core` 只依赖标准库与 `i18n`（`core.machine → services.components.manifest` 是一处登记过的例外，
+    例外失效即红）；没有 import 者的模块必须进 `ORPHAN_EXEMPTIONS` 并写明理由，理由失效同样红。
+  - `test_module_budget.py`：新模块 ≤600 行；34 个现存大模块冻结在当日行数；拆分后预算不降即红。
+  - `test_http_surface.py`：路由只写在 `api/`；`app.py` 只有 `/` 一条。
+  - 每个门禁都带“合成缺陷必须被抓”的用例。
+- **同批修掉的耦合**：
+  - 数值解析 `api/http.py` → `core/values.py`（9 个 engine/nodes/services 模块不再 import HTTP 层）。
+  - `default_model_path_for`/`read_model_registry` → `services/models/catalog.py`（节点执行器与组件探针改依赖域层）。
+  - `sessions/routes.py` → `api/sessions.py`；`services/pool/routes.py` → `api/pool.py`（`sessions/` 回到纯域）。
+  - `runtime/settings.py` 不再 import `app`：上传上限由组合根 `on_saved` 钩子重读。
+  - `core/refs.py` 的 pandas 依赖搬走：`df_to_csv_string`/`merge_results`/`json_safe_records` →
+    `services/datasets/frames.py`（导入 `platform_for` 的爬虫不再付 pandas 启动成本）。
+  - 删 16 个空的 `capabilities_kernel/nodes/<id>/__init__.py`（charts/operators/platforms 从来没有）。
+- **验证**：`doctor.py --all` 全绿；`ruff check backend/ tests/` 全绿；
+  `tests/unit/gates` 15 passed；`tests/api + tests/unit/foundation` 见当次输出。
+- **W2 第一片（决策抽出）**：`engine/decide.py`（纯函数、无 store）：`record_has_component` /
+  `record_belongs` / `split_records` / `choose_record`。采用仍由调用方 `pop` 返回的下标消耗候选
+  （同一画布可有两个同名组件）。`engine/run.py` 删除四个私有助手（1984 → 1900 行，模块预算同步下调）。
+  `tests/unit/runs/test_continue_record.py` 改为直接测 `decide`，保留全部旧用例并加一条随机性质
+  （200 组行集，永不在指纹之间串台）。`tests/unit/gates/test_run_worker_module_scope.py` 仍绿。
+- **下一步（W2 剩余）**：`engine/run/` 包（claim/worker/node/records/settle/stop）+
+  `core/asset.py` 接入（节点结算写 asset 行，复用键含上游资产哈希）。验收见 improvement-plan W2。
+- **全量 fast tier 实测（本批收口）**：`12234 passed / 7 skipped / 386 deselected`；同一份代码连测两次
+  **12:37** 与 **10:36**（抖动 ±10%，最慢的全是“等满真实超时”的假驱动用例）。12 分钟线目前是**骑线**，
+  不算有余量；归因与下一步（`crawlers/engine/` 的可注入就绪探针）写进 `docs/testing/performance.md`。
+
+## P8 尾巴：消费者契约 + 性质测试（2026-11-24）
 - **消费者契约** `tests/api/test_node_types_contract.py`：`/api/node-types` 的每个节点 defaults 键必须是
   已声明参数、`defaultsFrom` 类型不许有 defaults、未被运行期覆盖的种子值等于清单默认；图表 profile 等于
   `chart_profiles()` 且字段/默认名已声明；算子参数逐字段等于清单、面板盒子的 canonical 指向已声明参数。

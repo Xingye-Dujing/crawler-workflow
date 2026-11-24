@@ -8,7 +8,7 @@ The store arrives through ``ctx`` (the run passes its own ledger), so this execu
 singleton directly — it is pure against ``ctx``.
 """
 
-from api.http import _safe_int
+from core.values import safe_int as _safe_int
 from runtime.state import add_log
 
 from i18n import t

@@ -6,7 +6,7 @@ the node DONE, so the run reads green and the one sentence that explained it car
 """
 
 import pandas as pd
-from api.http import _safe_int
+from core.values import safe_int as _safe_int
 from runtime.state import add_log
 
 from i18n import t

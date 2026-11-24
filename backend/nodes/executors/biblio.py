@@ -9,7 +9,6 @@ import contextlib
 
 import pandas as pd
 from core.refs import as_bool
-from core.refs import json_safe_records as _json_safe_records
 from runtime import paths
 from runtime.state import add_log
 from runtime.stores import _load_dataset
@@ -21,6 +20,7 @@ from services.biblio.schema import CITATION_TYPES, COUPLING_TYPES
 from services.biblio.schema import collect_problems as biblio_param_problems
 from services.biblio.schema import output_columns as biblio_output_columns
 from services.biblio.schema import read_columns as biblio_read_columns
+from services.datasets.frames import json_safe_records as _json_safe_records
 
 
 def validate_node(node: dict, context) -> list[dict]:

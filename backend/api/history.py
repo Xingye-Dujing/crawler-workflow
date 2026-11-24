@@ -6,10 +6,11 @@ app, not the route). It reads the shared ``history_service`` from ``state`` and 
 helpers from ``api.http`` rather than importing ``app`` (a cycle).
 """
 
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify, request
 from runtime.state import history_service
 
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _json_body
 from i18n import t
 
 bp = Blueprint('history', __name__)

@@ -20,6 +20,7 @@ def _forward_run_console(monkeypatch):
     """
     import api.biblio
     import api.report
+    import api.sessions
     import app as app_module
     import nodes.executors.accumulate
     import nodes.executors.analysis
@@ -36,7 +37,6 @@ def _forward_run_console(monkeypatch):
     import nodes.executors.upload
     import nodes.executors.verify
     import nodes.executors.visualize
-    import sessions.routes
     from executor_seams import forward
 
     import engine.run
@@ -77,7 +77,7 @@ def _forward_run_console(monkeypatch):
     forward(monkeypatch, services.ingest.lifecycle, 'add_log', app_module)
     forward(monkeypatch, services.runs.queue, 'add_log', app_module)
     forward(monkeypatch, services.runs.settlement, 'add_log', app_module)
-    forward(monkeypatch, sessions.routes, 'add_log', app_module)
+    forward(monkeypatch, api.sessions, 'add_log', app_module)
 
 
 @pytest.fixture(autouse=True)

@@ -1,10 +1,7 @@
-import io
 import math
 import os
 import re
 from datetime import datetime
-
-import pandas as pd
 
 #: Longest name we hand to the OS, in CHARACTERS: Windows caps a path component at 255 chars and a full
 # path at ~260, and exports live under an already-deep data/ path.
@@ -326,28 +323,3 @@ def export_stamp(started_at, run_id: str = '') -> str:
     if safe:
         pieces.append(safe)
     return '_' + '-'.join(pieces) if pieces else ''
-
-
-def df_to_csv_string(df: pd.DataFrame) -> str:
-    """Convert DataFrame to CSV string."""
-    output = io.StringIO()
-    df.to_csv(output, index=False, encoding='utf-8-sig')
-    return output.getvalue()
-
-
-def merge_results(results: list, _key: str = 'platform') -> pd.DataFrame:
-    """Merge multiple result lists into a single DataFrame."""
-    all_items = []
-    for r in results:
-        if isinstance(r, list):
-            all_items.extend(r)
-        elif isinstance(r, dict):
-            all_items.append(r)
-    return pd.DataFrame(all_items)
-
-
-def json_safe_records(df: pd.DataFrame, limit: int = None) -> list:
-    """Convert a DataFrame slice to JSON-safe records: NaN/NaT become None
-    (raw NaN is not valid JSON and breaks JSON.parse() in the browser)."""
-    page = df.head(limit) if limit is not None else df
-    return page.astype(object).where(pd.notna(page), None).to_dict('records')

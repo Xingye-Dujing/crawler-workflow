@@ -16,8 +16,8 @@ import os
 import time
 
 import capabilities.registry as capabilities
-from api.http import _safe_int
 from core.refs import as_bool, comment_platforms, platform_for, split_urls
+from core.values import safe_int as _safe_int
 from runtime import gate, paths, phases
 from runtime.settings import get_setting
 from runtime.state import _wf_local, add_log, ambient, execution_state, stop_requested

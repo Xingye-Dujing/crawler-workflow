@@ -4,9 +4,10 @@ These moved out of ``app.py`` so a Blueprint can use them without importing the 
 module (which would be a cycle). ``app.py`` imports them back under the same names, so its other
 call sites are unchanged. Each is pure: it reads ``flask.request`` and renders ``flask.jsonify``,
 with no closure over ``app``-only globals.
-"""
 
-import math
+Numeric readers live in ``core.values``: a service or a node that only needs "what number did
+the human mean" must not import the HTTP layer.
+"""
 
 from flask import jsonify, request
 
@@ -45,82 +46,3 @@ def _bad_body():
 def _bad_param(name: str):
     """The 400 for one body field whose type a handler cannot work with."""
     return jsonify({'ok': False, 'error': t('api.paramInvalid', name=name)}), 400
-
-
-def _safe_int(value, default: int = 0, minimum: int = None, maximum: int = None) -> int:
-    """int() for numbers typed into the UI.
-
-    Every settings field arrives as a string, so "abc" used to raise a bare
-    ValueError from inside a request handler (HTTP 500) or from a node (opaque
-    node failure). A malformed value now falls back to the default.
-
-    ``inf`` / ``nan`` are the same class of mistake and used to escape it:
-    ``float('inf')`` parses fine and only ``int()`` then refuses it with an
-    OverflowError, which no ``except (TypeError, ValueError)`` catches — so
-    ``/api/history/series?limit=inf`` answered 500. Anything not finite is
-    rejected up front, exactly like unparseable text.
-    """
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    if not math.isfinite(number):
-        return default
-    result = int(number)
-    if minimum is not None:
-        result = max(minimum, result)
-    if maximum is not None:
-        result = min(maximum, result)
-    return result
-
-
-def _safe_float(value, default: float = 0.0) -> float:
-    """``_safe_int`` for a float field.
-
-    ``inf``/``nan`` poison every pandas call downstream instead of failing here, so they
-    are not usable numbers any more than "abc" is — both fall back to ``default``.
-    """
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    return number if math.isfinite(number) else default
-
-
-def _optional_int(value):
-    """Like :func:`_safe_int`, but blank or unparseable means "not configured" (None)."""
-    raw = str(value or '').strip()
-    if not raw:
-        return None
-    try:
-        number = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number):
-        return None
-    return int(number)
-
-
-def _optional_float(value):
-    """``_optional_int`` that keeps the fraction. ``frac=inf`` reached df.sample as a
-    ValueError and ``frac=nan`` as a silent no-op; both mean "no fraction configured"."""
-    raw = str(value or '').strip()
-    if not raw:
-        return None
-    try:
-        number = float(raw)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
-
-
-def _float_with_default(value, default: float) -> float:
-    """A rate/threshold field with a default, where a typed ``0`` is a real answer.
-
-    ``_optional_float(x) or default`` swallows a typed 0 into the default — the mistake the forecast
-    block's own comment warns against ("swallowing it into the default would answer a question the
-    user did not ask"). Unlike a COUNT (where 0 is "not configured", so ``or`` is right), a
-    threshold's 0 is meaningful, so the default is only for an ABSENT box; a typed 0 is forwarded to
-    the step, which honours or refuses it. Blank/unparseable → ``default`` (identical to the old ``or``)."""
-    parsed = _optional_float(value)
-    return default if parsed is None else parsed

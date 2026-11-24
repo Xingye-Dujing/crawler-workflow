@@ -30,6 +30,41 @@
 | 9 | 严格模式默认 | 本地小模型自动严格，强模型普通 |
 | 10 | 并发范围 | 仅 LLM 行任务 |
 
+## 未完成清单（2026-11-24 校准）
+
+这一节是**唯一**的剩余工作台账：每条都写成可验收的事实，而不是“完善 X”。做完一条，就在这里删掉一条；
+新增的剩余项也只能进这里（阶段内的勾选项仍以本文件为准）。
+
+### 契约未铺满
+
+| # | 事实 | 验收 |
+|---|---|---|
+| R1 | `resume`/`verify`/`python` 三个产出表的节点没有 `ports.emit_columns`；`output` 是终点，可解释 | 三个清单声明 `emit_columns`，`doctor.py --all` 与完整性门禁全绿 |
+| R2 | `core/asset.py` 的 `DataAsset` 无人 import；节点输出没有资产身份 | 节点结算写 asset 行；复用键含上游资产哈希；`test_no_dead_modules` 不再需要豁免它 |
+
+### 框架自身的层
+
+| # | 事实 | 验收 |
+|---|---|---|
+| R3 | `store.py` 1093 行 / 90+ 方法，覆盖 16 个聚合 | 拆成 `store/<聚合>.py` + `Store` 薄门面；框架 224 用例与宿主 parity 全绿 |
+| R4 | `agent.py` 925 行；`run()` 是 380 行生成器；6 个控制工具走 `if name ==` | 拆成 `agent/` 包 + `CONTROL_TOOLS` 处理器表；`Agent` 只依赖 `ports.py` |
+| R5 | 框架没有“不出现宿主领域词”的门禁 | `tests/test_no_domain_vocabulary.py` 绿 |
+
+### 评测与规范
+
+| # | 事实 | 验收 |
+|---|---|---|
+| R6 | 没有 qwen3.5:4b/9b 的 20–30 任务评测集 | `docs/testing/model-eval.md` 有任务、评分与跑法；严格模式 ≥80% 有据 |
+| R7 | 没有技能选择评测 | 同一评测集内技能选择命中率有数字 |
+| R8 | 没有工具描述质量规范 | `docs/capabilities/tool-descriptions.md`：命名、≤8 参数、读写分离、禁用场景 |
+
+### 前端与工程
+
+| # | 事实 | 验收 |
+|---|---|---|
+| R9 | `ai-workspace.js` 4446 行；无单文件预算门禁 | 拆成 kernel/features/render；单文件 ≤600 行门禁绿 |
+| R10 | 没有 nightly mutation | CI 夜间任务跑变异并给出分数 |
+
 ## P0 基线 + 热修列车（进行中）
 
 - [x] 基线：记录 fast 测试数与耗时（见 `docs/architecture/baseline.md`）
@@ -39,7 +74,7 @@
 - [x] H1 Ollama 不思考
 - [x] H2 待答问题按 question_id 恢复 + 多选答案
 - [x] H3a 新消息不取消待答问题（按名拒绝；邮箱在 P4）
-- [ ] H3b 同会话邮箱：排队下一回合 + 插入指引（P4）
+- [x] H3b 同会话邮箱：排队下一回合 + 插入指引（框架 0.1.4 `turn_inbox`/`mailbox_id`）
 - [x] H4 侧栏最小宽度（实测宽度 + 列宽夹紧 + pointer capture）
 - [x] H5 流式滚动（重绘前后恢复 scrollTop）
 - [ ] H6 原位回答
@@ -51,12 +86,12 @@
 - [x] H12 数据读取授权（会话/数据集/行数 grant；peek 免费；可撤销）
 - [x] H13 工作流/产物工具（list/read/update/rename/delete/export/run/stop；删除强制审批+审计）
 - [x] H14 工具覆盖审计（能力矩阵 + `ai_coverage` 工具 + 门禁）
-- [ ] H15 重试 parity
+- [x] H15 重试 parity（框架 0.1.11 从 user 行恢复 provider/model/skill/context）
 - [x] H16 stack_pct 验证（`ChartSpec.fields` → validate 阶段命名）
 - [x] H17/H18 视图单实例（转录/面板两个面；按 turn_id 复用节点）
 - [ ] H19 重试气泡
 - [ ] H20 工具结果上限
-- [ ] H21 @-only 消息
+- [x] H21 @-only 消息（框架 0.1.23 空正文 + 结构化 references）
 - [ ] H22 scope 静默失败
 - [ ] H23 限制可见
 - **DoD**：每个 H 有回归测试；fast + ruff + pylint 绿；无 `data/`/`logs/` 写入。
@@ -87,7 +122,7 @@
 - [x] 每节点技能骨架 + 示例 + 工具生成（清单第七段；`knowledge.py` 投影 L1/L2，生成 `docs/capabilities/skills/`）
 - [ ] 每节点声明 `emit`/`read` 契约与 `schema_hash`
 - [ ] 每节点输出物化为 Asset
-- [ ] 完整性门禁全绿
+- [x] 完整性门禁全绿（`python tools/doctor.py --all` 全绿，93 个能力，2026-11-24 复核）
 - **DoD**：新增一个节点只加一个清单目录；其它文件 0 改动；全部节点 doctor 绿；fast+device 绿。
 
 ## P3 验证完整化（1-2 周，与 P2 交叠）
@@ -162,7 +197,7 @@
   等（重名按 `command.duplicate` 拒绝）（框架 0.1.17）
 - [x] **F3 retry 还原原轮**：从 user 行所属 turn 恢复 provider/model/skill，复用该行已存的上下文块（不重读实时
   sources）；不新增 user 行（框架 0.1.11）
-- [ ] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架
+- [x] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架 0.1.24
 - [ ] **架构收口**：端口/适配器/`TurnFSM` 拆分（`store.py`/`agent.py`/`tools.py` 减重）
 - [ ] **通用性门禁**：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
 
@@ -211,7 +246,7 @@
 - [x] 严格/普通模式（本地 `local_only` 供应商自动严格：12 个工具预算；强模型完整列表）
 - [ ] 能力优先策略 + Python 缺口审批 + 审计
 - [ ] qwen3.5:4b/9b 评测集（20-30 个任务）
-- [ ] 工具覆盖门禁
+- [x] 工具覆盖门禁（`backend/ai/coverage.py` + `tests/unit/gates/test_ai_coverage.py`）
 - [x] 工具分层路由（每轮 ≤12 工具：控制 + 核心 + 当前配方步骤必留，其余按用户原话排序）
 - [ ] 技能选择评测
 - [ ] 工具描述质量规范
@@ -243,8 +278,8 @@
 
 ## P9 发布（1 周）
 
-- [ ] `version.json`/`APP_VERSION`
-- [ ] Windows/macOS 打包含 agent-workspace wheel
-- [ ] CI 三系统 + browser + docker
+- [x] `version.json`/`APP_VERSION`（`tools/check_release_version.py` 钉住两者一致）
+- [ ] Windows/macOS 打包含 agent-workspace wheel（构建脚本与 `macos-build.yml` 在；macOS 产物尚未进 `version.json`）
+- [x] CI 三系统 + browser + docker（`deploy/Dockerfile` 由 `docker` job 真正构建并启动）
 - [ ] 迁移说明/回滚方案
 - **DoD**：三系统安装包可启动；AI 工作区/节点/技能/验证冒烟通过。

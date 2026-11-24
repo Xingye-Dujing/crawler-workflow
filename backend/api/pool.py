@@ -1,5 +1,8 @@
 """``/api/pool/*`` — the account/exit pool's read side and its four levers.
 
+The HTTP surface lives here, in ``api/``, with every other route; the rules (cooldown, rotation,
+what a failed attempt proves) stay in ``services/pool/`` so they are answerable without Flask.
+
 The panel is deliberately given *facts*, never a rule: which logins exist, which are cooling
 and until when, which exit each one leaves through, and what the last attempts did. The
 cooldown itself is decided in :mod:`services.pool.health` from a measured failure, so a
@@ -18,13 +21,13 @@ never an HTML error page.
 import logging
 import time
 
-from api.auth import is_admin
-from api.http import _bad_body, _json_body
 from flask import Blueprint, jsonify
 from runtime.state import cookie_manager
 from sessions import preflight
 from sessions.cookies import CookieManager
 
+from api.auth import is_admin
+from api.http import _bad_body, _json_body
 from i18n import t
 from services.accounts.service import accounts_mode
 from services.pool import enabled as pool_enabled

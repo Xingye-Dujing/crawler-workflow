@@ -11,8 +11,8 @@ import threading
 import time
 
 import pytest
+from api import sessions as routes
 from runtime.state import cookie_manager
-from sessions import routes
 from sessions.cookies import CookieManager
 
 pytestmark = [pytest.mark.api, pytest.mark.serial]
@@ -290,7 +290,7 @@ class TestEntryLink:
     site's cookies in this platform's file."""
 
     def test_an_allowed_link_is_what_the_browser_is_sent_to(self, client, job, monkeypatch):
-        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('api.sessions.cookie_hosts', lambda platform: ('www.zhihu.com',))
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert (
             client.post(
@@ -305,7 +305,7 @@ class TestEntryLink:
         assert _await_idle(client)
 
     def test_a_foreign_link_is_rejected_and_says_so_instead_of_landing_elsewhere(self, client, job, monkeypatch):
-        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('api.sessions.cookie_hosts', lambda platform: ('www.zhihu.com',))
         r = client.post(
             '/api/cookies/generate', json={'platform': 'zhihu', 'wait_seconds': 10, 'url': 'https://evil.test/x'}
         )
@@ -363,7 +363,7 @@ class TestCookieVerify:
         assert made.requested['headless'] is False
 
     def test_a_link_outside_the_platform_is_refused(self, client, job, app_module, monkeypatch):
-        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('api.sessions.cookie_hosts', lambda platform: ('www.zhihu.com',))
         cookie_manager.save('zhihu', [{'name': 'x', 'value': 'y'}])
         r = client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': 'https://evil.test/'})
         assert r.status_code == 400
@@ -397,7 +397,7 @@ class TestCookieVerify:
         """The gate probes the platform's own address; a manual check aimed at an
         article link measured that page, so it may not become the answer to a question
         nobody asked about it."""
-        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('api.sessions.cookie_hosts', lambda platform: ('www.zhihu.com',))
         cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
         article = 'https://www.zhihu.com/question/1/answer/2'
         assert client.post('/api/cookies/verify', json={'platform': 'zhihu', 'url': article}).status_code == 202

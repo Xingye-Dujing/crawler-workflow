@@ -8,7 +8,6 @@ Deps are all cycle-free (``api.resolution``/``stores``/``services.analysis.pipel
 ``api.http``/``core.refs``/``i18n``); the handlers themselves have no monkeypatch seam.
 """
 
-from core.refs import json_safe_records as _json_safe_records
 from flask import Blueprint, jsonify
 from runtime import policy
 from runtime.stores import _register_dataset
@@ -24,6 +23,7 @@ from api.http import _bad_body, _bad_param, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.analysis.pipeline import LLM_OPS, DataAnalysisService
+from services.datasets.frames import json_safe_records as _json_safe_records
 from services.datasets.store import SOURCE_ANALYSIS
 
 bp = Blueprint('analysis', __name__)

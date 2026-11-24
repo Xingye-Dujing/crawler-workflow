@@ -17,7 +17,7 @@ Everything runs against a stub crawler and a stubbed probe: no browser, no socke
 """
 
 import pytest
-from sessions import routes
+from api import sessions as routes
 
 from crawlers.core.crawler import Crawler
 from crawlers.core.faults import PageNotArrivedError

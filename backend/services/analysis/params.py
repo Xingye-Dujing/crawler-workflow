@@ -6,10 +6,12 @@ the one translation layer; the analysis plugin reads the same rules to say which
 a step consumes, so a new field is declared once instead of in two shapes.
 """
 
-from api.http import _float_with_default, _optional_float, _optional_int
 from capabilities_kernel import registry
 from core.refs import as_bool
 from core.refs import split_columns as _split_columns
+from core.values import float_with_default as _float_with_default
+from core.values import optional_float as _optional_float
+from core.values import optional_int as _optional_int
 
 
 def apply_topic_method(result: dict, params: dict) -> dict:

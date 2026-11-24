@@ -8,13 +8,13 @@ The file is looked up by its id, and failing that by its *name* plus row count: 
 row was lost hands back something usable instead of forcing a second edit of the workflow.
 """
 
-from api.http import _optional_int
-from core.refs import json_safe_records as _json_safe_records
+from core.values import optional_int as _optional_int
 from runtime.state import add_log
 from runtime.stores import _apply_dataset_meta, _load_dataset, get_dataset_store
 
 from i18n import t
 from nodes.context import NodeCall, node_params
+from services.datasets.frames import json_safe_records as _json_safe_records
 
 
 def emit_columns(node: dict, _merged: list[str] | None) -> list[str] | None:

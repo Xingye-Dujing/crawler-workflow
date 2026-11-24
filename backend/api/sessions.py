@@ -1,9 +1,12 @@
 """Cookie and device routes — ``/api/cookies/*``, ``/api/profiles/delete`` and ``/api/browser/profiles*``.
 
-All of it lives in the login-state domain because a cookie and the browser directory that carries
-it are one thing to the user: saving a jar plants it into that account's profile, deleting a jar is
-not signing the device out, and renaming an account moves both halves or neither. The panel's
-generation and verification workers are here too — they open the very browser this domain owns.
+The verbs act on the login-state domain (``sessions/``), because a cookie and the browser directory
+that carries it are one thing to the user: saving a jar plants it into that account's profile,
+deleting a jar is not signing the device out, and renaming an account moves both halves or neither.
+The HTTP surface lives here, in ``api/``, with every other route: the domain modules under
+``sessions/`` answer questions and never import Flask, so a cookie rule can be tested without a
+request. The panel's generation and verification workers are here too — they open the very browser
+this domain owns, which is a transport concern.
 
 Two dependencies are worth keeping straight. ``cookie_manager`` is the one instance ``state``
 creates at import and never rebinds (a per-test jar is the same object with its directory
@@ -20,14 +23,19 @@ import threading
 import time
 
 import capabilities.registry as capabilities
-from api.auth import is_admin
-from api.http import _bad_body, _json_body, _safe_int
 from core.config import Config
 from core.refs import as_bool, flag_or_none
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify
 from runtime import account_context, paths, phases
 from runtime.state import add_log, cookie_manager, execution_state
+from sessions import preflight, profiles
+from sessions.cookies import CookieManager
+from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
+from sessions.template import ensure_profile_template
 
+from api.auth import is_admin
+from api.http import _bad_body, _json_body
 from crawlers import cookie_hosts, crawler_class, get_crawler
 from crawlers.core.browser import bounded_get
 from crawlers.engine import pacing
@@ -35,10 +43,6 @@ from i18n import get_lang, set_lang, t
 from services import pool
 from services.accounts.service import accounts_mode
 from services.ingest.lifecycle import close_login_browser as _close_login_browser
-from sessions import preflight, profiles
-from sessions.cookies import CookieManager
-from sessions.flow import crawler_hosts, flow_for, normalize_entry_url, retain_for_platform
-from sessions.template import ensure_profile_template
 
 logger = logging.getLogger(__name__)
 

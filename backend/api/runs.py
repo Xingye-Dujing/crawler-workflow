@@ -13,11 +13,13 @@ download must answer the same ``wf``/``level``/``q`` question, because the downl
 
 import logging
 
+from core.values import optional_int as _optional_int
+from core.values import safe_int as _safe_int
 from flask import Blueprint, Response, jsonify, request
 from runtime.state import execute_lock, execution_state, live_run_ids, run_is_foreign
 from runtime.stores import get_run_store
 
-from api.http import _bad_body, _json_body, _optional_int, _safe_int
+from api.http import _bad_body, _json_body
 from engine.workflow import effective_workflow
 from i18n import t
 from services import lock_store

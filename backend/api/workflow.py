@@ -19,6 +19,7 @@ import logging
 import os
 import threading
 
+from core.values import optional_int as _optional_int
 from flask import Blueprint, jsonify, request
 from runtime.state import (
     LOG_KEEP,
@@ -38,7 +39,7 @@ from runtime.stores import (
 )
 
 from api.auth import is_admin
-from api.http import _bad_body, _bad_param, _json_body, _optional_int
+from api.http import _bad_body, _bad_param, _json_body
 from engine import run as run_engine
 from engine.workflow import effective_workflow
 from engine.workflow_rerun import RerunRefusalError, rerun_node

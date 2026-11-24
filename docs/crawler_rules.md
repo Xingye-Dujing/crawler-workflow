@@ -83,7 +83,7 @@
   `data/chrome_profile/<平台>[/<账号>]` 作为 `--user-data-dir`：登录窗口与爬取是同一台设备，**一个 Cookie 一个 profile**
   （账号标签同时进文件名与目录名，`lock_for` 按路径，同平台两账号是两台可并行的设备）。保存的 Cookie 文件**只导入一次**。
   **保存 Cookie 本身就是更新**：`POST /api/cookies/save` 当场种进该账号 profile
-  （`sessions/routes.py::_plant_saved_cookie_into_profile`）；“把 Cookie 更新进 Profile”按钮与
+  （`api/sessions.py::_plant_saved_cookie_into_profile`）；“把 Cookie 更新进 Profile”按钮与
   `POST /api/cookies/refresh-profile` 已删除。浏览器被占用时保存仍成功并说明，下次抓取按 `needs_refresh`（文件戳新于标记）
   导入。**绝不把浏览器活 jar 写回 Cookie 文件。** `Capability.profile_recommended` 是“这个平台惩罚一次性浏览器”的唯一来源。
 - **新账号的设备目录是生成的，不是复制的。** 程序用空的无头 Chrome 造一次 `data/chrome_profile/_template`

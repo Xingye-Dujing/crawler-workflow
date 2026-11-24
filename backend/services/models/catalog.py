@@ -68,6 +68,27 @@ def legacy_rows() -> list[dict]:
     return [model.to_legacy() for model in all_models() if model.meta.get('legacy')]
 
 
+def default_model_path_for(operation: str) -> str:
+    """The registry path of the FIRST model tagged ``operation``, or ``''`` when none is registered.
+
+    This is what makes a default ``bert`` node actually mean bert: when a node names no model, the
+    executor resolves the operation's registered default here (registry order is the operator's
+    preference — e.g. the “推荐” tendency model is listed first). ``''`` means "nothing to load",
+    which the executor treats as bert-unavailable and degrades to the general mode with a printed line.
+
+    It lived in ``api/config.py`` until a node needed it — which meant the executor imported the
+    HTTP layer. The answer is a domain fact, so it lives beside the catalogue it reads.
+    """
+    want = str(operation or '').strip()
+    declared = default_for_declared(want)
+    if declared:
+        return declared
+    for model in legacy_rows():
+        if model['operation'] == want:
+            return model['path']
+    return ''
+
+
 def public_rows() -> list[dict]:
     """The rich catalogue, including this machine's runnable verdict for each model."""
     state = probe.runtime_state(include_cuda=False)

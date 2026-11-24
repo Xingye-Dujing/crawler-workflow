@@ -13,12 +13,13 @@ import logging
 import os
 
 from core.refs import sanitize_filename
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify, request
 from runtime import paths
 from runtime.state import any_run_live
 from runtime.stores import get_run_store
 
-from api.http import _bad_body, _bad_param, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services import lock_store

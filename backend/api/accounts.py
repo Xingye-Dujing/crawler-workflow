@@ -14,10 +14,10 @@ from core.refs import as_bool
 from flask import Blueprint, jsonify, request
 from runtime import paths, stores
 from runtime.state import _RUN_QUEUE, execute_lock, execution_state
-from sessions.routes import _COOKIE_JOB
 
 from api.auth import client_ip, current_sid, current_user
 from api.http import _bad_body, _json_body
+from api.sessions import _COOKIE_JOB
 from i18n import t
 from services.accounts.errors import AccountError
 from services.accounts.service import get_account_service

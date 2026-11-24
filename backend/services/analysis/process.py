@@ -7,7 +7,7 @@ schedule/cloud gate's "will this node call a model?" question, which is why it l
 service rather than inside one node plugin.
 """
 
-from api.http import _safe_float
+from core.values import safe_float as _safe_float
 
 from i18n import t
 from services.analysis.pipeline import UnknownOperationError

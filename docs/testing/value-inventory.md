@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**438**
-- 用例（定义数，参数化会展开成更多次运行）：**8579**
+- 文件：**441**
+- 用例（定义数，参数化会展开成更多次运行）：**8597**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -382,11 +382,14 @@
 | `tests/unit/gates/test_doc_paths.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/gates/test_event_contract.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/gates/test_flags.py` | 13 | 0 | 0 | 0 |
+| `tests/unit/gates/test_http_surface.py` | 3 | 0 | 0 | 0 |
+| `tests/unit/gates/test_import_graph.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/gates/test_isolation_census.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/gates/test_lint_gate.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/gates/test_live_acceptance_record_shape.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/gates/test_live_run_harness.py` | 71 | 0 | 0 | 0 |
 | `tests/unit/gates/test_manual_capture.py` | 8 | 0 | 0 | 0 |
+| `tests/unit/gates/test_module_budget.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/gates/test_module_shadowing.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/gates/test_quote_style.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/gates/test_requirements_pinned.py` | 5 | 0 | 0 | 0 |
@@ -410,7 +413,7 @@
 | `tests/unit/reports/test_report_service.py` | 36 | 0 | 0 | 0 |
 | `tests/unit/runs/test_active_crawler_ownership.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/runs/test_console_buffer.py` | 22 | 0 | 0 | 0 |
-| `tests/unit/runs/test_continue_record.py` | 19 | 0 | 0 | 0 |
+| `tests/unit/runs/test_continue_record.py` | 22 | 0 | 0 | 0 |
 | `tests/unit/runs/test_dead_workflow.py` | 2 | 0 | 0 | 0 |
 | `tests/unit/runs/test_engine_is_site_independent.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/runs/test_execution_history.py` | 21 | 0 | 0 | 0 |

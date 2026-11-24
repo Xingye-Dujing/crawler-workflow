@@ -14,11 +14,12 @@ assembled a diff would be a second implementation of "what changed".
 Nothing here re-runs an analysis: the panel reads what a run already proved.
 """
 
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify, request
 from runtime.state import add_log
 from runtime.stores import get_biblio_store, get_run_store
 
-from api.http import _bad_body, _json_body, _safe_int
+from api.http import _bad_body, _json_body
 from i18n import t
 from services.biblio.formats import accepted_extensions
 from services.biblio.metrics import snapshot_capture

@@ -114,6 +114,12 @@ BODY_ROUTES = [
     '/api/lexicon',
     '/api/llm/test',
     '/api/locks',
+    '/api/pool/account/disable',
+    '/api/pool/account/reset',
+    '/api/pool/bind',
+    '/api/pool/exit/delete',
+    '/api/pool/exit/import',
+    '/api/pool/exit/save',
     '/api/profiles/delete',
     '/api/report/generate',
     '/api/report/latex',
@@ -187,10 +193,13 @@ def _wf_names(client) -> list:
 
 
 def _route_source_files() -> list:
-    """Every module that declares HTTP routes: ``app.py``, the ``backend/api`` Blueprints,
-    and the one domain Blueprint that lives with its state (``sessions/routes.py``)."""
+    """Every module that declares HTTP routes: ``app.py`` and the ``backend/api`` Blueprints.
+
+    Domain blueprints moved here on 2026-11-24 (``sessions/routes.py`` → ``api/sessions.py``,
+    ``services/pool/routes.py`` → ``api/pool.py``), so the glob covers the whole surface.
+    """
     root = Path(__file__).resolve().parents[2] / 'backend'
-    return [root / 'app.py', *sorted((root / 'api').glob('*.py')), root / 'sessions' / 'routes.py']
+    return [root / 'app.py', *sorted((root / 'api').glob('*.py'))]
 
 
 def _post_route_policies() -> dict:
@@ -326,21 +335,21 @@ class TestNumericLimits:
             assert response.get_json()['ok'] is True
 
     def test_the_helpers_reject_every_non_finite_number(self, app_module):
-        from api.http import _optional_float, _optional_int, _safe_float, _safe_int
+        from core.values import optional_float, optional_int, safe_float, safe_int
 
-        assert _safe_int('inf', 20) == 20
-        assert _safe_int('nan', 20, minimum=1, maximum=10) == 20
-        assert _safe_int(float('-inf'), 7) == 7
-        assert _safe_int('1e999', 7) == 7
-        assert _safe_int('3.9') == 3
-        assert _safe_int(None) == 0
-        assert _optional_int('inf') is None
-        assert _optional_int('nan') is None
-        assert _optional_int('12') == 12
-        assert _optional_float('inf') is None
-        assert _optional_float('0.4') == 0.4
-        assert _safe_float('inf', 0.5) == 0.5
-        assert _safe_float('2.5', 0.5) == 2.5
+        assert safe_int('inf', 20) == 20
+        assert safe_int('nan', 20, minimum=1, maximum=10) == 20
+        assert safe_int(float('-inf'), 7) == 7
+        assert safe_int('1e999', 7) == 7
+        assert safe_int('3.9') == 3
+        assert safe_int(None) == 0
+        assert optional_int('inf') is None
+        assert optional_int('nan') is None
+        assert optional_int('12') == 12
+        assert optional_float('inf') is None
+        assert optional_float('0.4') == 0.4
+        assert safe_float('inf', 0.5) == 0.5
+        assert safe_float('2.5', 0.5) == 2.5
 
     def test_the_upload_ceiling_parse_cannot_be_turned_off_by_a_typo(self, app_module, monkeypatch):
         # A garbage MAX_UPLOAD_MB must fall back, not leave the limit unset.

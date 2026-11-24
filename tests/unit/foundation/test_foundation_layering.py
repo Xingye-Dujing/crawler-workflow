@@ -64,8 +64,11 @@ class TestTheFoundationImportsNoLayerAboveIt:
         # any domain layer loads. It is standard-library only and writes nothing at import.
         # ``asset`` joined it because every layer reads a run output's identity (run store, nodes,
         # API, AI); the record is standard-library only, so it belongs below all of them.
+        # ``values`` joined it because ``safe_int``/``optional_float`` and friends are asked by the
+        # engine, the nodes and the services: while they lived in ``api/http.py`` every one of those
+        # imports also pulled in Flask. They are standard-library only, like the rest of this package.
         modules = {path.stem for path in CORE.glob('*.py')} - {'__init__'}
-        assert modules == {'config', 'cache', 'refs', 'machine', 'procs', 'atomic', 'asset'}, (
+        assert modules == {'config', 'cache', 'refs', 'values', 'machine', 'procs', 'atomic', 'asset'}, (
             f'core/ holds {sorted(modules)}; a new module belongs here only if every layer may import it — '
             'say so in the package docstring and extend this contract deliberately'
         )

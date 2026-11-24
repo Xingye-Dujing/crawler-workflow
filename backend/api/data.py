@@ -18,16 +18,17 @@ import zipfile
 
 import pandas as pd
 from core.refs import as_bool, sanitize_filename
-from core.refs import json_safe_records as _json_safe_records
+from core.values import safe_int as _safe_int
 from flask import Blueprint, jsonify, request, send_file
 from runtime.state import any_run_live, clear_cached_datasets, drop_cached_dataset
 from runtime.stores import _load_dataset, _register_dataset, get_dataset_store, register_dataset_result
 
-from api.http import _bad_body, _bad_param, _json_body, _safe_int
+from api.http import _bad_body, _bad_param, _json_body
 from api.resolution import _resolve_payload_dataframe
 from i18n import t
 from services.analysis.pipeline import DataAnalysisService
 from services.biblio.importer import BiblioDecodeError, decode_text, parse_bytes, parse_frame, parse_text
+from services.datasets.frames import json_safe_records as _json_safe_records
 from services.datasets.merge import merge_datasets
 from services.datasets.store import SOURCE_PASTE, SOURCE_UPLOAD
 

@@ -12,8 +12,9 @@ import re
 import time
 
 import pytest
+from api import sessions as routes
 from core.config import Config
-from sessions import routes, template
+from sessions import template
 
 from analyzers.llm_client import LLMClient
 from services.accounts import service as accounts_service

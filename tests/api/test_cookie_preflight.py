@@ -20,9 +20,10 @@ import threading
 from concurrent.futures import Future
 
 import pytest
+from api import sessions as routes
 from core.config import Config
 from runtime.state import cookie_manager
-from sessions import preflight, profiles, routes
+from sessions import preflight, profiles
 from sessions.cookies import CookieManager
 
 import i18n
@@ -355,7 +356,7 @@ class TestCache:
         at a pasted article link measured a different page, so it may not become the
         answer to a question nobody asked about that page."""
         cookie_manager.save('zhihu', [{'name': 'z_c0', 'value': 'x'}])
-        monkeypatch.setattr('sessions.routes.cookie_hosts', lambda platform: ('www.zhihu.com',))
+        monkeypatch.setattr('api.sessions.cookie_hosts', lambda platform: ('www.zhihu.com',))
 
         class _Crawler:
             risk_blocked = False

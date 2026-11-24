@@ -26,6 +26,10 @@ lifted out on 2026-10-29 for exactly that reason — first ``_wf_display_name`` 
 itself (``run`` → ``_run_worker``, the claim's eight results as eight parameters); each captured
 name became a parameter and the file now nests no function inside a function at all.
 ``tests/unit/gates/test_run_worker_module_scope.py`` refuses a move back.
+
+The four record decisions (``record_has_component``/``record_belongs``/``split_records``/
+``choose_record``) went one step further on 2026-11-24: they are pure, they live in
+:mod:`engine.decide`, and ``tests/unit/workflows/test_run_decide.py`` pins them without a store.
 """
 
 import contextlib
@@ -35,9 +39,9 @@ import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
-from api.http import _safe_int
 from core.config import Config
 from core.refs import as_bool, export_stamp, flag_or_none
+from core.values import safe_int as _safe_int
 from nodes import registry as node_registry
 from nodes.catalog import QUIET_NODE_TYPES
 from nodes.context import NodeCall
@@ -64,6 +68,7 @@ from runtime.transport import _local_transport_refusal
 
 from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
+from engine.decide import choose_record, record_belongs, split_records
 from engine.executor import TaskExecutor
 from engine.plan import component_name, llm_provider, run_mode, workflow_needs_llm
 from engine.run_logs import LogTee, run_log_writer
@@ -673,101 +678,6 @@ def _run_single_workflow(wf_engine, wf_idx: int, ctx: dict, headless):
     return results
 
 
-def _record_has_component(candidate: dict, node_ids: set | None) -> bool:
-    """Whether a stored row carries any node of this component (or says nothing about nodes)."""
-    if not node_ids:
-        return True
-    stored = {str(node.get('node_id') or '') for node in candidate.get('nodes') or [] if isinstance(node, dict)}
-    return not stored or bool(stored & node_ids)
-
-
-def _record_belongs(record: dict | None, node_ids: set | None, fingerprint: str = '') -> bool:
-    """Whether ``record`` is THIS component's row, so its id may be kept by it.
-
-    Two questions, both about not writing one workflow's work onto another's record: the row
-    has to carry one of this component's nodes, and it must describe the same canvas (a
-    same-named component of another fingerprint is a different row). An empty fingerprint on
-    either side is "not recorded", not a mismatch — older rows and direct callers.
-    """
-    if not record:
-        return False
-    recorded = str(record.get('workflow_fingerprint') or '')
-    if fingerprint and recorded and recorded != fingerprint:
-        return False
-    return _record_has_component(record, node_ids)
-
-
-def _split_records(mode: str, wf_count: int, adopted: dict | None) -> bool:
-    """Whether this attempt opens one record per workflow instead of one for the canvas.
-
-    Serial is one row per workflow that starts — but a 继续 onto a record that covered the
-    whole canvas (``wf_count > 1``, written by a 并行 attempt) has to keep that one row: its
-    stored rows are filed under that id, and a per-component row refuses a node set it does
-    not own, so every component but the first would re-crawl work the record already holds.
-    """
-    if mode != 'serial' or wf_count <= 1:
-        return False
-    return not (adopted is not None and int(adopted.get('wf_count') or 1) > 1)
-
-
-def _continue_record(
-    name: str,
-    resumable: list,
-    resuming: bool,
-    requested: str = '',
-    fingerprint: str = '',
-    node_ids: set | None = None,
-) -> dict:
-    """The row this workflow should keep writing, if it is a 继续.
-
-    Only the resume path adopts: the attempt after a 继续 must accumulate
-    onto the rows that already exist, so it finds each workflow's own
-    unfinished row of this canvas again instead of opening a fresh one per
-    press. A plain Run is a new attempt and gets new rows — "one record per
-    attempt" is what makes the panel's history mean anything.
-
-    ``requested`` is the id the user pressed 继续 on. It is preferred over the
-    newest name match: re-deriving the record from the name alone made a run on an
-    OLD interrupted row adopt the newer (even completed) row of the same workflow,
-    rewrite its history and leave the chosen row interrupted forever.
-
-    The id may be older than the 50 rows the caller could list. The caller prepends
-    the requested row's own record, so this function sees it; the fingerprint is the
-    identity that survives a 工作流命名 edit, because the label is not an input.
-
-    Adopting CONSUMES the candidate (it is popped, not re-read): validate only
-    asks a name node for a non-empty label, so one canvas may legitimately carry
-    two same-named components, and a match that stayed in the list handed BOTH
-    the same run_id — the second ``start_run`` upsert reset the first's record
-    to running/node_done=0, its verdict overwrote the first's, and the other
-    same-named row of the previous attempt was left an orphan nobody adopts.
-    """
-    if not resuming:
-        return {}
-    wanted = str(requested or '')
-    if wanted:
-        for position, candidate in enumerate(resumable):
-            same_component = str(candidate.get('workflow_name') or '') == name
-            same_canvas = bool(fingerprint) and str(candidate.get('workflow_fingerprint') or '') == fingerprint
-            if (
-                str(candidate.get('run_id') or '') == wanted
-                and (same_component or same_canvas)
-                and _record_has_component(candidate, node_ids)
-            ):
-                return dict(resumable.pop(position))
-    for position, candidate in enumerate(resumable):
-        candidate_fp = str(candidate.get('workflow_fingerprint') or '')
-        if fingerprint and candidate_fp and candidate_fp != fingerprint:
-            # A same-named component of another fingerprint is a different record; adopting it
-            # put the upload's node on the crawl's row.
-            continue
-        if not _record_has_component(candidate, node_ids):
-            continue
-        if str(candidate.get('workflow_name') or '') == name:
-            return dict(resumable.pop(position))
-    return {}
-
-
 def _stopping() -> bool:
     """Whether this run has been asked to end, from either of the two places that say so.
 
@@ -841,19 +751,23 @@ def _component_run(
     if (
         requested_record is not None
         and not any(str(item.get('run_id') or '') == str(run_id) for item in resumable)
-        and _record_belongs(requested_record, component_ids, wf_fp)
+        and record_belongs(requested_record, component_ids, wf_fp)
     ):
         # Only the component the record belongs to may add it. The upload workflow in a serial
         # canvas shares the canvas name but has its own nodes; inserting the crawl's row for it
         # made the fallback-by-name adopt a record of another component.
         resumable.insert(0, requested_record)
-    earlier = _continue_record(name, resumable, resuming, requested=run_id, fingerprint=wf_fp, node_ids=component_ids)
+    adopted_at, earlier = choose_record(
+        name, resumable, resuming, requested=run_id, fingerprint=wf_fp, node_ids=component_ids
+    )
+    if adopted_at is not None:
+        resumable.pop(adopted_at)
     # The requested id may only be REUSED by the component that record actually belongs to.
     # ``run_id`` is the record the user pressed 继续 on; when its sibling record was deleted
     # (or aged out) the first component used to keep writing into the OTHER workflow's row —
     # two workflows in one "serial" record, ``node_done`` counted against one component's
     # ``node_total`` (4/3) and the history carrying the same id twice.
-    requested_owns = _record_belongs(requested_record, component_ids, wf_fp)
+    requested_owns = record_belongs(requested_record, component_ids, wf_fp)
     # A PLAIN run's id is the row the claim just opened for the whole attempt, so workflow zero
     # takes it as before; a 继续 may only keep it when that row is this component's.
     takes_requested = wf_idx == 0 and (not resuming or requested_owns)
@@ -1223,7 +1137,7 @@ def _run_worker(
         # from nothing and re-crawl what the record already holds. This attempt therefore keeps
         # ONE record too: the one the user pressed 继续 on.
         adopted_canvas = store.get_run(resume_run_id) if resume_run_id else None
-        split_records = _split_records(mode, wf_count, adopted_canvas)
+        split_by_workflow = split_records(mode, wf_count, adopted_canvas)
         # The named workflows the user switched off for this attempt. A disabled workflow is
         # not an effective component, so it opens no row on its own — the record's only trace
         # of it is this list, which is what lets the panel say "X ran, Y was skipped" instead
@@ -1238,7 +1152,7 @@ def _run_worker(
         # the request thread, so a rebind here would leave it writing to a list
         # nobody is looking at.
         ctx['open_records'] = execution_state['open_records']
-        if not split_records:
+        if not split_by_workflow:
             store.start_run(
                 run_id,
                 workflow_name,
@@ -1276,7 +1190,9 @@ def _run_worker(
         # Finished rows count too: 继续 on a row the panel offers is "run this
         # again from its checkpoints", and that has to land on the same row rather
         # than beside it — which is exactly what the single-record case does.
-        resumable = store.list_resumable(fingerprint=wf_fp, limit=50, include_finished=True) if split_records else []
+        resumable = (
+            store.list_resumable(fingerprint=wf_fp, limit=50, include_finished=True) if split_by_workflow else []
+        )
         resuming = bool(resume_run_id)
 
         if mode == 'serial' or wf_count <= 1:
@@ -1289,7 +1205,7 @@ def _run_worker(
                     _component_run(
                         wf_idx, se, ctx, created, resumable, resuming, wf_fp, skipped_str, store, run_id, mode, headless
                     )
-                    if split_records
+                    if split_by_workflow
                     else ctx
                 )
                 # Tagged with its OWN index: this line is printed before
@@ -1314,7 +1230,7 @@ def _run_worker(
                     # node recorded after it into that one workflow's group.
                     _wf_local.idx = None
                     _wf_local.name = ''
-                if split_records:
+                if split_by_workflow:
                     _close_component_record(sub_ctx, ctx, store)
                 all_results.update(results)
             # update(), not replace(): a branch that died halfway already
