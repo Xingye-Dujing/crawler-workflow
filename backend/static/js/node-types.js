@@ -13,6 +13,7 @@
 var NodeTypes = window.NodeTypes || {
     _types: null,
     _charts: null,
+    _operators: null,
     _failure: '',
 
     /* The generated fallback is a separate script; read it lazily so the load order of the two
@@ -22,6 +23,7 @@ var NodeTypes = window.NodeTypes || {
             && Array.isArray(NODE_TYPE_CATALOGUE.types)) {
             this._types = NODE_TYPE_CATALOGUE.types.slice();
             this._charts = Array.isArray(NODE_TYPE_CATALOGUE.charts) ? NODE_TYPE_CATALOGUE.charts.slice() : [];
+            this._operators = Array.isArray(NODE_TYPE_CATALOGUE.operators) ? NODE_TYPE_CATALOGUE.operators.slice() : [];
         }
         return this._types;
     },
@@ -40,6 +42,11 @@ var NodeTypes = window.NodeTypes || {
                    answer omits them keeps the generated copy rather than emptying the chart form. */
                 if (body && Array.isArray(body.charts) && body.charts.length) {
                     NodeTypes._charts = body.charts;
+                }
+                /* Same rule for the operator tree: an answer without it keeps the generated copy
+                   rather than emptying the 步骤 dropdown. */
+                if (body && Array.isArray(body.operators) && body.operators.length) {
+                    NodeTypes._operators = body.operators;
                 }
                 NodeTypes._failure = '';
                 NodeTypes._announce('node-types-loaded');
@@ -115,6 +122,13 @@ var NodeTypes = window.NodeTypes || {
     charts() {
         this._seed();
         return (this._charts || []).slice();
+    },
+
+    /* The analysis operators, in the manifest's panel order. The 分析 node's 步骤 dropdown renders
+       this; the panel keeps no array of its own. */
+    operators() {
+        this._seed();
+        return (this._operators || []).slice();
     },
 
     chart(key) {

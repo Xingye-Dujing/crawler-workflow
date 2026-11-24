@@ -200,6 +200,12 @@ AI 词汇表里的 CatBus-only 平台（京东/淘宝/快手/TikTok/闲鱼）不
 `services.capability_cli`（`python tools/capability_cli.py list|show|validate`）。两者都只是
 `ai.knowledge` 与 `engine.workflow` 的薄封装，所以终端或编辑器里看到的能力不会比产品多一个。
 
+浏览器侧同理：`/api/node-types` 现在同时服务 `types`、`charts` 与 `operators`（`registry.operator_entries()`
+= id/词/分组/声明的参数/读列/写形状），`panels/node-analysis.js` 的“步骤”下拉因此直接渲染清单，
+不再持有 `ANALYSIS_OPS` 字面表；冷页的 `node-types-fallback.js` 也带同一份 `operators`，所以页面在
+fetch 完成前就有可用的下拉。算子的**字段块**仍是手写的（下一片：字段名与 `normalize_analysis_params`
+的映射一起搬进清单）。
+
 ## 已迁移的例子
 
 `backend/capabilities_kernel/nodes/tokenize/manifest.py` 是最初的 pilot：catalogue 槽位 8、默认参数、

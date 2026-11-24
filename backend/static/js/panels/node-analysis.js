@@ -6,7 +6,16 @@
  * it a companion of that file, so a harness naming one receives both.
  */
 /* ── Analysis node settings ── */
-var ANALYSIS_OPS = ['drop_null', 'fill_null', 'drop_duplicates', 'dedupe_similar', 'semantic_dedupe', 'similar_to', 'filter_rows', 'select_columns', 'rename_columns', 'strip_whitespace', 'convert_type', 'sort_rows', 'sample_rows', 'groupby_agg', 'join_tables', 'anti_join', 'column_calc', 'bin_column', 'extract_time', 'bin_time', 'suggest_stages', 'topic_model', 'topic_by_stage', 'topic_label', 'cluster_label', 'cluster_review', 'topic_map', 'topic_salience', 'topic_timeline', 'topic_flow', 'topic_coherence', 'cooccur', 'reply_graph', 'compare_platform', 'forecast', 'alert', 'sentiment_evolution'];
+/* The 分析 node's 步骤 list comes from the capability manifests (``NodeTypes.operators()``), so a
+   new operator is a manifest and never an edit here. The per-operation FIELD blocks below are still
+   hand-written; moving them onto the served parameter list is the remaining half of this migration. */
+function analysisOps() {
+    var rows = (typeof NodeTypes !== 'undefined' && NodeTypes.operators) ? NodeTypes.operators() : [];
+    var ids = rows.map(function (row) { return row.id; });
+    /* A cold page that has not loaded the catalogue yet still gets a usable form; an empty select is
+       a form nobody can submit. */
+    return ids.length ? ids : ['drop_null'];
+}
 /* The matching modes a two-table step offers, pinned against
    services/analysis/matching.MATCH_MODES by tests/api/test_analysis_api.py. */
 var MATCH_MODES = ['exact', 'trim', 'url', 'text', 'similar'];
@@ -19,7 +28,7 @@ function renderAnalysisSettings(nodeId, p) {
     var html = '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.operation') + '</label>' +
         '<select class="settings-select" onchange="updateParam(\'' + nodeId + '\',\'operation\',this.value)">' +
         selectOptionTags(
-            ANALYSIS_OPS.map(function (op) {
+            analysisOps().map(function (op) {
                 return { value: op, label: I18n.t('op.' + op) };
             }),
             p.operation,

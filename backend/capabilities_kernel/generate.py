@@ -325,6 +325,11 @@ def _frontend_nodes() -> list[dict]:
     return registry.node_schema_entries()
 
 
+def _frontend_operators() -> list[dict]:
+    """One entry per analysis operator — the 步骤 dropdown's own catalogue."""
+    return list(registry.operator_entries())
+
+
 def _frontend_charts() -> list[dict]:
     """The chart registry's browser projection — the visualize node's parameter domain.
 
@@ -340,7 +345,14 @@ def _frontend_schema() -> str:
     It deliberately does not live under ``static/js`` yet: the frontend gate refuses a JS module no
     page loads, and a generated module nobody reads would be dead code with a freshness test.
     """
-    return _json({'apiVersion': registry.API_VERSION, 'nodes': _frontend_nodes(), 'charts': _frontend_charts()})
+    return _json(
+        {
+            'apiVersion': registry.API_VERSION,
+            'nodes': _frontend_nodes(),
+            'charts': _frontend_charts(),
+            'operators': _frontend_operators(),
+        }
+    )
 
 
 def _frontend_catalogue_js() -> str:
@@ -350,7 +362,12 @@ def _frontend_catalogue_js() -> str:
     cannot drift, and adding a node type edits no frontend file.
     """
     payload = json.dumps(
-        {'ok': True, 'types': _frontend_nodes(), 'charts': _frontend_charts()},
+        {
+            'ok': True,
+            'types': _frontend_nodes(),
+            'charts': _frontend_charts(),
+            'operators': _frontend_operators(),
+        },
         ensure_ascii=False,
         indent=2,
     )

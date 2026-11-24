@@ -39,6 +39,8 @@ SURFACES: dict[str, tuple[str, ...]] = {
     ),
     'operator': (
         'runtime:ops',
+        'api:operators',
+        'generated:frontend-schema',
         'openapi:params',
         'generated:catalog',
         'generated:ai-tools',
@@ -113,10 +115,12 @@ def _offered(surface: str, kind: str) -> set[str]:
         from services.charts.registry import chart_profiles
 
         return {row['key'] for row in chart_profiles()}
+    if surface == 'api:operators':
+        return {row['id'] for row in registry.operator_entries()}
     if surface == 'generated:frontend-schema':
         payload = _generated('backend/capabilities_kernel/generated/capability-schema.json')
-        key = 'nodes' if kind == 'node' else 'charts'
-        id_key = 'type' if kind == 'node' else 'key'
+        key = {'node': 'nodes', 'chart': 'charts', 'operator': 'operators'}[kind]
+        id_key = 'type' if kind == 'node' else ('key' if kind == 'chart' else 'id')
         return {row[id_key] for row in payload.get(key) or []}
     if surface == 'openapi:params':
         prefix = _OPENAPI_PREFIX[kind]
@@ -143,10 +147,10 @@ def _offered(surface: str, kind: str) -> set[str]:
         from ai import vocabulary
 
         handlers = {
-            'node': lambda: vocabulary.node_catalog(),
-            'operator': lambda: vocabulary.analysis_catalog(),
-            'chart': lambda: vocabulary.chart_catalog(),
-            'platform': lambda: vocabulary.platform_matrix(),
+            'node': vocabulary.node_catalog,
+            'operator': vocabulary.analysis_catalog,
+            'chart': vocabulary.chart_catalog,
+            'platform': vocabulary.platform_matrix,
         }
         rows = handlers[kind]()
         id_key = {'node': 'type', 'operator': 'operation', 'chart': 'chart_type', 'platform': 'platform'}[kind]

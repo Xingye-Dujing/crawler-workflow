@@ -784,8 +784,13 @@ class TestOperatorNameLists:
     def test_the_panel_and_python_name_the_same_operations(self):
         registry = set(D._operations())
         assert registry == set(OPERATIONS), 'this module must not hold its own opinion'
-        assert set(_js_array('ANALYSIS_OPS')) == registry, (
-            'the 步骤 dropdown and DataAnalysisService._operations drifted apart'
+        # The 步骤 dropdown renders the served operator tree, so the panel keeps no list of its own.
+        source = SETTINGS_JS.read_text(encoding='utf-8')
+        assert 'NodeTypes.operators()' in source, 'the 步骤 dropdown must read the capability manifests'
+        from capabilities_kernel import registry as kernel
+
+        assert {row['id'] for row in kernel.operator_entries()} == registry, (
+            'the served operator tree and DataAnalysisService._operations drifted apart'
         )
 
         # ``filter_rows`` answers a name it does not compare with a refusal, so a
@@ -803,9 +808,13 @@ class TestOperatorNameLists:
         assert 'str' not in compared
 
     def test_no_further_copy_of_the_operation_names_exists(self):
-        """A fourth list is how this contract broke before: whoever added an
-        operator edited the two copies they could see. Only the panel and this
-        module may name the whole set, and both are pinned above.
+        """A second list is how this contract broke before: whoever added an operator edited the
+        copies they could see. The panel now renders the served tree, so only this module may name
+        the whole set — and it is pinned above.
+
+        The scan looks for a bracketed literal holding TEN or more operation names: a copy of the
+        dropdown is the whole set, while the panel's remaining per-operation field blocks legitimately
+        name the three or four ops that share a box.
         """
         root = Path(__file__).resolve().parents[3]
         candidates = (
@@ -822,10 +831,9 @@ class TestOperatorNameLists:
             text = path.read_text(encoding='utf-8', errors='replace')
             for match in bracketed.finditer(text):
                 found = {op for op in names if f"'{op}'" in match.group(0) or f'"{op}"' in match.group(0)}
-                if len(found) >= 4:
+                if len(found) >= 10:
                     offenders.setdefault(path.relative_to(root).as_posix(), set()).update(found)
         assert set(offenders) == {
-            'backend/static/js/panels/node-analysis.js',
             'tests/unit/analysis/test_data_analysis.py',
         }, f'an unlinked copy of the operation names appeared in {sorted(offenders)}'
 

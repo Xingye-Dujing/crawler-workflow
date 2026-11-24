@@ -51,4 +51,11 @@ def node_types():
         types.append(served)
     # The chart types are the visualize node's parameter domain: the settings panel renders one
     # field box per declaration, so the browser never keeps a second map of which chart reads x/y.
-    return jsonify({'ok': True, 'types': types, 'charts': chart_profiles()})
+    return jsonify(
+        {
+            'ok': True,
+            'types': types,
+            'charts': chart_profiles(),
+            'operators': list(capabilities.operator_entries()),
+        }
+    )

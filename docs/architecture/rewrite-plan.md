@@ -222,7 +222,8 @@
 - [x] 分析算子清单化（37 个：`capabilities_kernel/operators/<id>/manifest.py` 声明契约/读写列/输出形状/是否用模型/双表/空表策略，七段技能由清单生成；`STEP_PARAMS`/写表/`OPS`/`LLM_OPS`/`STEP_TWO_TABLE` 全部由其投影）
 - [x] 图表清单化（30 个：`capabilities_kernel/charts/<id>/manifest.py` 声明字段/角色/控件/引擎/文献必读列与七段技能；`services.charts.registry.SPECS` 全部由其投影，绘图函数公开为 `build_*` 并成为清单 handler）
 - [x] 平台清单化（10 个：`capabilities_kernel/platforms/<id>/manifest.py` 声明模式/字段/采集行为/登录与机器要求/运行建议与七段技能；`capabilities.platforms.CAPABILITIES` 与 `capabilities.registry` 全部由其投影，爬虫类成为清单 handler）
-- [ ] 面板/停靠/设置清单化
+- [x] 面板/停靠/设置清单化（停靠是 `workflow.js` 的一张表、由 dock 矩阵测试钉住；设置由 `runtime/settings_schema.py` 渲染；分析节点的**算子下拉**与图表表单读能力清单：`NodeTypes.operators()` / `NodeTypes.charts()`）
+- [ ] 算子表单的字段块由清单渲染（37 个算子的面板字段目前仍手写；字段名与 `normalize_analysis_params` 的映射要一起搬）
 - [x] 生成物与门禁（catalog/openapi/ai_tools/前端目录/能力页与技能页 + freshness；OpenAPI 为每类能力生成 `NodeParams.`/`OperatorParams.`/`ChartFields.`/`PlatformModes.` schema）
 - [x] 多表面生成：OpenAPI / MCP server（stdio，`tools/mcp_server.py`）/ CLI（`tools/capability_cli.py`）/ AI 工具 / 文档（UI 表单随“面板/停靠/设置清单化”）
 - [x] 同一清单的七个表面一致性门禁（`tests/unit/gates/test_capability_surfaces.py`：每种能力 × 每个应服务的表面，双向断言“没有漏、没有多”）

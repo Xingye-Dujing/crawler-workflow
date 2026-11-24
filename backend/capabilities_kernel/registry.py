@@ -244,6 +244,46 @@ def node_schema_entries() -> list[dict]:
     return entries
 
 
+def operator_entries() -> tuple[dict, ...]:
+    """The browser projection of the operator tree: what a 分析 node's 步骤 dropdown offers.
+
+    The panel keeps no list of its own: the id, its word, its group and its declared parameters are
+    served here, exactly as ``node_schema_entries`` serves node types and ``chart_profiles`` serves
+    chart fields.
+    """
+    return tuple(
+        {
+            'id': manifest.identity.id,
+            'labelKey': manifest.identity.title_key,
+            'category': manifest.identity.category,
+            'order': manifest.identity.order,
+            'needsLlm': manifest.needs_llm,
+            'writes': manifest.writes.mode,
+            'reads': {
+                'one': list(manifest.reads.one),
+                'some': list(manifest.reads.some),
+                'nonblank': list(manifest.reads.nonblank),
+                'mapping': manifest.reads.mapping,
+                'twoTableKeys': list(manifest.reads.two_table_keys),
+            },
+            'params': [
+                {
+                    'name': spec.name,
+                    'type': spec.type,
+                    'default': spec.default,
+                    'required': spec.required,
+                    'enum': list(spec.enum),
+                    'minimum': spec.minimum,
+                    'maximum': spec.maximum,
+                    'widget': spec.widget,
+                }
+                for spec in manifest.params
+            ],
+        }
+        for manifest in manifests('operator')
+    )
+
+
 def register_node_executors() -> None:
     """Register every migrated node's ``run`` in ``nodes.registry``.
 

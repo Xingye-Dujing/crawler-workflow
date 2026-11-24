@@ -474,17 +474,13 @@ class TestFrontendCatalog:
     def test_every_operation_the_dropdowns_offer_has_a_word_in_both_languages(self):
         """``op.<name>`` is built at the call site (``I18n.t('op.' + op)``), so neither the parity
         audit nor the reachability audit can see it — both walk the keys that are DEFINED, never
-        the names that get looked up. Measured from the dropdown arrays themselves, which are the
-        universe of what can be asked: an op added to ``ANALYSIS_OPS`` without a catalogue entry
-        prints ``op.cluster_review`` on the node card and in the 步骤 list, in one language only.
+        the names that get looked up. Measured from the registries that decide what can be asked:
+        an operator or process operation without a catalogue entry prints ``op.cluster_review`` on
+        the node card and in the 步骤 list, in one language only.
         """
-        js = js_text('panels/settings.js')
-        offered = set()
-        for name in ('ANALYSIS_OPS',):
-            body = js[js.index(f'var {name} = [') :]
-            offered.update(re.findall(r"'([a-z_]+)'", body[: body.index('];')]))
         from capabilities_kernel import registry
 
+        offered = {manifest.identity.id for manifest in registry.manifests('operator')}
         process_manifest = registry.manifest_for_node('process')
         assert process_manifest is not None
         operation = next(spec for spec in process_manifest.params if spec.name == 'operation')

@@ -3252,5 +3252,2548 @@
       ],
       "controls": []
     }
+  ],
+  "operators": [
+    {
+      "id": "drop_null",
+      "labelKey": "op.drop_null",
+      "category": "clean",
+      "order": 10,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [],
+        "some": [
+          "columns"
+        ],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "columns",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "how",
+          "type": "string",
+          "default": "any",
+          "required": false,
+          "enum": [
+            "any",
+            "all"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "fill_null",
+      "labelKey": "op.fill_null",
+      "category": "clean",
+      "order": 20,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [],
+        "some": [
+          "columns"
+        ],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "columns",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": null,
+          "required": false,
+          "enum": [
+            "ffill",
+            "pad",
+            "bfill",
+            "backfill"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "drop_duplicates",
+      "labelKey": "op.drop_duplicates",
+      "category": "clean",
+      "order": 30,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [],
+        "some": [
+          "columns"
+        ],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "columns",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "keep",
+          "type": "string",
+          "default": "first",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "default": "exact",
+          "required": false,
+          "enum": [
+            "exact",
+            "normalized"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "dedupe_similar",
+      "labelKey": "op.dedupe_similar",
+      "category": "clean",
+      "order": 40,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "max_distance",
+          "type": "integer",
+          "default": 8,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 10,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "semantic_dedupe",
+      "labelKey": "op.semantic_dedupe",
+      "category": "clean",
+      "order": 50,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "threshold",
+          "type": "number",
+          "default": 0.92,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "batch_size",
+          "type": "integer",
+          "default": 64,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "similar_to",
+      "labelKey": "op.similar_to",
+      "category": "clean",
+      "order": 60,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [
+          "query"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "textarea"
+        },
+        {
+          "name": "top_k",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "filter_rows",
+      "labelKey": "op.filter_rows",
+      "category": "clean",
+      "order": 70,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "op",
+          "type": "string",
+          "default": "",
+          "required": true,
+          "enum": [
+            "eq",
+            "ne",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "contains",
+            "not_contains",
+            "in",
+            "not_in",
+            "is_null",
+            "not_null"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "value",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "keep",
+          "type": "string",
+          "default": "keep",
+          "required": false,
+          "enum": [
+            "keep",
+            "exclude"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "select_columns",
+      "labelKey": "op.select_columns",
+      "category": "clean",
+      "order": 80,
+      "needsLlm": false,
+      "writes": "select",
+      "reads": {
+        "one": [],
+        "some": [
+          "columns"
+        ],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "columns",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "rename_columns",
+      "labelKey": "op.rename_columns",
+      "category": "clean",
+      "order": 90,
+      "needsLlm": false,
+      "writes": "unknown",
+      "reads": {
+        "one": [],
+        "some": [],
+        "nonblank": [],
+        "mapping": true,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "mapping",
+          "type": "object",
+          "default": {},
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "strip_whitespace",
+      "labelKey": "op.strip_whitespace",
+      "category": "clean",
+      "order": 100,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [],
+        "some": [
+          "columns"
+        ],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "columns",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "convert_type",
+      "labelKey": "op.convert_type",
+      "category": "clean",
+      "order": 110,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "dtype",
+          "type": "string",
+          "default": "str",
+          "required": false,
+          "enum": [
+            "str",
+            "int",
+            "float",
+            "bool",
+            "datetime"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "sort_rows",
+      "labelKey": "op.sort_rows",
+      "category": "clean",
+      "order": 120,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "ascending",
+          "type": "boolean",
+          "default": true,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch"
+        }
+      ]
+    },
+    {
+      "id": "sample_rows",
+      "labelKey": "op.sample_rows",
+      "category": "clean",
+      "order": 130,
+      "needsLlm": false,
+      "writes": "passthrough",
+      "reads": {
+        "one": [],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "n",
+          "type": "integer",
+          "default": null,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "frac",
+          "type": "number",
+          "default": null,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "seed",
+          "type": "integer",
+          "default": null,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "groupby_agg",
+      "labelKey": "op.groupby_agg",
+      "category": "statistics",
+      "order": 140,
+      "needsLlm": false,
+      "writes": "unknown",
+      "reads": {
+        "one": [
+          "group_col",
+          "agg_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "group_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "agg_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "agg_func",
+          "type": "string",
+          "default": "sum",
+          "required": false,
+          "enum": [
+            "sum",
+            "mean",
+            "median",
+            "min",
+            "max",
+            "count",
+            "nunique",
+            "std",
+            "var"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "order_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "agg_metrics",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "join_tables",
+      "labelKey": "op.join_tables",
+      "category": "join",
+      "order": 150,
+      "needsLlm": false,
+      "writes": "unknown",
+      "reads": {
+        "one": [],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": [
+          "left_on",
+          "right_on"
+        ]
+      },
+      "params": [
+        {
+          "name": "how",
+          "type": "string",
+          "default": "left",
+          "required": false,
+          "enum": [
+            "left",
+            "right",
+            "inner",
+            "outer",
+            "cross"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "left_on",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "right_on",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "anti_join",
+      "labelKey": "op.anti_join",
+      "category": "join",
+      "order": 160,
+      "needsLlm": false,
+      "writes": "unknown",
+      "reads": {
+        "one": [],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": [
+          "left_on",
+          "right_on"
+        ]
+      },
+      "params": [
+        {
+          "name": "left_on",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "right_on",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "mode",
+          "type": "string",
+          "default": "trim",
+          "required": false,
+          "enum": [
+            "exact",
+            "trim",
+            "url",
+            "text",
+            "similar"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "keep",
+          "type": "string",
+          "default": "exclude",
+          "required": false,
+          "enum": [
+            "exclude",
+            "keep"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "ignore_case",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch"
+        },
+        {
+          "name": "max_distance",
+          "type": "integer",
+          "default": 8,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 10,
+          "widget": ""
+        },
+        {
+          "name": "swap_tables",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "switch"
+        }
+      ]
+    },
+    {
+      "id": "column_calc",
+      "labelKey": "op.column_calc",
+      "category": "clean",
+      "order": 170,
+      "needsLlm": false,
+      "writes": "add",
+      "reads": {
+        "one": [],
+        "some": [],
+        "nonblank": [
+          "new_col",
+          "expr"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "new_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "expr",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "bin_column",
+      "labelKey": "op.bin_column",
+      "category": "clean",
+      "order": 180,
+      "needsLlm": false,
+      "writes": "add",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "bins",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "labels",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "new_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "extract_time",
+      "labelKey": "op.extract_time",
+      "category": "time",
+      "order": 190,
+      "needsLlm": false,
+      "writes": "add",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "new_col",
+          "type": "string",
+          "default": "日期",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "part",
+          "type": "string",
+          "default": "date",
+          "required": false,
+          "enum": [
+            "date",
+            "hour",
+            "weekday",
+            "month",
+            "year"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "bin_time",
+      "labelKey": "op.bin_time",
+      "category": "time",
+      "order": 200,
+      "needsLlm": false,
+      "writes": "add",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "edges",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "labels",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "new_col",
+          "type": "string",
+          "default": "阶段",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "order_new_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "suggest_stages",
+      "labelKey": "op.suggest_stages",
+      "category": "time",
+      "order": 210,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "min_days",
+          "type": "integer",
+          "default": 3,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_windows",
+          "type": "integer",
+          "default": 6,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "peak_ratio",
+          "type": "number",
+          "default": 2.0,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "topic_model",
+      "labelKey": "op.topic_model",
+      "category": "topic",
+      "order": 220,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "n_topics",
+          "type": "integer",
+          "default": 5,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_features",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 10,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": "auto",
+          "required": false,
+          "enum": [
+            "lda",
+            "embedding",
+            "auto"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "embedding_model",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "topic_by_stage",
+      "labelKey": "op.topic_by_stage",
+      "category": "topic",
+      "order": 230,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column",
+          "stage_col"
+        ],
+        "some": [],
+        "nonblank": [
+          "topics"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "stage_col",
+          "type": "string",
+          "default": "阶段",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "order_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "topics",
+          "type": "array",
+          "default": [],
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_features",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 10,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "word_source",
+          "type": "string",
+          "default": "tfidf",
+          "required": false,
+          "enum": [
+            "tfidf",
+            "lda"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "sample_n",
+          "type": "integer",
+          "default": 5,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": "auto",
+          "required": false,
+          "enum": [
+            "lda",
+            "embedding",
+            "auto"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "embedding_model",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "topic_label",
+      "labelKey": "op.topic_label",
+      "category": "topic",
+      "order": 240,
+      "needsLlm": true,
+      "writes": "add",
+      "reads": {
+        "one": [
+          "words_col"
+        ],
+        "some": [],
+        "nonblank": [
+          "summary_col"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "words_col",
+          "type": "string",
+          "default": "feature_words",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "samples_col",
+          "type": "string",
+          "default": "sample_texts",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "summary_col",
+          "type": "string",
+          "default": "主题概括",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "on_fail",
+          "type": "string",
+          "default": "abort",
+          "required": false,
+          "enum": [
+            "abort",
+            "blank",
+            "fallback"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "max_topics",
+          "type": "integer",
+          "default": 30,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "cluster_label",
+      "labelKey": "op.cluster_label",
+      "category": "topic",
+      "order": 250,
+      "needsLlm": true,
+      "writes": "dynamic",
+      "reads": {
+        "one": [
+          "group_col",
+          "text_col"
+        ],
+        "some": [],
+        "nonblank": [
+          "summary_col"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "group_col",
+          "type": "string",
+          "default": "cluster",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "text_col",
+          "type": "string",
+          "default": "正文",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "summary_col",
+          "type": "string",
+          "default": "摘要",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "on_fail",
+          "type": "string",
+          "default": "abort",
+          "required": false,
+          "enum": [
+            "abort",
+            "blank",
+            "fallback"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "max_groups",
+          "type": "integer",
+          "default": 60,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "sample_n",
+          "type": "integer",
+          "default": 8,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "cluster_review",
+      "labelKey": "op.cluster_review",
+      "category": "biblio",
+      "order": 260,
+      "needsLlm": true,
+      "writes": "unknown",
+      "reads": {
+        "one": [
+          "group_col",
+          "name_col"
+        ],
+        "some": [],
+        "nonblank": [
+          "summary_col"
+        ],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "group_col",
+          "type": "string",
+          "default": "聚类",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "label_col",
+          "type": "string",
+          "default": "聚类标签",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "name_col",
+          "type": "string",
+          "default": "节点",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "freq_col",
+          "type": "string",
+          "default": "频次",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "first_col",
+          "type": "string",
+          "default": "首年",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "last_col",
+          "type": "string",
+          "default": "末年",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "summary_col",
+          "type": "string",
+          "default": "簇综述",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "members",
+          "type": "integer",
+          "default": 12,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "on_fail",
+          "type": "string",
+          "default": "abort",
+          "required": false,
+          "enum": [
+            "abort",
+            "blank",
+            "fallback"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "max_groups",
+          "type": "integer",
+          "default": 60,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "reply_graph",
+      "labelKey": "op.reply_graph",
+      "category": "social",
+      "order": 270,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "author_col",
+          "floor_col",
+          "parent_floor_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "author_col",
+          "type": "string",
+          "default": "评论者",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "floor_col",
+          "type": "string",
+          "default": "楼层",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "parent_floor_col",
+          "type": "string",
+          "default": "父楼层",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "article_col",
+          "type": "string",
+          "default": "文章URL",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "compare_platform",
+      "labelKey": "op.compare_platform",
+      "category": "statistics",
+      "order": 280,
+      "needsLlm": false,
+      "writes": "dynamic",
+      "reads": {
+        "one": [
+          "platform_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "platform_col",
+          "type": "string",
+          "default": "platform",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "value_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "agg",
+          "type": "string",
+          "default": "mean",
+          "required": false,
+          "enum": [
+            "mean",
+            "sum",
+            "median",
+            "min",
+            "max",
+            "count"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        }
+      ]
+    },
+    {
+      "id": "topic_map",
+      "labelKey": "op.topic_map",
+      "category": "topic",
+      "order": 290,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "n_topics",
+          "type": "integer",
+          "default": 5,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_features",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 10,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 6,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": "auto",
+          "required": false,
+          "enum": [
+            "lda",
+            "embedding",
+            "auto"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "embedding_model",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "topic_salience",
+      "labelKey": "op.topic_salience",
+      "category": "topic",
+      "order": 300,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "n_topics",
+          "type": "integer",
+          "default": 5,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_features",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 10,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 30,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "relevance",
+          "type": "number",
+          "default": 1.0,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": "auto",
+          "required": false,
+          "enum": [
+            "lda",
+            "embedding",
+            "auto"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "embedding_model",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        }
+      ]
+    },
+    {
+      "id": "topic_timeline",
+      "labelKey": "op.topic_timeline",
+      "category": "topic",
+      "order": 310,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "stage_col",
+          "words_col",
+          "size_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "stage_col",
+          "type": "string",
+          "default": "stage",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "words_col",
+          "type": "string",
+          "default": "feature_words",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "size_col",
+          "type": "string",
+          "default": "doc_n",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "topic_col",
+          "type": "string",
+          "default": "topic",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "order_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "min_overlap",
+          "type": "number",
+          "default": 0.5,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "topic_flow",
+      "labelKey": "op.topic_flow",
+      "category": "topic",
+      "order": 320,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "stage_col",
+          "topic_col",
+          "weights_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "stage_col",
+          "type": "string",
+          "default": "stage",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "topic_col",
+          "type": "string",
+          "default": "topic",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "words_col",
+          "type": "string",
+          "default": "feature_words",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "weights_col",
+          "type": "string",
+          "default": "weights",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "order_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "min_similarity",
+          "type": "number",
+          "default": 0.5,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "label_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "topic_coherence",
+      "labelKey": "op.topic_coherence",
+      "category": "topic",
+      "order": 330,
+      "needsLlm": false,
+      "writes": "unknown",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "min_topics",
+          "type": "integer",
+          "default": 2,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_topics",
+          "type": "integer",
+          "default": 8,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 10,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_features",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 10,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "max_documents",
+          "type": "integer",
+          "default": 2000,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "cooccur",
+      "labelKey": "op.cooccur",
+      "category": "topic",
+      "order": 340,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "topn",
+          "type": "integer",
+          "default": 30,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "min_count",
+          "type": "integer",
+          "default": 2,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "window",
+          "type": "integer",
+          "default": 0,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "sentiment_evolution",
+      "labelKey": "op.sentiment_evolution",
+      "category": "time",
+      "order": 350,
+      "needsLlm": false,
+      "writes": "dynamic",
+      "reads": {
+        "one": [
+          "column"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "label_col",
+          "type": "string",
+          "default": "sentiment",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "positive",
+          "type": "string",
+          "default": "positive",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "neutral",
+          "type": "string",
+          "default": "neutral",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "negative",
+          "type": "string",
+          "default": "negative",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "new_col",
+          "type": "string",
+          "default": "sentiment_index",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "text"
+        },
+        {
+          "name": "score_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "order_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        }
+      ]
+    },
+    {
+      "id": "forecast",
+      "labelKey": "op.forecast",
+      "category": "time",
+      "order": 360,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column",
+          "value_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "period",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "value_col",
+          "type": "string",
+          "default": "sentiment_index",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "default": "moving_average",
+          "required": false,
+          "enum": [
+            "moving_average",
+            "holt",
+            "seasonal_naive",
+            "holt_winters"
+          ],
+          "minimum": null,
+          "maximum": null,
+          "widget": "select"
+        },
+        {
+          "name": "horizon",
+          "type": "integer",
+          "default": 3,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "window",
+          "type": "integer",
+          "default": 3,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "alpha",
+          "type": "number",
+          "default": 0.5,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "beta",
+          "type": "number",
+          "default": 0.3,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        },
+        {
+          "name": "min_periods",
+          "type": "integer",
+          "default": 4,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "season",
+          "type": "integer",
+          "default": 7,
+          "required": false,
+          "enum": [],
+          "minimum": 2,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "gamma",
+          "type": "number",
+          "default": 0.35,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        }
+      ]
+    },
+    {
+      "id": "alert",
+      "labelKey": "op.alert",
+      "category": "time",
+      "order": 370,
+      "needsLlm": false,
+      "writes": "replace",
+      "reads": {
+        "one": [
+          "column",
+          "index_col"
+        ],
+        "some": [],
+        "nonblank": [],
+        "mapping": false,
+        "twoTableKeys": []
+      },
+      "params": [
+        {
+          "name": "column",
+          "type": "string",
+          "default": "period",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "index_col",
+          "type": "string",
+          "default": "sentiment_index",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "intensity_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "volume_col",
+          "type": "string",
+          "default": "",
+          "required": false,
+          "enum": [],
+          "minimum": null,
+          "maximum": null,
+          "widget": "column"
+        },
+        {
+          "name": "streak",
+          "type": "integer",
+          "default": 2,
+          "required": false,
+          "enum": [],
+          "minimum": 1,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "swing",
+          "type": "number",
+          "default": 0.2,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "heating",
+          "type": "number",
+          "default": 0.15,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": null,
+          "widget": ""
+        },
+        {
+          "name": "volume_floor",
+          "type": "number",
+          "default": 0.6,
+          "required": false,
+          "enum": [],
+          "minimum": 0,
+          "maximum": 1,
+          "widget": ""
+        }
+      ]
+    }
   ]
 }
