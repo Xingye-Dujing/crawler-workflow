@@ -5,7 +5,7 @@
 
 - 文件：**435**
 - 用例（定义数，参数化会展开成更多次运行）：**8559**
-- 无断言的用例：**33**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
+- 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
 
@@ -57,7 +57,7 @@
 | `tests/api/test_multi_model_api.py` | 13 | 0 | 0 | 0 |
 | `tests/api/test_node_matrix.py` | 103 | 0 | 0 | 0 |
 | `tests/api/test_node_types_api.py` | 7 | 0 | 0 | 0 |
-| `tests/api/test_nodes_execution.py` | 69 | 1 | 0 | 0 |
+| `tests/api/test_nodes_execution.py` | 69 | 0 | 0 | 0 |
 | `tests/api/test_page_not_arrived.py` | 12 | 0 | 0 | 0 |
 | `tests/api/test_phases_api.py` | 3 | 0 | 0 | 0 |
 | `tests/api/test_pool_api.py` | 6 | 0 | 0 | 0 |
@@ -73,7 +73,7 @@
 | `tests/api/test_rerun_node.py` | 13 | 0 | 0 | 0 |
 | `tests/api/test_reusable_api.py` | 9 | 0 | 0 | 0 |
 | `tests/api/test_run_compare_api.py` | 3 | 0 | 0 | 0 |
-| `tests/api/test_run_races.py` | 35 | 1 | 0 | 0 |
+| `tests/api/test_run_races.py` | 35 | 0 | 0 | 0 |
 | `tests/api/test_run_records_parallel.py` | 24 | 0 | 0 | 0 |
 | `tests/api/test_run_results_loading.py` | 8 | 0 | 0 | 0 |
 | `tests/api/test_runs_api.py` | 42 | 0 | 0 | 0 |
@@ -105,13 +105,13 @@
 | `tests/integration/test_profile_template.py` | 4 | 0 | 0 | 0 |
 | `tests/integration/test_stop_reaper.py` | 1 | 0 | 0 | 0 |
 | `tests/integration/test_twitter_crawler.py` | 19 | 0 | 0 | 0 |
-| `tests/integration/test_ui_layout.py` | 78 | 1 | 0 | 0 |
+| `tests/integration/test_ui_layout.py` | 78 | 0 | 0 | 0 |
 | `tests/integration/test_wechat_crawler.py` | 5 | 0 | 0 | 0 |
 | `tests/integration/test_weibo_crawler.py` | 49 | 0 | 0 | 0 |
 | `tests/integration/test_youtube_crawler.py` | 32 | 0 | 0 | 0 |
 | `tests/integration/test_zhihu_author.py` | 12 | 0 | 0 | 0 |
 | `tests/integration/test_zhihu_crawler.py` | 45 | 0 | 0 | 0 |
-| `tests/live_site/test_live_bilibili.py` | 5 | 1 | 0 | 0 |
+| `tests/live_site/test_live_bilibili.py` | 5 | 0 | 0 | 0 |
 | `tests/live_site/test_live_bilibili_author.py` | 3 | 0 | 0 | 0 |
 | `tests/live_site/test_live_bilibili_hot.py` | 2 | 0 | 0 | 0 |
 | `tests/live_site/test_live_bilibili_workflow.py` | 13 | 0 | 0 | 0 |
@@ -131,7 +131,7 @@
 | `tests/live_site/test_live_weibo.py` | 2 | 0 | 0 | 0 |
 | `tests/live_site/test_live_weibo_author.py` | 2 | 0 | 0 | 0 |
 | `tests/live_site/test_live_weibo_workflow.py` | 22 | 0 | 0 | 0 |
-| `tests/live_site/test_live_x.py` | 5 | 2 | 0 | 0 |
+| `tests/live_site/test_live_x.py` | 5 | 0 | 0 | 0 |
 | `tests/live_site/test_live_x_workflow.py` | 1 | 0 | 0 | 0 |
 | `tests/live_site/test_live_xiaohongshu.py` | 2 | 0 | 0 | 0 |
 | `tests/live_site/test_live_xiaohongshu_workflow.py` | 1 | 0 | 0 | 0 |
@@ -168,17 +168,17 @@
 | `tests/unit/analysis/test_aggression.py` | 20 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_analysis_postcheck.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_analyzer_llm_bodies.py` | 74 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_anomaly.py` | 15 | 1 | 0 | 0 |
+| `tests/unit/analysis/test_anomaly.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_anti_join.py` | 20 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_bot.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_bot_analyzer.py` | 2 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_cleaner_regex.py` | 22 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_clustering.py` | 17 | 1 | 0 | 0 |
-| `tests/unit/analysis/test_correlation.py` | 18 | 1 | 0 | 0 |
+| `tests/unit/analysis/test_clustering.py` | 17 | 0 | 0 | 0 |
+| `tests/unit/analysis/test_correlation.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_data_analysis.py` | 379 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_emotion_analyzer.py` | 15 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_keyword_analyzer.py` | 32 | 1 | 0 | 0 |
-| `tests/unit/analysis/test_lexicon_store.py` | 12 | 1 | 0 | 0 |
+| `tests/unit/analysis/test_keyword_analyzer.py` | 32 | 0 | 0 | 0 |
+| `tests/unit/analysis/test_lexicon_store.py` | 12 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_llm_tiering.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_matching.py` | 19 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_model_catalog.py` | 10 | 0 | 0 | 0 |
@@ -191,7 +191,7 @@
 | `tests/unit/analysis/test_quantitative_coding.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_semantic_ops.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_sentiment_analyzer.py` | 41 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_significance.py` | 18 | 1 | 0 | 0 |
+| `tests/unit/analysis/test_significance.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_small_model_modes.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_stats_service.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_step_checks.py` | 28 | 0 | 0 | 0 |
@@ -241,11 +241,11 @@
 | `tests/unit/charts/test_visualization.py` | 121 | 0 | 0 | 0 |
 | `tests/unit/components/test_components_core.py` | 50 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_bilibili_watermark.py` | 5 | 0 | 0 | 0 |
-| `tests/unit/crawlers/test_browser_health.py` | 9 | 1 | 0 | 0 |
-| `tests/unit/crawlers/test_browser_profiles.py` | 68 | 1 | 0 | 0 |
+| `tests/unit/crawlers/test_browser_health.py` | 9 | 0 | 0 | 0 |
+| `tests/unit/crawlers/test_browser_profiles.py` | 68 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_browser_startup_refusals.py` | 10 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_catbus_bridge.py` | 52 | 0 | 0 | 0 |
-| `tests/unit/crawlers/test_catbus_capability_dimension.py` | 15 | 1 | 0 | 0 |
+| `tests/unit/crawlers/test_catbus_capability_dimension.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_catbus_crawler.py` | 39 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_collection_depth.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_comment_time_filter.py` | 7 | 0 | 0 | 0 |
@@ -269,7 +269,7 @@
 | `tests/unit/crawlers/test_hongguo_harvest.py` | 89 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_login_wall.py` | 23 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_pagefetch_timeout.py` | 6 | 0 | 0 | 0 |
-| `tests/unit/crawlers/test_platform_rules.py` | 81 | 1 | 4 | 0 |
+| `tests/unit/crawlers/test_platform_rules.py` | 81 | 0 | 4 | 0 |
 | `tests/unit/crawlers/test_pool_proxy.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_source_comments_lane.py` | 2 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_source_hygiene.py` | 2 | 0 | 0 | 0 |
@@ -284,11 +284,11 @@
 | `tests/unit/desktop/test_bert_install.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_bootstrap_plan.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_bootstrap_server.py` | 16 | 0 | 0 | 0 |
-| `tests/unit/desktop/test_desktop_packaging.py` | 98 | 1 | 3 | 0 |
+| `tests/unit/desktop/test_desktop_packaging.py` | 98 | 0 | 3 | 0 |
 | `tests/unit/desktop/test_desktop_shell.py` | 19 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_macos_installer.py` | 17 | 0 | 1 | 0 |
 | `tests/unit/desktop/test_macos_packaging.py` | 7 | 0 | 0 | 0 |
-| `tests/unit/desktop/test_native_window.py` | 14 | 1 | 0 | 0 |
+| `tests/unit/desktop/test_native_window.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_release_signing.py` | 25 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_update_receipt.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/desktop/test_update_worker_entry.py` | 12 | 0 | 0 | 0 |
@@ -315,7 +315,7 @@
 | `tests/unit/foundation/test_net_probe.py` | 21 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_phases.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_times.py` | 14 | 0 | 0 | 0 |
-| `tests/unit/foundation/test_utils.py` | 44 | 1 | 0 | 0 |
+| `tests/unit/foundation/test_utils.py` | 44 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_accounts.py` | 20 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_ai_js.py` | 82 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_analysis_badge_js.py` | 8 | 0 | 0 | 0 |
@@ -348,7 +348,7 @@
 | `tests/unit/frontend/test_frontend_menu_js.py` | 28 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_missing_assets_js.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_node_types_js.py` | 6 | 0 | 0 | 0 |
-| `tests/unit/frontend/test_frontend_page_markup.py` | 19 | 8 | 0 | 0 |
+| `tests/unit/frontend/test_frontend_page_markup.py` | 19 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_page_scripts_js.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_palette_js.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_panel_actions_js.py` | 110 | 0 | 0 | 0 |
@@ -381,7 +381,7 @@
 | `tests/unit/gates/test_flags.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/gates/test_isolation_census.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/gates/test_lint_gate.py` | 9 | 0 | 0 | 0 |
-| `tests/unit/gates/test_live_acceptance_record_shape.py` | 8 | 2 | 0 | 0 |
+| `tests/unit/gates/test_live_acceptance_record_shape.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/gates/test_live_run_harness.py` | 71 | 0 | 0 | 0 |
 | `tests/unit/gates/test_manual_capture.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/gates/test_module_shadowing.py` | 3 | 0 | 0 | 0 |
@@ -416,7 +416,7 @@
 | `tests/unit/runs/test_run_compare.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_log_writer.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_memory_note.py` | 5 | 0 | 0 | 0 |
-| `tests/unit/runs/test_run_postcheck.py` | 4 | 1 | 0 | 0 |
+| `tests/unit/runs/test_run_postcheck.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_started_event.py` | 1 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_store.py` | 127 | 0 | 0 | 0 |
 | `tests/unit/runs/test_stop_wiring.py` | 11 | 0 | 0 | 0 |
@@ -430,17 +430,17 @@
 | `tests/unit/scheduling/test_schedule_store.py` | 33 | 0 | 0 | 0 |
 | `tests/unit/scheduling/test_scheduler.py` | 28 | 0 | 0 | 0 |
 | `tests/unit/sessions/test_cookie_flow.py` | 28 | 0 | 0 | 0 |
-| `tests/unit/sessions/test_cookie_manager.py` | 46 | 1 | 0 | 0 |
+| `tests/unit/sessions/test_cookie_manager.py` | 46 | 0 | 0 | 0 |
 | `tests/unit/sessions/test_preflight_probe_timeout.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/sessions/test_profile_template_policy.py` | 29 | 0 | 0 | 0 |
-| `tests/unit/test_update_feed_signature.py` | 4 | 1 | 0 | 0 |
+| `tests/unit/test_update_feed_signature.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/tools/test_backup.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/tools/test_check_release_version.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/tools/test_ci_lint_tiers.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/tools/test_fetch_assets.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/tools/test_migrate_accounts.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/tools/test_prune_gitee_releases.py` | 6 | 0 | 0 | 0 |
-| `tests/unit/tools/test_publish_gitee.py` | 13 | 1 | 0 | 0 |
+| `tests/unit/tools/test_publish_gitee.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/tools/test_release_components.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/tools/test_write_release_feed.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/update/test_update.py` | 30 | 0 | 0 | 0 |

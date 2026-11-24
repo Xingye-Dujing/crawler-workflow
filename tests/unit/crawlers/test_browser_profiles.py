@@ -728,8 +728,8 @@ class TestOneBrowserPerProfile:
     def test_releasing_something_unheld_is_not_an_error(self, tmp_path):
         # `close()` runs in finally-blocks; a release that raises would replace the
         # crawl's real outcome with a lock bookkeeping crash.
-        profiles.release_profile(None)
-        profiles.release_profile(profiles.lock_for(str(tmp_path / 'x')))
+        assert profiles.release_profile(None) is None
+        assert profiles.release_profile(profiles.lock_for(str(tmp_path / 'x'))) is None
 
 
 class TestCrawlerHoldsItsProfile:

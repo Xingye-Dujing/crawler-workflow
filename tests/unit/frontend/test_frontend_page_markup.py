@@ -123,7 +123,7 @@ def studio_sweep():
     return parser
 
 
-def _duplicate_ids(parser, page):
+def _assert_no_duplicate_ids(parser, page):
     seen = {}
     duplicates = []
     for element_id, tag, (line, _col) in parser.ids:
@@ -134,12 +134,12 @@ def _duplicate_ids(parser, page):
     assert not duplicates, f'duplicate ids in {page}: ' + '; '.join(duplicates)
 
 
-def _nesting_errors(parser, page):
+def _assert_markup_nests(parser, page):
     assert not parser.errors, f'mis-nested markup in {page}:\n' + '\n'.join(parser.errors)
     assert not parser.stack, f'unclosed tags in {page}: {[tag for tag, _pos in parser.stack]}'
 
 
-def _dangling_idrefs(parser, page):
+def _assert_no_dangling_idrefs(parser, page):
     known = {element_id for element_id, _tag, _pos in parser.ids}
     dangling = [
         f'{name}="{value}" at line {pos[0]}'
@@ -150,7 +150,7 @@ def _dangling_idrefs(parser, page):
     assert not dangling, f'references to missing ids in {page}: ' + '; '.join(dangling)
 
 
-def _unnamed_controls(parser, page):
+def _assert_every_control_named(parser, page):
     """An icon-only control with no text and no ``aria-label`` is announced as
     "button" — the SVG inside it carries no name."""
     unnamed = [
@@ -170,19 +170,19 @@ class TestTheDocumentIsADocument:
     def test_every_id_is_unique(self, sweep):
         """``getElementById`` answers the FIRST match, so a duplicate id silently moves a
         panel, a label or a harness stub to the wrong element."""
-        _duplicate_ids(sweep, 'index.html')
+        _assert_no_duplicate_ids(sweep, 'index.html')
 
     def test_the_markup_nests_cleanly(self, sweep):
         """An unclosed or mis-nested tag makes the browser re-parent panels: the page
         still renders, but the panel a test (or a user) expects inside a container is
         not, and every position-based assumption downstream is wrong."""
-        _nesting_errors(sweep, 'index.html')
+        _assert_markup_nests(sweep, 'index.html')
 
     def test_every_id_reference_names_an_element_that_exists(self, sweep):
-        _dangling_idrefs(sweep, 'index.html')
+        _assert_no_dangling_idrefs(sweep, 'index.html')
 
     def test_every_button_and_link_has_an_accessible_name(self, sweep):
-        _unnamed_controls(sweep, 'index.html')
+        _assert_every_control_named(sweep, 'index.html')
 
 
 class TestTheStudioPageIsADocument:
@@ -191,16 +191,16 @@ class TestTheStudioPageIsADocument:
     duplicate id or a mis-closed div goes unnoticed."""
 
     def test_every_id_is_unique(self, studio_sweep):
-        _duplicate_ids(studio_sweep, 'zenviz.html')
+        _assert_no_duplicate_ids(studio_sweep, 'zenviz.html')
 
     def test_the_markup_nests_cleanly(self, studio_sweep):
-        _nesting_errors(studio_sweep, 'zenviz.html')
+        _assert_markup_nests(studio_sweep, 'zenviz.html')
 
     def test_every_id_reference_names_an_element_that_exists(self, studio_sweep):
-        _dangling_idrefs(studio_sweep, 'zenviz.html')
+        _assert_no_dangling_idrefs(studio_sweep, 'zenviz.html')
 
     def test_every_button_and_link_has_an_accessible_name(self, studio_sweep):
-        _unnamed_controls(studio_sweep, 'zenviz.html')
+        _assert_every_control_named(studio_sweep, 'zenviz.html')
 
 
 class TestThePageLoadsItsScripts:

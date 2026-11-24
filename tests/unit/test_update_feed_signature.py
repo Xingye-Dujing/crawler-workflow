@@ -109,4 +109,4 @@ class TestTheSignedFeed:
         sys.path.insert(0, str(REPO / 'backend'))
         from services import update
 
-        update.verify_feed_signature(json.loads(feed.read_text(encoding='utf-8')))
+        assert update.verify_feed_signature(json.loads(feed.read_text(encoding='utf-8'))) is None

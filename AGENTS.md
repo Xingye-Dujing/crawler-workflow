@@ -170,8 +170,8 @@ repository root.
   `python tools/test_inventory.py` renders `docs/testing/value-inventory.md` (per file: cases,
   no-assert, skips, xfail); `tests/unit/gates/test_test_inventory.py` refuses a stale page, a case
   that asserts nothing without a recorded reason (the reasons live in the tool), and a no-assert
-  total other than the pinned 33. A skip is allowed only for a fact of the OS/environment — an
-  unconditional one is a case that proves nothing here.
+  total other than **zero** — every such case was rewritten to state its claim. A skip is allowed
+  only for a fact of the OS/environment — an unconditional one is a case that proves nothing here.
 
 - **Isolation happens at conftest import; the suite fails if `data/` or `logs/` gains a byte.**
 - **A warning is a test that noticed something and passed anyway — fix it, never mute it** (no `filterwarnings`).

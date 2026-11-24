@@ -171,6 +171,7 @@ class TestExistsAndDelete:
 
     def test_deleting_a_missing_login_is_not_an_error(self, manager):
         manager.delete('zhihu')
+        assert not manager.exists('zhihu'), 'deleting a missing login must leave nothing behind'
 
     def test_delete_refuses_an_unknown_platform(self, manager):
         with pytest.raises(ValueError, match='Unsupported platform'):

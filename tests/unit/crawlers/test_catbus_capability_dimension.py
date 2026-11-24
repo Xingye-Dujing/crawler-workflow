@@ -342,4 +342,4 @@ class _Ledger:
 
 
 def test_the_payload_is_still_json_ready_with_the_engine_dimension(manifest):
-    json.dumps(capabilities.as_dict(), ensure_ascii=False)
+    assert json.dumps(capabilities.as_dict(), ensure_ascii=False)

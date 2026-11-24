@@ -703,7 +703,9 @@ class TestAFileNameLimitIsBytesNotCharacters:
         assert sanitize_filename('report.csv') == 'report.csv'
 
     def test_a_cut_never_splits_a_character_in_half(self):
-        sanitize_filename('中' * 300).encode('utf-8').decode('utf-8')
+        name = sanitize_filename('中' * 300)
+        assert len(name.encode('utf-8')) <= MAX_FILENAME_BYTES
+        assert name.encode('utf-8').decode('utf-8') == name
 
     def test_the_byte_cap_binds_before_the_character_cap_for_chinese(self):
         # The character cap alone would let a 100-glyph Chinese name through, and 300 bytes is over NAME_MAX.

@@ -876,7 +876,7 @@ class TestStoreFailures:
 
         from services.runs.settlement import close_run
 
-        close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed')
+        assert close_run({'store': _Broken(), 'run_id': 'r1'}, 'completed') is None
 
 
 class TestStopWithoutABrowser:

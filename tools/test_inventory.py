@@ -20,40 +20,13 @@ ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / 'tests'
 PAGE = ROOT / 'docs' / 'testing' / 'value-inventory.md'
 
-#: A test that asserts nothing may still be a real test (a golden file, a harness-driven case, a
-#: "this call must not raise" case), and the reason has to be written down here — otherwise
-#: "no assert" is an accident, not a decision. The gate refuses any no-assert test not listed.
-NO_ASSERT_ALLOWED = {
-    'tests/api/test_nodes_execution.py': 'a null crawler is a no-op: the claim is "does not raise"',
-    'tests/api/test_run_races.py': 'a settlement failure must stay readable: the claim is "returns, does not raise"',
-    'tests/integration/test_ui_layout.py': 'the browser-measured claim lives in the assertion helper it calls',
-    'tests/live_site/test_live_bilibili.py': 'live case: numbers derived from the crawl, asserted in a helper',
-    'tests/live_site/test_live_x.py': 'live case: the shape claims are asserted in the shared row helper',
-    'tests/unit/analysis/test_anomaly.py': 'determinism: two runs compared inside the test body',
-    'tests/unit/analysis/test_clustering.py': 'non-mutation: the frame is compared to a copy',
-    'tests/unit/analysis/test_correlation.py': 'non-mutation: the frame is compared to a copy',
-    'tests/unit/analysis/test_keyword_analyzer.py': 'non-mutation: the frame is compared to a copy',
-    'tests/unit/analysis/test_lexicon_store.py': 'a named refusal is asserted through pytest.raises in a helper',
-    'tests/unit/analysis/test_significance.py': 'non-mutation: the frame is compared to a copy',
-    'tests/unit/crawlers/test_browser_health.py': 'shutdown must be silent: the claim is "logs nothing"',
-    'tests/unit/crawlers/test_browser_profiles.py': 'releasing an unheld profile must not raise',
-    'tests/unit/crawlers/test_catbus_capability_dimension.py': 'JSON-readiness asserted through the encoder',
-    'tests/unit/crawlers/test_platform_rules.py': 'the byte cut is compared to the re-joined original',
-    'tests/unit/desktop/test_desktop_packaging.py': 'off-Windows must not attempt a dialog: the claim is "no call"',
-    'tests/unit/desktop/test_native_window.py': 'the refusal path must not call startfile',
-    'tests/unit/foundation/test_utils.py': 'round-trip: the reparsed table is compared to the original',
-    'tests/unit/frontend/test_frontend_page_markup.py': 'the checks report through a problems list the test asserts',
-    'tests/unit/gates/test_live_acceptance_record_shape.py': 'the record shape is compared to expected component names',
-    'tests/unit/runs/test_run_postcheck.py': 'an unknown node type must not raise',
-    'tests/unit/sessions/test_cookie_manager.py': 'deleting a missing login must not raise',
-    'tests/unit/test_update_feed_signature.py': 'no key means unsigned, and the payload is compared in the test body',
-    'tests/unit/tools/test_publish_gitee.py': 'an already-attached name is skipped: the claim is "no upload call"',
-}
-
-#: The suite's no-assert count, pinned. A new case that asserts nothing (anywhere, including a listed
-#: file) changes this number and fails the gate, so the author must either assert something or add a
-#: reason above and move the number — the decision is reviewed instead of inherited.
-NO_ASSERT_TOTAL = 33
+#: The suite's no-assert count, pinned at zero: a case that asserts nothing (anywhere) changes this
+#: number and fails the gate, so the author must either assert something or add a reason above and
+#: move the number — the decision is reviewed instead of inherited. The mapping above is empty today
+#: because every such case was rewritten to assert its claim; a new exception belongs there WITH a
+#: reason, and the total grows by exactly that many.
+NO_ASSERT_ALLOWED: dict[str, str] = {}
+NO_ASSERT_TOTAL = 0
 
 
 class Case:
@@ -66,22 +39,22 @@ class Case:
 
     @property
     def asserts(self) -> bool:
+        """A test proves something when it asserts, expects an exception, or calls an
+        ``assert_*`` helper (``pd.testing.assert_frame_equal``, ``_assert_real_rows``)."""
         for child in ast.walk(self.node):
             if isinstance(child, ast.Assert):
                 return True
+            if isinstance(child, ast.Raise) and child.exc is not None:
+                text = ast.unparse(child.exc)
+                if 'AssertionError' in text:
+                    return True
             if isinstance(child, ast.With):
                 for item in child.items:
                     call = item.context_expr
                     text = ast.unparse(call.func) if isinstance(call, ast.Call) else ''
                     if text in ('pytest.raises', 'pytest.warns', 'pytest.deprecated_call'):
                         return True
-            if (
-                isinstance(child, ast.Call)
-                and isinstance(child.func, ast.Attribute)
-                and child.func.attr in ('raises', 'warns')
-                and isinstance(child.func.value, ast.Name)
-                and child.func.value.id == 'pytest'
-            ):
+            if isinstance(child, ast.Call) and _assert_call(child):
                 return True
         return False
 
@@ -93,6 +66,15 @@ class Case:
     @property
     def xfail(self) -> bool:
         return any('xfail' in item for item in self.decorators)
+
+
+def _assert_call(node: ast.Call) -> bool:
+    """Whether this call is an assertion: ``assert_*``/``assert*_equal`` or ``pytest.fail``."""
+    func = node.func
+    name = (func.attr if isinstance(func, ast.Attribute) else getattr(func, 'id', '')).lstrip('_')
+    if name.startswith('assert'):
+        return True
+    return name == 'fail' and isinstance(func, ast.Attribute) and getattr(func.value, 'id', '') == 'pytest'
 
 
 def _decorators(node) -> list[str]:

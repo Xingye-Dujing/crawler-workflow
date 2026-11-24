@@ -1124,7 +1124,7 @@ class TestBrowserReaper:
         assert child.poll() is not None, 'the ignored driver process must be reaped by PID'
 
     def test_a_null_crawler_is_nothing_to_do(self, app_module):
-        close_login_browser(None)  # must not raise
+        assert close_login_browser(None) is None  # must not raise
 
 
 class TestStopAndKill:

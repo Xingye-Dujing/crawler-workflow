@@ -236,7 +236,7 @@ def test_a_stopped_session_closes_silently(monkeypatch):
         def quit(self):
             raise SystemExit('stop')
 
-    browser.close_driver(_Dead())  # no exception escapes the teardown
+    assert browser.close_driver(_Dead()) is None  # no exception escapes the teardown
 
 
 def test_the_abandoned_probe_thread_is_a_daemon(fake_chrome, monkeypatch, reaper):

@@ -212,7 +212,7 @@ def test_complaining_about_a_missing_runtime_does_not_require_startfile(window, 
     """
     monkeypatch.setattr(window, 'alert', lambda *_args, **_kwargs: None)
     monkeypatch.setattr(window, 'os', types.SimpleNamespace())
-    window.complain('WebView2 runtime is missing')  # must not raise
+    assert window.complain('WebView2 runtime is missing') is None  # must not raise
 
 
 def test_a_machine_without_the_host_is_refused_by_name(window, monkeypatch):

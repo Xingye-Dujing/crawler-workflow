@@ -42,7 +42,7 @@ class TestTheConsoleLine:
 
     def test_an_unknown_type_is_not_a_crash(self, monkeypatch):
         monkeypatch.setattr('capabilities_kernel.registry.manifest_for_node', lambda _type: None)
-        run_module._postcheck_node({'id': 'x', 'type': 'moonbase'}, [], [], 'x', 0)
+        assert run_module._postcheck_node({'id': 'x', 'type': 'moonbase'}, [], [], 'x', 0) is None
 
     def test_a_non_list_result_is_treated_as_no_rows(self, monkeypatch):
         """A chart/compile node answers a dict; the hook gets an empty row list, not the dict."""
