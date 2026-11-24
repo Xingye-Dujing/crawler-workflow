@@ -249,7 +249,9 @@ def sanitize_filename(name: str, *, truncate: bool = True) -> str:
     enforced separately by ``resolve_export_file``'s realpath + prefix check.
     """
     clean = re.sub(r'[\x00-\x1f\\/*?:"<>|]', '_', str(name or ''))
-    clean = clean.strip().strip('.')
+    # Strip whitespace, then dots, then whitespace AGAIN: a name starting with a dot followed by a
+    # space would otherwise leave the space at the front (and the second sanitize would remove it).
+    clean = clean.strip().strip('.').strip()
     # ``open('CON.csv')`` on Windows writes to the console device and every read of the
     # "file" comes back empty; the same holds for NUL and the COM/LPT ports. A leading
     # underscore keeps the name recognisable without naming a device. Checked before the
@@ -258,9 +260,19 @@ def sanitize_filename(name: str, *, truncate: bool = True) -> str:
         clean = '_' + clean
     if truncate and (len(clean) > MAX_FILENAME_LENGTH or len(clean.encode('utf-8')) > MAX_FILENAME_BYTES):
         root, ext = os.path.splitext(clean)
-        budget = MAX_FILENAME_LENGTH - len(ext)
-        root = _cut_bytes(root[: max(1, budget)], MAX_FILENAME_BYTES - len(ext.encode('utf-8')))
-        clean = (root or _cut_bytes(clean, max(1, MAX_FILENAME_BYTES - len(ext.encode('utf-8'))))) + ext
+        # A dot chain the cap itself cannot hold is not an extension: treating it as one left a
+        # one-character stem plus an oversized suffix, i.e. a name longer than the cap it just
+        # measured (found by the property test's 300-glyph random names).
+        if len(ext) >= MAX_FILENAME_LENGTH or len(ext.encode('utf-8')) >= MAX_FILENAME_BYTES:
+            root, ext = clean, ''
+        budget_chars = max(1, MAX_FILENAME_LENGTH - len(ext))
+        budget_bytes = max(0, MAX_FILENAME_BYTES - len(ext.encode('utf-8')))
+        root = _cut_bytes(root[:budget_chars], budget_bytes)
+        clean = (root or _cut_bytes(clean, budget_bytes)) + ext
+        # The cut can expose a trailing space or dot the earlier strip already passed.
+        clean = clean.strip().strip('.').strip()
+        if len(clean.encode('utf-8')) > MAX_FILENAME_BYTES:
+            clean = _cut_bytes(clean, MAX_FILENAME_BYTES)
     return clean
 
 

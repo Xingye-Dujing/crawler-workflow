@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**436**
-- 用例（定义数，参数化会展开成更多次运行）：**8563**
+- 文件：**438**
+- 用例（定义数，参数化会展开成更多次运行）：**8579**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -57,6 +57,7 @@
 | `tests/api/test_multi_model_api.py` | 13 | 0 | 0 | 0 |
 | `tests/api/test_node_matrix.py` | 103 | 0 | 0 | 0 |
 | `tests/api/test_node_types_api.py` | 7 | 0 | 0 | 0 |
+| `tests/api/test_node_types_contract.py` | 8 | 0 | 0 | 0 |
 | `tests/api/test_nodes_execution.py` | 69 | 0 | 0 | 0 |
 | `tests/api/test_page_not_arrived.py` | 12 | 0 | 0 | 0 |
 | `tests/api/test_phases_api.py` | 3 | 0 | 0 | 0 |
@@ -314,6 +315,7 @@
 | `tests/unit/foundation/test_missing_dependency_messages.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_net_probe.py` | 21 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_phases.py` | 8 | 0 | 0 | 0 |
+| `tests/unit/foundation/test_properties.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_times.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_utils.py` | 44 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_accounts.py` | 20 | 0 | 0 | 0 |
