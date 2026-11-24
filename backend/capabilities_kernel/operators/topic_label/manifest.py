@@ -1,7 +1,7 @@
 """Name each topic with one model call, writing a summary column."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'topic_label',
@@ -27,6 +27,31 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('words_col',), nonblank=('summary_col',)),
     writes=Writes(mode='add', add=(('summary_col', '主题概括'),)),
+    panel=(
+        PanelField('label_words_col', 'words_col', 'settings.labelWordsColumn', default='feature_words'),
+        PanelField('label_samples_col', 'samples_col', 'settings.labelSamplesColumn', default='sample_texts'),
+        PanelField('label_summary_col', 'summary_col', 'settings.labelSummaryColumn', default='主题概括'),
+        PanelField(
+            'label_on_fail',
+            'on_fail',
+            'settings.labelOnFail',
+            control='select',
+            default='abort',
+            options=(
+                ('abort', 'settings.labelOnFailAbort'),
+                ('blank', 'settings.labelOnFailBlank'),
+                ('fallback', 'settings.labelOnFailFallback'),
+            ),
+        ),
+        PanelField(
+            'label_max_topics',
+            'max_topics',
+            'settings.labelMaxTopics',
+            control='number',
+            default=30,
+            hint_key='settings.topicLabelHint',
+        ),
+    ),
     needs_llm=True,
     labels=(
         ('words_col', 'settings.labelWordsColumn'),

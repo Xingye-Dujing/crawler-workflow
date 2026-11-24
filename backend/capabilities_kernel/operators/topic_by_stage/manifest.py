@@ -1,7 +1,13 @@
 """Fit one topic model per lifecycle phase."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import (
+    COLUMN,
+    EMBEDDING_MODEL,
+    TOPIC_MAX_FEATURES,
+    TOPIC_METHOD,
+)
 
 MANIFEST = operator_manifest(
     'topic_by_stage',
@@ -40,6 +46,26 @@ MANIFEST = operator_manifest(
     writes=Writes(
         mode='replace',
         columns=('stage', 'stage_order', 'topic', 'feature_words', 'weights', 'doc_n', 'perplexity', 'sample_texts'),
+    ),
+    panel=(
+        COLUMN,
+        PanelField('stage_col', 'stage_col', 'settings.stageColumn', default='阶段'),
+        PanelField('stage_order_col', 'order_col', 'settings.stageOrderColumn'),
+        PanelField('stage_topic_counts', 'topics', 'settings.stageTopicCounts', default='5,6,4,4,4'),
+        PanelField('topic_topn', 'topn', 'settings.topicTopn', control='number', default=10),
+        TOPIC_MAX_FEATURES,
+        PanelField('topic_sample_n', 'sample_n', 'settings.topicSampleN', control='number', default=5),
+        TOPIC_METHOD,
+        EMBEDDING_MODEL,
+        PanelField(
+            'word_source',
+            'word_source',
+            'settings.topicWordSource',
+            control='select',
+            default='tfidf',
+            options=(('tfidf', 'settings.topicWordSourceTfidf'), ('lda', 'settings.topicWordSourceLda')),
+            hint_key='settings.topicStageHint',
+        ),
     ),
     labels=(('word_source', 'settings.topicWordSource'),),
 )

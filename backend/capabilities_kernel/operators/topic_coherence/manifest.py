@@ -1,7 +1,10 @@
 """Sweep the topic count and report coherence (a coherence table, not a topic table)."""
 
+from dataclasses import replace
+
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN, TOPIC_MAX_FEATURES
 
 MANIFEST = operator_manifest(
     'topic_coherence',
@@ -22,4 +25,18 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='unknown'),
+    panel=(
+        COLUMN,
+        PanelField('coherence_min_topics', 'min_topics', 'settings.coherenceMinTopics', control='number', default=2),
+        PanelField('coherence_max_topics', 'max_topics', 'settings.coherenceMaxTopics', control='number', default=8),
+        PanelField('topic_topn', 'topn', 'settings.topicTopn', control='number', default=10),
+        PanelField(
+            'coherence_max_documents',
+            'max_documents',
+            'settings.coherenceMaxDocuments',
+            control='number',
+            default=2000,
+        ),
+        replace(TOPIC_MAX_FEATURES, hint_key='settings.coherenceHint'),
+    ),
 )

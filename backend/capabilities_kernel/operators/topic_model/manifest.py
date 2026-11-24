@@ -1,7 +1,16 @@
 """Fit LDA or embedding topics over one text column."""
 
+from dataclasses import replace
+
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import (
+    COLUMN,
+    EMBEDDING_MODEL,
+    N_TOPICS,
+    TOPIC_MAX_FEATURES,
+    TOPIC_METHOD,
+)
 
 MANIFEST = operator_manifest(
     'topic_model',
@@ -28,4 +37,12 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='replace', columns=('topic', 'rank', 'keyword', 'weight')),
+    panel=(
+        COLUMN,
+        N_TOPICS,
+        TOPIC_METHOD,
+        EMBEDDING_MODEL,
+        PanelField('topic_topn', 'topn', 'settings.topicTopn', control='number', default=10),
+        replace(TOPIC_MAX_FEATURES, hint_key='settings.topicHint'),
+    ),
 )

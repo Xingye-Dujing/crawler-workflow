@@ -1,7 +1,7 @@
 """Match the same topic between consecutive phases (sankey edges)."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'topic_flow',
@@ -35,6 +35,22 @@ MANIFEST = operator_manifest(
             'to_stage',
             'source_words',
             'target_words',
+        ),
+    ),
+    panel=(
+        PanelField('flow_stage_col', 'stage_col', 'settings.flowStageColumn', default='stage'),
+        PanelField('flow_topic_col', 'topic_col', 'settings.flowTopicColumn', default='topic'),
+        PanelField('flow_words_col', 'words_col', 'settings.flowWordsColumn', default='feature_words'),
+        PanelField('flow_weights_col', 'weights_col', 'settings.flowWeightsColumn', default='weights'),
+        PanelField('flow_order_col', 'order_col', 'settings.flowOrderColumn'),
+        PanelField('flow_label_col', 'label_col', 'settings.flowLabelColumn'),
+        PanelField(
+            'flow_min_similarity',
+            'min_similarity',
+            'settings.flowMinSimilarity',
+            control='number',
+            default=0.5,
+            hint_key='settings.flowHint',
         ),
     ),
     labels=(

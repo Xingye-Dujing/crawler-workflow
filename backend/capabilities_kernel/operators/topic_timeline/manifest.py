@@ -1,7 +1,7 @@
 """Follow each topic across lifecycle phases (first/peak/last stage)."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'topic_timeline',
@@ -34,6 +34,21 @@ MANIFEST = operator_manifest(
             'size_total',
             'peak_size',
             'is_secondary',
+        ),
+    ),
+    panel=(
+        PanelField('timeline_stage_col', 'stage_col', 'settings.timelineStageColumn', default='stage'),
+        PanelField('timeline_topic_col', 'topic_col', 'settings.timelineTopicColumn', default='topic'),
+        PanelField('timeline_words_col', 'words_col', 'settings.timelineWordsColumn', default='feature_words'),
+        PanelField('timeline_size_col', 'size_col', 'settings.timelineSizeColumn', default='doc_n'),
+        PanelField('timeline_order_col', 'order_col', 'settings.timelineOrderColumn'),
+        PanelField(
+            'timeline_overlap',
+            'min_overlap',
+            'settings.timelineOverlap',
+            control='number',
+            default=0.5,
+            hint_key='settings.timelineHint',
         ),
     ),
     labels=(

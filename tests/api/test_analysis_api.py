@@ -1509,7 +1509,15 @@ def _panel_fields(op: str) -> set:
     """Every field written for ``op`` — an operation can appear in more than one
     block (``drop_null`` shares the 列 field with four others and then adds its own
     ``how``), so the blocks are unioned rather than searched for a first hit.
+
+    A migrated operation declares its boxes in its manifest (``OperatorManifest.panel``),
+    served as ``operator_entries()['panel']``; the JS has no block for it any more.
     """
+    from capabilities_kernel import registry as kernel
+
+    entry = next((row for row in kernel.operator_entries() if row['id'] == op), None)
+    if entry and entry.get('panel'):
+        return {box['key'] for box in entry['panel']}
     fields = set()
     for ops, written in _panel_blocks():
         if ops and op in ops:
@@ -2939,9 +2947,17 @@ class TestPanelFieldsAndNormalizerKeysAgree:
     """
 
     def test_the_panel_has_a_block_for_every_registered_operation(self):
+        from capabilities_kernel import registry as kernel
+
         blocks = _panel_blocks()
         rendered = {op for ops, _fields in blocks if ops for op in ops}
-        assert rendered == set(_registry()), 'a block renders for an operation that does not exist (or none does)'
+        declared = {row['id'] for row in kernel.operator_entries() if row.get('panel')}
+        assert rendered | declared == set(_registry()), (
+            'a block renders for an operation that does not exist (or none does)'
+        )
+        assert not (rendered & declared), (
+            f'an operation is both declared and hand-written: {sorted(rendered & declared)}'
+        )
         # The part of the form that is not per-operation is the operation picker.
         head = [fields for ops, fields in blocks if ops is None]
         assert head == [['operation']], head

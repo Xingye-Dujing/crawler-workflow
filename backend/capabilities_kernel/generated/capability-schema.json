@@ -4610,7 +4610,87 @@
       "order": 220,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "n_topics",
+          "canonical": "n_topics",
+          "labelKey": "settings.nTopics",
+          "control": "number",
+          "default": 5,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_method",
+          "canonical": "method",
+          "labelKey": "settings.topicMethod",
+          "control": "select",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "labelKey": "settings.topicMethodAuto"
+            },
+            {
+              "value": "embedding",
+              "labelKey": "settings.topicMethodEmbed"
+            },
+            {
+              "value": "lda",
+              "labelKey": "settings.topicMethodLda"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "embedding_model",
+          "canonical": "embedding_model",
+          "labelKey": "settings.embeddingModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_topn",
+          "canonical": "topn",
+          "labelKey": "settings.topicTopn",
+          "control": "number",
+          "default": 10,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_max_features",
+          "canonical": "max_features",
+          "labelKey": "settings.topicMaxFeatures",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "settings.topicHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -4694,7 +4774,140 @@
       "order": 230,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stage_col",
+          "canonical": "stage_col",
+          "labelKey": "settings.stageColumn",
+          "control": "text",
+          "default": "阶段",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stage_order_col",
+          "canonical": "order_col",
+          "labelKey": "settings.stageOrderColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stage_topic_counts",
+          "canonical": "topics",
+          "labelKey": "settings.stageTopicCounts",
+          "control": "text",
+          "default": "5,6,4,4,4",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_topn",
+          "canonical": "topn",
+          "labelKey": "settings.topicTopn",
+          "control": "number",
+          "default": 10,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_max_features",
+          "canonical": "max_features",
+          "labelKey": "settings.topicMaxFeatures",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_sample_n",
+          "canonical": "sample_n",
+          "labelKey": "settings.topicSampleN",
+          "control": "number",
+          "default": 5,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_method",
+          "canonical": "method",
+          "labelKey": "settings.topicMethod",
+          "control": "select",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "labelKey": "settings.topicMethodAuto"
+            },
+            {
+              "value": "embedding",
+              "labelKey": "settings.topicMethodEmbed"
+            },
+            {
+              "value": "lda",
+              "labelKey": "settings.topicMethodLda"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "embedding_model",
+          "canonical": "embedding_model",
+          "labelKey": "settings.embeddingModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "word_source",
+          "canonical": "word_source",
+          "labelKey": "settings.topicWordSource",
+          "control": "select",
+          "default": "tfidf",
+          "options": [
+            {
+              "value": "tfidf",
+              "labelKey": "settings.topicWordSourceTfidf"
+            },
+            {
+              "value": "lda",
+              "labelKey": "settings.topicWordSourceLda"
+            }
+          ],
+          "hintKey": "settings.topicStageHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column",
@@ -4824,7 +5037,76 @@
       "order": 240,
       "needsLlm": true,
       "writes": "add",
-      "panel": [],
+      "panel": [
+        {
+          "key": "label_words_col",
+          "canonical": "words_col",
+          "labelKey": "settings.labelWordsColumn",
+          "control": "text",
+          "default": "feature_words",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_samples_col",
+          "canonical": "samples_col",
+          "labelKey": "settings.labelSamplesColumn",
+          "control": "text",
+          "default": "sample_texts",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_summary_col",
+          "canonical": "summary_col",
+          "labelKey": "settings.labelSummaryColumn",
+          "control": "text",
+          "default": "主题概括",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_on_fail",
+          "canonical": "on_fail",
+          "labelKey": "settings.labelOnFail",
+          "control": "select",
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "labelKey": "settings.labelOnFailAbort"
+            },
+            {
+              "value": "blank",
+              "labelKey": "settings.labelOnFailBlank"
+            },
+            {
+              "value": "fallback",
+              "labelKey": "settings.labelOnFailFallback"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_max_topics",
+          "canonical": "max_topics",
+          "labelKey": "settings.labelMaxTopics",
+          "control": "number",
+          "default": 30,
+          "options": [],
+          "hintKey": "settings.topicLabelHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "words_col"
@@ -5233,7 +5515,87 @@
       "order": 290,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "n_topics",
+          "canonical": "n_topics",
+          "labelKey": "settings.nTopics",
+          "control": "number",
+          "default": 5,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_method",
+          "canonical": "method",
+          "labelKey": "settings.topicMethod",
+          "control": "select",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "labelKey": "settings.topicMethodAuto"
+            },
+            {
+              "value": "embedding",
+              "labelKey": "settings.topicMethodEmbed"
+            },
+            {
+              "value": "lda",
+              "labelKey": "settings.topicMethodLda"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "embedding_model",
+          "canonical": "embedding_model",
+          "labelKey": "settings.embeddingModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_topn",
+          "canonical": "topn",
+          "labelKey": "settings.topicMapTopn",
+          "control": "number",
+          "default": 6,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_max_features",
+          "canonical": "max_features",
+          "labelKey": "settings.topicMaxFeatures",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "settings.topicMapHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -5317,7 +5679,98 @@
       "order": 300,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "n_topics",
+          "canonical": "n_topics",
+          "labelKey": "settings.nTopics",
+          "control": "number",
+          "default": 5,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_method",
+          "canonical": "method",
+          "labelKey": "settings.topicMethod",
+          "control": "select",
+          "default": "auto",
+          "options": [
+            {
+              "value": "auto",
+              "labelKey": "settings.topicMethodAuto"
+            },
+            {
+              "value": "embedding",
+              "labelKey": "settings.topicMethodEmbed"
+            },
+            {
+              "value": "lda",
+              "labelKey": "settings.topicMethodLda"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "embedding_model",
+          "canonical": "embedding_model",
+          "labelKey": "settings.embeddingModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_topn",
+          "canonical": "topn",
+          "labelKey": "settings.topicTermsTopn",
+          "control": "number",
+          "default": 30,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_lambda",
+          "canonical": "relevance",
+          "labelKey": "settings.topicLambda",
+          "control": "number",
+          "default": 1,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_max_features",
+          "canonical": "max_features",
+          "labelKey": "settings.topicMaxFeatures",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "settings.topicSalienceHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -5411,7 +5864,74 @@
       "order": 310,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "timeline_stage_col",
+          "canonical": "stage_col",
+          "labelKey": "settings.timelineStageColumn",
+          "control": "text",
+          "default": "stage",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "timeline_topic_col",
+          "canonical": "topic_col",
+          "labelKey": "settings.timelineTopicColumn",
+          "control": "text",
+          "default": "topic",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "timeline_words_col",
+          "canonical": "words_col",
+          "labelKey": "settings.timelineWordsColumn",
+          "control": "text",
+          "default": "feature_words",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "timeline_size_col",
+          "canonical": "size_col",
+          "labelKey": "settings.timelineSizeColumn",
+          "control": "text",
+          "default": "doc_n",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "timeline_order_col",
+          "canonical": "order_col",
+          "labelKey": "settings.timelineOrderColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "timeline_overlap",
+          "canonical": "min_overlap",
+          "labelKey": "settings.timelineOverlap",
+          "control": "number",
+          "default": 0.5,
+          "options": [],
+          "hintKey": "settings.timelineHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "stage_col",
@@ -5493,7 +6013,85 @@
       "order": 320,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "flow_stage_col",
+          "canonical": "stage_col",
+          "labelKey": "settings.flowStageColumn",
+          "control": "text",
+          "default": "stage",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_topic_col",
+          "canonical": "topic_col",
+          "labelKey": "settings.flowTopicColumn",
+          "control": "text",
+          "default": "topic",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_words_col",
+          "canonical": "words_col",
+          "labelKey": "settings.flowWordsColumn",
+          "control": "text",
+          "default": "feature_words",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_weights_col",
+          "canonical": "weights_col",
+          "labelKey": "settings.flowWeightsColumn",
+          "control": "text",
+          "default": "weights",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_order_col",
+          "canonical": "order_col",
+          "labelKey": "settings.flowOrderColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_label_col",
+          "canonical": "label_col",
+          "labelKey": "settings.flowLabelColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "flow_min_similarity",
+          "canonical": "min_similarity",
+          "labelKey": "settings.flowMinSimilarity",
+          "control": "number",
+          "default": 0.5,
+          "options": [],
+          "hintKey": "settings.flowHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "stage_col",
@@ -5585,7 +6183,74 @@
       "order": 330,
       "needsLlm": false,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "coherence_min_topics",
+          "canonical": "min_topics",
+          "labelKey": "settings.coherenceMinTopics",
+          "control": "number",
+          "default": 2,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "coherence_max_topics",
+          "canonical": "max_topics",
+          "labelKey": "settings.coherenceMaxTopics",
+          "control": "number",
+          "default": 8,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_topn",
+          "canonical": "topn",
+          "labelKey": "settings.topicTopn",
+          "control": "number",
+          "default": 10,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "coherence_max_documents",
+          "canonical": "max_documents",
+          "labelKey": "settings.coherenceMaxDocuments",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "topic_max_features",
+          "canonical": "max_features",
+          "labelKey": "settings.topicMaxFeatures",
+          "control": "number",
+          "default": 2000,
+          "options": [],
+          "hintKey": "settings.coherenceHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"

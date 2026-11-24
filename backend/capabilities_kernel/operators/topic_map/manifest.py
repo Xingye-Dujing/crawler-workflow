@@ -1,7 +1,16 @@
 """Project topics into two dimensions for the topic distance figure."""
 
+from dataclasses import replace
+
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import (
+    COLUMN,
+    EMBEDDING_MODEL,
+    N_TOPICS,
+    TOPIC_MAX_FEATURES,
+    TOPIC_METHOD,
+)
 
 MANIFEST = operator_manifest(
     'topic_map',
@@ -28,4 +37,12 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='replace', columns=('topic', 'pc1', 'pc2', 'prevalence_pct', 'doc_n', 'feature_words')),
+    panel=(
+        COLUMN,
+        N_TOPICS,
+        TOPIC_METHOD,
+        EMBEDDING_MODEL,
+        PanelField('topic_topn', 'topn', 'settings.topicMapTopn', control='number', default=6),
+        replace(TOPIC_MAX_FEATURES, hint_key='settings.topicMapHint'),
+    ),
 )

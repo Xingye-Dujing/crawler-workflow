@@ -6854,7 +6854,7 @@
     {
       "kind": "operator",
       "id": "topic_model",
-      "digest": "322fe8895f039c40291f709351f163f3505cafb8c257a09a580c477951de5375",
+      "digest": "5fb5c2f1803d570d27805997c7cb73721f2d29d7113263b77baada88dc7bc4df",
       "manifest": {
         "identity": {
           "id": "topic_model",
@@ -6977,7 +6977,87 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "n_topics",
+            "canonical": "n_topics",
+            "label_key": "settings.nTopics",
+            "control": "number",
+            "default": 5,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_method",
+            "canonical": "method",
+            "label_key": "settings.topicMethod",
+            "control": "select",
+            "default": "auto",
+            "options": [
+              [
+                "auto",
+                "settings.topicMethodAuto"
+              ],
+              [
+                "embedding",
+                "settings.topicMethodEmbed"
+              ],
+              [
+                "lda",
+                "settings.topicMethodLda"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "embedding_model",
+            "canonical": "embedding_model",
+            "label_key": "settings.embeddingModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_topn",
+            "canonical": "topn",
+            "label_key": "settings.topicTopn",
+            "control": "number",
+            "default": 10,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_max_features",
+            "canonical": "max_features",
+            "label_key": "settings.topicMaxFeatures",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "settings.topicHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_model:topic_model",
           "quiet": false
@@ -7048,7 +7128,7 @@
     {
       "kind": "operator",
       "id": "topic_by_stage",
-      "digest": "ab9fc525b966234b68747b0c7deb95ea40a03a2651dca12637d840c6370aaa96",
+      "digest": "a3244d48ab1f0eeadc0162fb9d9c684175164e141ef306cd7678cb95b5bde734",
       "manifest": {
         "identity": {
           "id": "topic_by_stage",
@@ -7237,7 +7317,140 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stage_col",
+            "canonical": "stage_col",
+            "label_key": "settings.stageColumn",
+            "control": "text",
+            "default": "阶段",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stage_order_col",
+            "canonical": "order_col",
+            "label_key": "settings.stageOrderColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stage_topic_counts",
+            "canonical": "topics",
+            "label_key": "settings.stageTopicCounts",
+            "control": "text",
+            "default": "5,6,4,4,4",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_topn",
+            "canonical": "topn",
+            "label_key": "settings.topicTopn",
+            "control": "number",
+            "default": 10,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_max_features",
+            "canonical": "max_features",
+            "label_key": "settings.topicMaxFeatures",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_sample_n",
+            "canonical": "sample_n",
+            "label_key": "settings.topicSampleN",
+            "control": "number",
+            "default": 5,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_method",
+            "canonical": "method",
+            "label_key": "settings.topicMethod",
+            "control": "select",
+            "default": "auto",
+            "options": [
+              [
+                "auto",
+                "settings.topicMethodAuto"
+              ],
+              [
+                "embedding",
+                "settings.topicMethodEmbed"
+              ],
+              [
+                "lda",
+                "settings.topicMethodLda"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "embedding_model",
+            "canonical": "embedding_model",
+            "label_key": "settings.embeddingModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "word_source",
+            "canonical": "word_source",
+            "label_key": "settings.topicWordSource",
+            "control": "select",
+            "default": "tfidf",
+            "options": [
+              [
+                "tfidf",
+                "settings.topicWordSourceTfidf"
+              ],
+              [
+                "lda",
+                "settings.topicWordSourceLda"
+              ]
+            ],
+            "hint_key": "settings.topicStageHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_by_stage:topic_by_stage",
           "quiet": false
@@ -7314,7 +7527,7 @@
     {
       "kind": "operator",
       "id": "topic_label",
-      "digest": "ef1d19b906b457794f0cb853acd0be7de78fcda2f2433912fa6c9e1fb1ab2269",
+      "digest": "5e3570205e7711e493873645013f88b29542af5eb85297e6ea99ca76b356adda",
       "manifest": {
         "identity": {
           "id": "topic_label",
@@ -7425,7 +7638,76 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "label_words_col",
+            "canonical": "words_col",
+            "label_key": "settings.labelWordsColumn",
+            "control": "text",
+            "default": "feature_words",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_samples_col",
+            "canonical": "samples_col",
+            "label_key": "settings.labelSamplesColumn",
+            "control": "text",
+            "default": "sample_texts",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_summary_col",
+            "canonical": "summary_col",
+            "label_key": "settings.labelSummaryColumn",
+            "control": "text",
+            "default": "主题概括",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_on_fail",
+            "canonical": "on_fail",
+            "label_key": "settings.labelOnFail",
+            "control": "select",
+            "default": "abort",
+            "options": [
+              [
+                "abort",
+                "settings.labelOnFailAbort"
+              ],
+              [
+                "blank",
+                "settings.labelOnFailBlank"
+              ],
+              [
+                "fallback",
+                "settings.labelOnFailFallback"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_max_topics",
+            "canonical": "max_topics",
+            "label_key": "settings.labelMaxTopics",
+            "control": "number",
+            "default": 30,
+            "options": [],
+            "hint_key": "settings.topicLabelHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_label:topic_label",
           "quiet": false
@@ -8311,7 +8593,7 @@
     {
       "kind": "operator",
       "id": "topic_map",
-      "digest": "c4539d6bdf59aa87995bafa7656de76aae20691f86a770673ac418495b2c810a",
+      "digest": "f8b1b24821729e2f9a390e9e144d9b1c11d5c99022b5517b1dc1c185d19ab2c6",
       "manifest": {
         "identity": {
           "id": "topic_map",
@@ -8436,7 +8718,87 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "n_topics",
+            "canonical": "n_topics",
+            "label_key": "settings.nTopics",
+            "control": "number",
+            "default": 5,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_method",
+            "canonical": "method",
+            "label_key": "settings.topicMethod",
+            "control": "select",
+            "default": "auto",
+            "options": [
+              [
+                "auto",
+                "settings.topicMethodAuto"
+              ],
+              [
+                "embedding",
+                "settings.topicMethodEmbed"
+              ],
+              [
+                "lda",
+                "settings.topicMethodLda"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "embedding_model",
+            "canonical": "embedding_model",
+            "label_key": "settings.embeddingModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_topn",
+            "canonical": "topn",
+            "label_key": "settings.topicMapTopn",
+            "control": "number",
+            "default": 6,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_max_features",
+            "canonical": "max_features",
+            "label_key": "settings.topicMaxFeatures",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "settings.topicMapHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_map:topic_map",
           "quiet": false
@@ -8507,7 +8869,7 @@
     {
       "kind": "operator",
       "id": "topic_salience",
-      "digest": "8f1c14b5ae0bcd1e00f906b7f5f8e37e95dc73d4b981ec84451257440ede65e9",
+      "digest": "7615026b99e02a8226c4812321977c7e5e458c47827030d98b56d1ad63000687",
       "manifest": {
         "identity": {
           "id": "topic_salience",
@@ -8646,7 +9008,98 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "n_topics",
+            "canonical": "n_topics",
+            "label_key": "settings.nTopics",
+            "control": "number",
+            "default": 5,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_method",
+            "canonical": "method",
+            "label_key": "settings.topicMethod",
+            "control": "select",
+            "default": "auto",
+            "options": [
+              [
+                "auto",
+                "settings.topicMethodAuto"
+              ],
+              [
+                "embedding",
+                "settings.topicMethodEmbed"
+              ],
+              [
+                "lda",
+                "settings.topicMethodLda"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "embedding_model",
+            "canonical": "embedding_model",
+            "label_key": "settings.embeddingModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_topn",
+            "canonical": "topn",
+            "label_key": "settings.topicTermsTopn",
+            "control": "number",
+            "default": 30,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_lambda",
+            "canonical": "relevance",
+            "label_key": "settings.topicLambda",
+            "control": "number",
+            "default": 1,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_max_features",
+            "canonical": "max_features",
+            "label_key": "settings.topicMaxFeatures",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "settings.topicSalienceHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_salience:topic_salience",
           "quiet": false
@@ -8717,7 +9170,7 @@
     {
       "kind": "operator",
       "id": "topic_timeline",
-      "digest": "06ded7068c48b3226cde4f589b1b5fb0b0f36a7dd431f3ecab484b80a1545eba",
+      "digest": "382560cc292865795a7b810f1f37da0e2e2afb06cb7b3b901a28db4d0f4057d5",
       "manifest": {
         "identity": {
           "id": "topic_timeline",
@@ -8844,7 +9297,74 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "timeline_stage_col",
+            "canonical": "stage_col",
+            "label_key": "settings.timelineStageColumn",
+            "control": "text",
+            "default": "stage",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "timeline_topic_col",
+            "canonical": "topic_col",
+            "label_key": "settings.timelineTopicColumn",
+            "control": "text",
+            "default": "topic",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "timeline_words_col",
+            "canonical": "words_col",
+            "label_key": "settings.timelineWordsColumn",
+            "control": "text",
+            "default": "feature_words",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "timeline_size_col",
+            "canonical": "size_col",
+            "label_key": "settings.timelineSizeColumn",
+            "control": "text",
+            "default": "doc_n",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "timeline_order_col",
+            "canonical": "order_col",
+            "label_key": "settings.timelineOrderColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "timeline_overlap",
+            "canonical": "min_overlap",
+            "label_key": "settings.timelineOverlap",
+            "control": "number",
+            "default": 0.5,
+            "options": [],
+            "hint_key": "settings.timelineHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_timeline:topic_timeline",
           "quiet": false
@@ -8934,7 +9454,7 @@
     {
       "kind": "operator",
       "id": "topic_flow",
-      "digest": "3d242e53377d724a1294dcb2bc753aefe94402c088d4a0113a72108030f6e155",
+      "digest": "c23e56b8ccca43e49e229d69ee47260e78d192cb5d997865cc27a063bb13c3f9",
       "manifest": {
         "identity": {
           "id": "topic_flow",
@@ -9075,7 +9595,85 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "flow_stage_col",
+            "canonical": "stage_col",
+            "label_key": "settings.flowStageColumn",
+            "control": "text",
+            "default": "stage",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_topic_col",
+            "canonical": "topic_col",
+            "label_key": "settings.flowTopicColumn",
+            "control": "text",
+            "default": "topic",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_words_col",
+            "canonical": "words_col",
+            "label_key": "settings.flowWordsColumn",
+            "control": "text",
+            "default": "feature_words",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_weights_col",
+            "canonical": "weights_col",
+            "label_key": "settings.flowWeightsColumn",
+            "control": "text",
+            "default": "weights",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_order_col",
+            "canonical": "order_col",
+            "label_key": "settings.flowOrderColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_label_col",
+            "canonical": "label_col",
+            "label_key": "settings.flowLabelColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "flow_min_similarity",
+            "canonical": "min_similarity",
+            "label_key": "settings.flowMinSimilarity",
+            "control": "number",
+            "default": 0.5,
+            "options": [],
+            "hint_key": "settings.flowHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_flow:topic_flow",
           "quiet": false
@@ -9165,7 +9763,7 @@
     {
       "kind": "operator",
       "id": "topic_coherence",
-      "digest": "afdee685ff8716b73453bd4334a86b1e3c4d0ceb9027a78b620972bbbebe13b4",
+      "digest": "0470e975c32d2d619886baef8582904cc9b99688f219973b73a89d226da5d817",
       "manifest": {
         "identity": {
           "id": "topic_coherence",
@@ -9279,7 +9877,74 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "coherence_min_topics",
+            "canonical": "min_topics",
+            "label_key": "settings.coherenceMinTopics",
+            "control": "number",
+            "default": 2,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "coherence_max_topics",
+            "canonical": "max_topics",
+            "label_key": "settings.coherenceMaxTopics",
+            "control": "number",
+            "default": 8,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_topn",
+            "canonical": "topn",
+            "label_key": "settings.topicTopn",
+            "control": "number",
+            "default": 10,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "coherence_max_documents",
+            "canonical": "max_documents",
+            "label_key": "settings.coherenceMaxDocuments",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "topic_max_features",
+            "canonical": "max_features",
+            "label_key": "settings.topicMaxFeatures",
+            "control": "number",
+            "default": 2000,
+            "options": [],
+            "hint_key": "settings.coherenceHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.topic_coherence:topic_coherence",
           "quiet": false

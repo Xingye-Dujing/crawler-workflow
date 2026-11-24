@@ -118,50 +118,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.stagesHint') + '</div></div>';
     }
-    if (op === 'topic_model') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
-        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'auto',
-            [{ v: 'auto', l: I18n.t('settings.topicMethodAuto') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }, { v: 'lda', l: I18n.t('settings.topicMethodLda') }]);
-        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
-        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
-        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.topicHint') + '</div></div>';
-    }
-    if (op === 'topic_by_stage') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'stage_col', 'settings.stageColumn', 'text', '阶段');
-        html += renderParamInput(nodeId, p, 'stage_order_col', 'settings.stageOrderColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'stage_topic_counts', 'settings.stageTopicCounts', 'text', '5,6,4,4,4');
-        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
-        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
-        html += renderParamInput(nodeId, p, 'topic_sample_n', 'settings.topicSampleN', 'number', 5);
-        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'auto',
-            [{ v: 'auto', l: I18n.t('settings.topicMethodAuto') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }, { v: 'lda', l: I18n.t('settings.topicMethodLda') }]);
-        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
-        html += renderParamSelect(nodeId, p, 'word_source', 'settings.topicWordSource', 'tfidf',
-            [{ v: 'tfidf', l: I18n.t('settings.topicWordSourceTfidf') },
-             { v: 'lda', l: I18n.t('settings.topicWordSourceLda') }]);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.topicStageHint') + '</div></div>';
-    }
-    if (op === 'topic_label') {
-        html += renderParamInput(nodeId, p, 'label_words_col', 'settings.labelWordsColumn', 'text', 'feature_words');
-        html += renderParamInput(nodeId, p, 'label_samples_col', 'settings.labelSamplesColumn', 'text', 'sample_texts');
-        html += renderParamInput(nodeId, p, 'label_summary_col', 'settings.labelSummaryColumn', 'text', '主题概括');
-        html += renderParamSelect(nodeId, p, 'label_on_fail', 'settings.labelOnFail', 'abort',
-            [{ v: 'abort', l: I18n.t('settings.labelOnFailAbort') },
-             { v: 'blank', l: I18n.t('settings.labelOnFailBlank') },
-             { v: 'fallback', l: I18n.t('settings.labelOnFailFallback') }]);
-        html += renderParamInput(nodeId, p, 'label_max_topics', 'settings.labelMaxTopics', 'number', 30);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.topicLabelHint') + '</div></div>';
-    }
+    /* The topic family's boxes are declared in the operator manifests (panel=...): nothing here. */
     if (op === 'cluster_label') {
         html += renderParamInput(nodeId, p, 'cluster_group_col', 'settings.clusterGroupColumn', 'text', 'cluster');
         html += renderParamInput(nodeId, p, 'cluster_text_col', 'settings.clusterTextColumn', 'text', '正文');
@@ -189,68 +146,6 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'review_members', 'settings.reviewMembers', 'number', 12);
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.clusterReviewHint') + '</div></div>';
-    }
-    if (op === 'topic_map') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
-        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'auto',
-            [{ v: 'auto', l: I18n.t('settings.topicMethodAuto') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }, { v: 'lda', l: I18n.t('settings.topicMethodLda') }]);
-        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
-        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicMapTopn', 'number', 6);
-        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.topicMapHint') + '</div></div>';
-    }
-    if (op === 'topic_salience') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'n_topics', 'settings.nTopics', 'number', 5);
-        html += renderParamSelect(nodeId, p, 'topic_method', 'settings.topicMethod', 'auto',
-            [{ v: 'auto', l: I18n.t('settings.topicMethodAuto') }, { v: 'embedding', l: I18n.t('settings.topicMethodEmbed') }, { v: 'lda', l: I18n.t('settings.topicMethodLda') }]);
-        html += renderParamInput(nodeId, p, 'embedding_model', 'settings.embeddingModel', 'text', 'BAAI/bge-small-zh-v1.5');
-        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTermsTopn', 'number', 30);
-        html += renderParamInput(nodeId, p, 'topic_lambda', 'settings.topicLambda', 'number', 1);
-        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.topicSalienceHint') + '</div></div>';
-    }
-    if (op === 'topic_timeline') {
-        // Every box names a column 分阶段 LDA writes, so the defaults are that step's own
-        // output names: an untouched form is the pipeline hand-off, not a guess.
-        html += renderParamInput(nodeId, p, 'timeline_stage_col', 'settings.timelineStageColumn', 'text', 'stage');
-        html += renderParamInput(nodeId, p, 'timeline_topic_col', 'settings.timelineTopicColumn', 'text', 'topic');
-        html += renderParamInput(nodeId, p, 'timeline_words_col', 'settings.timelineWordsColumn', 'text', 'feature_words');
-        html += renderParamInput(nodeId, p, 'timeline_size_col', 'settings.timelineSizeColumn', 'text', 'doc_n');
-        html += renderParamInput(nodeId, p, 'timeline_order_col', 'settings.timelineOrderColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'timeline_overlap', 'settings.timelineOverlap', 'number', 0.5);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.timelineHint') + '</div></div>';
-    }
-    if (op === 'topic_flow') {
-        html += renderParamInput(nodeId, p, 'flow_stage_col', 'settings.flowStageColumn', 'text', 'stage');
-        html += renderParamInput(nodeId, p, 'flow_topic_col', 'settings.flowTopicColumn', 'text', 'topic');
-        html += renderParamInput(nodeId, p, 'flow_words_col', 'settings.flowWordsColumn', 'text', 'feature_words');
-        html += renderParamInput(nodeId, p, 'flow_weights_col', 'settings.flowWeightsColumn', 'text', 'weights');
-        html += renderParamInput(nodeId, p, 'flow_order_col', 'settings.flowOrderColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'flow_label_col', 'settings.flowLabelColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'flow_min_similarity', 'settings.flowMinSimilarity', 'number', 0.5);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.flowHint') + '</div></div>';
-    }
-    if (op === 'topic_coherence') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'coherence_min_topics', 'settings.coherenceMinTopics', 'number', 2);
-        html += renderParamInput(nodeId, p, 'coherence_max_topics', 'settings.coherenceMaxTopics', 'number', 8);
-        html += renderParamInput(nodeId, p, 'topic_topn', 'settings.topicTopn', 'number', 10);
-        html += renderParamInput(nodeId, p, 'coherence_max_documents', 'settings.coherenceMaxDocuments', 'number', 2000);
-        html += renderParamInput(nodeId, p, 'topic_max_features', 'settings.topicMaxFeatures', 'number', 2000);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.coherenceHint') + '</div></div>';
     }
     if (op === 'cooccur') {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
