@@ -13,11 +13,13 @@ Do not use it when:
 ## Prerequisites
 
 - An upstream table (the analysis node’s input).
+- `column` names a column that must exist (default: none — required).
 
 ## Steps
 
 1. Put a step `{"op": "sentiment_evolution", …}` in the analysis node’s `steps`, or set `operation` to `sentiment_evolution`.
 2. A missing column, a blank required box or a value outside a declared select refuses by name.
+3. The step returns a fresh table whose column names come from the step’s own parameters.
 
 ## Examples
 
@@ -26,7 +28,7 @@ Do not use it when:
   "type": "analysis",
   "params": {
     "operation": "sentiment_evolution",
-    "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
+    "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
   }
 }
 ```
@@ -38,7 +40,7 @@ Do not use it when:
   "type": "analysis",
   "params": {
     "operation": "sentiment_evolution",
-    "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
+    "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
   }
 }
 ```
@@ -64,7 +66,7 @@ Do not use it when:
 
 ## Acceptance
 
-- Rows are filtered or reordered; the upstream columns are unchanged.
+- The output column names equal the parameters the step was given.
 
 ## Reach it
 

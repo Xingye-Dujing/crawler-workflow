@@ -1,7 +1,7 @@
 """Add a computed column from an arithmetic expression."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'column_calc',
@@ -18,4 +18,8 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(nonblank=('new_col', 'expr')),
     writes=Writes(mode='add', add=(('new_col', ''),)),
+    panel=(
+        PanelField('new_col', 'new_col', 'settings.newCol'),
+        PanelField('expr', 'expr', 'settings.expr'),
+    ),
 )

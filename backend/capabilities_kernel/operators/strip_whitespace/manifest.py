@@ -2,6 +2,7 @@
 
 from capabilities_kernel.manifest import ParamSpec
 from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMNS
 
 MANIFEST = operator_manifest(
     'strip_whitespace',
@@ -15,4 +16,5 @@ MANIFEST = operator_manifest(
     params=(ParamSpec(name='columns', type='array', default=[], widget='column'),),
     reads=Reads(some=('columns',)),
     writes=Writes(mode='passthrough'),
+    panel=(COLUMNS,),
 )

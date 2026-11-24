@@ -1,7 +1,7 @@
 """Summarise each cluster with one model call, reducing the table to one row per cluster."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'cluster_label',
@@ -28,6 +28,32 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('group_col', 'text_col'), nonblank=('summary_col',)),
     writes=Writes(mode='dynamic'),
+    panel=(
+        PanelField('cluster_group_col', 'group_col', 'settings.clusterGroupColumn', default='cluster'),
+        PanelField('cluster_text_col', 'text_col', 'settings.clusterTextColumn', default='正文'),
+        PanelField('cluster_summary_col', 'summary_col', 'settings.clusterSummaryColumn', default='摘要'),
+        PanelField(
+            'cluster_on_fail',
+            'on_fail',
+            'settings.clusterOnFail',
+            control='select',
+            default='abort',
+            options=(
+                ('abort', 'settings.labelOnFailAbort'),
+                ('blank', 'settings.labelOnFailBlank'),
+                ('fallback', 'settings.labelOnFailFallback'),
+            ),
+        ),
+        PanelField('cluster_max_groups', 'max_groups', 'settings.clusterMaxGroups', control='number', default=60),
+        PanelField(
+            'cluster_sample_n',
+            'sample_n',
+            'settings.clusterSampleN',
+            control='number',
+            default=8,
+            hint_key='settings.clusterLabelHint',
+        ),
+    ),
     needs_llm=True,
     labels=(
         ('text_col', 'settings.clusterTextColumn'),

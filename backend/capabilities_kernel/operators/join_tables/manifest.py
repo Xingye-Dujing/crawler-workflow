@@ -1,7 +1,7 @@
 """Join two incoming tables on a key."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'join_tables',
@@ -26,5 +26,17 @@ MANIFEST = operator_manifest(
     reads=Reads(two_table_keys=('left_on', 'right_on')),
     writes=Writes(mode='unknown'),
     empty_by_design=True,
+    panel=(
+        PanelField(
+            'join_how',
+            'how',
+            'settings.joinHow',
+            control='select',
+            default='left',
+            options=(('left', 'Left'), ('right', 'Right'), ('inner', 'Inner'), ('outer', 'Outer')),
+        ),
+        PanelField('left_on', 'left_on', 'settings.leftOn'),
+        PanelField('right_on', 'right_on', 'settings.rightOn', hint_key='settings.joinHint'),
+    ),
     labels=(('how', 'settings.joinHow'),),
 )

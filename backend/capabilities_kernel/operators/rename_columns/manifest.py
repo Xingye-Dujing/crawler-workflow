@@ -1,7 +1,7 @@
 """Rename one column, refusing a rename that erases a name."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'rename_columns',
@@ -15,5 +15,10 @@ MANIFEST = operator_manifest(
     params=(ParamSpec(name='mapping', type='object', default={}),),
     reads=Reads(mapping=True),
     writes=Writes(mode='unknown'),
+    panel=(
+        # Both boxes feed the same ``mapping`` dict: the normalizer assembles ``{from: to}``.
+        PanelField('rename_from', 'mapping', 'settings.renameFrom'),
+        PanelField('rename_to', 'mapping', 'settings.renameTo'),
+    ),
     template_values={'mapping': {'正文': '文本'}},
 )

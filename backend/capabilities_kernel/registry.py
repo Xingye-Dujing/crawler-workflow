@@ -266,7 +266,16 @@ def operator_entries() -> tuple[dict, ...]:
                     'labelKey': box.label_key,
                     'control': box.control,
                     'default': box.default,
-                    'options': [{'value': value, 'labelKey': label} for value, label in box.options],
+                    'options': [
+                        {'value': value, 'labelKey': f'{box.option_label_prefix}{value}'}
+                        for value in (
+                            manifest.param(box.options_param).enum
+                            if box.options_param
+                            else (value for value, _label in box.options)
+                        )
+                    ]
+                    if box.options_param
+                    else [{'value': value, 'labelKey': label} for value, label in box.options],
                     'hintKey': box.hint_key,
                     'placeholder': box.placeholder,
                     'hideWhen': list(box.hide_when),

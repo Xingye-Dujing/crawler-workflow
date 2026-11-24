@@ -1,7 +1,8 @@
 """Build a word co-occurrence edge list from one text column."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'cooccur',
@@ -20,4 +21,17 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='replace', columns=('source', 'target', 'value')),
+    panel=(
+        COLUMN,
+        PanelField('cooccur_topn', 'topn', 'settings.cooccurTopn', control='number', default=30),
+        PanelField('cooccur_min_count', 'min_count', 'settings.cooccurMinCount', control='number', default=2),
+        PanelField(
+            'cooccur_window',
+            'window',
+            'settings.cooccurWindow',
+            control='number',
+            default=0,
+            hint_key='settings.cooccurHint',
+        ),
+    ),
 )

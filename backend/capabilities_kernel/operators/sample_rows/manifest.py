@@ -1,7 +1,7 @@
 """Take a random sample of rows, by count or fraction."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'sample_rows',
@@ -18,4 +18,9 @@ MANIFEST = operator_manifest(
         ParamSpec(name='seed', type='integer', default=None),
     ),
     writes=Writes(mode='passthrough'),
+    panel=(
+        PanelField('n', 'n', 'settings.n', control='number'),
+        PanelField('frac', 'frac', 'settings.frac', control='number'),
+        PanelField('seed', 'seed', 'settings.seed', control='number'),
+    ),
 )

@@ -1,7 +1,8 @@
 """Convert one column to another dtype."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'convert_type',
@@ -24,5 +25,16 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMN,
+        PanelField(
+            'dtype',
+            'dtype',
+            'settings.dtype',
+            control='select',
+            default='str',
+            options=tuple((value, '') for value in ('str', 'int', 'float', 'bool', 'datetime')),
+        ),
+    ),
     labels=(('dtype', 'settings.dtype'),),
 )

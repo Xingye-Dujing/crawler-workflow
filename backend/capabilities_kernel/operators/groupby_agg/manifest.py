@@ -1,7 +1,7 @@
 """Group rows and aggregate one (or more) value columns."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'groupby_agg',
@@ -27,4 +27,18 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('group_col', 'agg_col')),
     writes=Writes(mode='unknown'),
+    panel=(
+        PanelField('group_col', 'group_col', 'settings.groupCol'),
+        PanelField('agg_col', 'agg_col', 'settings.aggCol'),
+        PanelField(
+            'agg_func',
+            'agg_func',
+            'settings.aggFunc',
+            control='select',
+            default='sum',
+            options=(('sum', 'Sum'), ('mean', 'Mean'), ('count', 'Count'), ('max', 'Max'), ('min', 'Min')),
+        ),
+        PanelField('group_order_col', 'order_col', 'settings.groupOrderColumn'),
+        PanelField('agg_metrics', 'agg_metrics', 'settings.aggMetrics'),
+    ),
 )

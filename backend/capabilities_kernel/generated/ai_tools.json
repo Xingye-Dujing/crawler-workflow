@@ -3028,14 +3028,15 @@
       "summary": "按时间列聚合情感标签，输出每期正/中/负占比、总量与可选的情感指数。",
       "steps": [
         "Put a step `{\"op\": \"sentiment_evolution\", …}` in the analysis node’s `steps`, or set `operation` to `sentiment_evolution`.",
-        "A missing column, a blank required box or a value outside a declared select refuses by name."
+        "A missing column, a blank required box or a value outside a declared select refuses by name.",
+        "The step returns a fresh table whose column names come from the step’s own parameters."
       ],
       "examples": [
         {
           "type": "analysis",
           "params": {
             "operation": "sentiment_evolution",
-            "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
+            "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
           }
         }
       ],

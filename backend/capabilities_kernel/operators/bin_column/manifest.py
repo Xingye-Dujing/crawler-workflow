@@ -1,7 +1,8 @@
 """Cut a numeric column into equal-width or explicit bins."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'bin_column',
@@ -20,4 +21,10 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='add', add=(('new_col', ''),), add_from_column=True),
+    panel=(
+        COLUMN,
+        PanelField('bin_new_col', 'new_col', 'settings.binNewCol'),
+        PanelField('bins', 'bins', 'settings.binEdges', placeholder='4 或 0, 60, 80, 100'),
+        PanelField('bin_labels', 'labels', 'settings.binLabels', placeholder='low, mid, high'),
+    ),
 )

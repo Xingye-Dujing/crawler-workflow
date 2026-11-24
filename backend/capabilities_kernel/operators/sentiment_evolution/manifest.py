@@ -1,7 +1,7 @@
 """Turn a row-level polarity column into a per-period sentiment curve."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import PanelField, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
@@ -23,6 +23,8 @@ MANIFEST = operator_manifest(
         ParamSpec(name='score_col', type='string', default='', widget='column'),
         ParamSpec(name='order_col', type='string', default='', widget='column'),
     ),
+    reads=Reads(one=('column',)),
+    writes=Writes(mode='dynamic'),
     panel=(
         COLUMN,
         PanelField('label_col', 'label_col', 'settings.labelColumn', default='sentiment'),

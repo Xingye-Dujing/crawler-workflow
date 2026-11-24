@@ -114,6 +114,10 @@ class PanelField:
     default: Any = ''
     #: ``((value, label_key), …)`` for a select; the labels are the browser catalogue's words.
     options: tuple = ()
+    #: Derive the options from a declared parameter's ``enum`` instead of listing them again, with
+    #: ``option_label_prefix + value`` as each label key. One declaration, no second copy of a list.
+    options_param: str = ''
+    option_label_prefix: str = ''
     hint_key: str = ''
     placeholder: str = ''
     #: ``(param, (values…))``: hide this box while another box holds one of those values (the
@@ -269,8 +273,14 @@ class OperatorManifest:
                 found.append(f'panel.{box.key}: canonical {box.canonical!r} is not a declared parameter')
             if box.control not in ('text', 'number', 'select', 'checkbox'):
                 found.append(f'panel.{box.key}.control: {box.control!r} is not text/number/select/checkbox')
-            if box.control == 'select' and not box.options:
+            if box.control == 'select' and not box.options and not box.options_param:
                 found.append(f'panel.{box.key}: a select needs options')
+            if box.options_param:
+                spec = self.param(box.options_param)
+                if spec is None or not spec.enum:
+                    found.append(f'panel.{box.key}.options_param: {box.options_param!r} has no enum')
+                if box.options:
+                    found.append(f'panel.{box.key}: options and options_param are two declarations')
             for value, label in box.options:
                 # An empty label key means "show the stored value itself" (``ffill``).
                 if label is None:

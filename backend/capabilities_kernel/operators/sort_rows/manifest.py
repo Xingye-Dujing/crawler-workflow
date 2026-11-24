@@ -1,7 +1,8 @@
 """Sort rows by one column."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'sort_rows',
@@ -18,4 +19,8 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMN,
+        PanelField('ascending', 'ascending', 'settings.ascending', control='checkbox', default=True),
+    ),
 )

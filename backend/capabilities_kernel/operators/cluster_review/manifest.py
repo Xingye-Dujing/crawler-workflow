@@ -1,7 +1,7 @@
 """Review each bibliometric cluster: members, time span and a written summary."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'cluster_review',
@@ -32,6 +32,34 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('group_col', 'name_col'), nonblank=('summary_col',)),
     writes=Writes(mode='unknown'),
+    panel=(
+        PanelField('review_group_col', 'group_col', 'settings.reviewGroupColumn', default='聚类'),
+        PanelField('review_label_col', 'label_col', 'settings.reviewLabelColumn', default='聚类标签'),
+        PanelField('review_name_col', 'name_col', 'settings.reviewNameColumn', default='节点'),
+        PanelField('review_freq_col', 'freq_col', 'settings.reviewFreqColumn', default='频次'),
+        PanelField('review_summary_col', 'summary_col', 'settings.reviewSummaryColumn', default='簇综述'),
+        PanelField(
+            'review_on_fail',
+            'on_fail',
+            'settings.clusterOnFail',
+            control='select',
+            default='abort',
+            options=(
+                ('abort', 'settings.labelOnFailAbort'),
+                ('blank', 'settings.labelOnFailBlank'),
+                ('fallback', 'settings.labelOnFailFallback'),
+            ),
+        ),
+        PanelField('review_max_groups', 'max_groups', 'settings.clusterMaxGroups', control='number', default=60),
+        PanelField(
+            'review_members',
+            'members',
+            'settings.reviewMembers',
+            control='number',
+            default=12,
+            hint_key='settings.clusterReviewHint',
+        ),
+    ),
     needs_llm=True,
     labels=(
         ('name_col', 'settings.reviewNameColumn'),

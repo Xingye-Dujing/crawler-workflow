@@ -3465,7 +3465,7 @@
     {
       "kind": "operator",
       "id": "drop_null",
-      "digest": "7217dee421e6aef019082f23a3adedfa03e8a3b7c8f624568e557cb6f698fa54",
+      "digest": "e933b2ece48b0246432a4f0242ee5ad3c101c627414f530cbc0e766030056671",
       "manifest": {
         "identity": {
           "id": "drop_null",
@@ -3534,6 +3534,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
             "hide_when": []
@@ -3554,6 +3556,8 @@
                 "settings.dropHowAll"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -3633,7 +3637,7 @@
     {
       "kind": "operator",
       "id": "fill_null",
-      "digest": "bd4e38a009fcc99a63c054cef60869f162563221f690b4c8caf798acaa5f5c1e",
+      "digest": "1a3e87e9389dd1448f03f11b2b31005a749efa145a6c29f12c0bcf58091faad1",
       "manifest": {
         "identity": {
           "id": "fill_null",
@@ -3718,6 +3722,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
             "hide_when": []
@@ -3729,6 +3735,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -3753,6 +3761,8 @@
                 ""
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -3832,7 +3842,7 @@
     {
       "kind": "operator",
       "id": "drop_duplicates",
-      "digest": "fa6a8c5ddc189f36bcb69be27f29bfaa0bdf3bf66e9eaa774838c5445e13e51a",
+      "digest": "e7d48affccc20ba2d793d5af6036aa659732ea72d019b57d64093e8cca1e117f",
       "manifest": {
         "identity": {
           "id": "drop_duplicates",
@@ -3915,6 +3925,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
             "hide_when": []
@@ -3935,6 +3947,8 @@
                 "settings.dedupeModeNormalized"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4014,7 +4028,7 @@
     {
       "kind": "operator",
       "id": "dedupe_similar",
-      "digest": "d09d2cf62a6150c3c786a9c8db4ea282d4c7dfbe70ed6e2121d8aeb63e0589de",
+      "digest": "e1a55324cc1a7d137d2cbcdf43df7ec33a943ee2c4558e9a9db85da937037a15",
       "manifest": {
         "identity": {
           "id": "dedupe_similar",
@@ -4080,6 +4094,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4091,6 +4107,8 @@
             "control": "number",
             "default": 8,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.dedupeSimilarHint",
             "placeholder": "",
             "hide_when": []
@@ -4165,7 +4183,7 @@
     {
       "kind": "operator",
       "id": "semantic_dedupe",
-      "digest": "e9d53813dba37da29d866f8074720cf9f66d694247856593b67b2a0dc5ca9b09",
+      "digest": "a4eaa794ed985965cbe29a90441becab30279af4d0f254fda8756bedb529963c",
       "manifest": {
         "identity": {
           "id": "semantic_dedupe",
@@ -4259,6 +4277,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4270,6 +4290,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4281,6 +4303,8 @@
             "control": "number",
             "default": 0.92,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4355,7 +4379,7 @@
     {
       "kind": "operator",
       "id": "similar_to",
-      "digest": "6fcd43b5433fc71cfcc0d09af0a475274aecb4c220509d370dc9c5cf03bb6b2a",
+      "digest": "538a9eeadc9442388d8ad5792c6b953b6101a66b1d103b9efd09ca7f03433e4b",
       "manifest": {
         "identity": {
           "id": "similar_to",
@@ -4456,6 +4480,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4467,6 +4493,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4478,6 +4506,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4489,6 +4519,8 @@
             "control": "number",
             "default": 10,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -4564,7 +4596,7 @@
     {
       "kind": "operator",
       "id": "filter_rows",
-      "digest": "ea517ca2996a248d30609c8551f42ee5875343b494fb9074ccec104165531901",
+      "digest": "67931a1aa3ff5c26a2ab3e7098cae9cea46b434fc969d8f03f9f2518458839e0",
       "manifest": {
         "identity": {
           "id": "filter_rows",
@@ -4666,7 +4698,75 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "op",
+            "canonical": "op",
+            "label_key": "settings.filterOp",
+            "control": "select",
+            "default": "eq",
+            "options": [],
+            "options_param": "op",
+            "option_label_prefix": "settings.filterOp.",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "value",
+            "canonical": "value",
+            "label_key": "settings.value",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [
+              "op",
+              [
+                "is_null",
+                "not_null"
+              ]
+            ]
+          },
+          {
+            "key": "filter_keep",
+            "canonical": "keep",
+            "label_key": "settings.filterKeep",
+            "control": "select",
+            "default": "keep",
+            "options": [
+              [
+                "keep",
+                "settings.filterKeepKeep"
+              ],
+              [
+                "exclude",
+                "settings.filterKeepExclude"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.filterRowsHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.filter_rows:filter_rows",
           "quiet": false
@@ -4741,7 +4841,7 @@
     {
       "kind": "operator",
       "id": "select_columns",
-      "digest": "a2efc0ca60492f69c22d5368ebc875b8b1a5f601e0284444d6dca9cd90f8c39c",
+      "digest": "94d78b3d52a74e01d787c896d2b3f97379d054699b655924aa3a39e0f426d66a",
       "manifest": {
         "identity": {
           "id": "select_columns",
@@ -4785,7 +4885,21 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "columns",
+            "canonical": "columns",
+            "label_key": "settings.columns",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "col1, col2 (empty = all)",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.select_columns:select_columns",
           "quiet": false
@@ -4855,7 +4969,7 @@
     {
       "kind": "operator",
       "id": "rename_columns",
-      "digest": "2d838657fc635e045508f522a1ad4d089d543809feb72bf66518915753d1ecc6",
+      "digest": "d1339dce5619c72a3f6041db0666d7f83d7585e8a7f644af48d13ab092b45d24",
       "manifest": {
         "identity": {
           "id": "rename_columns",
@@ -4897,7 +5011,34 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "rename_from",
+            "canonical": "mapping",
+            "label_key": "settings.renameFrom",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "rename_to",
+            "canonical": "mapping",
+            "label_key": "settings.renameTo",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.rename_columns:rename_columns",
           "quiet": false
@@ -4969,7 +5110,7 @@
     {
       "kind": "operator",
       "id": "strip_whitespace",
-      "digest": "fbb5f6eb6465614abc5fb695d7b6c5379167a2b94496b8e1b5d89ee5d7c2f6d7",
+      "digest": "fed917e8b39ce84a3e80b5784e10c7eeaf0387f0ee9ea1c827f39abdfa369ef3",
       "manifest": {
         "identity": {
           "id": "strip_whitespace",
@@ -5013,7 +5154,21 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "columns",
+            "canonical": "columns",
+            "label_key": "settings.columns",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "col1, col2 (empty = all)",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.strip_whitespace:strip_whitespace",
           "quiet": false
@@ -5083,7 +5238,7 @@
     {
       "kind": "operator",
       "id": "convert_type",
-      "digest": "be7207e5f7e59f45ab6703a26dc83b801711c6c05cffee365c8f86a5e76ae9f6",
+      "digest": "9ad618d0674cac68d4600d357774ed91c9c614d70f4e2926d3a7e7f708366ab8",
       "manifest": {
         "identity": {
           "id": "convert_type",
@@ -5147,7 +5302,55 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "dtype",
+            "canonical": "dtype",
+            "label_key": "settings.dtype",
+            "control": "select",
+            "default": "str",
+            "options": [
+              [
+                "str",
+                ""
+              ],
+              [
+                "int",
+                ""
+              ],
+              [
+                "float",
+                ""
+              ],
+              [
+                "bool",
+                ""
+              ],
+              [
+                "datetime",
+                ""
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.convert_type:convert_type",
           "quiet": false
@@ -5222,7 +5425,7 @@
     {
       "kind": "operator",
       "id": "sort_rows",
-      "digest": "11a3f132a063369cba5be1bfae77ac7be866b4f3c165f6238299932d32d35c53",
+      "digest": "b9047c0f66d2159d123a6e3ab5fafb6593626fdf1ce56655444345e54536144a",
       "manifest": {
         "identity": {
           "id": "sort_rows",
@@ -5280,7 +5483,34 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "ascending",
+            "canonical": "ascending",
+            "label_key": "settings.ascending",
+            "control": "checkbox",
+            "default": true,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.sort_rows:sort_rows",
           "quiet": false
@@ -5350,7 +5580,7 @@
     {
       "kind": "operator",
       "id": "sample_rows",
-      "digest": "d6d34eed7ad7388e81d9ddf83aa6700f7b620760d8967f2722e83b8764689bf6",
+      "digest": "44e05d79516d98ca9c354ab74442d2dec2ad8d5d2238b9f491496c2b10c7d290",
       "manifest": {
         "identity": {
           "id": "sample_rows",
@@ -5420,7 +5650,47 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "n",
+            "canonical": "n",
+            "label_key": "settings.n",
+            "control": "number",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "frac",
+            "canonical": "frac",
+            "label_key": "settings.frac",
+            "control": "number",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "seed",
+            "canonical": "seed",
+            "label_key": "settings.seed",
+            "control": "number",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.sample_rows:sample_rows",
           "quiet": false
@@ -5489,7 +5759,7 @@
     {
       "kind": "operator",
       "id": "groupby_agg",
-      "digest": "9c3ffc60f7e02d77d20943f16ad158bcee32bb25dd9ac70ecc6ca3ebf98c76ff",
+      "digest": "b666ac53253992c2a22b7d1f3e5df6fbc768b99f15f22aba0b4a69a1ebfe733c",
       "manifest": {
         "identity": {
           "id": "groupby_agg",
@@ -5600,7 +5870,94 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "group_col",
+            "canonical": "group_col",
+            "label_key": "settings.groupCol",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "agg_col",
+            "canonical": "agg_col",
+            "label_key": "settings.aggCol",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "agg_func",
+            "canonical": "agg_func",
+            "label_key": "settings.aggFunc",
+            "control": "select",
+            "default": "sum",
+            "options": [
+              [
+                "sum",
+                "Sum"
+              ],
+              [
+                "mean",
+                "Mean"
+              ],
+              [
+                "count",
+                "Count"
+              ],
+              [
+                "max",
+                "Max"
+              ],
+              [
+                "min",
+                "Min"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "group_order_col",
+            "canonical": "order_col",
+            "label_key": "settings.groupOrderColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "agg_metrics",
+            "canonical": "agg_metrics",
+            "label_key": "settings.aggMetrics",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.groupby_agg:groupby_agg",
           "quiet": false
@@ -5673,7 +6030,7 @@
     {
       "kind": "operator",
       "id": "join_tables",
-      "digest": "05ea4030270bddeddd9c56d2c7b1e5606b001bc6374557ea4f39b431606984d7",
+      "digest": "912ee276bccb3b0df7c4e87d3a997f3340785cf299d94727e7999a03b6edb75b",
       "manifest": {
         "identity": {
           "id": "join_tables",
@@ -5752,7 +6109,64 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "join_how",
+            "canonical": "how",
+            "label_key": "settings.joinHow",
+            "control": "select",
+            "default": "left",
+            "options": [
+              [
+                "left",
+                "Left"
+              ],
+              [
+                "right",
+                "Right"
+              ],
+              [
+                "inner",
+                "Inner"
+              ],
+              [
+                "outer",
+                "Outer"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "left_on",
+            "canonical": "left_on",
+            "label_key": "settings.leftOn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "right_on",
+            "canonical": "right_on",
+            "label_key": "settings.rightOn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.joinHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.join_tables:join_tables",
           "quiet": false
@@ -6046,7 +6460,7 @@
     {
       "kind": "operator",
       "id": "column_calc",
-      "digest": "ddd7a88edbffac73648b1c2dbc9d3d43f78240d6cfd364fc2d9ac9b0fccf9c82",
+      "digest": "922ad1a59972e65e2b5e1b56ba2e147ba4eb80ef2bbf8ae3f0a67366b12a98fd",
       "manifest": {
         "identity": {
           "id": "column_calc",
@@ -6110,7 +6524,34 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "new_col",
+            "canonical": "new_col",
+            "label_key": "settings.newCol",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "expr",
+            "canonical": "expr",
+            "label_key": "settings.expr",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.column_calc:column_calc",
           "quiet": false
@@ -6180,7 +6621,7 @@
     {
       "kind": "operator",
       "id": "bin_column",
-      "digest": "b7eaeaeb8381eebf1dd9c4d20c7a226cbb4771126bf94019dfefe2cef65eb1de",
+      "digest": "963f79215db0f0ea84ef912cfb79510328d8bce15d2f28f6acc38a85df9654b2",
       "manifest": {
         "identity": {
           "id": "bin_column",
@@ -6271,7 +6712,60 @@
           "add_maybe": [],
           "add_from_column": true
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "bin_new_col",
+            "canonical": "new_col",
+            "label_key": "settings.binNewCol",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "bins",
+            "canonical": "bins",
+            "label_key": "settings.binEdges",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "4 或 0, 60, 80, 100",
+            "hide_when": []
+          },
+          {
+            "key": "bin_labels",
+            "canonical": "labels",
+            "label_key": "settings.binLabels",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "low, mid, high",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.bin_column:bin_column",
           "quiet": false
@@ -6342,7 +6836,7 @@
     {
       "kind": "operator",
       "id": "extract_time",
-      "digest": "6d1c5a0509d95dbb7773cfeb62138bd4c359154d6eaa7116ad2ba110d1b58c84",
+      "digest": "db9bc58b5eab2e58852dd92e54ecb16cc1d64ef8740dc3fd005fbbb6a07319da",
       "manifest": {
         "identity": {
           "id": "extract_time",
@@ -6433,6 +6927,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6444,6 +6940,8 @@
             "control": "text",
             "default": "日期",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6476,6 +6974,8 @@
                 "settings.timePartYear"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6551,7 +7051,7 @@
     {
       "kind": "operator",
       "id": "bin_time",
-      "digest": "885a8fbf8348cb878f3fead023393a3c795a685a84e2e7f12961e90bedfd20c4",
+      "digest": "947adf67f75dfa81365479daa866eb031f6734dd88cabe4c121b614c3248fd03",
       "manifest": {
         "identity": {
           "id": "bin_time",
@@ -6669,6 +7169,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6680,6 +7182,8 @@
             "control": "text",
             "default": "阶段",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6691,6 +7195,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6702,6 +7208,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6713,6 +7221,8 @@
             "control": "text",
             "default": "阶段序号",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.phaseHint",
             "placeholder": "",
             "hide_when": []
@@ -6799,7 +7309,7 @@
     {
       "kind": "operator",
       "id": "suggest_stages",
-      "digest": "a085fd71a0ee2adbd5f9adadceb8fcedcbfdfaed71e7f4fa7428980e1abd3719",
+      "digest": "f4816920dbb0471113db6a4aa63fba56ab9d483d4d1c9d30794e7ed013ceca39",
       "manifest": {
         "identity": {
           "id": "suggest_stages",
@@ -6902,6 +7412,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6913,6 +7425,8 @@
             "control": "number",
             "default": 3,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6924,6 +7438,8 @@
             "control": "number",
             "default": 6,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -6935,6 +7451,8 @@
             "control": "number",
             "default": 2,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.stagesHint",
             "placeholder": "",
             "hide_when": []
@@ -7010,7 +7528,7 @@
     {
       "kind": "operator",
       "id": "topic_model",
-      "digest": "5fb5c2f1803d570d27805997c7cb73721f2d29d7113263b77baada88dc7bc4df",
+      "digest": "cc397ad78de8e7d85d00b4731fd35ee587d3d9748f7ea21f40a67d722feedfbd",
       "manifest": {
         "identity": {
           "id": "topic_model",
@@ -7141,6 +7659,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7152,6 +7672,8 @@
             "control": "number",
             "default": 5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7176,6 +7698,8 @@
                 "settings.topicMethodLda"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7187,6 +7711,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7198,6 +7724,8 @@
             "control": "number",
             "default": 10,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7209,6 +7737,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.topicHint",
             "placeholder": "",
             "hide_when": []
@@ -7284,7 +7814,7 @@
     {
       "kind": "operator",
       "id": "topic_by_stage",
-      "digest": "a3244d48ab1f0eeadc0162fb9d9c684175164e141ef306cd7678cb95b5bde734",
+      "digest": "987838c41b73fc90ce968b8e68a5a3a24b83e856854340034a940cad5b6ef5ac",
       "manifest": {
         "identity": {
           "id": "topic_by_stage",
@@ -7481,6 +8011,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7492,6 +8024,8 @@
             "control": "text",
             "default": "阶段",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7503,6 +8037,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7514,6 +8050,8 @@
             "control": "text",
             "default": "5,6,4,4,4",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7525,6 +8063,8 @@
             "control": "number",
             "default": 10,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7536,6 +8076,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7547,6 +8089,8 @@
             "control": "number",
             "default": 5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7571,6 +8115,8 @@
                 "settings.topicMethodLda"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7582,6 +8128,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7602,6 +8150,8 @@
                 "settings.topicWordSourceLda"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.topicStageHint",
             "placeholder": "",
             "hide_when": []
@@ -7683,7 +8233,7 @@
     {
       "kind": "operator",
       "id": "topic_label",
-      "digest": "5e3570205e7711e493873645013f88b29542af5eb85297e6ea99ca76b356adda",
+      "digest": "1ac38a48f0d70d156eed863632bdbb71cc417a1afd3d3c840f1f75d399983d40",
       "manifest": {
         "identity": {
           "id": "topic_label",
@@ -7802,6 +8352,8 @@
             "control": "text",
             "default": "feature_words",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7813,6 +8365,8 @@
             "control": "text",
             "default": "sample_texts",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7824,6 +8378,8 @@
             "control": "text",
             "default": "主题概括",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7848,6 +8404,8 @@
                 "settings.labelOnFailFallback"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -7859,6 +8417,8 @@
             "control": "number",
             "default": 30,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.topicLabelHint",
             "placeholder": "",
             "hide_when": []
@@ -7947,7 +8507,7 @@
     {
       "kind": "operator",
       "id": "cluster_label",
-      "digest": "d953b3fc745cdd0534db12de56e484ebe0e20c6256edb99ce7a818e8a0ca1ac8",
+      "digest": "d9f09cffd9efa2a28aef4252267a46c8def0b63435b9130554f10adeb91d213d",
       "manifest": {
         "identity": {
           "id": "cluster_label",
@@ -8068,7 +8628,99 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "cluster_group_col",
+            "canonical": "group_col",
+            "label_key": "settings.clusterGroupColumn",
+            "control": "text",
+            "default": "cluster",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cluster_text_col",
+            "canonical": "text_col",
+            "label_key": "settings.clusterTextColumn",
+            "control": "text",
+            "default": "正文",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cluster_summary_col",
+            "canonical": "summary_col",
+            "label_key": "settings.clusterSummaryColumn",
+            "control": "text",
+            "default": "摘要",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cluster_on_fail",
+            "canonical": "on_fail",
+            "label_key": "settings.clusterOnFail",
+            "control": "select",
+            "default": "abort",
+            "options": [
+              [
+                "abort",
+                "settings.labelOnFailAbort"
+              ],
+              [
+                "blank",
+                "settings.labelOnFailBlank"
+              ],
+              [
+                "fallback",
+                "settings.labelOnFailFallback"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cluster_max_groups",
+            "canonical": "max_groups",
+            "label_key": "settings.clusterMaxGroups",
+            "control": "number",
+            "default": 60,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cluster_sample_n",
+            "canonical": "sample_n",
+            "label_key": "settings.clusterSampleN",
+            "control": "number",
+            "default": 8,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.clusterLabelHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.cluster_label:cluster_label",
           "quiet": false
@@ -8149,7 +8801,7 @@
     {
       "kind": "operator",
       "id": "cluster_review",
-      "digest": "d927a7e6f51990bd8781ec634ae8f8e5763f56d3151d91aea8467ad12eec5477",
+      "digest": "61fa913a4e940dc75049e1bd854c311429ba262efbd25f4c77951f6cc2450357",
       "manifest": {
         "identity": {
           "id": "cluster_review",
@@ -8326,7 +8978,125 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "review_group_col",
+            "canonical": "group_col",
+            "label_key": "settings.reviewGroupColumn",
+            "control": "text",
+            "default": "聚类",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_label_col",
+            "canonical": "label_col",
+            "label_key": "settings.reviewLabelColumn",
+            "control": "text",
+            "default": "聚类标签",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_name_col",
+            "canonical": "name_col",
+            "label_key": "settings.reviewNameColumn",
+            "control": "text",
+            "default": "节点",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_freq_col",
+            "canonical": "freq_col",
+            "label_key": "settings.reviewFreqColumn",
+            "control": "text",
+            "default": "频次",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_summary_col",
+            "canonical": "summary_col",
+            "label_key": "settings.reviewSummaryColumn",
+            "control": "text",
+            "default": "簇综述",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_on_fail",
+            "canonical": "on_fail",
+            "label_key": "settings.clusterOnFail",
+            "control": "select",
+            "default": "abort",
+            "options": [
+              [
+                "abort",
+                "settings.labelOnFailAbort"
+              ],
+              [
+                "blank",
+                "settings.labelOnFailBlank"
+              ],
+              [
+                "fallback",
+                "settings.labelOnFailFallback"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_max_groups",
+            "canonical": "max_groups",
+            "label_key": "settings.clusterMaxGroups",
+            "control": "number",
+            "default": 60,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "review_members",
+            "canonical": "members",
+            "label_key": "settings.reviewMembers",
+            "control": "number",
+            "default": 12,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.clusterReviewHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.cluster_review:cluster_review",
           "quiet": false
@@ -8408,7 +9178,7 @@
     {
       "kind": "operator",
       "id": "reply_graph",
-      "digest": "1578ff2332ddfe99825f59331d6f7d9522897ca63084435c0309ba4e463d06f2",
+      "digest": "217642fcea8abdafa453e2c562c4a465ee5217314b2b6144a67705db163ed623",
       "manifest": {
         "identity": {
           "id": "reply_graph",
@@ -8500,7 +9270,60 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "reply_author_col",
+            "canonical": "author_col",
+            "label_key": "settings.replyAuthorColumn",
+            "control": "text",
+            "default": "评论者",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "reply_floor_col",
+            "canonical": "floor_col",
+            "label_key": "settings.replyFloorColumn",
+            "control": "text",
+            "default": "楼层",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "reply_parent_col",
+            "canonical": "parent_floor_col",
+            "label_key": "settings.replyParentColumn",
+            "control": "text",
+            "default": "父楼层",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "reply_article_col",
+            "canonical": "article_col",
+            "label_key": "settings.replyArticleColumn",
+            "control": "text",
+            "default": "文章URL",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.replyGraphHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.reply_graph:reply_graph",
           "quiet": false
@@ -8590,7 +9413,7 @@
     {
       "kind": "operator",
       "id": "compare_platform",
-      "digest": "3245dae3fcba44bfbb592b29c9f69c4c3a116c6171c902fa4a592545704a8e76",
+      "digest": "c6661eb9967221e46b0be4bfeadd55e65fe5200026af6e26baf15fe9ebb6cb3c",
       "manifest": {
         "identity": {
           "id": "compare_platform",
@@ -8669,7 +9492,56 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "compare_platform_col",
+            "canonical": "platform_col",
+            "label_key": "settings.comparePlatformColumn",
+            "control": "text",
+            "default": "platform",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "compare_value_col",
+            "canonical": "value_col",
+            "label_key": "settings.compareValueColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "compare_agg",
+            "canonical": "agg",
+            "label_key": "settings.compareAgg",
+            "control": "select",
+            "default": "mean",
+            "options": [
+              [
+                "mean",
+                "settings.compareAggMean"
+              ],
+              [
+                "sum",
+                "settings.compareAggSum"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.compareHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.compare_platform:compare_platform",
           "quiet": false
@@ -8749,7 +9621,7 @@
     {
       "kind": "operator",
       "id": "topic_map",
-      "digest": "f8b1b24821729e2f9a390e9e144d9b1c11d5c99022b5517b1dc1c185d19ab2c6",
+      "digest": "8084742549f7c89672b1a7ecb71f62cf79fbbdc327ab3752c26ae2f44219e0a0",
       "manifest": {
         "identity": {
           "id": "topic_map",
@@ -8882,6 +9754,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -8893,6 +9767,8 @@
             "control": "number",
             "default": 5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -8917,6 +9793,8 @@
                 "settings.topicMethodLda"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -8928,6 +9806,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -8939,6 +9819,8 @@
             "control": "number",
             "default": 6,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -8950,6 +9832,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.topicMapHint",
             "placeholder": "",
             "hide_when": []
@@ -9025,7 +9909,7 @@
     {
       "kind": "operator",
       "id": "topic_salience",
-      "digest": "7615026b99e02a8226c4812321977c7e5e458c47827030d98b56d1ad63000687",
+      "digest": "d474a8cdcbffeefc7c8fe1dc038944594b08ef1a26dfec95f5b95ee7b2131ccd",
       "manifest": {
         "identity": {
           "id": "topic_salience",
@@ -9172,6 +10056,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9183,6 +10069,8 @@
             "control": "number",
             "default": 5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9207,6 +10095,8 @@
                 "settings.topicMethodLda"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9218,6 +10108,8 @@
             "control": "text",
             "default": "BAAI/bge-small-zh-v1.5",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9229,6 +10121,8 @@
             "control": "number",
             "default": 30,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9240,6 +10134,8 @@
             "control": "number",
             "default": 1,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9251,6 +10147,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.topicSalienceHint",
             "placeholder": "",
             "hide_when": []
@@ -9326,7 +10224,7 @@
     {
       "kind": "operator",
       "id": "topic_timeline",
-      "digest": "382560cc292865795a7b810f1f37da0e2e2afb06cb7b3b901a28db4d0f4057d5",
+      "digest": "424a4aba5e2cd52199ff001c92240c74853a428aa4bfe8a6e5bafaa991ffa998",
       "manifest": {
         "identity": {
           "id": "topic_timeline",
@@ -9461,6 +10359,8 @@
             "control": "text",
             "default": "stage",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9472,6 +10372,8 @@
             "control": "text",
             "default": "topic",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9483,6 +10385,8 @@
             "control": "text",
             "default": "feature_words",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9494,6 +10398,8 @@
             "control": "text",
             "default": "doc_n",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9505,6 +10411,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9516,6 +10424,8 @@
             "control": "number",
             "default": 0.5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.timelineHint",
             "placeholder": "",
             "hide_when": []
@@ -9610,7 +10520,7 @@
     {
       "kind": "operator",
       "id": "topic_flow",
-      "digest": "c23e56b8ccca43e49e229d69ee47260e78d192cb5d997865cc27a063bb13c3f9",
+      "digest": "1ec2438b5f2caff196b8c628079c061c6b8d8138cb343e104813f8506d804d36",
       "manifest": {
         "identity": {
           "id": "topic_flow",
@@ -9759,6 +10669,8 @@
             "control": "text",
             "default": "stage",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9770,6 +10682,8 @@
             "control": "text",
             "default": "topic",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9781,6 +10695,8 @@
             "control": "text",
             "default": "feature_words",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9792,6 +10708,8 @@
             "control": "text",
             "default": "weights",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9803,6 +10721,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9814,6 +10734,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -9825,6 +10747,8 @@
             "control": "number",
             "default": 0.5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.flowHint",
             "placeholder": "",
             "hide_when": []
@@ -9919,7 +10843,7 @@
     {
       "kind": "operator",
       "id": "topic_coherence",
-      "digest": "0470e975c32d2d619886baef8582904cc9b99688f219973b73a89d226da5d817",
+      "digest": "a00ad042282e4f08c721c8a075ba26cd3274d39aac414cd10d5ffe04a075db68",
       "manifest": {
         "identity": {
           "id": "topic_coherence",
@@ -10041,6 +10965,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10052,6 +10978,8 @@
             "control": "number",
             "default": 2,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10063,6 +10991,8 @@
             "control": "number",
             "default": 8,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10074,6 +11004,8 @@
             "control": "number",
             "default": 10,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10085,6 +11017,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10096,6 +11030,8 @@
             "control": "number",
             "default": 2000,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.coherenceHint",
             "placeholder": "",
             "hide_when": []
@@ -10172,7 +11108,7 @@
     {
       "kind": "operator",
       "id": "cooccur",
-      "digest": "aac9c79ca81e70e7ec6224f882d9b3895106bc106ba149cc5b2b4eff5ae8fed5",
+      "digest": "8c9f7cb5d22485f2ae23b27588ebf3f20324be672178c2323dfcb38de7136d59",
       "manifest": {
         "identity": {
           "id": "cooccur",
@@ -10262,7 +11198,60 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cooccur_topn",
+            "canonical": "topn",
+            "label_key": "settings.cooccurTopn",
+            "control": "number",
+            "default": 30,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cooccur_min_count",
+            "canonical": "min_count",
+            "label_key": "settings.cooccurMinCount",
+            "control": "number",
+            "default": 2,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "cooccur_window",
+            "canonical": "window",
+            "label_key": "settings.cooccurWindow",
+            "control": "number",
+            "default": 0,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.cooccurHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.cooccur:cooccur",
           "quiet": false
@@ -10333,7 +11322,7 @@
     {
       "kind": "operator",
       "id": "sentiment_evolution",
-      "digest": "ea4772dab0ceeac26d395a039982ba288250b056870389cac484da3d4b8fa60e",
+      "digest": "ac68960229df876605e495406f5921fe1a6479d61a7cfc07c55d9069252c2591",
       "manifest": {
         "identity": {
           "id": "sentiment_evolution",
@@ -10460,14 +11449,16 @@
           }
         ],
         "reads": {
-          "one": [],
+          "one": [
+            "column"
+          ],
           "some": [],
           "nonblank": [],
           "mapping": false,
           "two_table_keys": []
         },
         "writes": {
-          "mode": "passthrough",
+          "mode": "dynamic",
           "columns": [],
           "add": [],
           "add_maybe": [],
@@ -10481,6 +11472,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10492,6 +11485,8 @@
             "control": "text",
             "default": "sentiment",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10503,6 +11498,8 @@
             "control": "text",
             "default": "sentiment_index",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10514,6 +11511,8 @@
             "control": "text",
             "default": "positive",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10525,6 +11524,8 @@
             "control": "text",
             "default": "neutral",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10536,6 +11537,8 @@
             "control": "text",
             "default": "negative",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10547,6 +11550,8 @@
             "control": "text",
             "default": "score",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10558,6 +11563,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.evolutionHint",
             "placeholder": "",
             "hide_when": []
@@ -10584,18 +11591,20 @@
             "要做预测用 forecast；要触发预警用 alert。"
           ],
           "prerequisites": [
-            "An upstream table (the analysis node’s input)."
+            "An upstream table (the analysis node’s input).",
+            "`column` names a column that must exist (default: none — required)."
           ],
           "steps": [
             "Put a step `{\"op\": \"sentiment_evolution\", …}` in the analysis node’s `steps`, or set `operation` to `sentiment_evolution`.",
-            "A missing column, a blank required box or a value outside a declared select refuses by name."
+            "A missing column, a blank required box or a value outside a declared select refuses by name.",
+            "The step returns a fresh table whose column names come from the step’s own parameters."
           ],
           "examples": [
             {
               "type": "analysis",
               "params": {
                 "operation": "sentiment_evolution",
-                "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
+                "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
               }
             }
           ],
@@ -10603,7 +11612,7 @@
             "type": "analysis",
             "params": {
               "operation": "sentiment_evolution",
-              "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
+              "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
             }
           },
           "failures": [
@@ -10612,7 +11621,7 @@
             "A value outside a declared select: `analysis.bad_option`."
           ],
           "acceptance": [
-            "Rows are filtered or reordered; the upstream columns are unchanged."
+            "The output column names equal the parameters the step was given."
           ]
         },
         "tests": {
@@ -10631,7 +11640,7 @@
     {
       "kind": "operator",
       "id": "forecast",
-      "digest": "2fa6f65bab24df8ae321b56671fd145c8458a71b975718b871837602b03a0798",
+      "digest": "20091d17f322117e500552c6800a8643b972ebceb4011c757327a3d7364cbd13",
       "manifest": {
         "identity": {
           "id": "forecast",
@@ -10822,6 +11831,8 @@
             "control": "text",
             "default": "period",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10833,6 +11844,8 @@
             "control": "text",
             "default": "sentiment_index",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10861,6 +11874,8 @@
                 "settings.forecastMethodHoltWinters"
               ]
             ],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10872,6 +11887,8 @@
             "control": "number",
             "default": 3,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10883,6 +11900,8 @@
             "control": "number",
             "default": 3,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10894,6 +11913,8 @@
             "control": "number",
             "default": 7,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10905,6 +11926,8 @@
             "control": "number",
             "default": 0.5,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10916,6 +11939,8 @@
             "control": "number",
             "default": 0.3,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10927,6 +11952,8 @@
             "control": "number",
             "default": 0.35,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -10938,6 +11965,8 @@
             "control": "number",
             "default": 4,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.forecastHint",
             "placeholder": "",
             "hide_when": []
@@ -11023,7 +12052,7 @@
     {
       "kind": "operator",
       "id": "alert",
-      "digest": "56cde1ee7be7950390fd82ae03bb8576996f251f2a9545ed4d6da7cffdd6292e",
+      "digest": "49784cceae22340beeed8108e872fe60f62fbdfcfa1361e6606e4599e7dc4910",
       "manifest": {
         "identity": {
           "id": "alert",
@@ -11180,6 +12209,8 @@
             "control": "text",
             "default": "period",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11191,6 +12222,8 @@
             "control": "text",
             "default": "sentiment_index",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11202,6 +12235,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11213,6 +12248,8 @@
             "control": "text",
             "default": "",
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11224,6 +12261,8 @@
             "control": "number",
             "default": 2,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11235,6 +12274,8 @@
             "control": "number",
             "default": 0.2,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11246,6 +12287,8 @@
             "control": "number",
             "default": 0.15,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
             "hide_when": []
@@ -11257,6 +12300,8 @@
             "control": "number",
             "default": 0.6,
             "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
             "hint_key": "settings.alertHint",
             "placeholder": "",
             "hide_when": []

@@ -1,7 +1,7 @@
 """Compare platforms (or any grouping column) with counts and one aggregate."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'compare_platform',
@@ -25,6 +25,19 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('platform_col',)),
     writes=Writes(mode='dynamic'),
+    panel=(
+        PanelField('compare_platform_col', 'platform_col', 'settings.comparePlatformColumn', default='platform'),
+        PanelField('compare_value_col', 'value_col', 'settings.compareValueColumn'),
+        PanelField(
+            'compare_agg',
+            'agg',
+            'settings.compareAgg',
+            control='select',
+            default='mean',
+            options=(('mean', 'settings.compareAggMean'), ('sum', 'settings.compareAggSum')),
+            hint_key='settings.compareHint',
+        ),
+    ),
     labels=(
         ('platform_col', 'settings.comparePlatformColumn'),
         ('value_col', 'settings.compareValueColumn'),

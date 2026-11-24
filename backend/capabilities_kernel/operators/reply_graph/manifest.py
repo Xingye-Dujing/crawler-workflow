@@ -1,7 +1,7 @@
 """Build the author-to-author reply graph of a comment table."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'reply_graph',
@@ -20,6 +20,18 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('author_col', 'floor_col', 'parent_floor_col')),
     writes=Writes(mode='replace', columns=('src_author', 'dst_author', 'weight')),
+    panel=(
+        PanelField('reply_author_col', 'author_col', 'settings.replyAuthorColumn', default='评论者'),
+        PanelField('reply_floor_col', 'floor_col', 'settings.replyFloorColumn', default='楼层'),
+        PanelField('reply_parent_col', 'parent_floor_col', 'settings.replyParentColumn', default='父楼层'),
+        PanelField(
+            'reply_article_col',
+            'article_col',
+            'settings.replyArticleColumn',
+            default='文章URL',
+            hint_key='settings.replyGraphHint',
+        ),
+    ),
     labels=(
         ('author_col', 'settings.replyAuthorColumn'),
         ('floor_col', 'settings.replyFloorColumn'),

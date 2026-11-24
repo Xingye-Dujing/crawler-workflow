@@ -3788,7 +3788,116 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 70,
       "needsLlm": false,
       "writes": "passthrough",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "op",
+          "canonical": "op",
+          "labelKey": "settings.filterOp",
+          "control": "select",
+          "default": "eq",
+          "options": [
+            {
+              "value": "eq",
+              "labelKey": "settings.filterOp.eq"
+            },
+            {
+              "value": "ne",
+              "labelKey": "settings.filterOp.ne"
+            },
+            {
+              "value": "gt",
+              "labelKey": "settings.filterOp.gt"
+            },
+            {
+              "value": "gte",
+              "labelKey": "settings.filterOp.gte"
+            },
+            {
+              "value": "lt",
+              "labelKey": "settings.filterOp.lt"
+            },
+            {
+              "value": "lte",
+              "labelKey": "settings.filterOp.lte"
+            },
+            {
+              "value": "contains",
+              "labelKey": "settings.filterOp.contains"
+            },
+            {
+              "value": "not_contains",
+              "labelKey": "settings.filterOp.not_contains"
+            },
+            {
+              "value": "in",
+              "labelKey": "settings.filterOp.in"
+            },
+            {
+              "value": "not_in",
+              "labelKey": "settings.filterOp.not_in"
+            },
+            {
+              "value": "is_null",
+              "labelKey": "settings.filterOp.is_null"
+            },
+            {
+              "value": "not_null",
+              "labelKey": "settings.filterOp.not_null"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "value",
+          "canonical": "value",
+          "labelKey": "settings.value",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [
+            "op",
+            [
+              "is_null",
+              "not_null"
+            ]
+          ]
+        },
+        {
+          "key": "filter_keep",
+          "canonical": "keep",
+          "labelKey": "settings.filterKeep",
+          "control": "select",
+          "default": "keep",
+          "options": [
+            {
+              "value": "keep",
+              "labelKey": "settings.filterKeepKeep"
+            },
+            {
+              "value": "exclude",
+              "labelKey": "settings.filterKeepExclude"
+            }
+          ],
+          "hintKey": "settings.filterRowsHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -3864,7 +3973,19 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 80,
       "needsLlm": false,
       "writes": "select",
-      "panel": [],
+      "panel": [
+        {
+          "key": "columns",
+          "canonical": "columns",
+          "labelKey": "settings.columns",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "col1, col2 (empty = all)",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [
@@ -3894,7 +4015,30 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 90,
       "needsLlm": false,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "rename_from",
+          "canonical": "mapping",
+          "labelKey": "settings.renameFrom",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "rename_to",
+          "canonical": "mapping",
+          "labelKey": "settings.renameTo",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [],
@@ -3922,7 +4066,19 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 100,
       "needsLlm": false,
       "writes": "passthrough",
-      "panel": [],
+      "panel": [
+        {
+          "key": "columns",
+          "canonical": "columns",
+          "labelKey": "settings.columns",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "col1, col2 (empty = all)",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [
@@ -3952,7 +4108,51 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 110,
       "needsLlm": false,
       "writes": "passthrough",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "dtype",
+          "canonical": "dtype",
+          "labelKey": "settings.dtype",
+          "control": "select",
+          "default": "str",
+          "options": [
+            {
+              "value": "str",
+              "labelKey": ""
+            },
+            {
+              "value": "int",
+              "labelKey": ""
+            },
+            {
+              "value": "float",
+              "labelKey": ""
+            },
+            {
+              "value": "bool",
+              "labelKey": ""
+            },
+            {
+              "value": "datetime",
+              "labelKey": ""
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -3998,7 +4198,30 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 120,
       "needsLlm": false,
       "writes": "passthrough",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "ascending",
+          "canonical": "ascending",
+          "labelKey": "settings.ascending",
+          "control": "checkbox",
+          "default": true,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -4038,7 +4261,41 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 130,
       "needsLlm": false,
       "writes": "passthrough",
-      "panel": [],
+      "panel": [
+        {
+          "key": "n",
+          "canonical": "n",
+          "labelKey": "settings.n",
+          "control": "number",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "frac",
+          "canonical": "frac",
+          "labelKey": "settings.frac",
+          "control": "number",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "seed",
+          "canonical": "seed",
+          "labelKey": "settings.seed",
+          "control": "number",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [],
@@ -4086,7 +4343,84 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 140,
       "needsLlm": false,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "group_col",
+          "canonical": "group_col",
+          "labelKey": "settings.groupCol",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "agg_col",
+          "canonical": "agg_col",
+          "labelKey": "settings.aggCol",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "agg_func",
+          "canonical": "agg_func",
+          "labelKey": "settings.aggFunc",
+          "control": "select",
+          "default": "sum",
+          "options": [
+            {
+              "value": "sum",
+              "labelKey": "Sum"
+            },
+            {
+              "value": "mean",
+              "labelKey": "Mean"
+            },
+            {
+              "value": "count",
+              "labelKey": "Count"
+            },
+            {
+              "value": "max",
+              "labelKey": "Max"
+            },
+            {
+              "value": "min",
+              "labelKey": "Min"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "group_order_col",
+          "canonical": "order_col",
+          "labelKey": "settings.groupOrderColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "agg_metrics",
+          "canonical": "agg_metrics",
+          "labelKey": "settings.aggMetrics",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "group_col",
@@ -4167,7 +4501,58 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 150,
       "needsLlm": false,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "join_how",
+          "canonical": "how",
+          "labelKey": "settings.joinHow",
+          "control": "select",
+          "default": "left",
+          "options": [
+            {
+              "value": "left",
+              "labelKey": "Left"
+            },
+            {
+              "value": "right",
+              "labelKey": "Right"
+            },
+            {
+              "value": "inner",
+              "labelKey": "Inner"
+            },
+            {
+              "value": "outer",
+              "labelKey": "Outer"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "left_on",
+          "canonical": "left_on",
+          "labelKey": "settings.leftOn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "right_on",
+          "canonical": "right_on",
+          "labelKey": "settings.rightOn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "settings.joinHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [],
@@ -4324,7 +4709,30 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 170,
       "needsLlm": false,
       "writes": "add",
-      "panel": [],
+      "panel": [
+        {
+          "key": "new_col",
+          "canonical": "new_col",
+          "labelKey": "settings.newCol",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "expr",
+          "canonical": "expr",
+          "labelKey": "settings.expr",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [],
@@ -4365,7 +4773,52 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 180,
       "needsLlm": false,
       "writes": "add",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "bin_new_col",
+          "canonical": "new_col",
+          "labelKey": "settings.binNewCol",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "bins",
+          "canonical": "bins",
+          "labelKey": "settings.binEdges",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "4 或 0, 60, 80, 100",
+          "hideWhen": []
+        },
+        {
+          "key": "bin_labels",
+          "canonical": "labels",
+          "labelKey": "settings.binLabels",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "low, mid, high",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -5339,7 +5792,87 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 250,
       "needsLlm": true,
       "writes": "dynamic",
-      "panel": [],
+      "panel": [
+        {
+          "key": "cluster_group_col",
+          "canonical": "group_col",
+          "labelKey": "settings.clusterGroupColumn",
+          "control": "text",
+          "default": "cluster",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cluster_text_col",
+          "canonical": "text_col",
+          "labelKey": "settings.clusterTextColumn",
+          "control": "text",
+          "default": "正文",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cluster_summary_col",
+          "canonical": "summary_col",
+          "labelKey": "settings.clusterSummaryColumn",
+          "control": "text",
+          "default": "摘要",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cluster_on_fail",
+          "canonical": "on_fail",
+          "labelKey": "settings.clusterOnFail",
+          "control": "select",
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "labelKey": "settings.labelOnFailAbort"
+            },
+            {
+              "value": "blank",
+              "labelKey": "settings.labelOnFailBlank"
+            },
+            {
+              "value": "fallback",
+              "labelKey": "settings.labelOnFailFallback"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cluster_max_groups",
+          "canonical": "max_groups",
+          "labelKey": "settings.clusterMaxGroups",
+          "control": "number",
+          "default": 60,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cluster_sample_n",
+          "canonical": "sample_n",
+          "labelKey": "settings.clusterSampleN",
+          "control": "number",
+          "default": 8,
+          "options": [],
+          "hintKey": "settings.clusterLabelHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "group_col",
@@ -5426,7 +5959,109 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 260,
       "needsLlm": true,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "review_group_col",
+          "canonical": "group_col",
+          "labelKey": "settings.reviewGroupColumn",
+          "control": "text",
+          "default": "聚类",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_label_col",
+          "canonical": "label_col",
+          "labelKey": "settings.reviewLabelColumn",
+          "control": "text",
+          "default": "聚类标签",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_name_col",
+          "canonical": "name_col",
+          "labelKey": "settings.reviewNameColumn",
+          "control": "text",
+          "default": "节点",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_freq_col",
+          "canonical": "freq_col",
+          "labelKey": "settings.reviewFreqColumn",
+          "control": "text",
+          "default": "频次",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_summary_col",
+          "canonical": "summary_col",
+          "labelKey": "settings.reviewSummaryColumn",
+          "control": "text",
+          "default": "簇综述",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_on_fail",
+          "canonical": "on_fail",
+          "labelKey": "settings.clusterOnFail",
+          "control": "select",
+          "default": "abort",
+          "options": [
+            {
+              "value": "abort",
+              "labelKey": "settings.labelOnFailAbort"
+            },
+            {
+              "value": "blank",
+              "labelKey": "settings.labelOnFailBlank"
+            },
+            {
+              "value": "fallback",
+              "labelKey": "settings.labelOnFailFallback"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_max_groups",
+          "canonical": "max_groups",
+          "labelKey": "settings.clusterMaxGroups",
+          "control": "number",
+          "default": 60,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "review_members",
+          "canonical": "members",
+          "labelKey": "settings.reviewMembers",
+          "control": "number",
+          "default": 12,
+          "options": [],
+          "hintKey": "settings.clusterReviewHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "group_col",
@@ -5553,7 +6188,52 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 270,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "reply_author_col",
+          "canonical": "author_col",
+          "labelKey": "settings.replyAuthorColumn",
+          "control": "text",
+          "default": "评论者",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "reply_floor_col",
+          "canonical": "floor_col",
+          "labelKey": "settings.replyFloorColumn",
+          "control": "text",
+          "default": "楼层",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "reply_parent_col",
+          "canonical": "parent_floor_col",
+          "labelKey": "settings.replyParentColumn",
+          "control": "text",
+          "default": "父楼层",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "reply_article_col",
+          "canonical": "article_col",
+          "labelKey": "settings.replyArticleColumn",
+          "control": "text",
+          "default": "文章URL",
+          "options": [],
+          "hintKey": "settings.replyGraphHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "author_col",
@@ -5615,7 +6295,50 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 280,
       "needsLlm": false,
       "writes": "dynamic",
-      "panel": [],
+      "panel": [
+        {
+          "key": "compare_platform_col",
+          "canonical": "platform_col",
+          "labelKey": "settings.comparePlatformColumn",
+          "control": "text",
+          "default": "platform",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "compare_value_col",
+          "canonical": "value_col",
+          "labelKey": "settings.compareValueColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "compare_agg",
+          "canonical": "agg",
+          "labelKey": "settings.compareAgg",
+          "control": "select",
+          "default": "mean",
+          "options": [
+            {
+              "value": "mean",
+              "labelKey": "settings.compareAggMean"
+            },
+            {
+              "value": "sum",
+              "labelKey": "settings.compareAggSum"
+            }
+          ],
+          "hintKey": "settings.compareHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "platform_col"
@@ -6487,7 +7210,52 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 340,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cooccur_topn",
+          "canonical": "topn",
+          "labelKey": "settings.cooccurTopn",
+          "control": "number",
+          "default": 30,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cooccur_min_count",
+          "canonical": "min_count",
+          "labelKey": "settings.cooccurMinCount",
+          "control": "number",
+          "default": 2,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "cooccur_window",
+          "canonical": "window",
+          "labelKey": "settings.cooccurWindow",
+          "control": "number",
+          "default": 0,
+          "options": [],
+          "hintKey": "settings.cooccurHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -6546,7 +7314,7 @@ window.NODE_TYPE_CATALOGUE = {
       "category": "time",
       "order": 350,
       "needsLlm": false,
-      "writes": "passthrough",
+      "writes": "dynamic",
       "panel": [
         {
           "key": "column",
@@ -6638,7 +7406,9 @@ window.NODE_TYPE_CATALOGUE = {
         }
       ],
       "reads": {
-        "one": [],
+        "one": [
+          "column"
+        ],
         "some": [],
         "nonblank": [],
         "mapping": false,
