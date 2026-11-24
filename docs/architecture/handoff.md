@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`6bcd90cb 功能更新：分析面板收口——36/37 个算子表单由清单渲染`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`7101f4b0 功能更新：分析面板 37/37——anti_join 迁完，P7 面板清单化收口`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 收口：分析面板 37/37（2026-11-24）
+
+- `PanelField` 增加两个虚拟控件：`control='note'`（只渲染 hint_key 的提示行）与 `control='roles'`
+  （双表步骤的“过滤表/基准表”实时角色行，`role_keys` + `toggle_param`）。二者不写参数，`problems()`
+  不要求 canonical；`hide_when` 的引用改为校验“另一个已声明的盒子”。
+- `anti_join` 迁完：roles / keep_mode / left_on / right_on / match_mode（选项由 enum 派生）/
+  ignore_case / max_distance（`hide_when`：match_mode 为空或非 similar 时隐藏）/ swap_tables。
+  `node-analysis.js` 不再有任何按算子的手写块——只剩算子下拉与预览按钮。
+- 测试：面板块解析器允许“没有按算子的块”；api 契约跳过虚拟控件。验证（全量收口）：**12168 passed /
+  7 skipped**；ruff 全绿；product 与 tests pylint **10.00/10**；doctor 全绿。
+- **P7 七项全部完成**：算子 37、图表 30、平台 10 清单化；九表面门禁；MCP + CLI；面板（下拉 + 37/37 表单）。
 
 ## 分析面板收口（36/37，2026-11-24）
 
