@@ -77,7 +77,8 @@ a defect, not a shortcut.
 - **Bibliographic sources/formats**: `services/biblio/sources.py` + `services/biblio/formats/`; a format's readable
   columns are its own module's answer.
 - **AI extensions**: typed contributions through `extensions/` (`ExtensionRegistry`), providers in
-  `ai/providers/registry.py`, skills/tools in `ai/skills.py`/`ai/tools.py`; manifests are data, local code plugins are
+  `ai/providers/registry.py`, skills in `ai/skills.py` and tools in `ai/tools/<domain>.py` (one file per domain, each
+  ending in a `TOOLS` tuple that `ai/tools/__init__.py` merges); manifests are data, local code plugins are
   local/admin only, cloud refuses them by name.
 - **Frontend panels**: a panel is a `static/js/panels/*.js` split with its `<script>` line in `index.html` (the one load
   order) and an entry in `tests/frontend/splits.json`/`companions.mjs`; the one-global rule is the seam. Never add a

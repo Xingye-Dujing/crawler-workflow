@@ -49,9 +49,8 @@ def manager(tmp_path):
 
 @pytest.fixture
 def wired(monkeypatch, manager):
-    from ai import tools
 
-    monkeypatch.setattr(tools, '_workflow_manager', lambda: manager)
+    monkeypatch.setattr('ai.tools.workflows._workflow_manager', lambda: manager)
     yield manager
 
 

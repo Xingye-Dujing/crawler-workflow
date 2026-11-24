@@ -15,6 +15,10 @@ from services.runs.store import RunStore
 
 pytestmark = pytest.mark.unit
 
+#: The DataAsset half of a stored record, by name — `record_asset` adds `run_id`/`node_id`/`input_sha`
+#: and the store's column names, which are not the contract's.
+_ASSET_FIELDS = ('id', 'kind', 'owner', 'origin', 'sha256', 'size', 'uri', 'parents', 'meta', 'created_at')
+
 
 @pytest.fixture
 def store(tmp_path):
@@ -53,7 +57,9 @@ class TestRecordingOneNode:
     def test_it_writes_a_valid_asset_row(self, store):
         ctx = _run(store)
         record = _asset(store, ctx, 'node-1', [{'X': 1}])
-        assert DataAsset.from_dict({k: record[k] for k in record if k in DataAsset.__dataclass_fields__}).id
+        # `record_asset` answers `DataAsset.to_dict()` plus the two store columns, so the asset half
+        # must still satisfy the contract it was built from.
+        assert DataAsset.from_dict({name: record[name] for name in _ASSET_FIELDS}).id == record['id']
         stored = store.asset_for('r1', 'node-1')
         assert stored['sha256'] == record['sha256']
         assert stored['kind'] == 'table'

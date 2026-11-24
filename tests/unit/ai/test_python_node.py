@@ -259,7 +259,7 @@ def test_dataset_peek_sends_a_few_capped_rows_not_the_table(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame([{'正文': 'x' * 500, '平台': '知乎'} for _ in range(100)])
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     result = tools.tool_dataset_peek({'dataset_id': 'd1', 'rows': 3}, {})
     assert result['total_rows'] == 100
     assert result['shown_rows'] == 3
@@ -273,7 +273,7 @@ def test_dataset_page_is_bounded_and_reports_more(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame([{'a': index} for index in range(100)])
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     page = tools.tool_dataset_page({'dataset_id': 'd1', 'offset': 90, 'limit': 5}, {})
     assert [row['a'] for row in page['rows']] == [90, 91, 92, 93, 94]
     assert page['has_more'] is True
@@ -286,8 +286,8 @@ def test_dataset_page_limit_comes_from_the_setting(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame([{'a': index} for index in range(5000)])
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
-    monkeypatch.setattr(tools, 'get_setting', lambda key: 3000)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets.get_setting', lambda key: 3000)
     page = tools.tool_dataset_page({'dataset_id': 'd1', 'limit': 2500}, {})
     assert len(page['rows']) == 2500
     capped = tools.tool_dataset_page({'dataset_id': 'd1', 'limit': 9999}, {})
@@ -299,7 +299,7 @@ def test_dataset_sample_honours_columns_and_offset_and_caps_cells(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame([{'正文': 'x' * 500, 'b': index} for index in range(20)])
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     page = tools.tool_dataset_sample(
         {'dataset_id': 'd1', 'limit': '5 rows', 'offset': '2', 'columns': ['正文', 'b']}, {}
     )

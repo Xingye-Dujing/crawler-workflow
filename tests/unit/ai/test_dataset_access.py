@@ -85,7 +85,7 @@ def test_dataset_page_spends_the_grant_and_stops_at_zero(monkeypatch):
     from ai import dataset_access, tools
 
     frame = pd.DataFrame({'a': list(range(100))})
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     dataset_access.grant('c1', 'ds1', 5, 'demo')
     page = tools.tool_dataset_page({'dataset_id': 'ds1', 'limit': 10}, {'conversation_id': 'c1'})
     assert len(page['rows']) == 5
@@ -99,7 +99,7 @@ def test_the_five_row_preview_stays_free(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame({'a': list(range(100))})
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     peek = tools.tool_dataset_peek({'dataset_id': 'ds1'}, {'conversation_id': 'c1'})
     assert peek['shown_rows'] == 5
     assert 'grant' not in peek
@@ -110,7 +110,7 @@ def test_a_filtered_query_is_a_row_read_but_an_aggregation_is_not(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame({'a': list(range(100))})
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     count = tools.tool_dataset_query({'dataset_id': 'ds1', 'op': 'count', 'columns': ['a']}, {'conversation_id': 'c1'})
     assert count['matched_rows'] == 100
     with pytest.raises(AIError) as refused:
@@ -127,7 +127,7 @@ def test_a_tool_call_without_a_conversation_is_not_an_agent_turn(monkeypatch):
     from ai import tools
 
     frame = pd.DataFrame({'a': list(range(100))})
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: frame)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: frame)
     page = tools.tool_dataset_page({'dataset_id': 'ds1', 'limit': 7}, {})
     assert len(page['rows']) == 7
     assert 'grant' not in page

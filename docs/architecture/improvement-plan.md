@@ -136,11 +136,16 @@ ai/render/   markdown.js  question.js  artifact.js  toolcard.js
 
 ## W7 算法与增量
 
+> 做法、验收与“为什么必须单独一片”写在 [`w7-incremental.md`](w7-incremental.md)。
+
 1. **内容寻址执行**：`(节点指纹, 上游资产哈希)` → 结果，复用从启发式变成可证明。
-2. **算子级缓存**：`(op, params, input_hash)`，缓存键必须含列名（`正文` 与 `cleaned_text` 是两条曲线）。
-3. **游标/账本值对象**：`Cursor(proven_prefix, position)`、`LedgerKey(platform, comment_id)`，把规则变成类型不变量。
-4. **采集节流/风控纯函数化**：`Attempt`/`Outcome`/`RetryPolicy`，性质测试钉住“网络故障永不轮换账号”。
-5. **工具检索式路由**：BM25 + embedding + RRF 取代“按用户原话排序”。
+   **已完成（W2 的 `node_assets` + `lineage_conflict`）**：已知不一致才拒绝复用，老库退回结构规则。
+2. **算子级缓存**：`(op, params, input_hash, columns)`，缓存键必须含列名（`正文` 与 `cleaned_text` 是两条曲线）。
+   未做：要先回答存哪、失效、命中率三个问题（见 W7 页）。
+3. **游标/账本值对象**：`Cursor(proven, position)`、`LedgerKey(platform, comment_id)`，把规则变成类型不变量。未做。
+4. **采集节流/风控纯函数化**：`Attempt`/`Outcome`/`RetryPolicy`，性质测试钉住“网络故障永不轮换账号”。未做。
+5. **工具检索式路由**：BM25 + embedding + RRF 取代“按用户原话排序”。未做：需要先有
+   `tools/eval_tool_routing.py` 的基线数字。
 
 ## 取舍与边界
 

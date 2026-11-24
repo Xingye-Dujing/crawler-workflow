@@ -65,7 +65,7 @@ def test_infer_is_bounded_and_reports_truncation(monkeypatch, runnable_model):
         seen['n'] = len(texts)
         return {'distribution': {'positive': len(texts)}, 'labels': [], 'sample': []}
 
-    monkeypatch.setattr(tools, '_infer_text_classifier', fake)
+    monkeypatch.setattr('ai.tools.models._infer_text_classifier', fake)
     rows = [{'正文': str(index)} for index in range(250)]
     answer = tools.tool_model_infer(
         {'model_id': 'sentiment_weibosenti_bin', 'column': '正文', 'rows': rows, 'limit': 200}, {}

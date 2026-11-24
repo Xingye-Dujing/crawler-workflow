@@ -1,0 +1,734 @@
+[
+  {
+    "model": "qwen3.5:4b",
+    "correct": 26,
+    "total": 26,
+    "results": [
+      {
+        "id": "count-with-filter",
+        "expected": [
+          "dataset_query"
+        ],
+        "picked": "dataset_query",
+        "ok": true,
+        "answer": "dataset_query"
+      },
+      {
+        "id": "peek-first",
+        "expected": [
+          "dataset_peek",
+          "dataset_profile"
+        ],
+        "picked": "dataset_profile",
+        "ok": true,
+        "answer": "dataset_profile"
+      },
+      {
+        "id": "schema",
+        "expected": [
+          "dataset_profile"
+        ],
+        "picked": "dataset_profile",
+        "ok": true,
+        "answer": "dataset_profile"
+      },
+      {
+        "id": "page",
+        "expected": [
+          "dataset_page",
+          "dataset_sample"
+        ],
+        "picked": "dataset_sample",
+        "ok": true,
+        "answer": "dataset_sample"
+      },
+      {
+        "id": "list-datasets",
+        "expected": [
+          "list_datasets"
+        ],
+        "picked": "list_datasets",
+        "ok": true,
+        "answer": "list_datasets"
+      },
+      {
+        "id": "grant",
+        "expected": [
+          "request_dataset_access"
+        ],
+        "picked": "request_dataset_access",
+        "ok": true,
+        "answer": "request_dataset_access"
+      },
+      {
+        "id": "run-failed",
+        "expected": [
+          "app_errors",
+          "run_status"
+        ],
+        "picked": "app_errors",
+        "ok": true,
+        "answer": "app_errors"
+      },
+      {
+        "id": "run-nodes",
+        "expected": [
+          "run_status"
+        ],
+        "picked": "run_status",
+        "ok": true,
+        "answer": "run_status"
+      },
+      {
+        "id": "rerun",
+        "expected": [
+          "rerun_node"
+        ],
+        "picked": "rerun_node",
+        "ok": true,
+        "answer": "rerun_node"
+      },
+      {
+        "id": "workflow-list",
+        "expected": [
+          "workflow_list"
+        ],
+        "picked": "workflow_list",
+        "ok": true,
+        "answer": "workflow_list"
+      },
+      {
+        "id": "workflow-validate",
+        "expected": [
+          "workflow_validate"
+        ],
+        "picked": "workflow_validate",
+        "ok": true,
+        "answer": "workflow_validate"
+      },
+      {
+        "id": "workflow-run",
+        "expected": [
+          "workflow_run"
+        ],
+        "picked": "workflow_run",
+        "ok": true,
+        "answer": "workflow_run"
+      },
+      {
+        "id": "workflow-stop",
+        "expected": [
+          "workflow_stop"
+        ],
+        "picked": "workflow_stop",
+        "ok": true,
+        "answer": "workflow_stop"
+      },
+      {
+        "id": "workflow-delete",
+        "expected": [
+          "workflow_delete"
+        ],
+        "picked": "workflow_delete",
+        "ok": true,
+        "answer": "workflow_delete"
+      },
+      {
+        "id": "workflow-export",
+        "expected": [
+          "workflow_export"
+        ],
+        "picked": "workflow_export",
+        "ok": true,
+        "answer": "workflow_export"
+      },
+      {
+        "id": "export-list",
+        "expected": [
+          "export_list"
+        ],
+        "picked": "export_list",
+        "ok": true,
+        "answer": "export_list"
+      },
+      {
+        "id": "models-catalog",
+        "expected": [
+          "models_catalog"
+        ],
+        "picked": "models_catalog",
+        "ok": true,
+        "answer": "models_catalog"
+      },
+      {
+        "id": "model-infer",
+        "expected": [
+          "model_infer"
+        ],
+        "picked": "model_infer",
+        "ok": true,
+        "answer": "model_infer"
+      },
+      {
+        "id": "rerank",
+        "expected": [
+          "model_rerank"
+        ],
+        "picked": "model_rerank",
+        "ok": true,
+        "answer": "model_rerank"
+      },
+      {
+        "id": "chart-contract",
+        "expected": [
+          "chart_catalog"
+        ],
+        "picked": "chart_catalog",
+        "ok": true,
+        "answer": "chart_catalog"
+      },
+      {
+        "id": "ops",
+        "expected": [
+          "analysis_catalog"
+        ],
+        "picked": "analysis_catalog",
+        "ok": true,
+        "answer": "analysis_catalog"
+      },
+      {
+        "id": "code-read",
+        "expected": [
+          "code_read"
+        ],
+        "picked": "code_read",
+        "ok": true,
+        "answer": "code_read"
+      },
+      {
+        "id": "code-search",
+        "expected": [
+          "code_search"
+        ],
+        "picked": "code_search",
+        "ok": true,
+        "answer": "code_search"
+      },
+      {
+        "id": "catbus",
+        "expected": [
+          "catbus_status"
+        ],
+        "picked": "catbus_status",
+        "ok": true,
+        "answer": "catbus_status"
+      },
+      {
+        "id": "skills",
+        "expected": [
+          "skill_catalog"
+        ],
+        "picked": "skill_catalog",
+        "ok": true,
+        "answer": "skill_catalog"
+      },
+      {
+        "id": "skill-load",
+        "expected": [
+          "skill_load"
+        ],
+        "picked": "skill_load",
+        "ok": true,
+        "answer": "skill_load"
+      }
+    ]
+  },
+  {
+    "model": "qwen3.5:9b",
+    "correct": 26,
+    "total": 26,
+    "results": [
+      {
+        "id": "count-with-filter",
+        "expected": [
+          "dataset_query"
+        ],
+        "picked": "dataset_query",
+        "ok": true,
+        "answer": "dataset_query"
+      },
+      {
+        "id": "peek-first",
+        "expected": [
+          "dataset_peek",
+          "dataset_profile"
+        ],
+        "picked": "dataset_peek",
+        "ok": true,
+        "answer": "dataset_peek"
+      },
+      {
+        "id": "schema",
+        "expected": [
+          "dataset_profile"
+        ],
+        "picked": "dataset_profile",
+        "ok": true,
+        "answer": "dataset_profile"
+      },
+      {
+        "id": "page",
+        "expected": [
+          "dataset_page",
+          "dataset_sample"
+        ],
+        "picked": "dataset_sample",
+        "ok": true,
+        "answer": "dataset_sample"
+      },
+      {
+        "id": "list-datasets",
+        "expected": [
+          "list_datasets"
+        ],
+        "picked": "list_datasets",
+        "ok": true,
+        "answer": "list_datasets"
+      },
+      {
+        "id": "grant",
+        "expected": [
+          "request_dataset_access"
+        ],
+        "picked": "request_dataset_access",
+        "ok": true,
+        "answer": "request_dataset_access"
+      },
+      {
+        "id": "run-failed",
+        "expected": [
+          "app_errors",
+          "run_status"
+        ],
+        "picked": "app_errors",
+        "ok": true,
+        "answer": "app_errors"
+      },
+      {
+        "id": "run-nodes",
+        "expected": [
+          "run_status"
+        ],
+        "picked": "run_status",
+        "ok": true,
+        "answer": "run_status"
+      },
+      {
+        "id": "rerun",
+        "expected": [
+          "rerun_node"
+        ],
+        "picked": "rerun_node",
+        "ok": true,
+        "answer": "rerun_node"
+      },
+      {
+        "id": "workflow-list",
+        "expected": [
+          "workflow_list"
+        ],
+        "picked": "workflow_list",
+        "ok": true,
+        "answer": "workflow_list"
+      },
+      {
+        "id": "workflow-validate",
+        "expected": [
+          "workflow_validate"
+        ],
+        "picked": "workflow_validate",
+        "ok": true,
+        "answer": "workflow_validate"
+      },
+      {
+        "id": "workflow-run",
+        "expected": [
+          "workflow_run"
+        ],
+        "picked": "workflow_run",
+        "ok": true,
+        "answer": "workflow_run"
+      },
+      {
+        "id": "workflow-stop",
+        "expected": [
+          "workflow_stop"
+        ],
+        "picked": "workflow_stop",
+        "ok": true,
+        "answer": "workflow_stop"
+      },
+      {
+        "id": "workflow-delete",
+        "expected": [
+          "workflow_delete"
+        ],
+        "picked": "workflow_delete",
+        "ok": true,
+        "answer": "workflow_delete"
+      },
+      {
+        "id": "workflow-export",
+        "expected": [
+          "workflow_export"
+        ],
+        "picked": "workflow_export",
+        "ok": true,
+        "answer": "workflow_export"
+      },
+      {
+        "id": "export-list",
+        "expected": [
+          "export_list"
+        ],
+        "picked": "export_list",
+        "ok": true,
+        "answer": "export_list"
+      },
+      {
+        "id": "models-catalog",
+        "expected": [
+          "models_catalog"
+        ],
+        "picked": "models_catalog",
+        "ok": true,
+        "answer": "models_catalog"
+      },
+      {
+        "id": "model-infer",
+        "expected": [
+          "model_infer"
+        ],
+        "picked": "model_infer",
+        "ok": true,
+        "answer": "model_infer"
+      },
+      {
+        "id": "rerank",
+        "expected": [
+          "model_rerank"
+        ],
+        "picked": "model_rerank",
+        "ok": true,
+        "answer": "model_rerank"
+      },
+      {
+        "id": "chart-contract",
+        "expected": [
+          "chart_catalog"
+        ],
+        "picked": "chart_catalog",
+        "ok": true,
+        "answer": "chart_catalog"
+      },
+      {
+        "id": "ops",
+        "expected": [
+          "analysis_catalog"
+        ],
+        "picked": "analysis_catalog",
+        "ok": true,
+        "answer": "analysis_catalog"
+      },
+      {
+        "id": "code-read",
+        "expected": [
+          "code_read"
+        ],
+        "picked": "code_read",
+        "ok": true,
+        "answer": "code_read"
+      },
+      {
+        "id": "code-search",
+        "expected": [
+          "code_search"
+        ],
+        "picked": "code_search",
+        "ok": true,
+        "answer": "code_search"
+      },
+      {
+        "id": "catbus",
+        "expected": [
+          "catbus_status"
+        ],
+        "picked": "catbus_status",
+        "ok": true,
+        "answer": "catbus_status"
+      },
+      {
+        "id": "skills",
+        "expected": [
+          "skill_catalog"
+        ],
+        "picked": "skill_catalog",
+        "ok": true,
+        "answer": "skill_catalog"
+      },
+      {
+        "id": "skill-load",
+        "expected": [
+          "skill_load"
+        ],
+        "picked": "skill_load",
+        "ok": true,
+        "answer": "skill_load"
+      }
+    ]
+  },
+  {
+    "model": "qwen3.5:2b",
+    "correct": 24,
+    "total": 26,
+    "results": [
+      {
+        "id": "count-with-filter",
+        "expected": [
+          "dataset_query"
+        ],
+        "picked": "dataset_query",
+        "ok": true,
+        "answer": "dataset_query"
+      },
+      {
+        "id": "peek-first",
+        "expected": [
+          "dataset_peek",
+          "dataset_profile"
+        ],
+        "picked": "dataset_page",
+        "ok": false,
+        "answer": "dataset_page"
+      },
+      {
+        "id": "schema",
+        "expected": [
+          "dataset_profile"
+        ],
+        "picked": "dataset_profile",
+        "ok": true,
+        "answer": "dataset_profile"
+      },
+      {
+        "id": "page",
+        "expected": [
+          "dataset_page",
+          "dataset_sample"
+        ],
+        "picked": "dataset_sample",
+        "ok": true,
+        "answer": "dataset_sample"
+      },
+      {
+        "id": "list-datasets",
+        "expected": [
+          "list_datasets"
+        ],
+        "picked": "list_datasets",
+        "ok": true,
+        "answer": "list_datasets"
+      },
+      {
+        "id": "grant",
+        "expected": [
+          "request_dataset_access"
+        ],
+        "picked": "request_dataset_access",
+        "ok": true,
+        "answer": "request_dataset_access"
+      },
+      {
+        "id": "run-failed",
+        "expected": [
+          "app_errors",
+          "run_status"
+        ],
+        "picked": "run_status",
+        "ok": true,
+        "answer": "run_status"
+      },
+      {
+        "id": "run-nodes",
+        "expected": [
+          "run_status"
+        ],
+        "picked": "run_status",
+        "ok": true,
+        "answer": "run_status"
+      },
+      {
+        "id": "rerun",
+        "expected": [
+          "rerun_node"
+        ],
+        "picked": "rerun_node",
+        "ok": true,
+        "answer": "rerun_node"
+      },
+      {
+        "id": "workflow-list",
+        "expected": [
+          "workflow_list"
+        ],
+        "picked": "workflow_list",
+        "ok": true,
+        "answer": "workflow_list"
+      },
+      {
+        "id": "workflow-validate",
+        "expected": [
+          "workflow_validate"
+        ],
+        "picked": "workflow_validate",
+        "ok": true,
+        "answer": "workflow_validate"
+      },
+      {
+        "id": "workflow-run",
+        "expected": [
+          "workflow_run"
+        ],
+        "picked": "workflow_run",
+        "ok": true,
+        "answer": "workflow_run"
+      },
+      {
+        "id": "workflow-stop",
+        "expected": [
+          "workflow_stop"
+        ],
+        "picked": "workflow_stop",
+        "ok": true,
+        "answer": "workflow_stop"
+      },
+      {
+        "id": "workflow-delete",
+        "expected": [
+          "workflow_delete"
+        ],
+        "picked": "workflow_delete",
+        "ok": true,
+        "answer": "workflow_delete"
+      },
+      {
+        "id": "workflow-export",
+        "expected": [
+          "workflow_export"
+        ],
+        "picked": "workflow_export",
+        "ok": true,
+        "answer": "workflow_export"
+      },
+      {
+        "id": "export-list",
+        "expected": [
+          "export_list"
+        ],
+        "picked": "export_list",
+        "ok": true,
+        "answer": "export_list"
+      },
+      {
+        "id": "models-catalog",
+        "expected": [
+          "models_catalog"
+        ],
+        "picked": "models_catalog",
+        "ok": true,
+        "answer": "models_catalog"
+      },
+      {
+        "id": "model-infer",
+        "expected": [
+          "model_infer"
+        ],
+        "picked": "model_infer",
+        "ok": true,
+        "answer": "model_infer"
+      },
+      {
+        "id": "rerank",
+        "expected": [
+          "model_rerank"
+        ],
+        "picked": "ask_user_question",
+        "ok": false,
+        "answer": "ask_user_question"
+      },
+      {
+        "id": "chart-contract",
+        "expected": [
+          "chart_catalog"
+        ],
+        "picked": "chart_catalog",
+        "ok": true,
+        "answer": "chart_catalog"
+      },
+      {
+        "id": "ops",
+        "expected": [
+          "analysis_catalog"
+        ],
+        "picked": "analysis_catalog",
+        "ok": true,
+        "answer": "analysis_catalog"
+      },
+      {
+        "id": "code-read",
+        "expected": [
+          "code_read"
+        ],
+        "picked": "code_read",
+        "ok": true,
+        "answer": "code_read"
+      },
+      {
+        "id": "code-search",
+        "expected": [
+          "code_search"
+        ],
+        "picked": "code_search",
+        "ok": true,
+        "answer": "code_search"
+      },
+      {
+        "id": "catbus",
+        "expected": [
+          "catbus_status"
+        ],
+        "picked": "catbus_status",
+        "ok": true,
+        "answer": "catbus_status"
+      },
+      {
+        "id": "skills",
+        "expected": [
+          "skill_catalog"
+        ],
+        "picked": "skill_catalog",
+        "ok": true,
+        "answer": "skill_catalog"
+      },
+      {
+        "id": "skill-load",
+        "expected": [
+          "skill_load"
+        ],
+        "picked": "skill_load",
+        "ok": true,
+        "answer": "skill_load"
+      }
+    ]
+  }
+]

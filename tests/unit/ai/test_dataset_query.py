@@ -7,7 +7,6 @@ from ai.errors import AIError
 @pytest.fixture
 def frame(monkeypatch):
     import pandas as pd
-    from ai import tools
 
     data = pd.DataFrame(
         [
@@ -17,7 +16,7 @@ def frame(monkeypatch):
             {'平台': '知乎', '正文': 'd' * 300, '点赞': None, '阶段': '二'},
         ]
     )
-    monkeypatch.setattr(tools, '_dataset_frame', lambda dataset_id: data)
+    monkeypatch.setattr('ai.tools.datasets._dataset_frame', lambda dataset_id: data)
     return data
 
 

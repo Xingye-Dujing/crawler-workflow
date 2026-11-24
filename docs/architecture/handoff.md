@@ -16,6 +16,27 @@
 - 最后提交：`a237eb0a 修改：运行引擎拆包——engine/run/ 按问题拆成八个模块（W2 第二片）`；框架仓库 `9e1e66a`（0.1.26）
 - 工作区：干净
 
+## W3：ai/tools 拆包（2026-11-24）
+
+`ai/tools.py`（1697 行、37 个工具、一份 `TOOLS` 字典）→ `ai/tools/` 包，一域一模块，各文件末尾一个
+`TOOLS` 元组，`ai.tools.TOOLS` 是合并字典（与 `nodes/catalog.py` 同一手法）：
+
+- `catalog.py`（覆盖率/能力技能/CatBus/图表/算子）、`datasets.py`（peek/profile/page/sample/query +
+  封闭算子表）、`runs.py`（运行/控制台/确认编辑/`rerun_node` + `RERUN_REFUSAL_KEYS`）、
+  `workflows.py`（保存的工作流 + 导出架）、`models.py`（本机模型 + infer/rerank）、`code.py`（源码只读）、
+  `policy.py`（`UNIVERSAL_TOOLS`/`APPROVAL_TOOLS`/`ALWAYS_APPROVAL_TOOLS`）、`shared.py`（`_int_arg`）。
+- `ai.tools.tool_x` 的历史地址用 PEP-562 `__getattr__` 转发到属主模块（**只转发调用**，patch 必须打在
+  `ai.tools.datasets` 这类属主上——这条写在转发函数的 docstring 里）；测试里的 patch 目标随之改指属主
+  （`_dataset_frame`/`_workflow_manager`/`_infer_text_classifier`/`get_setting`）。
+- 顺手删掉四个死 schema（`ASK_USER_SCHEMA`/`UPDATE_PLAN_SCHEMA`/`PRESENT_SCHEMA`/`APPROVAL_SCHEMA`）：
+  控制工具已由框架接管，这四个没有任何引用。
+- 模块预算删掉 `ai/tools.py: 1697`（包内最大 `datasets.py` 454 行）。
+- 新增 `docs/capabilities/tool-descriptions.md`（命名、参数 ≤8、读写分离、“什么时候不该用”，逐工具表）与
+  门禁 `tests/unit/gates/test_tool_descriptions.py`（名字有域前缀、描述 ≥40 字、≤8 参数、无 `code`/`script`
+  类自由参数、权限是已知动词、页面不漏列不多列）。
+- 新增 `tools/eval_tool_routing.py`：26 条用户原话，用本地 Ollama 让模型只挑一个工具名，输出命中率；
+  数字记在 `docs/testing/model-eval.md`。
+
 ## W6：框架 0.1.26（2026-11-24）
 
 框架侧两次提交（`aeeb11d`、`9e1e66a`），宿主侧换 wheel + 记文档：
