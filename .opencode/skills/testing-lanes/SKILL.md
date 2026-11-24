@@ -31,7 +31,9 @@ to turn a missing dependency into a failure. Never run `live_*` unattended; ask 
   name it; device only when UI/engine/LLM/crawling changed.
 - **One full fast run per batch, not per edit**: run it when a ~4-knife batch closes, when the change
   crosses several domains, or at the closure gate. It costs ~14 minutes of the user's time. Both
-  pylint tiers ride with that batch run.
+  pylint tiers ride with that batch run. **A Lane C change never starts the full tier**: name the
+  domains it can break and run those; the commit message says which ones ran and CI is the backstop.
+  (2026-11-24: a dropdown-plus-tests change nearly burned 14 minutes; the user stopped it.)
 - **Do not test the world twice.** A green file is not re-run because a doc line moved. "不用那么严格"
   is about scope, not about the touched domain — prove that one, and let CI be the backstop.
 - **Closure** — a "done" claim: one full fast run + the tiers the change touched, nothing
