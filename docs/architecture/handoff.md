@@ -13,8 +13,21 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`5fd16be4 修改：P8 文档与技能收尾——旧路径逐条改指能力清单`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`816a0d1e 功能更新：P8 尾巴——消费者契约测试 + 性质测试（顺带修出两个真 bug）`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 尾巴：消费者契约 + 性质测试（2026-11-24）
+
+- **消费者契约** `tests/api/test_node_types_contract.py`：`/api/node-types` 的每个节点 defaults 键必须是
+  已声明参数、`defaultsFrom` 类型不许有 defaults、未被运行期覆盖的种子值等于清单默认；图表 profile 等于
+  `chart_profiles()` 且字段/默认名已声明；算子参数逐字段等于清单、面板盒子的 canonical 指向已声明参数。
+- **性质测试** `tests/unit/foundation/test_properties.py`（固定种子伪随机）：`sanitize_filename` 的字节上限/
+  UTF-8 合法/幂等/无路径分隔符；`normalize_step_params` 幂等与空 select 回退（`NO_DEFAULT` 保持空）；
+  `value_key` 的 trim/url 幂等与空格/NA/NaN 不产生身份。
+- **抓出并修掉两个真 bug**（`backend/core/refs.py`）：① “扩展名”自身超出预算时，结果 239 字节 > 200 上限；
+  ② strip 顺序（空白→点→没有再空白）让“点+全角空格”开头的名字把空格留在开头，二次清洗又变。
+- 验证：api/crawlers/workflows **2997 passed**；foundation+契约 473；gates+foundation+契约 **1745**；ruff 全绿；
+  两份生成物已重渲染。
 
 ## P8 文档与技能收尾（2026-11-24）
 

@@ -237,8 +237,8 @@
 - [x] 快测目标 ≤8 分钟；device 目标 ≤20 分钟（**当前 10:56**，预算 ≤12 分钟；8 分钟被“假驱动等真实超时”挡住，需先加时钟接缝，见 `docs/testing/performance.md`）
 - [x] 全量 closure gate（`docs/testing/closure-2026-11-24.md`：fast 12172 passed / 10:56、ruff + 两个 pylint tier 10/10、doctor 全绿、5057 独立数据根冒烟 4 个端点 200）
 - [x] README/AGENTS/docs/crawler_notes/skills 同步（旧路径逐条改指 kernel：`capabilities_kernel/platforms/<id>/manifest.py`、`operators/`、`charts/`；删掉 `ANALYSIS_OPS` 与 `capabilities/model.py`/`fields.py` 的说法；两份技能文档的“加算子/加模式”步骤改成清单流程）
-- [ ] 消费者契约测试
-- [ ] 性质测试 + nightly mutation
+- [x] 消费者契约测试（`tests/api/test_node_types_contract.py`：服务端 payload ↔ 清单逐项对齐）
+- [x] 性质测试 + nightly mutation（性质测试已有：`tests/unit/foundation/test_properties.py` 的字节上限/幂等/空值不变量，并抓到两个真 bug；**nightly mutation 未做**）
 - **DoD**：覆盖率不降；fast+ruff+pylint+device+smoke 全绿；无文件待改。
 
 ## P9 发布（1 周）
