@@ -13,8 +13,16 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`69f87e7d 功能更新：分析面板第二批——topic 家族 8 个算子表单清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`3d85100c 功能更新：分析面板第三批——时间/事件 6 个算子表单清单化`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## 分析面板：第三批（时间/事件，2026-11-24）
+
+- 迁移 extract_time / bin_time / suggest_stages / sentiment_evolution / forecast / alert（累计 **20/37**）。
+- **操作事故与修复**：为补 import 用了 PowerShell `Get-Content -Raw` + `Set-Content`（按 ANSI 读入），
+  中文串被二次编码、BOM 注入、6 个文件语法错误；`git checkout` 还原后改用 edit 重做。**清单只能 edit/write。**
+- 验证：operator/panel 契约 297 passed；frontend contract 107 passed；ruff 全绿；生成物重生成。
+  该批未跑 product/tests pylint（下一批收口时补）。
 
 ## 分析面板：第二批（topic 家族，2026-11-24）
 
