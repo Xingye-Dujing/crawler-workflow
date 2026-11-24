@@ -231,8 +231,8 @@
 
 ## P8 测试瘦身与收口（1-2 周）
 
-- [ ] 测试价值清单（每条测试防什么）
-- [ ] 删重复/实现细节/永久 skip
+- [x] 测试价值清单（`python tools/test_inventory.py` → `docs/testing/value-inventory.md`：逐文件的用例数/无断言/skip/xfail；`tests/unit/gates/test_test_inventory.py` 拒绝陈旧页面、拒绝“无断言又没写理由”的用例，并把无断言总数钉成 33）
+- [ ] 删重复/实现细节/永久 skip（已核对：10 个 skip 全是 OS/环境事实；无断言 33 条已逐条写明理由，尚未改写为显式断言）
 - [ ] 节点/算子/图表矩阵生成式
 - [ ] 快测目标 ≤8 分钟；device 目标 ≤20 分钟
 - [ ] 全量 closure gate
