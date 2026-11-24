@@ -188,7 +188,9 @@ repository root.
   `seeded_logins`; a test *about* the login rule points `Config.COOKIE_DIR` at its own tmp dir.
 - **The `integration` UI tier performs no server writes** — stub `fetch`.
 - **A test may not assume the machine: CI is UTC, this box is UTC+8.** Ask the machine (`astimezone()`); `TZ` is honoured
-  on Windows — `$env:TZ='UTC'` before believing a green run.
+  on Windows — `$env:TZ='UTC'` before believing a green run. **A wait reads ONE clock at both ends** (`time.monotonic()`
+  for the deadline it compares): `deadline = time.time() + 40` against `while time.monotonic() < deadline` never expires on
+  Windows, where `monotonic` counts from boot, so a fixture whose server never answers hangs to the suite's own timeout.
 - **A feature matrix must enumerate every dimension that classifies the thing under test.**
 
 ### Frontend JS

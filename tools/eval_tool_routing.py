@@ -2,7 +2,7 @@
 
 The AI workspace hands the model a list of tool names and one-sentence descriptions and expects it to
 choose — so the quality of those DESCRIPTIONS is a measurable thing, not an opinion. This script asks
-a local Ollama model the same 25 user utterances and scores the tool name it answers with.
+a local Ollama model the same 26 user utterances and scores the tool name it answers with.
 
 It is deliberately not part of pytest: it needs a model, it is slow, and its numbers are a reading,
 not a pass/fail. `docs/testing/model-eval.md` records the runs.

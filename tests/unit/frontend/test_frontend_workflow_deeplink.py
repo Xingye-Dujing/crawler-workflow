@@ -78,7 +78,7 @@ def test_recorder_clears_history_and_draws_no_cursor():
     recorder = (tools / 'record_demo.py').read_text(encoding='utf-8')
     capture = (tools / 'demo_capture.py').read_text(encoding='utf-8')
     assert '/api/runs/clear' in recorder, 'run records must be cleared before each take'
-    assert "'/api/ai/conversations/" in recorder, 'AI chat history must be cleared too'
+    assert "'/api/ai/ws/conversations/" in recorder, 'AI chat history must be cleared too'
     assert 'DELETE FROM llm_cache' in recorder, 'cached LLM answers must be cleared so nodes really run'
     assert "'-draw_mouse', '0'" in capture, 'the cursor must not flicker in the recording'
     assert 'keybd_event(0x12' not in capture, 'no synthetic ALT press — it flickers the UI'

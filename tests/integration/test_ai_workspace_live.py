@@ -105,11 +105,14 @@ def ai_server(tmp_path_factory):
             env=env,
         )
         url = f'http://127.0.0.1:{port}'
-        deadline = time.time() + 40
+        # One clock for both ends: a deadline read from the wall clock against an uptime counter never
+        # expires on Windows (monotonic counts from boot), so a server that never answers would sit in
+        # this loop until the suite's own timeout instead of failing with the log below.
+        deadline = time.monotonic() + 40
         try:
             while time.monotonic() < deadline:
                 try:
-                    with urllib.request.urlopen(url + '/api/ai/bootstrap', timeout=2) as resp:
+                    with urllib.request.urlopen(url + '/api/ai/ws/bootstrap', timeout=2) as resp:
                         if resp.status == 200:
                             break
                 except (urllib.error.URLError, ConnectionError, TimeoutError):

@@ -150,7 +150,7 @@
 | `tests/unit/ai/test_ai_workspace_blueprint.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/ai/test_artifact_previews.py` | 10 | 0 | 0 | 0 |
 | `tests/unit/ai/test_artifact_validators.py` | 7 | 0 | 0 | 0 |
-| `tests/unit/ai/test_catbus_skill.py` | 12 | 0 | 0 | 0 |
+| `tests/unit/ai/test_catbus_skill.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/ai/test_chat_stream.py` | 2 | 0 | 0 | 0 |
 | `tests/unit/ai/test_dataset_access.py` | 10 | 0 | 0 | 0 |
 | `tests/unit/ai/test_dataset_query.py` | 9 | 0 | 0 | 0 |
@@ -257,7 +257,7 @@
 | `tests/unit/crawlers/test_crawler_base.py` | 33 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_crawler_cnki.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_crawler_engine.py` | 48 | 0 | 0 | 0 |
-| `tests/unit/crawlers/test_crawler_factory_account_path.py` | 7 | 0 | 0 | 0 |
+| `tests/unit/crawlers/test_crawler_factory_account_path.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_crawler_platform_plugins.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_crawler_twitter.py` | 32 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_crawler_youtube.py` | 29 | 0 | 0 | 0 |

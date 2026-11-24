@@ -88,6 +88,15 @@
   仍在补丁旧常量，于是每次都等满 45 秒；`has_more=false` 的行走仍在向站点要下一页，等满 10 秒窗口×8。
   单例超过 10 秒先问“它补丁的对象/product 读的对象是同一个吗”，再谈性能。实测与预算见
   `docs/testing/performance.md`。
+- **一个等待的截止时刻只能读一个钟，而一个存活探针的 URL 是产品的既成事实。** 2026-11-24 第一次跑 device tier 才
+  发现：`tests/integration/{test_ai_workspace_live,test_ui_layout}.py` 的服务夹具写
+  `deadline = time.time() + 40` 却用 `while time.monotonic() < deadline`，在 Windows 上 `monotonic` 从开机算
+  （几万秒，远小于墙钟的 1.79e9），于是这个 40 秒**永远不会到期**——服务器没起来时不是 40 秒后带着日志失败，而是一直转到
+  900 秒的全局 timeout；同时 AI 那个探针还指着 `/api/ai/bootstrap`（P4 之后已迁到 `/api/ai/ws/bootstrap`），
+  它只会一直 404。两处都修了。教训：移动一个端点要顺手跑 device tier；写等待先确认两端的钟是同一个。
+  同一条道理的另一面：**测试桩要按产品自己的拼写匹配**——`test_ui_layout.py` 的 bootstrap/`@` 菜单桩写死
+  `/api/ai/...`，端点搬到 `/api/ai/ws` 后桩继续匹配不上、用例照样“跑完了”，只是页面里什么都没有；现在桩用页面
+  声明的 `AI_BASE`。
 - **隔离发生在 conftest 导入时。** collection 先导入所有模块，而 `app.py` 在导入那刻就把路径冻进单例，晚一步的迁移无效。
 - **两个 pytest 会话可以同时跑，所以清理只能回收“空着”的旧根。** 每个会话的临时根按 pid 命名，但“保留最新三个”的清理会把**正在跑的那个**根删掉——
   最长的那次运行按 mtime 永远是最旧的。它的 `data/`、`settings.json`、数据库在一半消失，于是那次全量报出十几个彼此无关的失败

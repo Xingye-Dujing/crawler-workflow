@@ -13,8 +13,74 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`a237eb0a 修改：运行引擎拆包——engine/run/ 按问题拆成八个模块（W2 第二片）`；框架仓库 `9e1e66a`（0.1.26）
+- 最后提交：`f05019b2 修改：AI 工具按域拆包——ai/tools/ 七个模块 + 描述规范门禁（W3）`；框架仓库 `9e1e66a`（0.1.26）
 - 工作区：干净
+
+## 收口批的 device tier：两处测试缺陷（2026-11-24）
+
+第一次真跑 device tier（`-m "integration or live_ollama"` + `CRAWLER_REQUIRE_BROWSER/OLLAMA=1`）发现两个
+**只在真环境才暴露**的测试缺陷，都已修：
+
+- `tests/integration/{test_ai_workspace_live,test_ui_layout}.py` 的服务夹具写 `deadline = time.time() + 40`
+  却用 `while time.monotonic() < deadline`：Windows 的 `monotonic` 从开机算，远小于墙钟，于是 40 秒永不到期。
+  服务器没起来时不是带日志失败，而是一直转到 900 秒全局 timeout（父进程空转、Chrome 与测试服务器泄漏，管道还被
+  泄漏子进程攥着，后台命令的输出一直是空的）。两处都改成 `time.monotonic() + 40`。
+- `test_ai_workspace_live.py` 的就绪探针指着 `/api/ai/bootstrap`；P4 之后 AI 的 HTTP 表面整体搬到
+  `/api/ai/ws`（`api/ai_workspace.py` 的 `url_prefix`），所以它只会一直 404。改为 `/api/ai/ws/bootstrap`
+  （手测：新端口 + 临时 `CRAWLER_DATA_ROOT`，200）。
+- 同一批 2 个真浏览器用例红：`test_ui_layout.py` 的 `AI_BOOTSTRAP_STUB` 与 `@` 菜单桩还按 `/api/ai/...`
+  匹配，于是 bootstrap 只回 `{ok:true}`（没有技能 → “no skill card rendered a context chip”）、`references`
+  落到真服务器（“本用户没有可用的对象” → 2 行变 0 行）。两个桩改成 `AI_BASE + '…'`（`AI_BASE` 是
+  `ai/kernel/http.js` 一处声明的页面拼写，桩不再持有第二份），两条都转绿。
+- `tools/record_demo.py` 清 AI 会话也还在打 `/api/ai/conversations`，一并改到 `/api/ai/ws/conversations`
+  （`test_frontend_workflow_deeplink.py` 的字面断言同步）。
+
+规则已写进 `AGENTS.md`（“一个等待的两端读同一个钟”）与 `docs/agent_practices.md`（含两次实测的读法）。
+**教训：移动一个端点要顺手跑一次 device tier**——这条 tier 在 P4 之后一直没人真跑过；“桩按产品自己的拼写
+匹配”是同一条道理的另一面。
+
+结果：**215 passed / 5 skipped / 6:12**；`CATBUS_HOME=F:\catbus-0.2.1` 下那 5 个跳过（CatBus 适配器）全部
+变成 passed（适配器 0.3.0 + Node v24.21.0，入口 `dist/integrations/crawler-workflow/cli.js`，manifests 11 个
+平台）。真实 CatBus 登录采集没跑：那要花用户账号，属于 live tier，得先问。
+
+## W4：sessions 纯判定 + 弹窗接线（2026-11-24，`ee3cbfc2`）
+
+- **三个纯模块**（无文件写、无读钟、无 Flask）：`sessions/naming.py`（`(平台, 账号)` 的折叠：
+  `account_name`/`account_segment`/`cookie_filename`/`profile_path`/`account_order`/`next_free_label`）、
+  `sessions/verdict.py`（状态词、`BLOCKING`、`classify_probe`、`cache_key`、`cacheable`、`is_fresh`，TTL 边界含端点）、
+  `sessions/lanes.py`（profile 锁归属：`dir_key`/`acquire(…, clock=)`/`release_profile`/`is_busy`，等待的钟可注入）。
+- `cookies.py` 的 `ACCOUNT_RE`/`DEFAULT_ACCOUNT` 变成 `naming` 的对象（一条规则一个家），其余方法委托；
+  `profiles.py` 的 `_account_part`、锁块与路径拼接删掉，**889 → 776 行**；`preflight.py` 的分类/状态/
+  阻塞/键/TTL/可缓存全部来自 `verdict`，**747 → 689 行**；预算表同步下调。
+- **`instagram.dialogs` / `youtube.dialogs`：接入，不删。** 两条平台都真有弹窗路径：`Crawler.open()` 对任何带
+  `prompts` 的类调用 `_dismiss_prompts()`，YouTube 的 `_boot()` 要从 EU 同意页底下读 `ytcfg`/`ytInitialData`
+  （匿名采集必然遇到），Instagram 登录页由面板的验证探针经 `diagnose()→open()` 打开。于是
+  `InstagramCrawler.prompts = (dialogs.NOTIFICATIONS,)`、`YouTubeCrawler.prompts = (dialogs.CONSENT,)`，
+  两条 `ORPHAN_EXEMPTIONS` 删除，并新增 `tests/unit/crawlers/test_platform_prompts.py`：`dialogs.py` 里的
+  每个 `Prompt` 都必须被其平台 crawler 类携带。
+- **尾巴已收**：`crawlers/__init__.py` 的 `elif cookie_dir` 分支原来自行拼 `<platform>@<account>_cookies.json`
+  （wechat 这类无会话平台），现在只调 `naming.cookie_filename`；`test_crawler_factory_account_path.py`
+  对 `''`/`default`/`DEFAULT`/`work` 四种写法钉住“同一个命名者”。
+
+## W5：AI 前端内核化（2026-11-24，`3df480fd`）
+
+`ai-workspace.js` 4498 行 → 174 行的入口/接线，其余拆成 22 个模块（`index.html` 顺序即加载顺序，
+`splits.json` 登记，`Object.assign` 保持一个全局）：
+
+- `ai/kernel/`：`store.js`（唯一可观察状态 `AI_STATE` + `const AIWorkspace` + `AIStore`）、`dom.js`（安全渲染 +
+  morph + 折叠记忆）、`http.js`（`AI_BASE` + 21 个请求→状态成员）、`sse.js`（SSE 解码 + `_onEvent` reducer +
+  turn 时钟 + trace 流）。
+- `ai/render/`：`markdown.js`（声明 `AIRender` 与转义/表格）、`question.js`、`artifact.js`、`toolcard.js`。
+- `ai/features/`：`dock`/`chat`/`stored`/`composer`/`mentions`/`answers`/`sidebar`/`events`/`artifacts`/`monitors`/
+  `folder`/`studio`/`editors`/`watch`。`ai/stream.js`、`ai/render.js`、`ai/studio.js`、`ai/watch.js` 删除（字节在新文件里）。
+- **新门禁 `tests/js_budget.py` + `tests/unit/frontend/test_frontend_js_budget.py`**：单文件 ≤600 行，`SCOPE` 是
+  唯一声明范围的地方（今天是 `ai-workspace.js` 的 splits 闭包），生成物 `zenviz-page.js`/`node-types-fallback.js`
+  按名字豁免；带“超预算必须报出文件名/恰好在预算上通过/生成物豁免只有一处声明”的合成缺陷自测。
+  页面级铺开会让 19 个既有文件变红（canvas.js 2637 等），那是后续片要显式改范围的事，不是现在的豁免。
+- 一处必须修的行为：bootstrap 的模型清单答复在用户切走 provider 之后返回时，会把旧 provider 的模型写回去；
+  `_loadBootstrap` 现在也拒绝一个页面已经离开的 provider 的答复（`test_the_local_daemons_real_models…` 仍绿）。
+- 未做（已写在文件头，不假装做了）：`AIHttp` 还没有收养面板里约 30 处单次 `fetch`（studio 插件开关、文件夹、
+  技能 CRUD、监控）。
 
 ## W3：ai/tools 拆包（2026-11-24）
 
@@ -36,6 +102,9 @@
   类自由参数、权限是已知动词、页面不漏列不多列）。
 - 新增 `tools/eval_tool_routing.py`：26 条用户原话，用本地 Ollama 让模型只挑一个工具名，输出命中率；
   数字记在 `docs/testing/model-eval.md`。
+- **删掉宿主 `ai.skills.route`（及 `test_catbus_skill.py` 里的那条用例）**：它是框架 `Skills.route` 的
+  第二份关键词表，且两侧都没人调用；技能选择这件事只留框架一份。架构待办（R7）因此改写为“先把框架
+  `Skills.route` 接进 `auto` 再评测”——`api/ai_workspace.py` 现在把 `auto` 当空串交给框架默认技能。
 
 ## W6：框架 0.1.26（2026-11-24）
 

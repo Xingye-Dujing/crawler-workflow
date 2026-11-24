@@ -104,7 +104,10 @@ def app_url(tmp_path_factory):
             env=env,
         )
         url = f'http://127.0.0.1:{port}'
-        deadline = time.time() + 40
+        # One clock for both ends: a wall-clock deadline against the monotonic uptime counter never
+        # expires on Windows, so a server that never answers would hang this fixture until the suite's
+        # own timeout instead of failing with the log it just wrote.
+        deadline = time.monotonic() + 40
         try:
             while time.monotonic() < deadline:
                 try:
@@ -6021,8 +6024,12 @@ AI_BOOTSTRAP_STUB = """
    to state: one provider, one skill whose context chip is the label the case asserts on. */
 window.fetch = function (url) {
     const path = String(url).split('?')[0];
+    /* The route prefix is the PAGE's spelling, not a copy of it: `AI_BASE` is declared once in
+       `ai/kernel/http.js`, and a stub that hard-coded `/api/ai` kept passing nothing after the
+       workspace moved to `/api/ai/ws` (measured: no skill card, an empty @ menu). */
+    const base = AI_BASE;
     let payload = {ok: true};
-    if (path === '/api/ai/bootstrap') {
+    if (path === base + '/bootstrap') {
         payload = {
             ok: true,
             providers: [{id: 'deepseek', label_key: 'ai.provider.deepseek',
@@ -6035,7 +6042,7 @@ window.fetch = function (url) {
             context_sources: ['project', 'canvas'], tools: [],
             runtime: {kind: 'desktop', label_key: 'ai.runtime.desktop'},
         };
-    } else if (path === '/api/ai/context' || path.endsWith('/context')) {
+    } else if (path === base + '/context' || path.endsWith('/context')) {
         payload = {
             ok: true,
             meta: {scope: 'summary', tokens: 20, chars: 80, items: [{title: '项目事实', chars: 80}]},
@@ -6161,7 +6168,7 @@ def test_the_composer_can_reference_a_dataset_instead_of_uploading_it(app_url, d
         window.__chatBodies = [];
         window.fetch = function (url, opts) {
             const path = String(url).split('?')[0];
-            if (path === '/api/ai/references') {
+            if (path === AI_BASE + '/references') {
                 const payload = {ok: true, references: [
                     {kind: 'dataset', id: 'ds-1', label: '2026-11 语料', detail: '12,345 行'},
                     {kind: 'export', id: 'r.csv', label: 'r.csv', detail: '3 KB'},
@@ -6169,7 +6176,7 @@ def test_the_composer_can_reference_a_dataset_instead_of_uploading_it(app_url, d
                 return Promise.resolve({ok: true, json: () => Promise.resolve(payload),
                                         text: () => Promise.resolve(JSON.stringify(payload))});
             }
-            if (path === '/api/ai/chat' && opts && opts.body) window.__chatBodies.push(String(opts.body));
+            if (path === AI_BASE + '/chat' && opts && opts.body) window.__chatBodies.push(String(opts.body));
             return real(url, opts);
         };
         """

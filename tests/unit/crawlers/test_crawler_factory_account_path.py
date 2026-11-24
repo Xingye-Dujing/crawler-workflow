@@ -14,7 +14,7 @@ the object it was handed.
 """
 
 import pytest
-from sessions import profiles
+from sessions import naming, profiles
 from sessions.cookies import CookieManager
 
 import crawlers
@@ -68,6 +68,17 @@ def test_the_platform_that_holds_no_session_still_builds_no_cookie_file(stub_fac
     The fold must not turn "no session" into an exception."""
     made = crawlers.get_crawler('wechat', cookie_dir='C:/jar', account='default')
     assert made.cookie_path.replace('\\', '/') == 'C:/jar/wechat_cookies.json'
+
+
+@pytest.mark.parametrize('account', ['', 'default', 'DEFAULT', 'work'])
+def test_the_same_session_free_platform_asks_one_namer_for_the_name(stub_factory, account):
+    """The factory used to splice ``<platform>@<account>_cookies.json`` by hand for a platform
+    outside the manager — a second copy of the naming rule (W4 follow-up). Blank, the NAME
+    ``default`` and a real label all go through ``sessions.naming.cookie_filename`` now, so the
+    two spellings of one login cannot drift apart."""
+    made = crawlers.get_crawler('wechat', cookie_dir='C:/jar', account=account)
+    expected = naming.cookie_filename('wechat', account)
+    assert made.cookie_path.replace('\\', '/') == f'C:/jar/{expected}', made.cookie_path
 
 
 @pytest.mark.parametrize('account', ['work.home', 'x/../../y', 'has space', '桌号'])

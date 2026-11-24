@@ -191,14 +191,6 @@ def test_cloud_refuses_the_catbus_skill_by_name(monkeypatch):
     assert skills.reason_text(reason)[0] == 'ai.skillLocalOnly'
 
 
-def test_route_sends_catbus_mentions_to_its_skill():
-    from ai import skills
-
-    assert skills.route('帮我用 catbus 采集小红书') == 'catbus'
-    assert skills.route('本机装了 catbus 吗') == 'catbus'
-    assert skills.route('我想采集微博数据') == 'crawl'
-
-
 def test_the_authoritative_catbus_docs_are_searchable():
     from ai.context import docs_search
 

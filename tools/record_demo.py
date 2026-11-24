@@ -152,11 +152,13 @@ def _clear_run_records(url: str, root: str) -> dict:
     removed = answer.get('removed') or {}
 
     # Clear the AI workspace so the recorded transcript shows only THIS take's node-trace chats.
+    # The workspace's HTTP surface lives under `/api/ai/ws` (`api/ai_workspace.py`); `/api/ai/...`
+    # is the pre-P4 spelling and answers 404.
     cleared_ai = 0
-    listing = requests.get(url + '/api/ai/conversations?limit=500', timeout=10).json()
+    listing = requests.get(url + '/api/ai/ws/conversations?limit=500', timeout=10).json()
     for conv in listing.get('conversations') or []:
         cid = conv.get('id')
-        if cid and requests.delete(url + '/api/ai/conversations/' + quote(str(cid)), timeout=10).ok:
+        if cid and requests.delete(url + '/api/ai/ws/conversations/' + quote(str(cid)), timeout=10).ok:
             cleared_ai += 1
 
     # Drop the row-level LLM checkpoint cache too: a replayed row would be filled from disk without

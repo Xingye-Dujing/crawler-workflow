@@ -54,15 +54,15 @@
 
 | # | 事实 | 验收 |
 |---|---|---|
-| R6 | 没有 qwen3.5:4b/9b 的 20–30 任务评测集 | `docs/testing/model-eval.md` 有任务、评分与跑法；严格模式 ≥80% 有据 |
-| R7 | 没有技能选择评测 | 同一评测集内技能选择命中率有数字 |
-| R8 | 没有工具描述质量规范 | `docs/capabilities/tool-descriptions.md`：命名、≤8 参数、读写分离、禁用场景 |
+| R6 | ~~没有 qwen3.5:4b/9b 的 20–30 任务评测集~~ **已完成（`f05019b2`）** | `docs/testing/model-eval.md` 有 26 条任务、评分与跑法；严格模式 ≥80% 有据（4b/9b 26/26） |
+| R7 | 没有技能选择评测；且“自动技能”实际总是 `project`：宿主 `ai.skills.route` 与框架 `Skills.route` 各有一份**无人调用的**关键词路由（宿主那份已删，重复规则） | 先把框架 `Skills.route` 接进 `auto`（`api/ai_workspace.py` 现在把 `auto` 当空串 → 框架 `general`），再用一张任务表给出命中率；接线前评测只会测一个没人用的函数 |
+| R8 | ~~没有工具描述质量规范~~ **已完成（`f05019b2`）** | `docs/capabilities/tool-descriptions.md`：命名、≤8 参数、读写分离、禁用场景，`test_tool_descriptions.py` 钉住 |
 
 ### 前端与工程
 
 | # | 事实 | 验收 |
 |---|---|---|
-| R9 | `ai-workspace.js` 4446 行；无单文件预算门禁 | 拆成 kernel/features/render；单文件 ≤600 行门禁绿 |
+| R9 | ~~`ai-workspace.js` 4446 行；无单文件预算门禁~~ **已完成（`3df480fd`）** | 拆成 kernel/features/render；单文件 ≤600 行门禁绿（`tests/js_budget.py`，`SCOPE` 一处声明） |
 | R10 | 没有 nightly mutation | CI 夜间任务跑变异并给出分数 |
 
 ## P0 基线 + 热修列车（进行中）

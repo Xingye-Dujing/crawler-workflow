@@ -1,7 +1,7 @@
 import os
 
 from core.config import Config
-from sessions import profiles
+from sessions import naming, profiles
 from sessions.cookies import CookieManager
 
 from crawlers.platforms.bilibili.crawler import BilibiliCrawler
@@ -157,11 +157,10 @@ def get_crawler(
             raise ValueError(t('pool.badAccount', account=account)) from exc
     elif cookie_dir:
         # A platform that holds no session (wechat) is not in the manager's PLATFORMS, so the
-        # validating builder would refuse a crawl that never wanted a cookie. Keep its historical
-        # unsuffixed name: no file is ever written or planted for it.
-        segment = CookieManager.path_segment(account)
-        stem = f'{platform}@{segment}' if segment else str(platform)
-        saved = os.path.join(cookie_dir, f'{stem}_cookies.json')
+        # validating builder would refuse a crawl that never wanted a cookie. Its historical
+        # unsuffixed name is still the ONE spelling the cookie file has: ask `naming`, never
+        # re-spell it here. No file is ever written or planted for such a platform.
+        saved = os.path.join(cookie_dir, naming.cookie_filename(platform, account))
     else:
         saved = ''
     # Import-once protects a *rotating* session from an older snapshot; it must not swallow a

@@ -90,33 +90,31 @@ engine/run/stop.py      stop_run 与浏览器回收
 - `tests/unit/gates/test_run_worker_module_scope.py` 仍绿；
 - 模块预算表里 `engine/run.py` 的数字被删掉或降到 600 以下。
 
-## W3 AI 领域切片
+## W3 AI 领域切片 —— 已完成（`f05019b2`）
 
-`ai/tools.py`（1697 行、50 个函数、47 个 `ToolSpec`）按域拆成
-`ai/tools/{datasets,runs,workflows,models,code}.py`，每个文件末尾一个 `TOOLS` 元组，`ai/tools.py` 只做聚合——
-与 `nodes/catalog.py` 同一个手法。同片补两件 P6 的欠账：
+`ai/tools.py`（1697 行、37 个 `ToolSpec`）→ `ai/tools/` 包，一域一文件，各文件末尾一个 `TOOLS` 元组，
+`ai/tools/__init__.py` 只是合并——与 `nodes/catalog.py` 同一个手法。同片补两件 P6 的欠账：
 
-- `docs/capabilities/tool-descriptions.md`：命名 `<域>_<名词>_<动词>`、≤8 参数、读写分离、每个工具写“什么时候不该用”；
-- qwen3.5:4b/9b 的 20–30 任务评测集与技能选择评测（`docs/testing/model-eval.md`）。
+- `docs/capabilities/tool-descriptions.md`：命名 `<域>_<名词>`、≤8 参数、读写分离、每个工具写“什么时候不该用”，
+  由 `tests/unit/gates/test_tool_descriptions.py` 钉住（名字/长度/参数数/无自由代码参数/权限动词/页面不漏不多）；
+- 26 条任务的工具路由评测 `tools/eval_tool_routing.py` 与数字（`docs/testing/model-eval.md`）：
+  qwen3.5:9b 26/26、4b 26/26、2b 24/26。
 
-## W4 会话/账号切片
+## W4 会话/账号切片 —— 已完成（`ee3cbfc2`）
 
-`sessions/profiles.py`（889 行）与 `sessions/preflight.py`（747 行）里，纯判定（路径折叠、锁定、
-verdict 缓存键）抽成函数，路由只做序列化。`instagram.dialogs` / `youtube.dialogs` 两个死模块在这里
-决定“接入还是删除”，并删掉死模块门禁里对应的例外。
+`sessions/profiles.py`（889→776）与 `sessions/preflight.py`（747→689）里的纯判定抽成
+`sessions/naming.py`（折叠/路径/顺序/命名）、`sessions/verdict.py`（状态/分类/缓存键/TTL）、
+`sessions/lanes.py`（profile 锁归属，等待的钟可注入），现有模块只序列化与转调；预算表同步下调。
+`instagram.dialogs` / `youtube.dialogs` 判为**接入**（两个平台真有弹窗路径，见 handoff），
+例外删除，并加 `tests/unit/crawlers/test_platform_prompts.py` 钉住“每个 Prompt 都被其 crawler 携带”。
 
-## W5 AI 前端内核化
+## W5 AI 前端内核化 —— 已完成（`3df480fd`）
 
-`ai-workspace.js` 4446 行，承担 SSE 解析、渲染、侧栏、设置、工作室五种职责。拆成：
-
-```text
-ai/kernel/   store.js（单一可观察状态） sse.js  http.js  dom.js（安全渲染 + morph）
-ai/features/ chat.js  composer.js  sidebar.js  studio.js  watch.js
-ai/render/   markdown.js  question.js  artifact.js  toolcard.js
-```
-
-零构建、`index.html` 顺序、`splits.json` 登记全部不变；新增“单文件 ≤600 行”的前端门禁
-（`zenviz-page.js`、`node-types-fallback.js` 是生成物，豁免）。
+`ai-workspace.js` 4498 行拆成 174 行的入口 + `ai/kernel/`（store/dom/http/sse）、`ai/render/`
+（markdown/question/artifact/toolcard）、`ai/features/`（dock/chat/stored/composer/mentions/answers/
+sidebar/events/artifacts/monitors/folder/studio/editors/watch）。零构建、`index.html` 顺序、
+`splits.json` 登记、一个全局（`Object.assign`）全部保持；新门禁 `tests/js_budget.py`
+（单文件 ≤600 行，`SCOPE` 是唯一声明范围的地方，生成物按名字豁免，带合成缺陷自测）。
 
 ## W6 框架收口（agent-workspace）——已完成 0.1.26
 

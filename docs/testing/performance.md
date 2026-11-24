@@ -1,16 +1,21 @@
 # 快测性能预算（2026-11-24 实测）
 
 > 本文件是 P8 的性能记录。数字来自 `python -m pytest -q --durations=15`，本机（Windows，
-> Windows 11，Python 3.11，`-q` 默认 marker 过滤：fast tier 12234 passed / 7 skipped /
+> Windows 11，Python 3.11，`-q` 默认 marker 过滤：fast tier 12368 passed / 7 skipped /
 > 386 deselected）。
 
 ## 预算
 
 | 层 | 预算 | 现状 | 判定 |
 |---|---|---|---|
-| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **10:36 ～ 12:37**（同一天连测两次，同一台机器、同一份代码） | **骑线**：一次达标、一次超 37 秒 |
+| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **10:36 ～ 12:37 ～ 11:31**（同一天三次，同一台机器、各自的代码树） | **骑线**：一次达标、一次超 37 秒，W0–W5 收官批 11:31 |
 | fast tier 原始目标 | ≤ 8 分钟 | 10:36 | **未达标，原因见下，不接受用 xdist 掩盖** |
-| device（`-m "integration or live_ollama"`） | ≤ 20 分钟 | 未测（需真 Chrome/Ollama） | 待测 |
+| device（`-m "integration or live_ollama"`） | ≤ 20 分钟 | **6:12**（215 passed / 5 skipped；设 `CATBUS_HOME=F:\catbus-0.2.1` 时 5 个跳过变成 5 passed，即 220） | 达标 |
+
+**W0–W5 收官批的第三次数字**：`12368 passed / 7 skipped / 386 deselected in 691.78s (0:11:31)`。
+用例比 W2 收官批多 134 条（W3/W4/W5 新增的门禁与合成缺陷自测），耗时只多 55 秒——新用例都很短，
+最慢 15 条仍是原来那批“等满真实超时”的（`test_data_analysis` 的算子名单扫描 24.95 s 是新晋第一，
+它是遍历全仓文本，不是等待）。结论不变：**余量来自慢用例，不来自继续拆文件**。
 
 **“骑线”是真的骑线，不是取其中好看的一次。** 2026-11-24 W0/W1/W2 收官批：第一次全量
 `12234 passed / 7 skipped / 386 deselected in 757.26s (0:12:37)`，紧接着带 `--durations=15`

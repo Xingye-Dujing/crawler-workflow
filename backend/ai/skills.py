@@ -542,33 +542,3 @@ def public_skills(provider=None, model: str = '') -> list:
                 item['why_not_text'] = t(parsed[0], **parsed[1])
         out.append(item)
     return sorted(out, key=lambda item: (not item['builtin'], item['id']))
-
-
-def route(text: str, page: str = '') -> str:
-    """A deterministic router whose choice is printed in the transcript; no hidden model call."""
-    blob = f'{page} {text}'.lower()
-    if any(word in blob for word in ('catbus', '猫巴士', '第二后端')):
-        return 'catbus'
-    if any(word in blob for word in ('监控', '盯着', '通知我', 'watch', 'monitor', 'notify')):
-        return 'monitor'
-    if any(word in blob for word in ('重跑', '重新跑', '继续跑', 'rerun', 'replay')):
-        return 'diagnose'
-    if any(word in blob for word in ('失败', '报错', '错误', '诊断', 'failed', 'error', 'console', '日志')):
-        return 'diagnose'
-    if any(word in blob for word in ('内容分析', '量化编码', '编码信度', 'kappa', '内容分析法')):
-        return 'quantitative_coding'
-    if any(word in blob for word in ('编码', '开放式编码', '主轴编码', '选择性编码', 'codebook', 'grounded')):
-        return 'qualitative_coding'
-    if any(word in blob for word in ('图', 'chart', '可视化', '画什么', '坐标')):
-        return 'charts'
-    if any(word in blob for word in ('数据集', '分析', '清洗', '情感', '主题', 'dataset', 'analy')):
-        return 'analysis'
-    if any(word in blob for word in ('工作流', '画布', '节点', '连线', 'workflow', 'canvas')):
-        return 'workflow'
-    if any(word in blob for word in ('采集', '平台', 'cookie', '登录', '采集方式', 'crawl')):
-        return 'crawl'
-    if any(word in blob for word in ('源码', '模块', '测试', '开发', 'code', 'source')):
-        return 'developer'
-    if any(word in blob for word in ('搜索', '联网', '最新', '新闻', 'search', 'web')):
-        return 'research'
-    return 'project'
