@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`7e1652a4 功能更新：分析节点的算子下拉改由能力清单渲染`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`eb885cfb 功能更新：分析面板首批算子表单由清单渲染`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## 分析面板：首批算子表单清单化（2026-11-24）
+
+- `OperatorManifest` 新增 `panel`（`PanelField`：面板键/规范参数/标签键/控件/默认/选项/提示/占位/hide_when），
+  `operator_entries()` 投影给 `/api/node-types`；`node-types.js` 新增 `operator(key)`。
+- `node-analysis.js` 新增 `renderOperatorPanel`：有 `panel` 就按清单渲染，否则回落手写块——**缩小的清单**。
+  首批迁移 6 个（drop_null/fill_null/drop_duplicates/dedupe_similar/semantic_dedupe/similar_to），
+  共享 `columns` 块只剩 select_columns/strip_whitespace；`normalize_analysis_params` 未动。
+- 三例门禁：迁移后的面板值只产出已声明参数；已迁移算子不得留手写块；未迁移算子必须在 JS 仍有表单。
+- 验证：capabilities/analysis/frontend/api/表面门禁 **3558 passed**（约 3 分钟，未跑全量）；ruff 全绿；
+  两个 pylint tier 10.00/10。
+- **剩余**：31 个算子的面板块（topic/时间/统计/关联类），下一批继续。
 
 ## 面板清单化（第一半，2026-11-24）
 
