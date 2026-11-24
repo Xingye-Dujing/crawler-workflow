@@ -2,8 +2,23 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`a36c997a 功能更新：P7 七表面一致性门禁 + 生成物补齐`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`9c8fddf2 功能更新：P7 多表面——MCP server 与能力 CLI`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 多表面：MCP server 与能力 CLI（2026-11-24）
+
+- **`services.mcp`**：传输无关的 JSON-RPC（`initialize`/`ping`/`tools/list`/`tools/call`），工具
+  `capabilities_list`、`capabilities_show`、`workflow_validate`；转调 `ai.knowledge` 与
+  `engine.workflow`，所以编辑器/终端看到的能力不会比产品多一个。通知不回包、未知方法与未知工具按名
+  拒绝、工具级拒绝是 `isError` 结果（不是传输层错误），`serve()` 是逐行 JSON 的 stdio 传输。
+  `tools/mcp_server.py` 是入口。
+- **`services.capability_cli`**：`list [--kind] [--query]` / `show <skill_id>` / `validate <file>`，
+  退出码区分“未知 id”（2）与“校验不通过”（1）；入口 `tools/capability_cli.py`。两个列表都取
+  `MAX_LIMIT`，避免默认短页静默截断。
+- **门禁扩展**：七表面门禁新增 `mcp:capabilities` 与 `cli:capabilities` 两条双向断言（现 87 例）。
+- **验证**：mcp/cli 14 passed；capabilities+表面+文档+引号 520 passed；全量 fast tier **12160 passed**
+  （唯一失败是自己文档里用了角括号，已改并复跑）；ruff 全绿；product 与 tests pylint 10.00/10。
+- **未做**：UI 表单的清单化（随“面板/停靠/设置清单化”）；MCP 资源（当前只暴露工具，不暴露 resources）。
 
 ## P7 七表面一致性门禁（2026-11-24）
 
@@ -86,6 +101,7 @@
 | `f272770a` | P7 第二类：30 个图表类型清单化（字段/引擎/文献列/七段技能；registry 改为投影，绘图函数公开为 handler） |
 | `6a8c4025` | P7 第三类：10 个采集平台清单化（模式/字段/登录与机器要求/七段技能；值类型搬进 kernel，爬虫类成为 handler） |
 | `a36c997a` | P7 七表面一致性门禁（每类能力 × 每个表面双向断言）+ OpenAPI 图表/平台 schema |
+| `9c8fddf2` | P7 多表面：MCP server（stdio，3 个工具）与能力 CLI（list/show/validate），门禁新增两条表面 |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
