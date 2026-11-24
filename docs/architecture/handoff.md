@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`775ea663 功能更新：P8 第二片——无断言用例 33 → 0`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`ba7ca228 功能更新：P8 第三片——快测从 14:23 降到 11:36，并写下预算`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 第三片：快测预算（2026-11-24）
+
+- 实测 `--durations=15`：**14:23 → 11:36**，省 2:47，全部来自修“陈旧测试缝”，没删用例：
+  - `tests/api/test_collision_retry.py` 还在补丁 `Config.WALL_RETRY_BACKOFF`，产品早已改读设置
+    `wall_retry_backoff` → 每例等满真实 45 s。补丁改到 `source.get_setting` 后 **94 s → 3.6 s**。
+  - `test_hongguo_harvest` 的 `has_more=false` 用例仍向站点要下一页、每页等满 10 s×8。
+    让假 UI 的 `scroll_drawer` 返回 `False`（断言不变）后 **78.7 s → 3.5 s**。
+- 新增 `docs/testing/performance.md`：预算（fast ≤12 分钟达标；8 分钟未达，剩余热点与原因逐条列出，
+  明确不用 xdist 掩盖，下一步是给假驱动加时钟接缝）、修复表、复测命令。
+- AGENTS 测试节新增“预算 + 10 秒单例先查陈旧缝”；`docs/agent_practices.md` 记下这条教训。
+- 验证：全量 fast tier **12172 passed / 7 skipped（11:36）**；ruff 全绿；文档/引号门禁 10 passed。
 
 ## P8 第二片：无断言用例 33 → 0（2026-11-24）
 
