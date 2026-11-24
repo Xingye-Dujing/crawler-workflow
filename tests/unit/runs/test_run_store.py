@@ -1207,7 +1207,9 @@ class TestRunFilesLedger:
         # moves. This is the whole reason the ledger is not a list of absolute paths.
         _start(store, 'r2', 'wf', 'fp-b')
         store.record_file('r2', 'node-1', '/var/data/exports/a.csv', 'export')
-        assert store.files_for_run('r2') == [{'name': 'a.csv', 'kind': 'export', 'node_id': 'node-1'}]
+        assert store.files_for_run('r2') == [
+            {'name': 'a.csv', 'kind': 'export', 'node_id': 'node-1', 'group_name': '', 'group': ''}
+        ]
 
     def test_re_recording_the_same_name_does_not_duplicate(self, store):
         _start(store, 'r3', 'wf', 'fp-c')

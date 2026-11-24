@@ -24,6 +24,7 @@ from runtime.transport import _local_transport_refusal
 from analyzers.llm_client import LLMClient
 from api.http import _bad_body, _bad_param, _json_body
 from i18n import get_lang, normalize, t
+from services.exports.groups import resolve_group_dir
 from services.reports import jobs
 
 bp = Blueprint('report', __name__)
@@ -128,7 +129,13 @@ def _generate_report(data: dict, identity: dict) -> tuple[int, dict]:
                 conclusion = ''
 
     workflow_name = meta.get('workflow_name') or 'workflow'
-    report = ReportService(paths.active().export_dir)
+    run_id = str(meta.get('run_id') or '')
+    store = get_run_store()
+    group = str((store.get_run(run_id) or {}).get('export_group') or '') if run_id else ''
+    export_dir = (
+        resolve_group_dir(paths.active().export_dir, group, must_exist=True) if group else ''
+    ) or paths.active().export_dir
+    report = ReportService(export_dir)
     name = (title or '').strip() or workflow_name
     markup = report.build(
         (title or '').strip() or t('report.default_title', name=workflow_name),
@@ -142,6 +149,8 @@ def _generate_report(data: dict, identity: dict) -> tuple[int, dict]:
     except OSError as e:
         add_log(t('run.reportFailed', err=e))
         return 500, {'ok': False, 'error': t('api.reportSaveFailed')}
+    if run_id and group:
+        store.record_file(run_id, '', saved['name'], 'report_html', group=group)
     add_log(t('run.reportSaved', name=saved['name'], size=saved['bytes']))
     return 200, {
         'ok': True,
@@ -198,7 +207,9 @@ def report_view():
     from services.exports.browser import resolve_report_path
 
     name = request.args.get('name', '')
-    path = resolve_report_path(paths.active().export_dir, name)
+    group = request.args.get('group', '')
+    directory = resolve_group_dir(paths.active().export_dir, group, must_exist=True) if group else ''
+    path = resolve_report_path(directory or paths.active().export_dir, name)
     if not path:
         return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
     response = send_file(path, mimetype='text/html', download_name=os.path.basename(path))
@@ -241,16 +252,19 @@ def _latex_work(run_id: str, title: str) -> tuple[int, dict]:
     """The slow half: assemble the LaTeX from the run ledger and compile it."""
     from services.reports import paper
 
-    export_dir = paths.active().export_dir
     store = get_run_store()
+    group = str((store.get_run(run_id) or {}).get('export_group') or '')
+    export_dir = (
+        resolve_group_dir(paths.active().export_dir, group, must_exist=True) if group else ''
+    ) or paths.active().export_dir
     result = paper.generate(run_id, title=title, store=store, export_dir=export_dir)
     produced_tex = str(result.get('tex_file') or '')
     if produced_tex:
-        store.record_file(run_id, '', os.path.join(export_dir, produced_tex), 'latex_doc')
+        store.record_file(run_id, '', os.path.join(export_dir, produced_tex), 'latex_doc', group=group)
     if result.get('error'):
         add_log(t('run.reportLatexFailed', err=result['error']))
         return 400, {'ok': False, 'error': result['error'], 'tex': produced_tex or None}
-    store.record_file(run_id, '', os.path.join(export_dir, result['pdf_file']), 'report_pdf')
+    store.record_file(run_id, '', os.path.join(export_dir, result['pdf_file']), 'report_pdf', group=group)
     add_log(t('run.reportLatexSaved', name=result['pdf_file'], figures=result['figures'], tables=result['tables']))
     return 200, {
         'ok': True,

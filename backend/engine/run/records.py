@@ -8,10 +8,11 @@ verdict, and the two rerun helpers carry the "重跑节点" subtree to the worke
 """
 
 import contextlib
+import os
 import uuid
 
 from core.refs import export_stamp
-from runtime import account_context, run_events
+from runtime import account_context, paths, run_events
 from runtime.state import _completed_lock, add_log, execute_lock, execution_state
 
 from engine.run.decide import choose_record, record_belongs
@@ -124,7 +125,11 @@ def _component_run(
             node_total=len(sub_engine.nodes),
             wf_count=1,
             skipped_workflows=skipped_str if wf_idx == 0 else '',
+            export_dir=paths.active().export_dir,
         )
+        group = str((store.get_run(rid) or {}).get('export_group') or '')
+        ctx['export_group'] = group
+        ctx['export_dir'] = os.path.join(paths.active().export_dir, group) if group else paths.active().export_dir
         created.append(rid)
         ctx['open_records'].append(rid)
         execution_state['owned_records'].add(rid)

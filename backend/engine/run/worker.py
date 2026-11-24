@@ -13,11 +13,12 @@ creates this thread (``engine.run.claim``).
 
 import contextlib
 import logging
+import os
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from runtime import account_context, run_events
+from runtime import account_context, paths, run_events
 from runtime.state import (
     _completed_lock,
     _results_snapshot,
@@ -280,7 +281,11 @@ def _run_worker(
                 node_total=execution_state['total_nodes'],
                 wf_count=wf_count,
                 skipped_workflows=skipped_str,
+                export_dir=paths.active().export_dir,
             )
+            group = str((store.get_run(run_id) or {}).get('export_group') or '')
+            ctx['export_group'] = group
+            ctx['export_dir'] = os.path.join(paths.active().export_dir, group) if group else paths.active().export_dir
             created.append(run_id)
             ctx['open_records'].append(run_id)
             execution_state['owned_records'].add(run_id)

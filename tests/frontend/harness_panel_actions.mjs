@@ -164,7 +164,7 @@ function fresh() {
        nothing; pin the all-records list so "reloads after a write" stays observable. */
     pa.runsManager._tab = 'all';
     pa.runsManager._shown = [];
-    pa.exportsManager._last = [];
+    pa.exportsManager._groups = [];
     pa.datasetManager._last = [];
     pa.datasetManager._compare = [];
     pa.datasetManager._merge = [];
@@ -966,7 +966,7 @@ out.exports_clear = {
     url: requests[0].url,
     body: JSON.parse(requests[0].body),
     clears: requests.filter((r) => r.url.indexOf('/api/exports/clear') >= 0).length,
-    reloaded: requests.some((r) => r.url.indexOf('/api/exports/list') >= 0),
+    reloaded: requests.some((r) => r.url.indexOf('/api/exports/tree') >= 0),
     toast: toasts[0],
 };
 fresh();
@@ -1285,7 +1285,15 @@ route('/api/locks', { ok: true, locks: ['keep.csv'] });
 requests.length = 0;
 await sandbox.onLockToggle('exports', 'keep.csv');
 const lockReq = requests.filter((r) => r.url === '/api/locks');
-pa.exportsManager._last = [{ name: 'keep.csv', kind: 'csv', size: 10, mtime: 1760000000, downloadable: true }];
+pa.exportsManager._groups = [
+    {
+        id: '',
+        label: 'run',
+        kind: 'run',
+        created_at: '',
+        files: [{ name: 'keep.csv', kind: 'csv', size: 10, mtime: 1760000000, downloadable: true }],
+    },
+];
 pa.exportsManager.render();
 const lockRowHtml = id('exports-mgr-body').innerHTML;
 const unlockedBtn = sandbox.lockButtonHtml('runs', 'not-locked-key');

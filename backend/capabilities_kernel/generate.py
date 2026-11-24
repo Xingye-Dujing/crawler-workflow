@@ -594,7 +594,7 @@ def _docs_index() -> str:
 def _skill_docs() -> dict[Path, str]:
     """One page per capability skill plus its catalogue.
 
-    The page is rendered by the same ``knowledge.render`` the ``skill_load`` tool calls, so the
+    The page is rendered by the same ``knowledge.render`` the ``capability_load`` tool calls, so the
     published body and the body a model reads are one derivation. A reader can also find them
     through ``docs_search`` because ``docs/capabilities/`` is a document root.
     """

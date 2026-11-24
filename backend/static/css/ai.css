@@ -504,6 +504,34 @@
   gap: 2px;
   min-width: 0;
 }
+.ai-session-group {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.ai-session-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+.ai-session-group-head:hover {
+  background: var(--line2);
+}
+.ai-session-group-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ai-session-row {
   position: relative;
   display: flex;
@@ -671,6 +699,12 @@
   text-transform: uppercase;
   color: var(--text-faint);
   padding-top: 3px;
+}
+.ai-turn-model {
+  margin-left: 6px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-dim);
 }
 .ai-message-body {
   min-width: 0;

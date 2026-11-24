@@ -101,5 +101,5 @@ class TestTheOldPanelBridge:
         response = client.get(f'/api/ai/ws/conversations/{conversation_id}')
         assert response.status_code == 200
         body = response.get_json()
-        assert body['conversation']['skill'] == 'node_trace'
+        assert any((message.get('meta') or {}).get('skill') == 'node_trace' for message in body['messages'])
         assert body['messages']

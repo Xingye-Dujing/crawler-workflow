@@ -77,7 +77,10 @@ def project_facts() -> str:
         from capabilities_kernel import knowledge
 
         lines.append('## 能力技能')
-        lines.append('用 skill_catalog 检索、skill_load 读全文；每个能力都有前置/步骤/模板/失败/验收七段。')
+        lines.append(
+            '用 capability_catalog 检索、capability_load 读全文；专家技能用 skill_catalog/skill_load。'
+            '每个能力都有前置/步骤/模板/失败/验收七段。'
+        )
         lines.extend(knowledge.prompt_lines(limit=40))
     except Exception:  # a partial install must not take the whole context down
         pass

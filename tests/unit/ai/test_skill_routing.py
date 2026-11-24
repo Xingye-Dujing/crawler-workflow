@@ -45,14 +45,15 @@ class TestTheHostCues:
     def test_every_row_of_the_table_routes_to_an_acceptable_skill(self, workspace, tasks):
         misses = []
         for task in tasks:
-            chosen = workspace.skills.route(task['prompt'], 'default')
-            if chosen not in task['skills']:
-                misses.append(f'{task["id"]}: chose {chosen}, expected {task["skills"]}')
+            chosen = workspace.skills.route_many(task['prompt'], 'default')
+            ids = [row['id'] for row in chosen]
+            if not set(ids) & set(task['skills']):
+                misses.append(f'{task["id"]}: chose {ids}, expected one of {task["skills"]}')
         assert misses == [], 'the automatic router lost: ' + '; '.join(misses)
 
     def test_an_empty_sentence_is_general_rather_than_a_guess(self, workspace):
-        assert workspace.skills.route('', 'default') == 'general'
-        assert workspace.skills.route('   ', 'default') == 'general'
+        assert workspace.skills.route_many('', 'default') == []
+        assert workspace.skills.route_many('   ', 'default') == []
 
     def test_every_host_skill_declares_a_cue_set(self, workspace):
         """A skill with no keyword can only be reached by its English id being typed."""

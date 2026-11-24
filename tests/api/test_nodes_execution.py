@@ -11,6 +11,7 @@ tmp-isolated store, and the slow crawler is a fake that respects the stop
 flag, so /api/workflow/stop is exercised without ever touching a browser.
 """
 
+import os
 import re
 import time
 
@@ -132,7 +133,7 @@ class TestTokenizeNode:
         rows = app_module._RUN_STORE.load_rows(run_id, 'node-2')
         assert rows, 'jieba must emit frequency rows for Chinese text'
         assert {'word', 'frequency'} <= set(rows[0].keys())
-        assert (data_root / 'data' / 'exports' / 'tok.json').exists(), 'the chain must end in a file'
+        assert list((data_root / 'data' / 'exports').rglob('tok.json')), 'the chain must end in a file'
 
     def test_a_wrong_column_name_fails_loudly_not_silently(self, client, app_module, paste):
         ds = _upload(client, paste)
@@ -508,8 +509,9 @@ class TestOutputFormats:
         )
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': f'out-{fmt}'})
         assert _wait(app_module)
-        path = data_root / 'data' / 'exports' / f'out-{fmt}{ext}'
-        assert path.exists(), f'{fmt} export missing (and the extension must be normalised)'
+        paths = list((data_root / 'data' / 'exports').rglob(f'out-{fmt}{ext}'))
+        assert paths, f'{fmt} export missing (and the extension must be normalised)'
+        path = paths[0]
         if fmt == 'json':
             import json as _json
 
@@ -542,18 +544,18 @@ class TestOutputFormats:
         )
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'defname'})
         assert _wait(app_module)
-        assert any(p.suffix == '.csv' for p in (data_root / 'data' / 'exports').iterdir())
+        assert any(p.suffix == '.csv' for p in (data_root / 'data' / 'exports').rglob('*'))
 
 
 def _export_names(data_root) -> set:
     """What is in the export directory right now. The directory is shared for the
     whole session, so a test may only speak about the names it added."""
     exports = data_root / 'data' / 'exports'
-    return {p.name for p in exports.iterdir()} if exports.is_dir() else set()
+    return {p.relative_to(exports).as_posix() for p in exports.rglob('*') if p.is_file()} if exports.is_dir() else set()
 
 
 def _is_stamped(name: str, stem: str) -> bool:
-    return bool(re.fullmatch(rf'{stem}-\d{{8}}-\d{{6}}(?:-\d+)?\.csv', name))
+    return bool(re.fullmatch(rf'{stem}-\d{{8}}-\d{{6}}(?:-\d+)?\.csv', os.path.basename(name)))
 
 
 class TestMergePlatformStamp:
@@ -698,14 +700,15 @@ class TestStampedOutputFilenames:
         assert nodes['node-2']['fingerprint'] == fingerprints_for_workflow(workflow)['node-2']
         assert nodes['node-2']['status'] == 'done'
 
-    def test_without_the_option_a_second_run_still_overwrites_the_one_file(self, client, app_module, paste, data_root):
-        """The default is the old behaviour, unchanged: this is a switch, not a policy."""
+    def test_without_the_option_each_run_keeps_one_plain_file_in_its_folder(self, client, app_module, paste, data_root):
         ds = _upload(client, paste)
         workflow = self._workflow('plain', ds)
         before = _export_names(data_root)
         self._run(client, app_module, workflow, 'plain-once')
         self._run(client, app_module, workflow, 'plain-twice')
-        assert _export_names(data_root) - before == {'plain.csv'}
+        fresh = _export_names(data_root) - before
+        assert len(fresh) == 2
+        assert all(name.endswith('/plain.csv') for name in fresh)
 
 
 @pytest.mark.usefixtures('clean_globals')
@@ -865,7 +868,7 @@ class TestSentimentNode:
         assert [r['sentiment'] for r in rows[:2]] == ['positive', 'negative']
         # An empty text is not a judgement of 中性; the row keeps saying nothing.
         assert rows[3]['sentiment'] == '' and rows[3]['score'] in (None, ''), rows[3]
-        written = pd.read_csv(data_root / 'data' / 'exports' / 'senti.csv', encoding='utf-8-sig')
+        written = pd.read_csv(next((data_root / 'data' / 'exports').rglob('senti.csv')), encoding='utf-8-sig')
         assert {'sentiment', 'score'} <= set(written.columns), sorted(written.columns)
         assert len(written) == 4
 
@@ -1449,7 +1452,7 @@ class TestVerifyNode:
         # The list's own columns survive: the 链接 cell is what a re-crawl would be fed.
         assert rows[1]['链接'] == 'https://ex.com/p/3'
 
-        exported = data_root / 'data' / 'exports' / 'gaps.json'
+        exported = next((data_root / 'data' / 'exports').rglob('gaps.json'))
         assert exported.exists(), 'the gap table must reach the save node'
         assert len(pd.read_json(exported)) == 2
 

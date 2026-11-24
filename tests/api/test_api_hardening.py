@@ -51,6 +51,7 @@ BODY_ROUTES = [
     '/api/ai/ws/context',
     '/api/ai/ws/conversations',
     '/api/ai/ws/conversations/<conversation_id>/context',
+    '/api/ai/ws/conversations/<conversation_id>/workspace',
     '/api/ai/ws/files',
     '/api/ai/ws/memories',
     '/api/ai/ws/monitors',

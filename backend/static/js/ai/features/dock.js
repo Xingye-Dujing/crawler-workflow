@@ -250,7 +250,7 @@ Object.assign(AIWorkspace, {
         root.classList.add('open');
         document.body.classList.add('ai-open');
         AISettings.save({ open: true });
-        if (opts && opts.skill) this._skill = opts.skill;
+        if (opts && opts.skill) this._skills = [opts.skill];
         if (opts && opts.prompt) this._dom.input.value = opts.prompt;
         if (opts && opts.context) AIContext.setManual(opts.context);
         this._restoreConversation();

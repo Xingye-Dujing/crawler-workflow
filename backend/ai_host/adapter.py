@@ -8,12 +8,15 @@ handler signature ``(args, ctx)``, so migration is a declaration change, not a r
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from agent_workspace import DefaultHostAdapter
 from agent_workspace.config import BY_KEY, LEGACY_KEYS
 from agent_workspace.host import EventBus, HostEnvironment
 from agent_workspace.settings import FileSettings
 from agent_workspace.tools import CONTROL_TOOLS, generic_specs
-from agent_workspace.types import SkillSpec, ToolSpec
+from agent_workspace.types import ArtifactGroup, SkillSpec, ToolSpec
 from ai import environment as product_environment
 from ai import files as product_files
 from ai import skills as legacy_skills
@@ -213,6 +216,84 @@ class CaiXiHuiHost(DefaultHostAdapter):
 
         return product_workspace.import_path(str(path or ''))
 
+    # ── artifact groups and skill resources ───────────────────────────────────
+
+    def artifact_groups(self, account: str) -> list[ArtifactGroup]:
+        """One run → one export folder; the ledger owns the grouping."""
+        from runtime import paths, stores
+
+        from services.exports.groups import LEGACY_GROUP, build_tree
+
+        export_dir = paths.active().export_dir
+        ledger = stores.get_run_store().run_ledger()
+        groups = []
+        for row in build_tree(export_dir, ledger, limit=500):
+            groups.append(
+                ArtifactGroup(
+                    id=str(row['id']),
+                    label=str(row['label']),
+                    root=os.path.join(export_dir, row['id']) if row['id'] != LEGACY_GROUP else export_dir,
+                    kind='run',
+                    metadata={
+                        'run_id': str(row.get('run_id') or ''),
+                        'workflow_name': str(row.get('workflow_name') or ''),
+                        'status': '',
+                    },
+                    created_at=str(row.get('created_at') or ''),
+                )
+            )
+        return groups
+
+    def artifact_group_entries(self, account: str, group_id: str) -> list[dict]:
+        from runtime import paths
+
+        from services.exports.groups import list_group
+
+        return list_group(paths.active().export_dir, group_id, limit=500)
+
+    def artifact_group_guidance(self, group) -> str:
+        meta = getattr(group, 'metadata', {}) or {}
+        workflow = str(meta.get('workflow_name') or '')
+        return (
+            f"This folder is one workflow run's export group ({workflow or group.label}). "
+            'List names first, then read only the files a question needs. CSV/JSON files are run '
+            'outputs; reports/charts are read-only artefacts. Do not read the whole folder into context.'
+        )
+
+    def skill_resources(self, skill_id: str) -> list[dict]:
+        if skill_id == 'catbus':
+            return [
+                {'name': 'SKILL.md', 'description': 'CatBus rules and commands'},
+                {'name': 'reference/commands.md', 'description': 'Command reference'},
+                {'name': 'workflows/collect.md', 'description': 'Collection workflow'},
+            ]
+        if skill_id == 'python':
+            return [{'name': 'python_scripts', 'description': 'The saved script library'}]
+        if skill_id == 'developer':
+            return [{'name': 'source', 'description': 'The read-only source snapshot'}]
+        return []
+
+    def skill_resource(self, skill_id: str, name: str) -> str:
+        if skill_id == 'catbus':
+            from runtime import paths
+
+            safe = str(name or '').replace('\\', '/').strip('/')
+            root = Path(product_environment.code_root() or Path(paths.active().ai_db).parent)
+            path = (root / 'docs' / 'catbus' / safe).resolve()
+            if not str(path).startswith(str((root / 'docs' / 'catbus').resolve())):
+                return ''
+            try:
+                return path.read_text(encoding='utf-8', errors='replace')[:12000]
+            except OSError:
+                return ''
+        return ''
+
+    def file_roots(self, account: str) -> list[str]:
+        from runtime import paths
+
+        active = paths.active()
+        return [active.export_dir, str(Path(active.ai_db).parent)]
+
     # ── @ references ─────────────────────────────────────────────────────────
 
     def reference_candidates(self, account: str, query: str = '') -> list[dict]:
@@ -226,7 +307,7 @@ class CaiXiHuiHost(DefaultHostAdapter):
 
         rows: list[dict] = []
         for skill in knowledge.catalog(limit=knowledge.MAX_LIMIT)['skills']:
-            rows.append({'kind': 'skill', 'id': skill['id'], 'label': skill['title'], 'detail': skill['category']})
+            rows.append({'kind': 'capability', 'id': skill['id'], 'label': skill['title'], 'detail': skill['category']})
         for dataset in stores.get_dataset_store().list_datasets(limit=60):
             rows.append(
                 {
@@ -249,9 +330,9 @@ class CaiXiHuiHost(DefaultHostAdapter):
             rows.append(
                 {
                     'kind': 'run',
-                    'id': str(run.get('id') or ''),
-                    'label': str(run.get('workflow_name') or run.get('id') or ''),
-                    'detail': f'{run.get("status") or ""} · {run.get("row_count") or 0} 行',
+                    'id': str(run.get('run_id') or ''),
+                    'label': str(run.get('workflow_name') or run.get('run_id') or ''),
+                    'detail': f'{run.get("status") or ""} · {len(run.get("files") or [])} 个产物',
                 }
             )
         from runtime import paths
@@ -265,6 +346,15 @@ class CaiXiHuiHost(DefaultHostAdapter):
                     'id': str(export.get('name') or ''),
                     'label': str(export.get('name') or ''),
                     'detail': f'{int(export.get("size") or 0) // 1024} KB',
+                }
+            )
+        for group in self.artifact_groups(account):
+            rows.append(
+                {
+                    'kind': 'group',
+                    'id': group.id,
+                    'label': group.label,
+                    'detail': f'{len(self.artifact_group_entries(account, group.id))} 个文件',
                 }
             )
         return rows
@@ -282,10 +372,16 @@ class CaiXiHuiHost(DefaultHostAdapter):
     def resolve_reference(self, kind: str, identifier: str) -> str:
         from ai import reference_text
 
+        if kind == 'group':
+            group = self.artifact_group('default', str(identifier or ''))
+            if group is None:
+                return ''
+            names = [row['name'] for row in self.artifact_group_entries('default', group.id)]
+            return (f'产物分组 {group.label}\n' + '\n'.join(f'- {name}' for name in names))[:1200]
         reader = {
             'workflow': reference_text.workflow,
             'export': reference_text.export,
-            'skill': reference_text.skill,
+            'capability': reference_text.skill,
         }.get(str(kind or ''))
         return str(reader(str(identifier or '')) if reader else '')
 
@@ -328,7 +424,7 @@ class CaiXiHuiHost(DefaultHostAdapter):
         turn" (``universal_tools``) is eligibility, not immunity; only the verb that unblocks a
         refused read and the one that loads a skill's body earn a guaranteed slot.
         """
-        return ('request_dataset_access', 'skill_load')
+        return ('request_dataset_access', 'skill_catalog', 'skill_load')
 
     # ── run monitors ────────────────────────────────────────────────────────
 

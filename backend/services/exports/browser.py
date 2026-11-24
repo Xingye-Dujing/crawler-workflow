@@ -228,13 +228,14 @@ def export_usage(export_dir: str) -> dict:
     files = 0
     size = 0
     if export_dir and os.path.isdir(export_dir):
-        with os.scandir(export_dir) as handles:
-            for entry in handles:
+        for root, _dirs, names in os.walk(export_dir):
+            for name in names:
+                if is_staged(name):
+                    continue
                 try:
-                    if not entry.is_file() or is_staged(entry.name):
-                        continue
-                    files += 1
-                    size += int(entry.stat().st_size or 0)
+                    stat = os.stat(os.path.join(root, name))
                 except OSError:
                     continue
+                files += 1
+                size += int(stat.st_size or 0)
     return {'files': files, 'bytes': size}

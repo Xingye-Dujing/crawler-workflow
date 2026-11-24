@@ -162,9 +162,19 @@ class RunsMixin:
         node_total: int = 0,
         wf_count: int = 1,
         skipped_workflows: str = '',
+        export_dir: str = '',
     ):
         llm = llm or {}
         stamp = self.now()
+        export_group = ''
+        if export_dir:
+            from services.exports.groups import ensure_group, group_name
+
+            existing = self._query('SELECT export_group FROM runs WHERE run_id = ?', (run_id,))
+            export_group = str((existing[0]['export_group'] if existing else '') or '')
+            if not export_group:
+                export_group = group_name(workflow_name, stamp, export_dir)
+            ensure_group(export_dir, export_group)
         # A resumed run rewrites the description of what this run IS, not just its
         # status: the attempt after a 继续 may run in the other mode, in a visible
         # window, or under a label the user has since edited. Left at their
@@ -176,14 +186,16 @@ class RunsMixin:
         self._execute(
             'INSERT INTO runs (run_id, workflow_name, workflow_fingerprint, status, mode, headless, '
             'llm_provider, llm_model, lang, node_total, node_done, wf_count, skipped_workflows, '
-            'started_at, updated_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) '
+            'export_group, started_at, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?) '
             'ON CONFLICT(run_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, '
             'llm_provider = excluded.llm_provider, llm_model = excluded.llm_model, '
             'workflow_name = excluded.workflow_name, workflow_fingerprint = excluded.workflow_fingerprint, '
             'mode = excluded.mode, headless = excluded.headless, lang = excluded.lang, '
             'node_total = excluded.node_total, node_done = excluded.node_done, wf_count = excluded.wf_count, '
             'skipped_workflows = excluded.skipped_workflows, '
+            'export_group = CASE WHEN runs.export_group IS NULL OR runs.export_group = "" '
+            'THEN excluded.export_group ELSE runs.export_group END, '
             'forced_visible = 0, finished_at = NULL, note = NULL',
             (
                 run_id,
@@ -198,6 +210,7 @@ class RunsMixin:
                 node_total,
                 max(1, int(wf_count or 1)),
                 skipped_workflows,
+                export_group,
                 stamp,
                 stamp,
             ),
@@ -326,13 +339,18 @@ class RunsMixin:
         # ``get_run`` per run meant two round trips (plus a full node list) per history row,
         # which grows with the archive on a request thread.
         by_run: dict[str, list] = {}
-        for row in self._query('SELECT run_id, name, kind, node_id FROM run_files ORDER BY run_id, name'):
+        for row in self._query('SELECT run_id, name, kind, node_id, group_name FROM run_files ORDER BY run_id, name'):
             by_run.setdefault(str(row['run_id']), []).append(
-                {'name': row['name'], 'kind': row['kind'], 'node_id': row['node_id']}
+                {
+                    'name': row['name'],
+                    'kind': row['kind'],
+                    'node_id': row['node_id'],
+                    'group': row['group_name'] or '',
+                }
             )
         headers = {
             str(row['run_id']): dict(row)
-            for row in self._query('SELECT run_id, workflow_name, started_at, status FROM runs')
+            for row in self._query('SELECT run_id, workflow_name, started_at, status, export_group FROM runs')
         }
         out = []
         for run_id, files in by_run.items():
@@ -343,6 +361,7 @@ class RunsMixin:
                     'workflow_name': run.get('workflow_name') or '',
                     'started_at': run.get('started_at') or '',
                     'status': run.get('status') or '',
+                    'export_group': run.get('export_group') or '',
                     'node_ids': sorted({f['node_id'] for f in files if f['node_id']}),
                     'files': files,
                 }
@@ -418,7 +437,7 @@ class RunsMixin:
 
 
 class FilesMixin:
-    def record_file(self, run_id: str, node_id: str, path_or_name, kind: str) -> bool:
+    def record_file(self, run_id: str, node_id: str, path_or_name, kind: str, group: str = '') -> bool:
         """Register one file a run wrote into the export folder, by basename.
 
         Only the basename is kept (never a path): every reader of this table deletes through
@@ -432,11 +451,23 @@ class FilesMixin:
         if not run_id or not name:
             return False
         self._execute(
-            'INSERT INTO run_files(run_id, node_id, name, kind, created_at) VALUES(?,?,?,?,?) '
-            'ON CONFLICT(run_id, name) DO UPDATE SET kind=excluded.kind, node_id=excluded.node_id',
-            (str(run_id), str(node_id or ''), name, str(kind or ''), self.now()),
+            'INSERT INTO run_files(run_id, node_id, name, kind, group_name, created_at) VALUES(?,?,?,?,?,?) '
+            'ON CONFLICT(run_id, name) DO UPDATE SET kind=excluded.kind, node_id=excluded.node_id, '
+            'group_name=excluded.group_name',
+            (str(run_id), str(node_id or ''), name, str(kind or ''), str(group or ''), self.now()),
         )
         return True
+
+    def set_export_group(self, run_id: str, group: str) -> None:
+        """Point one run record at its export folder (the migration and the writer use this)."""
+        self._execute('UPDATE runs SET export_group=? WHERE run_id=?', (str(group or ''), str(run_id)))
+
+    def set_file_group(self, run_id: str, name: str, group: str) -> None:
+        """Point one ledger row at its export folder without changing its basename."""
+        self._execute(
+            'UPDATE run_files SET group_name=? WHERE run_id=? AND name=?',
+            (str(group or ''), str(run_id), os.path.basename(str(name or ''))),
+        )
 
     def find_file(self, name: str) -> dict | None:
         """The ledger row for one exported file, by basename — the resolver a request that
@@ -450,14 +481,14 @@ class FilesMixin:
         clean = os.path.basename(str(name or '').replace('\\', '/'))
         if not clean:
             return None
-        sql = 'SELECT run_id, node_id, name, kind FROM run_files WHERE name = ? ORDER BY rowid DESC'
+        sql = 'SELECT run_id, node_id, name, kind, group_name FROM run_files WHERE name = ? ORDER BY rowid DESC'
         for row in self._query(sql, (clean,)):
-            return dict(row)
+            return {**dict(row), 'group': dict(row).get('group_name') or ''}
         return None
 
     def files_for_run(self, run_id: str, node_id: str = None, kind: str = None) -> list:
         """The files a run wrote, optionally narrowed to one node and/or one kind."""
-        sql = 'SELECT name, kind, node_id FROM run_files WHERE run_id = ?'
+        sql = 'SELECT name, kind, node_id, group_name FROM run_files WHERE run_id = ?'
         params: list = [str(run_id)]
         if node_id is not None:
             sql += ' AND node_id = ?'
@@ -466,7 +497,7 @@ class FilesMixin:
             sql += ' AND kind = ?'
             params.append(str(kind))
         sql += ' ORDER BY name'
-        return [dict(row) for row in self._query(sql, tuple(params))]
+        return [{**dict(row), 'group': dict(row).get('group_name') or ''} for row in self._query(sql, tuple(params))]
 
     def forget_files(self, names) -> int:
         """Forget many deleted files in ONE transaction (the 清空 sweep's batch form).
@@ -492,42 +523,6 @@ class FilesMixin:
         if not name:
             return 0
         return self._execute('DELETE FROM run_files WHERE name = ?', (name,)).rowcount
-
-    def clear_all(self, exclude_run_ids=()) -> dict:
-        """Delete every run record, and the crawled-item claims those runs made with them.
-
-        This is the panel's 清空 button, and it releases the ``item_seen`` ledger the way
-        ``purge`` does rather than the way a single ``delete_run`` does. The difference is what
-        each one is a promise about: deleting one record is a user tidying a history whose
-        crawl they still know was paid for, while emptying every record is a request to start
-        from nothing — keeping the claims would leave a ledger that points at rows which no
-        longer exist, and the next crawl of the same canvas would hand back fewer rows than it
-        was asked for with no table left anywhere that could explain the gap.
-
-        The LLM answer cache deliberately survives this: a stored answer is paid for by its
-        prompt, not by the run row, and clearing history must not make the next run re-pay
-        questions this machine already knows the answers to.
-
-        *exclude_run_ids* is the run a worker is still writing (a serial pass closes one
-        record per workflow, hence a set); deleting rows under its feet would destroy state
-        mid-flight.
-        """
-        excluded = {str(rid) for rid in exclude_run_ids if rid}
-        totals = {'runs': 0, 'node_rows': 0, 'node_runs': 0, 'item_claims': 0}
-        for row in self._query('SELECT run_id FROM runs'):
-            run_id = str(row['run_id'])
-            if run_id in excluded:
-                continue
-            counts = self.delete_run(run_id)
-            for table in ('node_rows', 'node_runs'):
-                totals[table] += int(counts.get(table) or 0)
-            totals['item_claims'] += int(self.forget_run_items(run_id) or 0)
-            totals['runs'] += 1
-        if not excluded:
-            # Emptying the history is starting from nothing; a watermark pointing at a
-            # deleted crawl would make the next run skip rows whose provenance is gone.
-            self._execute('DELETE FROM source_watermarks')
-        return totals
 
 
 class LogMixin:

@@ -540,7 +540,7 @@ def execute_source_node(
             # to the record) — but only when “保留分片” is on: with keep_parts off the writer
             # deletes them the moment the merge succeeds, so there is nothing for 智能清除 to find.
             writer = PartWriter(
-                paths.active().export_dir,
+                (ctx or {}).get('export_dir') or paths.active().export_dir,
                 stem,
                 pfmt,
                 part_size,

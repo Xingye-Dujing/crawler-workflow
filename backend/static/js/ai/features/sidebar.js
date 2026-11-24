@@ -16,7 +16,7 @@ Object.assign(AIWorkspace, {
         const active = document.activeElement;
         const typing = !!(active && active.hasAttribute && active.hasAttribute('data-ai-session-search'));
         const caret = typing ? active.selectionStart : null;
-        const items = rows.map((row) => {
+        const rowHtml = (row) => {
             const id = AIRender.escape(row.id);
             const rename = AIRender.escape(I18n.t('ai.rename'));
             const remove = AIRender.escape(I18n.t('ai.delete'));
@@ -30,8 +30,6 @@ Object.assign(AIWorkspace, {
                 (sessionModel ? ' title="' + AIRender.escape(sessionModel) + '"' : '') + '>' +
                 '<span class="ai-session-text">' +
                 '<span class="ai-session-title">' + (row.pinned ? '<span class="ai-session-pin">★</span>' : '') + AIRender.escape(row.title || I18n.t('ai.noConversation')) + '</span>' +
-                /* Which model answered this conversation, so an old chat is readable as itself rather
-                   than as "whatever the picker shows today". */
                 (sessionModel ? '<span class="ai-session-model">' + AIRender.escape(sessionModel) + '</span>' : '') +
                 '</span>' +
                 '<span class="ai-session-meta">' + AIRender.escape(String(row.message_count || 0)) + '</span>' +
@@ -44,6 +42,23 @@ Object.assign(AIWorkspace, {
                 '<button type="button" class="ai-icon-btn" data-ai-delete-conversation="' + id + '" title="' + remove + '" aria-label="' + remove + '">×</button>' +
                 '</span></div>'
             );
+        };
+        const groups = new Map();
+        for (const row of rows) {
+            const key = String(row.workspace_group || row.workspace_dir || 'default');
+            const label = String(row.workspace_label || (row.workspace_dir ? String(row.workspace_dir).split(/[\\/]/).pop() : I18n.t('ai.workspaceDefault')));
+            if (!groups.has(key)) groups.set(key, { key, label, rows: [] });
+            groups.get(key).rows.push(row);
+        }
+        const items = Array.from(groups.values()).map((group) => {
+            const open = this._collapsedWorkspace ? !this._collapsedWorkspace[group.key] : true;
+            return '<section class="ai-session-group">' +
+                '<button type="button" class="ai-session-group-head" data-ai-workspace-group="' + AIRender.escape(group.key) + '" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+                '<span class="ai-session-group-icon">▣</span>' +
+                '<span class="ai-session-group-label">' + AIRender.escape(group.label) + '</span>' +
+                '<span class="ai-hint">' + group.rows.length + '</span></button>' +
+                (open ? group.rows.map(rowHtml).join('') : '') +
+                '</section>';
         }).join('');
         const emptyKey = query ? 'ai.noSessionsMatch' : archived ? 'ai.archivedEmpty' : 'ai.noSessions';
         this._dom.sessions.innerHTML =
@@ -200,6 +215,12 @@ Object.assign(AIWorkspace, {
         return rows.join('') || '<p class="ai-hint">—</p>';
     },
 
+    toggleWorkspaceGroup(key) {
+        this._collapsedWorkspace = this._collapsedWorkspace || {};
+        this._collapsedWorkspace[key] = !this._collapsedWorkspace[key];
+        this._renderSessions();
+    },
+
     async selectConversation(id) {
         if (!id) return;
         /* The turn in flight owns this DOM. Re-selecting the same conversation while it streams
@@ -231,10 +252,13 @@ Object.assign(AIWorkspace, {
                 throw new Error(data.error || 'not found');
             }
             this._messages = data.messages || [];
+            this._turns = data.turns || [];
+            this._turnsById = new Map(this._turns.map((turn) => [String(turn.id), turn]));
             this._grants = data.dataset_grants || [];
             this._conversationId = data.conversation.id;
             this._rememberConversation(this._conversationId);
-            const isTrace = String(data.conversation.skill || '') === 'node_trace';
+            const isTrace = String(data.conversation.skill || '') === 'node_trace' ||
+                (data.messages || []).some((message) => String((message.meta || {}).skill || '') === 'node_trace');
             const savedProvider = String(data.conversation.provider || '');
             const savedModel = String(data.conversation.model || '');
             const startMeta = (this._messages.find((m) => (m.meta || {}).kind === 'trace_start') || {}).meta || {};
@@ -259,6 +283,7 @@ Object.assign(AIWorkspace, {
                 this._renderModelOptions();
             }
             this._renderMessages(data.pending_questions || []);
+            if (data.active_turn && data.active_turn.id) this._reattachTurn(data.active_turn.id);
             this._renderSessions();
             this._renderSide();
             this._loadRecipe();

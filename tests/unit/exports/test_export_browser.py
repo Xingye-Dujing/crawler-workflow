@@ -84,8 +84,11 @@ class TestListing:
 
     def test_usage_totals_cover_the_whole_directory(self, exports):
         usage = export_usage(exports)
-        assert usage['files'] == 4
-        assert usage['bytes'] == sum(row['size'] for row in list_exports(exports))
+        assert usage['files'] == 5
+        total = sum(
+            os.path.getsize(os.path.join(root, name)) for root, _dirs, names in os.walk(exports) for name in names
+        )
+        assert usage['bytes'] == total
 
     def test_usage_is_not_truncated_by_the_listing_cap(self, tmp_path):
         directory = tmp_path / 'many'

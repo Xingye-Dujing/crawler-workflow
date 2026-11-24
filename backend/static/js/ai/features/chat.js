@@ -277,7 +277,18 @@ Object.assign(AIWorkspace, {
             const turnId = String(meta.turn_id || message.id || '');
             let turn = turns.get(turnId);
             if (!turn) {
-                turn = { kind: 'turn', turnId: turnId, messageId: message.id, blocks: [], usage: null, error: '', extras: [] };
+                const origin = (this._turnsById || new Map()).get(String(turnId)) || {};
+                turn = {
+                    kind: 'turn',
+                    turnId: turnId,
+                    messageId: message.id,
+                    blocks: [],
+                    usage: null,
+                    error: '',
+                    extras: [],
+                    model: [origin.provider, origin.model].filter(Boolean).join(' / '),
+                    skills: (origin.skills || []).map((row) => String((row && row.id) || row)).filter(Boolean),
+                };
                 turns.set(turnId, turn);
                 order.push(turn);
             }
@@ -468,7 +479,9 @@ Object.assign(AIWorkspace, {
        reused, so a keyed reconciliation cannot drift from a fresh render. */
     _turnHtml(turn) {
         return (
-            '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) + '</div><div class="ai-message-body">' +
+            '<div class="ai-message-role">' + AIRender.escape(I18n.t('ai.assistant')) +
+            (turn.model ? ' <span class="ai-turn-model">' + AIRender.escape(turn.model) + '</span>' : '') +
+            '</div><div class="ai-message-body">' +
             '<div class="ai-flow">' + AIRender.assistantFlow(turn.blocks) + '</div>' +
             /* A turn that ENDED in an error is part of the transcript: the reason was painted into
                this page once and then lost on every reload, so a user reopening the conversation
@@ -481,6 +494,9 @@ Object.assign(AIWorkspace, {
             (turn.stopped ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stopped')) + '</div>' : '') +
             (turn.interrupted ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.interrupted')) + '</div>' : '') +
             (turn.live ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.stillStreaming')) + '</div>' : '') +
+            ((turn.skills || []).length
+                ? '<div class="ai-note">' + AIRender.escape(I18n.t('ai.turnSkills', { skills: turn.skills.join(', ') })) + '</div>'
+                : '') +
             '<div class="ai-question-slot"></div>' +
             '<div class="ai-extras"></div>' +
             '<div class="ai-usage">' + AIRender.usage(turn.usage || {}) + '</div>' +

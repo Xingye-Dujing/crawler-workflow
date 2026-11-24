@@ -13,9 +13,32 @@
 
 - 日期：2026-11-25
 - 分支：`main`
-- 最后提交：`44af8e05 重构：严格模式工具预算——排序没话可说时不裁剪（框架 0.1.29）`（已推 GitHub + Gitee，CI 触发）；
-  框架仓库 `7887558`（0.1.29）
-- 工作区：R7（技能自动路由）+ 销账改动在本地未提交
+- 最后提交：`功能更新：AI 工作区四模块`（框架 0.2.0 已接入；本地提交）；
+  框架仓库 `c9e78df`（0.2.0）
+- 工作区：AI 四模块已实施并收口（全量 fast tier 12488 passed / 10:49）
+
+## AI 四模块（框架 0.2.0，2026-11-25）
+
+- **框架 0.2.0**：`ChatRequest.skills` 取代单值 `skill`；`turns.skills`/`pending_calls.skills`
+  存 `[{id,source}]`；`conversations` 增加 `provider/model/skills/workspace_*`；`ArtifactGroup`、
+  `SkillContext`（L0/L1/L2）、`skill_catalog`/`skill_load`、`Workspace(conversation_id)`、
+  `ProviderCatalog.history_problems`、`turns.max_parallel` 与同会话邮箱化已落位。
+  `vendor/agent_workspace-0.2.0-py3-none-any.whl` 是钉版产物（旧 0.1.30 已删）。
+- **宿主**：`ai_host/adapter.py` 增加产物分组/技能资源/文件根；`api/ai_workspace.py` 的会话 PATCH
+  接受模型/技能、详情返回 `turns`/`active_turn`，新增 `POST /conversations/<id>/workspace`。
+- **产物**：`runs.export_group` + `run_files.group_name`；`services/exports/groups.py` 是命名/解析的
+  唯一住址；运行上下文 `ctx['export_dir']` 供 source/comment/analysis/output 使用；`/api/exports/tree`
+  与树面板已接；存量迁移见 `tools/migrate_export_groups.py`。
+- **前端**：多技能 `<select multiple>` + `@skill` 指令 + 逐轮技能/模型标注；`@capability` 才是能力文档；
+  侧栏按工作目录分组；`_reattachTurn` 用 `/turns/<id>/events?after=0` 重连。
+- **验证**：框架 `pytest` 全绿（0.2.0，含 `test_multiskill_artifacts.py`）；宿主
+  `tests/api` **2840 passed**；`tests/unit/ai` 180 passed；`tests/unit/exports` 166 passed；
+  前端 AI/导出 harness 已绿；`doctor.py --all` 全绿；product/tests pylint 10.00/10；
+  **全量 fast tier 12488 passed / 7 skipped / 386 deselected，10:49**；
+  `tests/integration/test_ui_layout.py -m integration` **164 passed / 1:30**（真实 Chrome）。
+  收口：ruff check/format 全绿；product/tests pylint 10.00/10；`doctor.py --all` 全绿；
+  `PORT=5057` + 独立 `CRAWLER_DATA_ROOT` 冒烟：`/`、`/api/node-types`、`/api/ai/ws/bootstrap`、
+  `/api/exports/tree` 全 200，随后关闭并释放端口。
 
 ## R7：`auto` 接上技能路由，并量出它原本几乎没用（框架 0.1.30，2026-11-25）
 

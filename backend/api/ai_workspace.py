@@ -15,6 +15,8 @@ from agent_workspace import AIError as AgentError
 from agent_workspace import ChatRequest
 from agent_workspace import config as workspace_config
 from agent_workspace.errors import WorkspaceError
+from ai_host.wire import attachments as _attachments
+from ai_host.wire import legacy_events as _legacy_events
 from flask import Blueprint, Response, abort, jsonify, request
 from runtime import account_context
 
@@ -26,106 +28,10 @@ def _sse(events):
         yield f'data: {json.dumps(item, ensure_ascii=False, default=str)}\n\n'
 
 
-def _attachments(raw, workspace=None, account: str = '') -> list[dict]:
-    """Host-side extraction: the browser sends bytes, the framework only ever sees text/images.
-
-    ``[{'name': 'a.pdf', 'data': '<base64>'}]`` is extracted here with ``ai.file_text``; an entry with
-    ``text`` or ``image`` is passed through unchanged; a bare file id is resolved from the stored file
-    row (the panel uploads first, then names the ids). Every failure becomes a named refusal, never
-    an empty document.
-    """
-    from ai import file_text
-    from ai.errors import AIError as LegacyError
-
-    found = []
-    for item in raw or []:
-        if isinstance(item, str) and item:
-            if workspace is None:
-                raise AgentError('attachment.unknownFile', kind='not_found', key='attachment.unknownFile', reason=item)
-            row = workspace.store.get_file(item)
-            if not row or row.get('account') != account:
-                raise AgentError('attachment.unknownFile', kind='not_found', key='attachment.unknownFile', reason=item)
-            meta = row.get('meta') or {}
-            found.append(
-                {
-                    'name': str(row.get('name') or ''),
-                    'text': str(meta.get('text') or ''),
-                    'image': str(meta.get('image') or ''),
-                    'file_id': str(row.get('id') or ''),
-                }
-            )
-            continue
-        if not isinstance(item, dict):
-            raise AgentError('attachment.badShape', kind='bad_request', key='attachment.badShape')
-        entry = {'name': str(item.get('name') or '')}
-        if item.get('file_id'):
-            entry['file_id'] = str(item['file_id'])
-        if item.get('text'):
-            entry['text'] = str(item['text'])
-        elif item.get('data'):
-            try:
-                data = base64.b64decode(str(item['data']), validate=False)
-            except Exception as exc:
-                raise AgentError(
-                    'attachment.badData',
-                    kind='bad_request',
-                    key='attachment.badData',
-                    reason=str(item.get('name') or ''),
-                ) from exc
-            try:
-                extracted = file_text.extract(str(item.get('name') or ''), data)
-            except LegacyError as exc:
-                raise AgentError(str(exc), kind='bad_request', key=str(exc.key or 'ai.attachExtract')) from exc
-            entry['text'] = str(extracted.get('text') or '')
-        if item.get('image'):
-            entry['image'] = str(item['image'])
-        found.append(entry)
-    return found
-
-
 def _error(exc: WorkspaceError):
     payload = exc.to_dict()
     payload['ok'] = False
     return jsonify(payload), 400
-
-
-def _legacy_events(events):
-    """The frontend's wire names, mapped once at the host edge (the engine stays canonical).
-
-    ``text_delta``/``thinking_delta`` were ``text``/``thinking`` on the old stream; tool rows were
-    ``tool_start``/``tool_result`` with ``id`` and ``ok``. Mapping here keeps the engine's event
-    catalog untouched and can be deleted with the old panel.
-    """
-    for event in events:
-        kind = event.get('type')
-        if kind == 'text_delta':
-            yield {**event, 'type': 'text'}
-        elif kind == 'thinking_delta':
-            yield {**event, 'type': 'thinking'}
-        elif kind == 'tool_start':
-            yield {
-                **event,
-                'type': 'tool_start',
-                'id': event.get('call_id') or '',
-                'name': event.get('tool') or '',
-                'arguments': event.get('arguments') or {},
-            }
-        elif kind == 'tool_result':
-            ok = not event.get('is_error')
-            payload = {**event, 'type': 'tool_result', 'id': event.get('call_id') or '', 'ok': ok}
-            if ok:
-                payload['result'] = event.get('content')
-            else:
-                payload['error'] = event.get('content')
-            yield payload
-        elif kind == 'error':
-            yield {**event, 'error': event.get('message') or event.get('error') or ''}
-        elif kind == 'citation':
-            yield {**event, 'type': 'citation', 'citation': event.get('payload') or {}}
-        elif kind == 'server_tool':
-            yield {**event, 'type': 'server_tool', 'block': event.get('payload') or {}}
-        else:
-            yield event
 
 
 def _not_found(kind: str, reason: str):
@@ -205,8 +111,8 @@ def create_blueprint(manager):
             account=account(),
             host=request.host_url.rstrip('/'),
             lang=get_lang(),
-            # "auto" is the framework's own routing request (the turn records context.skill).
-            skill='auto' if str(payload.get('skill') or '') in ('', 'auto') else str(payload.get('skill')),
+            # An empty list is the framework's own automatic routing request.
+            skills=[str(item) for item in (payload.get('skills') or []) if str(item).strip()],
             provider=str(payload.get('provider') or ''),
             model=str(payload.get('model') or ''),
             api_key=provider_key(),
@@ -336,14 +242,15 @@ def create_blueprint(manager):
         if not row:
             return _not_found('conversation.unknown', conversation_id)
         messages = workspace.store.list_messages(conversation_id)
-        skill = next((item['meta'].get('skill') for item in messages if (item.get('meta') or {}).get('skill')), '')
         from ai import dataset_access
 
         return jsonify(
             {
                 'ok': True,
-                'conversation': {**row, 'skill': skill},
+                'conversation': row,
                 'messages': messages,
+                'turns': list(reversed(workspace.store.list_turns(conversation_id, account(), limit=200))),
+                'active_turn': workspace.store.active_turn(conversation_id, account()),
                 'dataset_grants': dataset_access.active(conversation_id),
             }
         )
@@ -360,7 +267,43 @@ def create_blueprint(manager):
     @blueprint.patch('/conversations/<conversation_id>')
     def patch_conversation(conversation_id):
         payload = body()
-        fields = {key: payload[key] for key in ('title', 'pinned', 'archived') if key in payload}
+        fields = {
+            key: payload[key]
+            for key in (
+                'title',
+                'pinned',
+                'archived',
+                'provider',
+                'model',
+                'skills',
+                'workspace_dir',
+                'workspace_group',
+                'workspace_label',
+            )
+            if key in payload
+        }
+        if 'provider' in fields or 'model' in fields:
+            workspace = manager.workspace(account())
+            row = workspace.store.get_conversation(conversation_id, account())
+            if not row:
+                return _not_found('conversation.unknown', conversation_id)
+            provider = str(fields.get('provider') or row.get('provider') or '')
+            model = str(fields.get('model') or row.get('model') or '')
+            try:
+                problems = workspace.catalog.history_problems(
+                    provider, model, workspace.store.list_messages(conversation_id)
+                )
+            except AgentError as exc:
+                return _error(exc)
+            if problems:
+                return jsonify(
+                    {
+                        'ok': False,
+                        'error': 'model.historyIncompatible',
+                        'key': 'model.historyIncompatible',
+                        'reason': problems[0],
+                    }
+                ), 400
         row = manager.workspace(account()).store.patch_conversation(conversation_id, account(), **fields)
         return jsonify({'ok': True, 'conversation': row})
 
@@ -378,7 +321,11 @@ def create_blueprint(manager):
     @blueprint.post('/conversations')
     def create_conversation():
         payload = body()
-        row = manager.workspace(account()).store.create_conversation(account(), title=str(payload.get('title') or ''))
+        workspace = manager.workspace(account())
+        row = workspace.create_conversation(account(), title=str(payload.get('title') or ''))
+        fields = {key: payload[key] for key in ('provider', 'model', 'skills') if key in payload}
+        if fields:
+            row = workspace.store.patch_conversation(row['id'], account(), **fields)
         return jsonify({'ok': True, 'conversation': row})
 
     @blueprint.delete('/conversations/<conversation_id>')
@@ -819,6 +766,33 @@ def create_blueprint(manager):
         try:
             path = str(body().get('path') or '').strip()
             state = space.clear_root() if not path else space.set_root(path)
+        except WorkspaceError as exc:
+            return _error(exc)
+        return jsonify({'ok': True, 'workspace': state})
+
+    @blueprint.post('/conversations/<conversation_id>/workspace')
+    def conversation_workspace(conversation_id):
+        from runtime import policy
+
+        if not policy.may_administer_machine():
+            return jsonify({'ok': False, 'error': policy.machine_refusal_key(), 'key': 'machine.refused'}), 403
+        payload = body()
+        workspace = manager.workspace(account())
+        if not workspace.store.get_conversation(conversation_id, account()):
+            return _not_found('conversation.unknown', conversation_id)
+        space = workspace.workspace(account(), conversation_id)
+        try:
+            group_id = str(payload.get('group_id') or '').strip()
+            if group_id:
+                group = workspace.host.artifact_group(account(), group_id)
+                if group is None:
+                    return jsonify(
+                        {'ok': False, 'error': 'workspace.groupRefused', 'key': 'workspace.groupRefused'}
+                    ), 404
+                state = space.mount_group(group)
+            else:
+                path = str(payload.get('path') or '').strip()
+                state = space.clear_root() if not path else space.set_root(path)
         except WorkspaceError as exc:
             return _error(exc)
         return jsonify({'ok': True, 'workspace': state})

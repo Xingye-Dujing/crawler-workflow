@@ -382,7 +382,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             # Same ledger contract as a source crawl: shards are recorded as they land, and only
             # when “保留分片” is on (with it off the merge deletes them, so there is nothing to clear).
             writers[stem] = PartWriter(
-                paths.active().export_dir,
+                (ctx or {}).get('export_dir') or paths.active().export_dir,
                 stem,
                 fmt,
                 part_size,

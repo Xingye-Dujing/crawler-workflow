@@ -64,6 +64,8 @@ class BaseMixin:
         # record otherwise reads as "this canvas had fewer workflows than the user drew". Stored
         # here so the panel can name them under 跳过 instead of leaving them silently absent.
         ('runs', 'skipped_workflows', "TEXT DEFAULT ''"),
+        ('runs', 'export_group', "TEXT DEFAULT ''"),
+        ('run_files', 'group_name', "TEXT DEFAULT ''"),
     )
 
     def __init__(self, db_path: str = None):
@@ -114,6 +116,7 @@ class BaseMixin:
                     -- one run executed: >1 is what makes the record 并行, and the
                     -- name field carries all their labels joined.
                     wf_count INTEGER DEFAULT 1,
+                    export_group TEXT DEFAULT '',
                     started_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
                     finished_at TEXT,
@@ -222,6 +225,7 @@ class BaseMixin:
                     node_id TEXT NOT NULL DEFAULT '',
                     name TEXT NOT NULL,
                     kind TEXT NOT NULL,
+                    group_name TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL,
                     PRIMARY KEY (run_id, name)
                 );

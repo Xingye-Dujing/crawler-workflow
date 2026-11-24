@@ -1364,7 +1364,7 @@ class TestCommentNodeFilesAndLimits:
     def _merged(export_dir, prefix):
         """Final merged files only — the ``.partNNN`` pieces are kept on disk by
         design (``keep_parts`` defaults to on) and are not the answer here."""
-        names = sorted(path.name for path in export_dir.glob(f'{prefix}*.csv'))
+        names = sorted(path.name for path in export_dir.rglob(f'{prefix}*.csv'))
         return [name for name in names if '.part' not in name]
 
     def test_per_article_file_writes_one_file_per_article(self, client, app_module, monkeypatch, data_root):
@@ -1514,13 +1514,13 @@ class TestOutputNodeOperations:
         _run, status, rows = self._run(client, app_module, paste, {'format': fmt, 'filename': 'matrix-out'})
         assert status['status'] == 'done', status.get('error')
         assert len(rows) == len(RICH_RECORDS), 'the node passes its input downstream'
-        written = sorted(path.name for path in (data_root / 'data' / 'exports').glob('matrix-out*'))
+        written = sorted(path.name for path in (data_root / 'data' / 'exports').rglob('matrix-out*'))
         assert written, f'{fmt} produced no file'
 
     def test_the_format_is_taken_from_the_extension_when_left_out(self, client, app_module, paste, data_root):
         _run, status, _rows = self._run(client, app_module, paste, {'filename': 'matrix-inferred.xlsx', 'format': ''})
         assert status['status'] == 'done', status.get('error')
-        assert (data_root / 'data' / 'exports' / 'matrix-inferred.xlsx').exists()
+        assert list((data_root / 'data' / 'exports').rglob('matrix-inferred.xlsx'))
 
     def test_an_unwritable_format_fails_the_node_rather_than_passing_quietly(
         self, client, app_module, paste, data_root
@@ -1541,7 +1541,7 @@ class TestOutputNodeOperations:
             records=RICH_RECORDS,
         )
         assert status['status'] == 'done', status.get('error')
-        assert (data_root / 'data' / 'exports' / 'matrix-legacy.csv').exists()
+        assert list((data_root / 'data' / 'exports').rglob('matrix-legacy.csv'))
 
     def test_a_name_that_is_not_a_file_is_cleaned_not_followed(self, client, app_module, paste, data_root):
         _run, status, _rows = self._run(client, app_module, paste, {'format': 'csv', 'filename': '../../escape'})

@@ -59,7 +59,7 @@ Flask 后端 HTTP 端点，按域名分组。未登录时 `/api/*` 答 401 `{ok:
 |---|---|
 | `POST` `/api/analysis/run` · `POST` `/api/analysis/train` | 对数据集跑清洗流水线 / 从标注数据集训练情感、倾向模型 |
 | `POST` `/api/visualize/render` | 渲染图表，返回 ECharts option 或图片；带 `emit_latex`/`emit_latex_table` 时另写导出；无运行数据回 200 + `code:no_run_data` |
-| `POST` `/api/export/save` · `GET` `/api/exports/list` · `GET` `/api/exports/download` · `POST` `/api/exports/delete` | 导出数据集 / 列出 / 按文件名下载 / 删除单个文件 |
+| `POST` `/api/export/save` · `GET` `/api/exports/tree` · `GET` `/api/exports/download?group=&name=` · `POST` `/api/exports/delete` | 导出数据集 / 按运行分组列出 / 按分组与文件名下载 / 删除单个文件 |
 | `GET` `/api/data/datasets/<dataset_id>/download` | 把存下的数据集渲染成 CSV 直接下载（数据集面板的“下载”）；未知 id 404，不写入导出目录 |
 | `POST` `/api/exports/clear` | 清空导出目录，必须 `{"confirm": true}`；有运行在跑 409 |
 | `GET` `/api/exports/ledger` · `POST` `/api/exports/clear-run` · `POST` `/api/exports/clear-run-parts` · `POST` `/api/exports/clear-name` | 写过导出文件的每次运行及清单 / 按运行清除 / 按运行 × 节点清分片 / 按分片名清同一批；保留合并文件与固定项 |

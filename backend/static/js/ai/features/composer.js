@@ -48,17 +48,19 @@ Object.assign(AIWorkspace, {
 
     _renderSkillOptions() {
         const skills = this._bootstrap?.skills || [];
-        if (this._dom.skill) {
-            this._dom.skill.innerHTML = '<option value="auto">' + AIRender.escape(I18n.t('ai.skill') + ': ' + I18n.t('ai.skillAuto')) + '</option>' +
-                skills.map((skill) => {
-                    const why = skill.available === false
-                        ? (skill.why_not_text || I18n.t('ai.skillUnavailable'))
-                        : '';
-                    const title = why ? ' title="' + AIRender.escape(why) + '"' : '';
-                    return '<option value="' + AIRender.escape(skill.id) + '"' + title + (skill.id === this._skill ? ' selected' : '') + '' + (skill.available === false ? ' disabled' : '') + '>' +
-                        AIRender.escape(skill.name || (I18n.has(skill.name_key) ? I18n.t(skill.name_key) : skill.id)) + (skill.available === false ? ' — ' + AIRender.escape(why) : '') + '</option>';
-                }).join('');
-        }
+        if (!this._dom.skill) return;
+        const chosen = new Set(this._skills || []);
+        this._dom.skill.innerHTML =
+            '<option value="auto"' + (chosen.size ? '' : ' selected') + '>' +
+            AIRender.escape(I18n.t('ai.skill') + ': ' + I18n.t('ai.skillAuto')) + '</option>' +
+            skills.map((skill) => {
+                const why = skill.available === false
+                    ? (skill.why_not_text || I18n.t('ai.skillUnavailable'))
+                    : '';
+                const title = why ? ' title="' + AIRender.escape(why) + '"' : '';
+                return '<option value="' + AIRender.escape(skill.id) + '"' + title + (chosen.has(skill.id) ? ' selected' : '') + '' + (skill.available === false ? ' disabled' : '') + '>' +
+                    AIRender.escape(skill.name || (I18n.has(skill.name_key) ? I18n.t(skill.name_key) : skill.id)) + (skill.available === false ? ' — ' + AIRender.escape(why) : '') + '</option>';
+            }).join('');
     },
 
     _runtimeTitle() {
@@ -266,12 +268,12 @@ Object.assign(AIWorkspace, {
             api_key: key,
             thinking: this._thinkingOn(),
             web_search: !!AISettings.load().search && (provider?.capabilities || []).includes('web_search'),
-            skill: this._skill || 'auto',
+            skills: this._selectedSkills(),
             locale: (typeof I18n !== 'undefined' && I18n.lang) || 'zh',
             context,
             scope: this._scope,
             attachments: pendingAttachments.map((row) => row.id),
-            references: pendingRefs.map((row) => ({ kind: row.kind, id: row.id })),
+            references: pendingRefs.filter((row) => row.kind !== 'skill').map((row) => ({ kind: row.kind, id: row.id })),
             monitor_event_id: opts.monitorEventId || '',
             feedback: !!opts.feedback,
             agent_mode: this._agentMode || 'build',
@@ -383,9 +385,24 @@ Object.assign(AIWorkspace, {
         this._loadBootstrap();
     },
 
-    setSkillFromBar(value) {
-        this._skill = value;
-        AISettings.save({ skill: value });
+    _selectedSkills() {
+        const ids = [];
+        for (const id of this._skills || []) if (id && id !== 'auto' && !ids.includes(id)) ids.push(id);
+        for (const row of this._refs || []) {
+            if (row.kind === 'skill' && !ids.includes(row.id)) ids.push(row.id);
+        }
+        return ids;
+    },
+
+    setSkillsFromBar(values) {
+        this._skills = (values || []).filter((id) => id && id !== 'auto');
+        AISettings.save({ skills: this._skills });
+        if (this._conversationId) {
+            AIHttp.patch('/conversations/' + encodeURIComponent(this._conversationId), {
+                skills: this._skills,
+            }).catch(() => {});
+        }
+        this._renderSkillOptions();
     },
 
     /* The local daemon never thinks in this product: qwen3.5 thinks by default, which doubles a

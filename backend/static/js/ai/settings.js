@@ -17,7 +17,7 @@ const AISettings = {
         /* 联网搜索默认开：DeepSeek 自 2026-11-18 起，调用模型触发的服务端搜索/抓页工具调用本身
            免费，结果拼进上下文只按模型 Token 计费。不想联网时点工具栏开关关掉，或在设置里改默认。 */
         search: true,
-        skill: 'auto',
+        skills: [],
         scope: 'summary',
         width: 520,
         open: false,
@@ -131,7 +131,7 @@ const AISettings = {
             api_key: settings.keys[settings.provider] || '',
             thinking: !!settings.thinking,
             web_search: !!settings.search,
-            skill: settings.skill || 'auto',
+            skills: Array.isArray(settings.skills) ? settings.skills : [],
             scope: settings.scope || 'summary',
         };
     },

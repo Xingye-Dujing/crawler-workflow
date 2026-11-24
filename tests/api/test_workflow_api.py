@@ -433,9 +433,10 @@ class TestWorkflowExecute:
         run_id = started.get_json()['run_id']
         assert _wait_for_worker(app_module), 'the execute thread did not finish in time'
 
-        # ── the file the run was supposed to produce ──────────────────
-        export = data_root / 'data' / 'exports' / 'workflow-e2e.csv'
-        assert export.exists()
+        # ── the file the run was supposed to produce (inside its run folder) ──
+        candidates = sorted((data_root / 'data' / 'exports').glob('*/workflow-e2e.csv'))
+        assert candidates, list((data_root / 'data' / 'exports').iterdir())
+        export = candidates[0]
         frame = pd.read_csv(export, encoding='utf-8-sig')
         # The order is alphabetical because Flask's JSON provider sorts object
         # keys when the test client serialises the request body; the set of
@@ -1222,11 +1223,11 @@ class TestProgressiveOutput:
         assert app_module._RUN_STORE.row_count(run_id, 'node-1') == 5
 
         exports = data_root / 'data' / 'exports'
-        final = exports / 'parts-test-src-node-1.csv'
-        assert final.exists(), 'the merged file must exist whatever the keep-parts choice'
-        frame = pd.read_csv(final, encoding='utf-8-sig')
+        finals = list(exports.rglob('parts-test-src-node-1.csv'))
+        assert finals, 'the merged file must exist whatever the keep-parts choice'
+        frame = pd.read_csv(finals[0], encoding='utf-8-sig')
         assert frame['正文'].tolist() == [f'body {i}' for i in range(5)]
-        parts = sorted(p.name for p in exports.glob('parts-test-src-node-1.part*.csv'))
+        parts = sorted(p.name for p in exports.rglob('parts-test-src-node-1.part*.csv'))
         assert len(parts) == expect_parts, '5 rows at part_size=2 flush exactly two settled parts'
 
     def test_llm_live_snapshot_is_rewritten_on_every_publish(self, client, app_module, data_root):
@@ -1239,8 +1240,9 @@ class TestProgressiveOutput:
         from services.ingest.parts import safe_stem
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p1')
-        live = data_root / 'data' / 'exports' / f'{stem}.live.csv'
-        assert live.exists()
+        lives = list((data_root / 'data' / 'exports').rglob(f'{stem}.live.csv'))
+        assert lives
+        live = lives[0]
         assert pd.read_csv(live, encoding='utf-8-sig')['正文'].tolist() == ['甲', '乙']
 
         # A later batch adds a column: the snapshot grows in place, the tmp
@@ -1264,7 +1266,7 @@ class TestProgressiveOutput:
         from services.ingest.parts import safe_stem
 
         stem = safe_stem(f'{app_module.execution_state.get("workflow_name") or "llm"}-p2')
-        assert not list((data_root / 'data' / 'exports').glob(f'{stem}.live.*'))
+        assert not list((data_root / 'data' / 'exports').rglob(f'{stem}.live.*'))
 
     def test_llm_run_ctx_trace_respects_the_tier_setting(self, client, app_module, data_root, monkeypatch):
         """The trace gate follows ai_trace_tier: at 'traditional' a local BERT/SnowNLP node opens a

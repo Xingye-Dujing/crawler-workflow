@@ -2668,7 +2668,7 @@
               <button type="button" class="ai-toggle is-on" id="ai-agent-build" data-ai-agents="build" data-i18n="ai.mode.build" data-i18n-aria-label="ai.mode.buildHint">Build</button>
               <button type="button" class="ai-toggle" id="ai-thinking-btn" onclick="AIWorkspace.toggleThinking()" data-i18n="ai.thinking" data-i18n-aria-label="ai.thinking" aria-label="Thinking">Thinking</button>
               <button type="button" class="ai-toggle" id="ai-search-btn" onclick="AIWorkspace.toggleSearch()" data-i18n="ai.search" data-i18n-aria-label="ai.search" aria-label="Web search">Web</button>
-              <select id="ai-skill" class="ai-select" data-i18n-aria-label="ai.skill" aria-label="Skill" onchange="aiSetSkill(this.value)"></select>
+              <select id="ai-skill" class="ai-select" multiple size="3" data-i18n-aria-label="ai.skill" aria-label="Skill" onchange="aiSetSkills(Array.from(this.selectedOptions).map((item) => item.value))"></select>
               <select id="ai-ws-provider" class="ai-select" data-i18n-aria-label="ai.provider" aria-label="Provider" onchange="aiSetProvider(this.value)"></select>
               <select id="ai-ws-model" class="ai-select" data-i18n-aria-label="ai.model" aria-label="Model" onchange="aiSetModel(this.value)"></select>
             </div>

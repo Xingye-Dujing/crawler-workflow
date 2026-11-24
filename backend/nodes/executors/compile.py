@@ -75,7 +75,8 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
     run_id = str((ctx or {}).get('run_id') or '')
     stem = f'{run_id}-compile-{nid}' if run_id else f'compile-{nid}'
     out_name = f'{sanitize_filename(stem) or "compile"}.pdf'
-    out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, paths.active().export_dir)
+    export_dir = str((ctx or {}).get('export_dir') or paths.active().export_dir)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), out_name, export_dir)
     if 'error' in out:
         # Fold the reason into the returned error so run_node_durable's single wf.node_failed
         # line carries it; a separate add_log was the duplicate line for one failure.
@@ -86,7 +87,13 @@ def execute_compile_node(node: dict, _current_input: list, upstream: list = None
     # this name (see nodes/executors/output.py); recording here covers the no-save case, which owns the file.
     if ctx and ctx.get('store') and ctx.get('run_id'):
         with contextlib.suppress(Exception):
-            ctx['store'].record_file(ctx['run_id'], str(node.get('id') or ''), name, 'compile')
+            ctx['store'].record_file(
+                ctx['run_id'],
+                str(node.get('id') or ''),
+                name,
+                'compile',
+                group=str(ctx.get('export_group') or ''),
+            )
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
     return {**out, 'sources': sources}
 

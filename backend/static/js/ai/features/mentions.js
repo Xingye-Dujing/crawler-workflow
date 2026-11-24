@@ -214,6 +214,10 @@ Object.assign(AIWorkspace, {
                 rows.push({ kind: kind, id: id, label: label || id });
             }
             this._renderAnswerRefs(questionId);
+        } else if (kind === 'skill') {
+            this._skills = this._selectedSkills().filter((value) => value !== id).concat([id]);
+            AISettings.save({ skills: this._skills });
+            this._renderSkillOptions();
         } else if (!this._refs.some((row) => row.kind === kind && row.id === id)) {
             this._refs.push({kind: kind, id: id, label: label || id});
             this._renderRefs();

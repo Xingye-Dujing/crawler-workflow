@@ -127,7 +127,12 @@ Object.assign(sandbox, {
         } else if (body) {
             answer = { ok: true, name: 'report-x.html' };
         } else {
-            answer = { ok: true, exports: payload.exports, files: payload.files, bytes: payload.bytes };
+            answer = {
+                ok: true,
+                groups: [{ id: '', label: 'run', kind: 'run', created_at: '', files: payload.exports }],
+                files: payload.files,
+                bytes: payload.bytes,
+            };
         }
         return Promise.resolve({ json: () => Promise.resolve(answer) });
     },
@@ -153,14 +158,16 @@ sandbox.showDialog = (opts) => {
     return Promise.resolve(next);
 };
 
-exportsManager._last = payload.exports;
+exportsManager._groups = [
+    { id: '', label: 'run', kind: 'run', created_at: '', files: payload.exports },
+];
 exportsManager._totals = { files: payload.files, bytes: payload.bytes };
 exportsManager.render();
 
 const html = sandbox.__byId('exports-mgr-body').innerHTML;
 const out = {
     html,
-    rows: (html.match(/<tr>/g) || []).length,
+    rows: (html.match(/<tr\b/g) || []).length,
     downloads: (html.match(/exportsManager\.download\(/g) || []).length,
     deletes: (html.match(/exportsManager\.remove\(/g) || []).length,
     // The per-batch clear button appears only on shard rows (name has .partNNN).
@@ -179,7 +186,7 @@ const out = {
 };
 /* The empty-state path, rendered after the populated one so the two do not
    share a fixture. */
-exportsManager._last = [];
+exportsManager._groups = [];
 exportsManager.render();
 out.empty = sandbox.__byId('exports-mgr-body').innerHTML;
 out.dlHref = '/api/exports/download?name=' + sandbox.encodeURIComponent("it's.csv");

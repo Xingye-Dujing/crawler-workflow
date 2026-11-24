@@ -30,6 +30,34 @@ logger = logging.getLogger(__name__)
 bp = Blueprint('exports', __name__)
 
 
+def _delete_export_rows(rows) -> dict:
+    """Delete ledger rows that carry ``{group, name}`` through the group resolver."""
+    from services.exports.browser import delete_export_file
+    from services.exports.groups import resolve_member
+
+    store = get_run_store()
+    counts = {'removed': 0, 'skipped_locked': 0, 'missing': 0}
+    for row in rows:
+        name = os.path.basename(str(row.get('name') or ''))
+        group = str(row.get('group') or '')
+        if not name:
+            continue
+        if lock_store.is_locked('exports', name):
+            counts['skipped_locked'] += 1
+            continue
+        path = resolve_member(paths.active().export_dir, group, name) if group else ''
+        if not path:
+            from services.exports.browser import resolve_export_file
+
+            path = resolve_export_file(paths.active().export_dir, name)
+        if path and delete_export_file(os.path.dirname(path), name):
+            counts['removed'] += 1
+        else:
+            counts['missing'] += 1
+        store.forget_file(name)
+    return counts
+
+
 def _delete_export_names(names) -> dict:
     """Delete a set of export files by name, one at a time, and keep the run ledger honest.
 
@@ -116,6 +144,28 @@ def exports_list():
     return jsonify({'ok': True, 'exports': rows, **usage})
 
 
+@bp.route('/api/exports/tree', methods=['GET'])
+def exports_tree():
+    """Groups and their files. The run ledger owns the grouping; the panel renders it as a tree."""
+    from services.exports.groups import build_tree
+
+    ledger = get_run_store().run_ledger()
+    groups = build_tree(paths.active().export_dir, ledger, limit=_safe_int(request.args.get('limit'), 200, 1, 500))
+    return jsonify(
+        {
+            'ok': True,
+            'groups': groups,
+            'files': sum(len(group['files']) for group in groups),
+            'bytes': sum(sum(int(row.get('size') or 0) for row in group['files']) for group in groups),
+        }
+    )
+
+
+def _group_for_name(name: str) -> str:
+    row = get_run_store().find_file(name)
+    return str((row or {}).get('group') or '')
+
+
 @bp.route('/api/exports/download', methods=['GET'])
 def exports_download():
     """Send one export file by name — never by path.
@@ -126,11 +176,18 @@ def exports_download():
     """
     from flask import send_file
 
-    from services.exports.browser import resolve_download_path
+    from services.exports.browser import is_downloadable
+    from services.exports.groups import resolve_member
 
-    path = resolve_download_path(paths.active().export_dir, request.args.get('name', ''))
+    name = request.args.get('name', '')
+    group = request.args.get('group', '') or _group_for_name(name)
+    path = resolve_member(paths.active().export_dir, group, name) if group else ''
     if not path:
-        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=request.args.get('name', ''))}), 404
+        from services.exports.browser import resolve_download_path
+
+        path = resolve_download_path(paths.active().export_dir, name)
+    if not path or not is_downloadable(path):
+        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
     return send_file(path, as_attachment=True, download_name=os.path.basename(path))
 
 
@@ -138,6 +195,7 @@ def exports_download():
 def exports_delete():
     """Delete exactly one export file. No prefixes, no recursion."""
     from services.exports.browser import delete_export_file
+    from services.exports.groups import resolve_member
 
     data = _json_body()
     if data is None:
@@ -145,19 +203,25 @@ def exports_delete():
     name = data.get('name')
     if not isinstance(name, str) or not name.strip():
         return _bad_param('name')
-    # The lock, the delete, the ledger row and the echoed name must use the SAME spelling.
-    # ``delete_export_file`` sanitizes before touching disk; checking the raw name let
-    # ``a?b.csv`` pass a lock held on ``a_b.csv`` and delete the very file the user pinned.
     clean = sanitize_filename(name, truncate=False)
+    group = str(data.get('group') or '') or _group_for_name(clean)
     if not clean:
         return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
     if lock_store.is_locked('exports', clean):
         return jsonify({'ok': False, 'error': t('lock.refuse')}), 409
-    gone = delete_export_file(paths.active().export_dir, clean)
+    path = resolve_member(paths.active().export_dir, group, clean) if group else ''
+    if not path:
+        from services.exports.browser import resolve_export_file
+
+        path = resolve_export_file(paths.active().export_dir, clean)
+    gone = bool(path and delete_export_file(os.path.dirname(path), os.path.basename(path)))
     if gone:
         lock_store.drop('exports', clean)
         get_run_store().forget_file(clean)
-    return jsonify({'ok': gone, 'deleted': gone, 'name': os.path.basename(clean)})
+    payload = {'ok': gone, 'deleted': gone, 'name': os.path.basename(clean)}
+    if group:
+        payload['group'] = group
+    return jsonify(payload)
 
 
 @bp.route('/api/exports/clear', methods=['POST'])
@@ -172,7 +236,7 @@ def exports_clear():
     Refused outright while a run is live — a streaming node is writing part files into this
     very directory, and the panel cannot tell a finished artefact from one still being appended.
     """
-    from services.exports.browser import delete_export_file, export_usage, list_exports
+    from services.exports.browser import export_usage
 
     data = _json_body()
     if data is None:
@@ -181,33 +245,22 @@ def exports_clear():
         return jsonify({'ok': False, 'error': t('api.needConfirm')}), 400
     if any_run_live():
         return jsonify({'ok': False, 'error': t('exports.clearBusy')}), 409
+    from services.exports.browser import list_exports
+    from services.exports.groups import build_tree
+
     removed = 0
-    deleted: list[str] = []
-    # The listing is capped, so one pass is not necessarily the whole folder: keep going
-    # while it shrinks. A page whose every file is pinned (or held open by Excel) removed
-    # nothing, and the old `break` then left every deletable file BEHIND that head untouched
-    # while reporting the folder as swept. So a no-progress page advances the offset instead;
-    # a page that shrank restarts at 0 (earlier names may now be reachable).
     offset = 0
     while True:
         before = removed
         batch = list_exports(paths.active().export_dir, offset=offset)
         if not batch:
             break
-        for row in batch:
-            if lock_store.is_locked('exports', row['name']):
-                # A locked artefact outlives 清空 — the user pinned it on purpose.
-                continue
-            if delete_export_file(paths.active().export_dir, row['name']):
-                removed += 1
-                deleted.append(row['name'])
-        if removed == before:
-            offset += len(batch)
-        else:
-            offset = 0
-    if deleted:
-        # One transaction for the whole sweep; the per-file form committed once per name.
-        get_run_store().forget_files(deleted)
+        removed += _delete_export_rows([{'group': '', 'name': row['name']} for row in batch])['removed']
+        offset = offset + len(batch) if removed == before else 0
+    for group in build_tree(paths.active().export_dir, get_run_store().run_ledger(), limit=500):
+        removed += _delete_export_rows([{'group': group['id'], 'name': file['name']} for file in group['files']])[
+            'removed'
+        ]
     # Count the DIRECTORY, not a capped listing: quoting MAX_ENTRIES as "left" was the same
     # error ``export_usage`` was written to stop.
     left = int(export_usage(paths.active().export_dir)['files'])
@@ -258,7 +311,7 @@ def exports_clear_run():
         return _bad_param('run_id')
     store = get_run_store()
     files = store.files_for_run(run_id.strip())
-    result = _delete_export_names([f['name'] for f in files])
+    result = _delete_export_rows(files)
     result['ok'] = True
     result['run_id'] = run_id.strip()
     result['requested'] = len(files)
@@ -285,7 +338,7 @@ def exports_clear_run_parts():
         return _bad_param('node_id')
     store = get_run_store()
     files = store.files_for_run(run_id.strip(), node_id=node_id.strip(), kind='part')
-    result = _delete_export_names([f['name'] for f in files])
+    result = _delete_export_rows(files)
     result['ok'] = True
     result['run_id'] = run_id.strip()
     result['node_id'] = node_id.strip()
@@ -313,10 +366,18 @@ def exports_clear_name():
     name = data.get('name')
     if not isinstance(name, str) or not name.strip():
         return _bad_param('name')
-    batch = part_batch_names(paths.active().export_dir, name)
+    group = str(data.get('group') or '')
+    from services.exports.groups import resolve_group_dir
+
+    directory = (
+        resolve_group_dir(paths.active().export_dir, group, must_exist=True) if group else paths.active().export_dir
+    )
+    if group and not directory:
+        return jsonify({'ok': False, 'error': t('api.exportNotFound', name=name)}), 404
+    batch = part_batch_names(directory, name)
     if batch is None:
         return jsonify({'ok': False, 'error': t('exports.notAPart', name=os.path.basename(name.strip()))}), 400
-    result = _delete_export_names(batch)
+    result = _delete_export_rows([{'group': group, 'name': item} for item in batch])
     result['ok'] = True
     result['name'] = os.path.basename(name.strip())
     result['requested'] = len(batch)

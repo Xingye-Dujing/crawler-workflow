@@ -77,10 +77,39 @@ class TestTheSurface:
     def test_auto_reaches_the_frameworks_router_and_says_what_it_chose(self, client):
         """The panel's default is auto; the turn must record the skill it picked, not answer as
         general with no trace of the decision."""
-        body = _chat(client, '怎么用这个项目开始？', skill='auto').get_json()
+        body = _chat(client, '怎么用这个项目开始？', skills=[]).get_json()
         meta = next(item for item in body['events'] if item['type'] == 'meta')
-        assert meta['skill'] == 'project'
-        assert meta['context']['skill'] == {'requested': 'auto', 'chosen': 'project'}
+        assert meta['skills'] == ['project']
+        assert meta['context']['skills']['resolved'][0]['id'] == 'project'
+
+    def test_the_conversation_keeps_its_model_and_skills(self, client):
+        created = client.post(
+            '/api/ai/ws/conversations',
+            json={'title': 'pinned model', 'provider': 'complete', 'model': 'complete', 'skills': ['project']},
+        ).get_json()['conversation']
+        assert created['provider'] == 'complete'
+        assert created['skills'] == ['project']
+        first = client.get(f'/api/ai/ws/conversations/{created["id"]}').get_json()['conversation']
+        assert (first['provider'], first['model']) == ('complete', 'complete')
+        patched = client.patch(
+            f'/api/ai/ws/conversations/{created["id"]}',
+            json={'provider': 'complete', 'model': 'complete', 'skills': []},
+        ).get_json()['conversation']
+        assert patched['skills'] == []
+        assert patched['model'] == 'complete'
+
+    def test_a_conversation_can_bind_a_workspace(self, client, tmp_path):
+        created = client.post('/api/ai/ws/conversations', json={'title': 'folder'}).get_json()['conversation']
+        folder = tmp_path / 'folder'
+        folder.mkdir()
+        response = client.post(
+            f'/api/ai/ws/conversations/{created["id"]}/workspace',
+            json={'path': str(folder)},
+        )
+        assert response.status_code == 200
+        assert response.get_json()['workspace']['folder'] == str(folder.resolve())
+        detail = client.get(f'/api/ai/ws/conversations/{created["id"]}').get_json()['conversation']
+        assert detail['workspace_dir'] == str(folder.resolve())
 
     def test_an_unknown_turn_is_named(self, client):
         missing = client.get('/api/ai/ws/turns/turn_nope')
@@ -188,7 +217,7 @@ class TestTheSurface:
         listed = client.get(f'/api/ai/ws/traces/{run}').get_json()['conversations']
         assert [row['id'] for row in listed] == [conversation_id]
         detail = client.get(f'/api/ai/ws/conversations/{conversation_id}').get_json()
-        assert detail['conversation']['skill'] == 'node_trace'
+        assert any((message.get('meta') or {}).get('skill') == 'node_trace' for message in detail['messages'])
         apply = client.post(f'/api/ai/ws/traces/{conversation_id}/apply', json={'result': {}})
         assert apply.status_code == 400
 

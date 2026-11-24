@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def record_file(ctx: dict | None, node_id: str, path_or_name, kind: str) -> None:
+def record_file(ctx: dict | None, node_id: str, path_or_name, kind: str, group: str = '') -> None:
     """Register one export file a run produced, so 智能清除 can later name them all.
 
     ``ctx`` carries the run's own ledger (``store`` + ``run_id``); without both there is no
@@ -26,6 +26,6 @@ def record_file(ctx: dict | None, node_id: str, path_or_name, kind: str) -> None
     if store is None or not run_id:
         return
     try:
-        store.record_file(run_id, node_id, path_or_name, kind)
+        store.record_file(run_id, node_id, path_or_name, kind, group=group or str(ctx.get('export_group') or ''))
     except Exception as e:
         logger.debug('run-file ledger failed for %s: %s', path_or_name, e)

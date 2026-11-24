@@ -164,7 +164,7 @@ def merge_upstream_tables(
     return merged.to_dict('records'), (str(label), len(merged))
 
 
-def pdf_filename(params: dict) -> str:
+def pdf_filename(params: dict, export_dir: str = '') -> str:
     """The final PDF file name from an output node's params: sanitized, extension forced to ``.pdf``.
 
     Deliberately NOT ``DataExporter.normalize_filename`` — that re-applies a *tabular* extension from its
@@ -173,7 +173,7 @@ def pdf_filename(params: dict) -> str:
     base = os.path.splitext(sanitize_filename(params.get('filename', 'export.pdf')))[0]
     name = f'{base}.pdf'
     if as_bool(params.get('filename_timestamp')):
-        name = DataExporter.stamp_filename(name, paths.active().export_dir)
+        name = DataExporter.stamp_filename(name, export_dir or paths.active().export_dir)
     return name
 
 
@@ -183,6 +183,7 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
     so exactly one source kind is present and ``xelatex`` runs once per chain — never twice.
     """
     params = node.get('params', {})
+    export_dir = str((ctx or {}).get('export_dir') or paths.active().export_dir)
     docs = []
     staged_pdf = ''
     for _pid, res in upstream or ():
@@ -198,15 +199,16 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
             docs.append(res['latex'])
         if res.get('latex_table'):
             docs.append(res['latex_table'])
-    filename = pdf_filename(params)
+    filename = pdf_filename(params, export_dir)
     if staged_pdf:
-        # The compile node already produced this (staged in EXPORT_DIR); finalize it under the user's name.
-        staged = os.path.join(paths.active().export_dir, staged_pdf)
+        # The compile node already produced this (staged in this run's export group); finalize it
+        # under the user's name.
+        staged = os.path.join(export_dir, staged_pdf)
         try:
-            atomic_replace(staged, os.path.join(paths.active().export_dir, filename))
+            atomic_replace(staged, os.path.join(export_dir, filename))
         except OSError as e:
             return {'error': t('api.compilePdfFailed', err=e)}
-        size = os.path.getsize(os.path.join(paths.active().export_dir, filename))
+        size = os.path.getsize(os.path.join(export_dir, filename))
         add_log(t('run.compileSaved', name=filename, size=size))
         record_file(ctx, str(node.get('id') or ''), filename, 'pdf')
         # The compile node recorded the staged name; the rename made that file this one, so drop
@@ -217,7 +219,7 @@ def output_pdf(node: dict, upstream: list, ctx: dict = None) -> dict:
         return {'pdf_file': filename, 'pdf_bytes': size}
     if not docs:
         return {'error': t('wf.compile_no_source')}
-    out, name = pdf.compile_pdf(pdf.compose_tex(docs), filename, paths.active().export_dir)
+    out, name = pdf.compile_pdf(pdf.compose_tex(docs), filename, export_dir)
     if 'error' in out:
         return out
     add_log(t('run.compileSaved', name=name, size=out.get('pdf_bytes', 0)))
@@ -248,6 +250,7 @@ def execute_output_node(
     attributes it to no record — which is correct, because none made it.
     """
     params = node.get('params', {})
+    export_dir = str((ctx or {}).get('export_dir') or paths.active().export_dir)
     op = node.get('operation', params.get('operation', ''))
     # PDF is not a tabular export: when the format is pdf the node compiles the LaTeX its upstream
     # visualize / compile produced (see output_pdf) and never reaches the row merge below, which would
@@ -304,8 +307,8 @@ def execute_output_node(
             else:
                 filename = DataExporter.tagged_filename(filename, tag)
         if as_bool(params.get('filename_timestamp')):
-            filename = DataExporter.stamp_filename(filename, paths.active().export_dir)
-        filepath = os.path.join(paths.active().export_dir, filename)
+            filename = DataExporter.stamp_filename(filename, export_dir)
+        filepath = os.path.join(export_dir, filename)
         try:
             DataExporter.save(df, filepath, fmt=fmt, text_column=params.get('text_column'))
         except UnsupportedFormatError as e:

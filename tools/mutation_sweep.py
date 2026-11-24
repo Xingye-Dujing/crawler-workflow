@@ -322,6 +322,7 @@ def run_target(
             capture_output=True,
             timeout=timeout,
             text=True,
+            check=False,
             encoding='utf-8',
             errors='replace',
         )

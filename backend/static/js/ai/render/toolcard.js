@@ -132,9 +132,13 @@ Object.assign(AIRender, {
             }
             if (type === 'skill') {
                 flush();
-                const id = String(block.name || '');
-                const nameKey = 'ai.skill.' + id + '.name';
-                const label = I18n.has(nameKey) ? I18n.t(nameKey) : id;
+                const ids = Array.isArray(block.names) && block.names.length ? block.names.map(String) : [String(block.name || '')];
+                const id = ids[0] || '';
+                const labels = ids.map((value) => {
+                    const key = 'ai.skill.' + value + '.name';
+                    return I18n.has(key) ? I18n.t(key) : value;
+                });
+                const label = labels.join(' + ');
                 const reason = String(block.reason || '');
                 /* Three distinct facts: auto-routed, chosen by the user, or authored by the model.
                    Printing the skill's own name as its "reason" (`画布建构师 · 画布建构师`) said

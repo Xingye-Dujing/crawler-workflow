@@ -36,7 +36,7 @@ backend/capabilities_kernel/
 > 两类事实互相绑架；`Docs.version_hash` 保持为空（技能页由 `docs.skill` 声明路径，页面内容是清单第七段的渲染）。
 >
 > 技能正文不在文件里手写：`capabilities_kernel.knowledge` 的 L2 渲染在每次读取时从 `manifest.params` 重建参数表，
-> 所以页面和 `skill_load` 都不可能比清单旧。
+> 所以页面和 `capability_load` 都不可能比清单旧。
 
 `Manifest.problems()` 是完整性门禁的结构半部；`tests/unit/gates/test_capability_completeness.py` 再补文件系统事实（执行器可导入、端口钩子可解析、自定义设置表单的 renderer 确实在浏览器注册、文档/契约测试存在、双语词齐全、生成物最新）。`python tools/doctor.py --all` 从同一组事实逐项打印勾选。
 
@@ -102,7 +102,7 @@ backend/capabilities_kernel/
 | `backend/capabilities_kernel/generated/capability-schema.json` | 浏览器 schema 表单目录（数据形态，供 P2 渲染器/工具读取） |
 | `backend/static/js/node-types-fallback.js` | 同一目录的冷启动脚本：`index.html` 在 `node-types.js` 之前加载，画布不再手写类型/默认值表 |
 | `docs/capabilities/index.md` | 人类可读的能力索引 |
-| `docs/capabilities/skills/index.md` + `skills/<kind>s/<id>.md` | 能力技能的 L1 索引与 L2 七段正文；与 `skill_load` 共用 `capabilities_kernel.knowledge.render` |
+| `docs/capabilities/skills/index.md` + `skills/<kind>s/<id>.md` | 能力技能的 L1 索引与 L2 七段正文；与 `capability_load` 共用 `capabilities_kernel.knowledge.render` |
 
 `tests/unit/gates/test_capability_completeness.py` 调用同一个 `generate.check()`：改了清单却忘记重新生成，CI 直接红，并打印 `run python tools/gen_capabilities.py`。渲染是确定性的（registry 顺序、dataclass 字段顺序、跨平台 LF），所以 Windows 与 Linux 比较的是同一串字节。
 
@@ -146,7 +146,7 @@ backend/capabilities_kernel/
 `STEP_EMPTY_BY_DESIGN`、`matching.STEP_TWO_TABLE`/`MATCH_MODES`/`KEEP_MODES`、`kernels` 的 `FILTER_OPS`/`CONVERT_TYPES`/
 `DROP_HOW`/`FILL_METHODS`/`DEDUPE_MODES`/`TIME_PARTS`、`step_checks.TWO_TABLE_KEYS` 与徽章字段名、`ops.OPS`。
 七段技能由 `operator_manifest()` 生成（模板从“必填框”机械推导，必填列给占位符），因此新算子只写两句人类语言 +
-契约，就能被 `skill_catalog`/`skill_load` 检索和阅读。`tests/unit/capabilities/test_operator_manifests.py` 钉住
+契约，就能被 `capability_catalog`/`capability_load` 检索和阅读。`tests/unit/capabilities/test_operator_manifests.py` 钉住
 “投影 == 清单”和“模板不会被按名拒绝”。
 
 ## 已迁移 / 还没迁移

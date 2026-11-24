@@ -173,6 +173,6 @@ Object.assign(AIWorkspace, {
  * forward the value rather than the event, so the handler never sees a stale element. */
 function aiSetProvider(value) { AIWorkspace.setProviderFromBar(value); }
 function aiSetModel(value) { AIWorkspace.setModelFromBar(value); }
-function aiSetSkill(value) { AIWorkspace.setSkillFromBar(value); }
+function aiSetSkills(values) { AIWorkspace.setSkillsFromBar(values); }
 
 window.AIWorkspace = AIWorkspace;

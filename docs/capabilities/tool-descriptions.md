@@ -30,8 +30,8 @@
 | 工具 | 权限 | 读什么 / 什么时候不该用 |
 |---|---|---|
 | `ai_coverage` | read:project | 能力→AI 入口矩阵；缺格是产品缺口，不是提示词问题——不要用它猜某一个节点怎么用 |
-| `skill_catalog` | read:project | 一级技能目录（id、一句摘要、何时用/何时不用）；不要拿它当正文 |
-| `skill_load` | read:project | 二级正文（步骤、例子、模板、重新渲染的参数表）；不确定一个能力时才读，别把全部技能都读进来 |
+| `capability_catalog` | read:project | 一级能力文档目录（id、一句摘要、何时用/何时不用）；不要拿它当正文 |
+| `capability_load` | read:project | 二级能力正文（步骤、例子、模板、重新渲染的参数表）；不确定一个能力时才读，别把全部能力都读进来 |
 | `catbus_status` | read:project | 第二采集后端的工具链探测；只读，**绝不安装** |
 | `chart_catalog` | read:project | 图表注册表与各图所需列 |
 | `analysis_catalog` | read:project | 分析算子清单与列契约 |

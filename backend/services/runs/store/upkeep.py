@@ -127,3 +127,39 @@ class UpkeepMixin:
             'cache_entries': cur.rowcount,
             'seen_keys': cur2.rowcount,
         }
+
+    def clear_all(self, exclude_run_ids=()) -> dict:
+        """Delete every run record, and the crawled-item claims those runs made with them.
+
+        This is the panel's 清空 button, and it releases the ``item_seen`` ledger the way
+        ``purge`` does rather than the way a single ``delete_run`` does. The difference is what
+        each one is a promise about: deleting one record is a user tidying a history whose
+        crawl they still know was paid for, while emptying every record is a request to start
+        from nothing — keeping the claims would leave a ledger that points at rows which no
+        longer exist, and the next crawl of the same canvas would hand back fewer rows than it
+        was asked for with no table left anywhere that could explain the gap.
+
+        The LLM answer cache deliberately survives this: a stored answer is paid for by its
+        prompt, not by the run row, and clearing history must not make the next run re-pay
+        questions this machine already knows the answers to.
+
+        *exclude_run_ids* is the run a worker is still writing (a serial pass closes one
+        record per workflow, hence a set); deleting rows under its feet would destroy state
+        mid-flight.
+        """
+        excluded = {str(rid) for rid in exclude_run_ids if rid}
+        totals = {'runs': 0, 'node_rows': 0, 'node_runs': 0, 'item_claims': 0}
+        for row in self._query('SELECT run_id FROM runs'):
+            run_id = str(row['run_id'])
+            if run_id in excluded:
+                continue
+            counts = self.delete_run(run_id)
+            for table in ('node_rows', 'node_runs'):
+                totals[table] += int(counts.get(table) or 0)
+            totals['item_claims'] += int(self.forget_run_items(run_id) or 0)
+            totals['runs'] += 1
+        if not excluded:
+            # Emptying the history is starting from nothing; a watermark pointing at a
+            # deleted crawl would make the next run skip rows whose provenance is gone.
+            self._execute('DELETE FROM source_watermarks')
+        return totals

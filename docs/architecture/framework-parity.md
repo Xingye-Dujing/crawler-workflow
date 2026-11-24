@@ -201,6 +201,15 @@ P4.0 的第一片就是表中前四行：`fsm.py` + `turns`/`turn_events`/`pendi
 - 旧 `data/users/<id>/ai.db` 历史会话/记忆/技能**不迁移**；新工作区从空开始（声明在 handoff）。
 - 框架 `apply_artifact` 宿主钩子未实现写入；前端产物走类型端点，直接调用 `/artifacts/<id>/apply` 会按名拒绝。
 
+## 0.2.0：AI 工作区四模块（2026-11-25）
+
+框架 0.2.0 把四模块的通用部分收进 `agent-workspace`：`ChatRequest.skills` / `turns.skills`、
+`Skills.route_many` 与 `SkillContext`（L0/L1/L2）、框架 `skill_catalog`/`skill_load`、
+`ArtifactGroup` 与 `Workspace(conversation_id)`、`conversations` 的模型/技能/工作夹字段、
+`ProviderCatalog.history_problems`、`turns.max_parallel` 与同会话邮箱化。采析绘只保留
+`ai_host` 的领域翻译、`/api/ai/ws` 映射、导出目录分组与前端。能力文档工具从
+`skill_catalog/skill_load` 改名为 `capability_catalog/capability_load`（不保留别名）。
+
 ## 依赖与钉版
 
 - 框架没有 index 发布：`vendor/agent_workspace-<version>-py3-none-any.whl` 是钉版产物，`requirements.txt`

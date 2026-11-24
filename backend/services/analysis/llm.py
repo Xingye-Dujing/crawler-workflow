@@ -125,7 +125,7 @@ def build_llm_run_ctx(node: dict, op: str, ctx: dict = None) -> dict:
 
         stem = safe_stem(f'{ambient().get("workflow_name") or "llm"}-{node_id}')
         lfmt = 'json' if str((node.get('params') or {}).get('format') or 'csv') == 'json' else 'csv'
-        live_writer = SnapshotWriter(paths.active().export_dir, stem, lfmt)
+        live_writer = SnapshotWriter((ctx or {}).get('export_dir') or paths.active().export_dir, stem, lfmt)
         add_log(t('run.live_export', file=os.path.basename(live_writer.path)))
         # The live file has one fixed name from the moment it is made, so it is registered once
         # here rather than on every batch's rewrite — it is a run artifact and 智能清除 must find it.

@@ -4,16 +4,18 @@
 
 ## 先读什么
 
-**每次会话第一步**（与读压缩交接文档同等义务）：本目录的 README → ADR-001/002/003 → handoff →
+**每次会话第一步**（与读压缩交接文档同等义务）：本目录的 README → ADR-001/002/003/004 → handoff →
 rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲突的改动必须先写成决策，不能默默绕过。
 
 1. [ADR-001：内核替换，而不是推倒重来](ADR-001-kernel-replacement.md)
 2. [ADR-002：能力清单（Manifest）与完整性门禁](ADR-002-capability-manifest.md)
 3. [ADR-003：持久状态机与中断恢复](ADR-003-durable-state.md)
-4. [能力内核（P1 骨架）](capabilities-kernel.md) —— 清单、注册表、pilot 落点
-5. [问题台账](problem-ledger.md) —— 每个用户问题属于“直接修 / 重构 / 已决策”
-6. [实施计划](rewrite-plan.md) —— Workbuddy 式勾选，未过验收不打勾
-7. [架构改进计划](improvement-plan.md) —— W0–W7：还剩哪些结构债、每笔怎么还、用哪个门禁证明
+4. [ADR-004：AI 上下文、产物分组与会话执行](ADR-004-ai-context-artifacts-sessions.md)
+5. [AI 工作区四模块实施规划](ai-workspace-modules-plan.md) —— Skills 多选/自检索、产物分组、会话工作夹与执行恢复
+6. [能力内核（P1 骨架）](capabilities-kernel.md) —— 清单、注册表、pilot 落点
+7. [问题台账](problem-ledger.md) —— 每个用户问题属于“直接修 / 重构 / 已决策”
+8. [实施计划](rewrite-plan.md) —— Workbuddy 式勾选，未过验收不打勾
+9. [架构改进计划](improvement-plan.md) —— W0–W7：还剩哪些结构债、每笔怎么还、用哪个门禁证明
 
 ## 十条长期原则
 
@@ -36,5 +38,7 @@ rewrite-plan 的未勾选项。代码可能有意落后于契约；与 ADR 冲�
 - **W0/W1 已完成（2026-11-24）**：清单与代码校准；导入方向 / 模块预算 / HTTP 表面 / 死模块四个门禁上线，
   `core/values.py`、`services/datasets/frames.py`、`api/sessions.py`、`api/pool.py` 落位。见
   [improvement-plan.md](improvement-plan.md)
+- **P10 已完成（2026-11-25）**：框架 0.2.0 的多技能/渐进披露/产物分组/会话工作目录已接入；
+  验收与证据见 [ai-workspace-modules-plan.md](ai-workspace-modules-plan.md)。
 - 已确认的 10 个方向决策见 [rewrite-plan.md](rewrite-plan.md#已确认的决策)
 - 一个勾选项只有在“代码 + 测试 + 文档/技能 + 门禁 + 收口”全部通过后才能打勾

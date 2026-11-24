@@ -76,7 +76,8 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 命名拒绝、验收。算子、图表与平台的前置/步骤/失败/验收由各自契约机械推导（模板从必填框生成），
 人工只写“选它/别选它”的话。`capabilities_kernel.knowledge` 从清单投影 **L1 目录**（id/分组/一句话/何时用）并渲染
 **L2 正文**（参数表在渲染时从 `manifest.params` 重读，不会过期）；`ai.knowledge` 加上本地化标题与具名拒绝。
-模型通过两个常备工具按需展开：`skill_catalog`（检索/按 kind 过滤）与 `skill_load`（读全文 + 模板）。
+模型通过两个常备工具按需展开：`capability_catalog`（检索/按 kind 过滤）与 `capability_load`（读全文 + 模板）；
+专家技能用框架的 `skill_catalog`/`skill_load`。
 项目事实里只放 L1 一行摘要（节点；算子已在合法词汇表里逐条列出，不重复进前缀），正文不进系统提示。同一渲染函数也生成 `docs/capabilities/skills/` 页面，
 并随 `docs/capabilities/` 进入 `docs_search`；生成物由 `tools/gen_capabilities.py --check`  freshness 门禁。
 
@@ -240,7 +241,7 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
 - **@ 引用（挑选与键入同一条路）**：框里打 `@` 时 `/references` 返回候选，前端挑中的是**结构化 chips**（不是把
   `@kind:id` 写进正文）；服务端在写入 user 行前把 chips 和正文里的 token 一起展开成有界文本，未解析的按名列进
   `unresolved`。种类：数据集 / 运行 / 工作流文件 / 导出产物 / **能力技能** / 上传文件 / 产物 / 会话；工作流展开成
-  节点图与连线，导出只读前 4000 字，技能正文与 `skill_load` 完全同一份渲染，运行是状态 + 节点判定 + 20 行控制台尾。
+  节点图与连线，导出只读前 4000 字，技能正文与 `capability_load` 完全同一份渲染，运行是状态 + 节点判定 + 20 行控制台尾。
   宿主通过 `HostAdapter.reference_candidates()` / `resolve_reference()` 提供自己的种类，框架只做合并、去重与预算。
 - **配方（recipe）**：宿主声明有序步骤（每步一个工具、前序步骤证据、产物名），框架把运行存进
   `recipe_runs`/`recipe_evidence`。运行中**只下发当前步工具 + 只读工具 + 永远要人批的工具**，模型越步调用按
@@ -304,7 +305,8 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 | POST | `/api/ai/ws/answer` · `/stop` · `/steer` · `/retry` · `/command` | 恢复问题、停止、插话、重试、宿主命令 |
 | GET | `/api/ai/ws/pending` · `/inbox` | 待答问题 / 邮箱 |
 | GET/POST | `/api/ai/ws/conversations` | 列表（`?q=`、`?archived=1`、`limit/offset`）/ 新建 |
-| GET/PATCH/DELETE | `/api/ai/ws/conversations/<id>` | 详情、重命名/置顶/归档、删除 |
+| GET/PATCH/DELETE | `/api/ai/ws/conversations/<id>` | 详情（含 `turns`/`active_turn`）、重命名/置顶/归档、模型/技能、删除 |
+| POST | `/api/ai/ws/conversations/<id>/workspace` | 绑定会话工作目录（`path` 或产物分组 `group_id`） |
 | GET | `/api/ai/ws/conversations/<id>/export` | 下载 `format=md|json` |
 | POST | `/api/ai/ws/conversations/<id>/context` | 单会话上下文预览 |
 | DELETE | `/api/ai/ws/conversations/<id>/dataset-grants/<dataset_id>` | 撤销数据集读取授权 |
@@ -361,6 +363,24 @@ provider-pack / tool-pack）是数据、可移植；`kind: "code"` 的本地插�
 - `tests/api/test_ai_chart_artifact.py`：chart_spec 的类型/数据集/列名校验与具名拒绝；前端产物卡的渲染按钮在 `tests/unit/frontend/test_frontend_ai_js.py`。
 - `tests/unit/frontend/test_frontend_ai_js.py` + `harness_ai.mjs`：真实解码器/渲染器、运行时 chip、禁用原因。
 
-## 11. 未实现
+## 11. 多技能、产物分组与会话工作目录（2026-11-25）
+
+- **技能是轮次级集合**：输入框可多选专家技能，`ChatRequest.skills` 为空表示自动；自动路由可命中
+  多个（默认最多 3 个）。`@skill:id` 是**指令**，它改变本轮技能集合而不是把正文塞进用户消息；
+  `@capability:id` 才是能力文档的内容引用。每轮 `turns.skills` 记录 `{id, source}`，刷新后仍可见。
+- **渐进披露**：系统提示只放技能索引；显式/自动技能正文进提示；AI 用 `skill_catalog` 检索、
+  `skill_load` 加载正文，加载后下一轮工具表扩大。能力文档用 `capability_catalog/load`。
+- **产物分组**：一次运行的所有输出落在 `data/exports/<工作流文件名>_<执行时间>/`；产物面板按
+  运行记录画树，文件夹行可“用作 AI 工作目录”。树接口是 `GET /api/exports/tree`，下载/删除带
+  `group`。存量平铺文件用 `tools/migrate_export_groups.py --dry-run` 迁移。
+- **会话工作目录**：每个会话在 `conversations.workspace_dir` 持久化自己的根；挂载产物分组时
+  写 `workspace_group/label`。AI 只收到目录名、顶层条目和分组说明，文件内容仍按需用
+  `workspace_list/read` 读取。侧栏按工作目录分组。
+- **模型两级**：`conversations.provider/model` 是会话默认，单轮请求可覆盖；`turns.provider/model`
+  记录实际值，会话详情返回 `turns` 供逐轮标注。切换模型前检查历史里的工具/图片块，不兼容按名拒绝。
+- **重连**：会话详情带 `active_turn`；前端用 `GET /turns/<id>/events?after=0` 重放。同一会话只允许
+  一个活动回合，第二条消息进邮箱；全局并发上限是 `turns.max_parallel`。
+
+## 12. 未实现
 
 语音输入输出、OCR、后台常驻智能体、代码插件沙箱。以上能力未声明，不在代码中假装存在。

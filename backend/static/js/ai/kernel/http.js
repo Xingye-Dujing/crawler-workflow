@@ -90,7 +90,11 @@ Object.assign(AIWorkspace, {
             const ids = (data.providers || []).map((item) => item.id);
             this._provider = ids.includes(provider) ? provider : (ids[0] || 'deepseek');
             this._model = AISettings.modelFor(this._provider, data.providers);
-            this._skill = settings.skill || 'auto';
+            this._skills = Array.isArray(settings.skills) ? settings.skills.slice() : [];
+            if (this._conversationId && data.conversations) {
+                const current = data.conversations.find((row) => row.id === this._conversationId);
+                if (current && Array.isArray(current.skills)) this._skills = current.skills.slice();
+            }
             this._scope = data.settings?.context_scope || settings.scope || 'summary';
             /* 联网搜索默认跟随服务端设置：只有这个浏览器从没选过时才采纳，动手点过开关的浏览器
                保留自己的选择（一次点击不该被下一次刷新改回去）。 */
@@ -104,6 +108,21 @@ Object.assign(AIWorkspace, {
             this._renderWorkspace();
         } catch (error) {
             this._toast(I18n.t('ai.error') + ': ' + error.message);
+        }
+    },
+
+    async mountArtifactGroup(groupId) {
+        if (!groupId) return;
+        try {
+            const conversationId = await this._ensureConversation();
+            const { data } = await AIHttp.post('/conversations/' + encodeURIComponent(conversationId) + '/workspace', {
+                group_id: groupId,
+            });
+            if (!data.ok) throw new Error(data.error || 'workspace failed');
+            this._workspace = data.workspace || null;
+            this._toast(I18n.t('ai.workspaceMounted'));
+        } catch (error) {
+            this._toast(error.message || I18n.t('ai.error'));
         }
     },
 
@@ -438,7 +457,7 @@ Object.assign(AIWorkspace, {
         const { data } = await AIHttp.post('/conversations', {
             provider: this._provider,
             model: this._model,
-            skill: this._skill || 'auto',
+            skills: this._skills || [],
         });
         if (!data.ok) throw new Error(data.error || 'conversation failed');
         this._conversationId = data.conversation.id;

@@ -46,7 +46,7 @@ const AI_STATE = {
     _loading: false,
     _provider: 'deepseek',
     _model: '',
-    _skill: 'auto',
+    _skills: [],
     _agentMode: 'build',
     _scope: 'summary',
     _messages: [],

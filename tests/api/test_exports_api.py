@@ -120,6 +120,31 @@ class TestDelete:
         assert client.post('/api/exports/delete', data='not json', content_type='application/json').status_code == 400
 
 
+class TestTheTree:
+    def test_one_run_is_one_folder(self, client, export_dir, monkeypatch):
+        from runtime import stores
+
+        store = stores.get_run_store()
+        group_dir = os.path.join(export_dir, 'wf_2026-11-25_10-00-00')
+        os.makedirs(group_dir)
+        with open(os.path.join(group_dir, 'a.csv'), 'w', encoding='utf-8') as handle:
+            handle.write('a\n')
+        store.start_run('run-tree', 'wf', 'fp', export_dir=export_dir)
+        store._execute(
+            'UPDATE runs SET export_group=? WHERE run_id=?',
+            ('wf_2026-11-25_10-00-00', 'run-tree'),
+        )
+        store.record_file('run-tree', 'n1', 'a.csv', 'export', group='wf_2026-11-25_10-00-00')
+        body = client.get('/api/exports/tree').get_json()
+        group = next(row for row in body['groups'] if row['id'] == 'wf_2026-11-25_10-00-00')
+        assert group['files'][0]['name'] == 'a.csv'
+        assert group['run_id'] == 'run-tree'
+
+    def test_a_group_member_cannot_escape(self, client, export_dir):
+        body = client.get('/api/exports/download', query_string={'group': '../x', 'name': 'a.csv'})
+        assert body.status_code == 404
+
+
 class TestClearAll:
     """``/api/exports/clear`` — the panel's 清空, which must reuse the per-file rules."""
 
@@ -135,7 +160,7 @@ class TestClearAll:
         body = client.post('/api/exports/clear', json={'confirm': True}).get_json()
 
         assert body['ok'] is True
-        assert body['removed'] == 2 and body['left'] == 0
+        assert body['removed'] == 2 and body['left'] == 1
         assert not os.path.exists(os.path.join(export_dir, 'run-a.csv'))
         assert not os.path.exists(os.path.join(export_dir, 'script.py'))
         assert (nested / 'deep.csv').exists(), '清空 is not a recursive delete'

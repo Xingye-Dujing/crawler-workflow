@@ -45,10 +45,10 @@ var exportsManager = {
         var body = document.getElementById('exports-mgr-body');
         if (!body) return;
         try {
-            var resp = await fetch('/api/exports/list?limit=200');
+            var resp = await fetch('/api/exports/tree?limit=200');
             var result = await resp.json();
-            if (!result.ok) throw new Error('list failed');
-            this._last = result.exports || [];
+            if (!result.ok) throw new Error('tree failed');
+            this._groups = result.groups || [];
             this._totals = { files: result.files || 0, bytes: result.bytes || 0 };
             this.render();
         } catch (e) {
@@ -61,7 +61,7 @@ var exportsManager = {
     onLanguageChange() {
         var panel = this.panel();
         if (!panel || !panel.classList.contains('open')) return;
-        if (this._last) this.render();
+        if (this._groups) this.render();
         else this.refresh();
     },
 
@@ -75,54 +75,72 @@ var exportsManager = {
     render() {
         var body = document.getElementById('exports-mgr-body');
         if (!body) return;
-        var rows = this._last || [];
-        if (!rows.length) {
+        var groups = this._groups || [];
+        if (!groups.length) {
             body.innerHTML = '<div class="runs-mgr-empty">' + I18n.t('exportsMgr.empty') + '</div>';
             return;
         }
         var self = this;
-        var html = rows.map(function (row) {
+        this._expanded = this._expanded || {};
+        var fileRow = function (group, row, depth) {
             var name = escapeHtml(row.name);
             var ops = '';
-            if (row.downloadable) {
-                ops += '<button class="runs-mgr-btn" onclick="exportsManager.download(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.download') + '</button>';
+            var groupArg = group.id ? ',\'' + self._quote(group.id) + '\'' : '';
+            if (row.downloadable !== false) {
+                ops += '<button class="runs-mgr-btn" onclick="exportsManager.download(\'' + self._quote(row.name) + '\'' + groupArg + ')">' + I18n.t('exportsMgr.download') + '</button>';
             }
             if (row.kind === 'report') {
-                /* No download button on purpose — .html is refused there. A
-                   report opens through its own route, script-free. */
-                ops += '<button class="runs-mgr-btn" onclick="exportsManager.view(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.view') + '</button>';
+                ops += '<button class="runs-mgr-btn" onclick="exportsManager.view(\'' + self._quote(row.name) + '\'' + groupArg + ')">' + I18n.t('exportsMgr.view') + '</button>';
             }
-            ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.remove') + '</button>';
+            ops += '<button class="runs-mgr-btn del" onclick="exportsManager.remove(\'' + self._quote(row.name) + '\'' + groupArg + ')">' + I18n.t('exportsMgr.remove') + '</button>';
             if (/\.part\d+\./.test(row.name)) {
-                /* A batched crawl leaves ``{stem}.part{NNN}{ext}`` shards. 删除 clears ONE file;
-                   this clears the WHOLE batch the clicked shard belongs to — the server keeps the
-                   merged ``{stem}.csv``, other stems/extensions and “固定”pinned files. */
-                ops += '<button class="runs-mgr-btn del" onclick="exportsManager.clearPartsByName(\'' + self._quote(row.name) + '\')">' + I18n.t('exportsMgr.clearParts') + '</button>';
+                ops += '<button class="runs-mgr-btn del" onclick="exportsManager.clearPartsByName(\'' + self._quote(row.name) + '\'' + groupArg + ')">' + I18n.t('exportsMgr.clearParts') + '</button>';
             }
             ops += lockButtonHtml('exports', row.name);
-            return '<tr>' +
-                '<td class="runs-mgr-wf">' + name + '</td>' +
+            return '<tr class="exports-tree-file" style="--depth:' + depth + '">' +
+                '<td class="runs-mgr-wf"><span class="exports-tree-icon">▤</span>' + name + '</td>' +
                 '<td>' + escapeHtml(row.kind || '') + '</td>' +
                 '<td>' + self.size(row.size) + '</td>' +
                 '<td class="runs-mgr-time">' + self._when(row.mtime) + '</td>' +
                 '<td class="runs-mgr-ops">' + ops + '</td>' +
                 '</tr>';
+        };
+        var html = groups.map(function (group) {
+            var open = self._expanded[group.id] !== false;
+            var files = (group.files || []).map(function (row) { return fileRow(group, row, 1); }).join('');
+            return '<tr class="exports-tree-folder" role="treeitem" aria-expanded="' + (open ? 'true' : 'false') + '">' +
+                '<td class="runs-mgr-wf"><button type="button" class="exports-tree-toggle" onclick="exportsManager.toggleGroup(\'' + self._quote(group.id) + '\')">' + (open ? '▾' : '▸') + '</button>' +
+                '<span class="exports-tree-icon">▣</span>' + escapeHtml(group.label || group.id) +
+                '<span class="ai-hint"> · ' + (group.files || []).length + '</span></td>' +
+                '<td>' + escapeHtml(group.kind || '') + '</td>' +
+                '<td>' + self.size((group.files || []).reduce(function (sum, row) { return sum + (Number(row.size) || 0); }, 0)) + '</td>' +
+                '<td class="runs-mgr-time">' + escapeHtml(group.created_at || '') + '</td>' +
+                '<td class="runs-mgr-ops"><button class="runs-mgr-btn" onclick="exportsManager.mountGroup(\'' + self._quote(group.id) + '\')">' + I18n.t('exportsMgr.useAsWorkspace') + '</button></td>' +
+                '</tr>' + (open ? files : '');
         }).join('');
         var totals = this._totals || {};
         body.innerHTML =
-            '<table class="data-preview-table runs-mgr-table"><thead><tr>' +
+            '<table class="data-preview-table runs-mgr-table" role="tree"><thead><tr>' +
             '<th>' + I18n.t('exportsMgr.colName') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colKind') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colSize') + '</th>' +
             '<th>' + I18n.t('exportsMgr.colModified') + '</th>' +
             '<th></th>' +
             '</tr></thead><tbody>' + html + '</tbody></table>' +
-            /* Read as a summary of the list above it, so it goes after the table — the
-               totals cover the whole export directory, not the rows on screen, and a
-               heading invites reading them as one file's figures. */
             '<div class="exports-summary">' +
             I18n.t('exportsMgr.summary').replace('{files}', totals.files || 0).replace('{size}', this.size(totals.bytes || 0)) +
             '</div>';
+    },
+
+    toggleGroup(id) {
+        this._expanded = this._expanded || {};
+        this._expanded[id] = this._expanded[id] === false;
+        this.render();
+    },
+
+    mountGroup(id) {
+        if (typeof AIWorkspace === 'undefined' || !AIWorkspace.mountArtifactGroup) return;
+        AIWorkspace.mountArtifactGroup(id);
     },
 
     _when(epoch) {
@@ -141,19 +159,22 @@ var exportsManager = {
         return attrJsArg(name);
     },
 
-    download(name) {
+    download(name, group) {
         var frame = document.createElement('iframe');
         frame.style.display = 'none';
-        frame.src = window.__cu('/api/exports/download?name=' + encodeURIComponent(name));
+        frame.src = window.__cu('/api/exports/download?name=' + encodeURIComponent(name) + (group ? '&group=' + encodeURIComponent(group) : ''));
         document.body.appendChild(frame);
         setTimeout(function () { document.body.removeChild(frame); }, 60000);
     },
 
-    view(name) {
+    view(name, group) {
         /* The report is text crawled from other people's pages, so it is served
            by a route that sends a Content-Security-Policy with no script in it —
            which is also why this is not the download button. */
-        window.open(window.__cu('/api/report/view?name=' + encodeURIComponent(name)), '_blank');
+        window.open(
+            window.__cu('/api/report/view?name=' + encodeURIComponent(name) + (group ? '&group=' + encodeURIComponent(group) : '')),
+            '_blank'
+        );
     },
 
     /* One click, one HTML file — with the sections, row cap and Chart-Studio
@@ -281,7 +302,7 @@ var exportsManager = {
         }
     },
 
-    async remove(name) {
+    async remove(name, group) {
         var go = await showDialog({
             message: I18n.t('exportsMgr.confirmRemove'),
             buttons: [
@@ -294,7 +315,7 @@ var exportsManager = {
             var resp = await fetch('/api/exports/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Lang': I18n.lang || 'zh' },
-                body: JSON.stringify({ name: name }),
+                body: JSON.stringify(group ? { name: name, group: group } : { name: name }),
             });
             var result = await resp.json();
             showToast(result.ok ? I18n.t('exportsMgr.removeDone') : ((result && result.error) || I18n.t('exportsMgr.removeFailed')));
@@ -308,7 +329,7 @@ var exportsManager = {
        asks first and names what survives (the merged file + 固定); the server does the batch
        lookup by name and deletes each through the same per-name resolver as 删除, refuses without
        confirm and while a run is writing here. */
-    async clearPartsByName(name) {
+    async clearPartsByName(name, group) {
         var go = await showDialog({
             message: I18n.t('exportsMgr.confirmClearName', { name: name }),
             buttons: [
@@ -317,7 +338,9 @@ var exportsManager = {
             ],
         });
         if (go !== 'go') return;
-        var r = await this._postClear('/api/exports/clear-name', { name: name, confirm: true });
+        var payload = { name: name, confirm: true };
+        if (group) payload.group = group;
+        var r = await this._postClear('/api/exports/clear-name', payload);
         if (r && r.ok) {
             showToast(I18n.t('exportsMgr.clearNameDone').replace('{removed}', r.removed || 0).replace('{skipped}', r.skipped_locked || 0));
         } else {

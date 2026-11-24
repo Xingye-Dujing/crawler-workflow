@@ -61,17 +61,21 @@ Object.assign(AIWorkspace, {
                 return;
             }
         }
-        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-revoke-grant],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory],[data-ai-recipe-skip]');
+        const target = event.target.closest('[data-ai-suggest],[data-ai-conversation],[data-ai-new-session],[data-ai-rename-conversation],[data-ai-delete-conversation],[data-ai-context-refresh],[data-ai-context-preview],[data-ai-cmd],[data-ai-agents],[data-ai-context-apply],[data-ai-manual],[data-ai-answer],[data-ai-send-custom],[data-ai-copy-artifact],[data-ai-preview-artifact],[data-ai-apply-skill],[data-ai-apply-plugin],[data-ai-apply-chart],[data-ai-apply-workflow],[data-ai-run-workflow],[data-ai-copy-answer],[data-ai-retry],[data-ai-jump],[data-ai-folder-open],[data-ai-folder-root],[data-ai-folder-native],[data-ai-folder-use],[data-ai-folder-clear],[data-ai-folder-close],[data-ai-apply-monitor],[data-ai-watch-only],[data-ai-disarm-monitor],[data-ai-revoke-grant],[data-ai-monitor-new],[data-ai-remove-attachment],[data-ai-ref],[data-ai-remove-ref],[data-ai-remove-answer-ref],[data-ai-skill],[data-ai-rerun-node],[data-ai-studio-tab],[data-ai-python-new],[data-ai-python-edit],[data-ai-python-save],[data-ai-python-cancel],[data-ai-python-delete],[data-ai-python-fork],[data-ai-python-run],[data-ai-python-install],[data-ai-fork],[data-ai-edit-skill],[data-ai-delete-skill],[data-ai-new-skill],[data-ai-save-skill],[data-ai-cancel-skill],[data-ai-toggle-plugin],[data-ai-delete-plugin],[data-ai-install-plugin],[data-ai-studio-close],[data-ai-provider-select],[data-ai-refresh-models],[data-ai-spend-refresh],[data-ai-implement-artifact],[data-ai-test],[data-ai-save-settings],[data-ai-scope],[data-ai-switch-provider],[data-ai-switch-model],[data-ai-switch-skill],[data-ai-workspace-group],[data-ai-pin-conversation],[data-ai-archive-conversation],[data-ai-export-conversation],[data-ai-toggle-archived],[data-ai-memory-add],[data-ai-memory-delete],[data-ai-apply-memory],[data-ai-recipe-skip]');
         if (!target) return;
         if (target.hasAttribute('data-ai-recipe-skip')) {
             this._skipRecipeStep();
             return;
         }
         if (target.hasAttribute('data-ai-suggest')) {
-            this._skill = target.getAttribute('data-ai-suggest');
-            AISettings.save({ skill: this._skill });
+            this._skills = [target.getAttribute('data-ai-suggest')];
+            AISettings.save({ skills: this._skills });
             this._renderSkillOptions();
             this._dom.input.focus();
+            return;
+        }
+        if (target.hasAttribute('data-ai-workspace-group')) {
+            this.toggleWorkspaceGroup(target.getAttribute('data-ai-workspace-group'));
             return;
         }
         if (target.hasAttribute('data-ai-conversation')) {
@@ -386,8 +390,7 @@ Object.assign(AIWorkspace, {
             return;
         }
         if (target.hasAttribute('data-ai-switch-skill')) {
-            this._skill = target.value;
-            AISettings.save({ skill: this._skill });
+            this.setSkillsFromBar([target.value]);
             return;
         }
         if (target.hasAttribute('data-ai-scope')) {

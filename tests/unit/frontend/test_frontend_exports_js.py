@@ -79,8 +79,8 @@ def results(tmp_path_factory):
 
 class TestExportRows:
     def test_every_row_is_rendered(self, results):
-        # one header row plus one per file
-        assert results['rows'] == len(PAYLOAD['exports']) + 1
+        # one header row, one folder row, plus one per file
+        assert results['rows'] == len(PAYLOAD['exports']) + 2
 
     def test_a_non_downloadable_file_gets_no_download_button(self, results):
         assert results['downloads'] == 3, 'only the three downloadable rows (two csv + one shard) offer a download'

@@ -94,7 +94,7 @@ class TestTheReferenceSeam:
 
         expected = {kernel.skill_id(manifest) for kind in kernel.KINDS for manifest in registry.manifests(kind)}
         rows = host.reference_candidates('default')
-        skills = {row['id']: row for row in rows if row['kind'] == 'skill'}
+        skills = {row['id']: row for row in rows if row['kind'] == 'capability'}
         assert set(skills) == expected
         assert skills['node.tokenize']['detail'] == 'process'
         assert skills['node.tokenize']['label'] == 'tokenize'
@@ -105,10 +105,10 @@ class TestTheReferenceSeam:
     def test_a_skill_reference_is_the_body_skill_load_returns(self, host):
         from ai import knowledge
 
-        assert host.resolve_reference('skill', 'node.tokenize') == knowledge.load('node.tokenize')['markdown']
+        assert host.resolve_reference('capability', 'node.tokenize') == knowledge.load('node.tokenize')['markdown']
 
     def test_an_unknown_reference_kind_or_id_is_empty(self, host):
-        assert host.resolve_reference('skill', 'node.nope') == ''
+        assert host.resolve_reference('capability', 'node.nope') == ''
         assert host.resolve_reference('gadget', 'x') == ''
         assert host.resolve_reference('workflow', 'no-such-file') == ''
 
@@ -119,7 +119,7 @@ class TestTheReferenceSeam:
             kinds = {row['kind'] for row in workspace.reference_candidates('default')}
         finally:
             workspace.close()
-        assert {'skill', 'file'} <= kinds
+        assert {'capability', 'file'} <= kinds
 
 
 class TestStrictMode:
@@ -130,8 +130,8 @@ class TestStrictMode:
         and checked the count afterwards, so a "12 tool" turn was offered 27 — and not one tool of
         the active skill. Measured on the real registry, every skill lost its own verbs.
         """
-        assert set(host.core_tools()) == {'request_dataset_access', 'skill_load'}
-        assert set(host.core_tools()) < set(legacy_tools.UNIVERSAL_TOOLS)
+        assert set(host.core_tools()) == {'request_dataset_access', 'skill_catalog', 'skill_load'}
+        assert 'request_dataset_access' in legacy_tools.UNIVERSAL_TOOLS
 
     def test_a_ranked_query_keeps_the_budget_and_the_skills_own_tools(self, host):
         """An English question reaches the descriptions: the 12-slot budget holds and the skill's

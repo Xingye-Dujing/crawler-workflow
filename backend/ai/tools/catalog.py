@@ -18,7 +18,7 @@ def tool_ai_coverage(_args: dict, _ctx: dict) -> dict:
     return coverage.audit()
 
 
-def tool_skill_catalog(args: dict, _ctx: dict) -> dict:
+def tool_capability_catalog(args: dict, _ctx: dict) -> dict:
     """The level-1 capability-skill catalogue: words to select on, not bodies."""
     from ai import knowledge
 
@@ -29,7 +29,7 @@ def tool_skill_catalog(args: dict, _ctx: dict) -> dict:
     )
 
 
-def tool_skill_load(args: dict, _ctx: dict) -> dict:
+def tool_capability_load(args: dict, _ctx: dict) -> dict:
     """The level-2 body of one capability skill, with its parameter table rendered fresh."""
     from ai import knowledge
 
@@ -118,10 +118,10 @@ TOOLS = (
         handler=tool_ai_coverage,
     ),
     ToolSpec(
-        'skill_catalog',
-        'List the capability skills (level 1: id, category, one-sentence summary, when to use and when '
-        'not to). Pass query to search and kind to narrow (node/operator/chart/platform/tool/skill). '
-        'Load one body with skill_load before acting on a capability you are not sure about.',
+        'capability_catalog',
+        'List the capability documentation (level 1: id, category, one-sentence summary, when to use and '
+        'when not to). Pass query to search and kind to narrow (node/operator/chart/platform/tool/skill). '
+        'Load one body with capability_load before acting on a capability you are not sure about.',
         {
             'type': 'object',
             'properties': {
@@ -130,10 +130,10 @@ TOOLS = (
                 'limit': {'type': 'integer'},
             },
         },
-        handler=tool_skill_catalog,
+        handler=tool_capability_catalog,
     ),
     ToolSpec(
-        'skill_load',
+        'capability_load',
         'Read one capability skill in full (level 2): prerequisites, ordered steps, examples, a template '
         'JSON, the parameters re-read from the live manifest, named refusals and acceptance. Refuses an '
         'unknown id by name.',
@@ -142,7 +142,7 @@ TOOLS = (
             'properties': {'skill_id': {'type': 'string'}},
             'required': ['skill_id'],
         },
-        handler=tool_skill_load,
+        handler=tool_capability_load,
     ),
     ToolSpec(
         'catbus_status',

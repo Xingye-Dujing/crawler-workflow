@@ -23,7 +23,7 @@ def test_the_reference_picker_answers_under_the_wire_key_the_panel_reads(client)
     data = response.get_json()
     assert data['ok'] is True
     assert isinstance(data['references'], list)
-    assert any(row['kind'] == 'skill' for row in data['references'])
+    assert any(row['kind'] == 'capability' for row in data['references'])
 
 
 def test_the_recipe_catalogue_is_served_with_the_declared_steps(client):

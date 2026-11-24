@@ -7,6 +7,43 @@
  * the turn's blocks, plan, usage and verdict are written by that one function. */
 
 const AIStream = {
+    async get(url, onEvent, signal) {
+        const response = await fetch(url, {
+            headers: { Accept: 'text/event-stream' },
+            signal,
+        });
+        if (!response.ok) throw new Error(response.statusText || ('HTTP ' + response.status));
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let dataLines = [];
+        const dispatch = () => {
+            if (!dataLines.length) return;
+            const raw = dataLines.join('\n');
+            dataLines = [];
+            try {
+                onEvent(JSON.parse(raw));
+            } catch (e) {
+                /* ignore a malformed frame */
+            }
+        };
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let lineStart = 0;
+            for (let index = 0; index < buffer.length; index += 1) {
+                if (buffer[index] !== '\n' && buffer[index] !== '\r') continue;
+                const line = buffer.slice(lineStart, index);
+                lineStart = index + 1;
+                if (line === '') dispatch();
+                else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
+            }
+            buffer = buffer.slice(lineStart);
+        }
+        dispatch();
+    },
+
     async post(url, body, onEvent, signal) {
         const response = await fetch(url, {
             method: 'POST',
@@ -181,6 +218,40 @@ Object.assign(AIWorkspace, {
         await AIStream.post(AIHttp.url(path), body, (event) => this._onEvent(event), this._abort.signal);
     },
 
+    async _reattachTurn(turnId) {
+        if (!turnId) return;
+        this._sending = true;
+        this._turnEnded = false;
+        this._setSending(true);
+        this._streamConversation = this._conversationId;
+        this._streamTurnId = String(turnId);
+        this._current = null;
+        /* The stored rows of this turn are incomplete; replay from 0 rebuilds the live bubble.
+           Drop those rows first so the replay is the only copy. */
+        this._messages = (this._messages || []).filter((message) => {
+            const meta = message.meta || {};
+            return String(meta.turn_id || '') !== String(turnId) || message.role === 'user';
+        });
+        this._renderMessages(this._messages);
+        this._showChat();
+        this._abort = new AbortController();
+        this._startClock();
+        try {
+            await AIStream.get(
+                AIHttp.url('/turns/' + encodeURIComponent(turnId) + '/events?after=0'),
+                (event) => this._onEvent(event),
+                this._abort.signal
+            );
+        } catch (error) {
+            if (error.name !== 'AbortError') this._noteCutStream();
+        } finally {
+            this._sending = false;
+            this._setSending(false);
+            this._stopClock();
+            if (this._conversationId) this.selectConversation(this._conversationId);
+        }
+    },
+
     _onEvent(event) {
         /* Any byte from the provider is proof of life; the live line's "no answer yet" wording and
            its seconds both hang off this. */
@@ -208,12 +279,21 @@ Object.assign(AIWorkspace, {
             if (event.turn_id) this._current.el.setAttribute('data-ai-key', 'turn:' + String(event.turn_id));
             if (event.message_id) this._current.el.setAttribute('data-ai-message', String(event.message_id));
             this._current.runId = event.run_id;
+            this._current.model = [event.provider, event.model].filter(Boolean).join(' / ');
+            this._current.skills = (event.skills || []).map((item) => String((item && item.id) || item)).filter(Boolean);
             this._contextMeta = event.context || {};
             /* The server opens EVERY provider round with a meta event, and all rounds of one turn
                share the turn_id. The skill row describes the TURN, so pushing it per round printed
                “技能 · 画布建构师” twice in one answer. */
-            if (event.skill && !this._current.blocks.some((block) => block.type === 'skill')) {
-                this._current.blocks.push({ type: 'skill', name: String(event.skill), reason: String(event.skill_reason || '') });
+            const rawSkills = Array.isArray(event.skills) ? event.skills : (event.skill ? [event.skill] : []);
+            const activeSkills = rawSkills.map((item) => String((item && item.id) || item)).filter(Boolean);
+            if (activeSkills.length && !this._current.blocks.some((block) => block.type === 'skill')) {
+                this._current.blocks.push({
+                    type: 'skill',
+                    name: activeSkills.join(', '),
+                    names: activeSkills,
+                    reason: String(event.skill_reason || ''),
+                });
             }
             this._renderSide();
             this._paintAssistant();

@@ -40,8 +40,8 @@ def _staged_pdfs(exports, nid):
     collided across canvases, so a second run replaced the file the first run's ledger pointed at).
     A test that hardcoded the old name would pin the collision back.
     """
-    prefixed = sorted(path.name for path in exports.glob(f'*-compile-{nid}.pdf'))
-    return prefixed or sorted(path.name for path in exports.glob(f'compile-{nid}.pdf'))
+    prefixed = sorted(path.name for path in exports.rglob(f'*-compile-{nid}.pdf'))
+    return prefixed or sorted(path.name for path in exports.rglob(f'compile-{nid}.pdf'))
 
 
 def _fake_xelatex_run(writes=True, returncode=0, stderr=b''):
@@ -127,7 +127,7 @@ class TestCompileNodeAndPdf:
         )
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'vizpdf'})
         assert run_finished(app_module)
-        assert (data_root / 'data' / 'exports' / 'myfig.pdf').exists(), 'a chart wired to a save must export a PDF'
+        assert list((data_root / 'data' / 'exports').rglob('myfig.pdf')), 'a chart wired to a save must export a PDF'
 
     def test_compile_to_output_renames_the_staged_pdf(self, client, app_module, paste, data_root, monkeypatch):
         monkeypatch.setattr(latex_compile, 'find_xelatex', lambda: 'xelatex')
@@ -153,7 +153,7 @@ class TestCompileNodeAndPdf:
         client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': 'cmppdf'})
         assert run_finished(app_module)
         exports = data_root / 'data' / 'exports'
-        assert (exports / 'final.pdf').exists(), 'the output finalises the compile node’s PDF under the user name'
+        assert list(exports.rglob('final.pdf')), 'the output finalises the compile node’s PDF under the user name'
         assert not _staged_pdfs(exports, 'cmpB'), 'the staged file was renamed away, not copied and left behind'
 
     def test_both_boxes_off_is_rejected_before_the_run(self, client, app_module, paste, data_root, monkeypatch):
