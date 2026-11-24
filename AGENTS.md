@@ -387,6 +387,12 @@ repository root.
 - **One provider catalog** (`ai/providers/registry.py`) serves the workspace and the row analyzers; a provider capability is
   a server promise, so an unsupported `thinking`/`web_search`/`files` request is refused by name, never sent as a field the
   provider ignores. JS holds no model/endpoint list.
+- **`auto` is a routing decision, and the turn says which skill it chose**: `Skills.route` scores a sentence against
+  `suggested` (a whole pasted chip, +5), `keywords` (+word length) and the skill id's English words (+3), and the meta
+  block records `context.skill={requested, chosen}`. Every built-in skill must declare Chinese `keywords` — measured, 18
+  real questions scored 2/18 before the host declared them and 18/18 after. A routed skill this host cannot run falls
+  back to `general` instead of refusing a turn the user never chose (`tools/eval_skill_routing.py`,
+  `tests/unit/ai/test_skill_routing.py`).
 - **Keys stay in the browser**; the server holds one for a request only. `ai.db` and logs must never contain an API key. A
   turn's assistant row is `streaming` until settled; a crash leaves `interrupted`.
 - **A turn is several assistant rows**: every `tool_use` has an immediate tool result, grouped in the UI by `turn_id`.

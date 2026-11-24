@@ -1,16 +1,19 @@
-# 快测性能预算（2026-11-24 实测）
+# 快测性能预算（2026-11-25 实测）
 
 > 本文件是 P8 的性能记录。数字来自 `python -m pytest -q --durations=15`，本机（Windows，
-> Windows 11，Python 3.11，`-q` 默认 marker 过滤：fast tier 12406 passed / 7 skipped /
+> Windows 11，Python 3.11，`-q` 默认 marker 过滤：fast tier 12480 passed / 7 skipped /
 > 386 deselected）。
 
 ## 预算
 
 | 层 | 预算 | 现状 | 判定 |
 |---|---|---|---|
-| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **10:36 ～ 12:37 ～ 11:31 ～ 10:55**（同一天五次，同一台机器、各自的代码树） | **达标**：W7-5 批 10:55，比同代码结构的 11:31 快 36 秒，仍在 ±10% 抖动内 |
+| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **10:36 ～ 12:37 ～ 11:31 ～ 10:55 ～ 11:07 ～ 10:53**（同一台机器、各自的代码树；最新一批 R7 新增 5 条） | **达标**：10:53，比上一批多 5 条、快 14 秒（抖动区间内） |
 | fast tier 原始目标 | ≤ 8 分钟 | 10:36 | **未达标，原因见下，不接受用 xdist 掩盖** |
 | device（`-m "integration or live_ollama"`） | ≤ 20 分钟 | **6:12**（215 passed / 5 skipped；设 `CATBUS_HOME=F:\catbus-0.2.1` 时 5 个跳过变成 5 passed，即 220） | 达标 |
+
+**R7 批的数字（2026-11-25）**：`12480 passed / 7 skipped / 386 deselected in 653.41s (0:10:53)`。
+比 R10/R1 批多 5 条（技能路由 4 + blueprint 1），快 14 秒：纯逻辑用例，没有新的等待。
 
 **W7-5 批的数字（2026-11-24，`7c3a86cf`）**：`12406 passed / 7 skipped / 386 deselected
 in 655.92s (0:10:55)`。比 W7 第 3、4 件多 5 条（工具预算的 4 条框架性质 + 1 条宿主地板测试），

@@ -15,7 +15,46 @@
 - 分支：`main`
 - 最后提交：`44af8e05 重构：严格模式工具预算——排序没话可说时不裁剪（框架 0.1.29）`（已推 GitHub + Gitee，CI 触发）；
   框架仓库 `7887558`（0.1.29）
-- 工作区：R10（变异扫描 + 夜间工作流）改动在本地未提交
+- 工作区：R7（技能自动路由）+ 销账改动在本地未提交
+
+## R7：`auto` 接上技能路由，并量出它原本几乎没用（框架 0.1.30，2026-11-25）
+
+面板默认“自动”一直传成空串，回合直接落到 `general`；框架的 `Skills.route` 存在但没人调用。这次接上并量。
+
+- **框架侧**：`SkillSpec` 新增 `keywords`（用户技能清单里也能带，`validate_manifest` 拒绝空串/超 40 字）。
+  `Skills.route` 的打分：`suggested` 整句命中 +5、`keywords` 命中 +词长（长词压过被它包含的短词）、
+  技能 id 的英文词 +3。回合在 `skill` 为空或 `'auto'` 时调用它，`meta.context.skill` 记下
+  `{requested, chosen}`；选中的技能在本机/本供应商不可用就回落 `general`（用户没选它，不该被拒）。
+- **宿主侧**：`api/ai_workspace.py` 把 `auto` 原样传给框架；18 个技能各声明 4–8 个中英 cue
+  （`ai/types.py` 的 `SkillSpec.keywords` 经 `_convert_skill` 过界）。
+- **量出来的事实**：只按 id + suggested 打分时，`tools/eval_skill_routing.py` 的 18 条真实提问只对 **2/18**
+  ——只有 `catbus`、`python` 这种 id 恰好是用户词的技能能被选中。声明 cue 之后 **18/18**。
+  歧义句（“定性编码 + 两个人比较 kappa”）在表里两个答案都算对；强行二选一测的是表不是路由。
+- **测试**：框架 `tests/test_tools_skills.py::TestTheAutomaticRouter` 六条（cue 命中、整句压过词、
+  auto 回合记录选择、不可用回落、用户技能 keywords 往返、非法 keyword 按名拒绝），
+  `ports.SkillsPort` 因此多了 `route`；宿主 `tests/unit/ai/test_skill_routing.py`（18 条全中、
+  每个技能都有 cue、cue 过界）+ blueprint 一条“`auto` 到路由并记录”。读数记进
+  `docs/testing/model-eval.md` 与 `docs/testing/skill-routing.json`。
+
+## 销账：把 rewrite-plan 里已经做完的方框核对掉（2026-11-25）
+
+清单比代码旧。逐条核过之后，以下都由“未做”改为“已完成（证据）”：
+
+| 项 | 证据 |
+|---|---|
+| H6 原位回答 | `answers.js` 把待答卡挂回提问那一轮（按 turn 复用节点） |
+| H7 置顶/归档即时刷新 | `_toggleConversationPin`/Archive 之后 `_refreshConversations()` |
+| H19 重试气泡 | `retry()` + `data-ai-retry`；斜杠命令与 `/api/ai/ws/retry` 路由都测 |
+| H20 工具结果上限 | 框架 `tools.max_result_chars` 默认 12000（`test_tool_result_is_bounded`） |
+| H22/H23 scope/限制可见 | `sidebar.js` 渲染 `context_meta.omitted`/`replay_truncated`；`test_the_context_inspector_names_what_was_left_out` |
+| P1 `emit`/`read` 契约与 `schema_hash` | R1 补齐声明侧；记录侧 `node_schema.schema_hash` 早已存在 |
+| P4 架构收口 / 通用性门禁 | 框架 0.1.26 的 `store/`+`agent/`+`ports.py`；`tests/test_no_host_vocabulary.py` |
+| P5 web components | 已评估、决定不做（保留自己的零构建前端） |
+| P6 能力优先/Python 缺口/审计 | `python` 清单的 `when_not_to_use`；`/python/install` 的 `allow_download`；`ai.auditLog` |
+| P6 qwen 评测 / 工具描述规范 | R6 / R8（`docs/testing/model-eval.md`、`docs/capabilities/tool-descriptions.md`） |
+
+仍然开着的只有两件发布事项：**P9 的 macOS 产物进 `version.json`** 与**迁移/回滚说明**。真机验证按用户
+要求不做（live/CatBus 采集要账号与网络）。
 
 ## R10：夜间变异扫描（2026-11-25）
 

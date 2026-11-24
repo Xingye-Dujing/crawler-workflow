@@ -50,3 +50,29 @@ python tools/eval_tool_routing.py --model qwen3.5:4b --model qwen3.5:9b --model 
 - **它测的是“工具全在列表里时模型选得对不对”，不是严格模式的裁剪**。裁剪是另一层，2026-11-24 量出它
   当时是坏的（27 个工具、0 个技能工具），已修：技能自有工具现在是预算的地板，通用动词在中文提问下
   只能按名字排（词法无信号）。细节见 `docs/architecture/w7-incremental.md` 第 4 节。
+
+## 技能自动路由（R7，18 条，不需要模型）
+
+面板默认是“自动”：`skill='auto'` 交给框架的 `Skills.route` 从这句话里选专家模式，并在回合的
+`meta.context.skill` 里写明 `{requested, chosen}`。路由是确定性的关键词打分（`suggested` 整句 +5、
+`keywords` +词长、技能 id 的英文词 +3），所以它是可重复的读数，也是可以进测试的规则：
+
+```bash
+python tools/eval_skill_routing.py --json docs/testing/skill-routing.json
+python -m pytest -q tests/unit/ai/test_skill_routing.py
+```
+
+| 阶段 | 命中 | 说明 |
+|---|---|---|
+| 只按 id + suggested（原样） | **2/18** | 只有 `catbus`、`python` 这种 id 恰好就是用户词的技能能被选中 |
+| 宿主 18 个技能各声明中文 `keywords` 之后 | **18/18** | 语料：`tools/eval_skill_routing.py` 的 `TASKS` |
+
+读数给出的三条：
+
+- **`suggested` 不是路由词表**：它是 UI 里整句粘贴的起手 chip，一句自然提问几乎不会包含整句；
+  没有 `keywords` 的自动路由等于“几乎总是 general”。
+- **一条命中的歧义句要允许两个答案**：“帮我做定性编码，两个人编码比较 kappa”既是定性也是定量
+  内容分析，表里两个都算对；强行二选一测的是表，不是路由。
+- **选中的技能不可用时回落 general 而不是报错**（云端拒绝的 `local_only`、缺能力）。用户没选它，
+  不该因路由的判断被拒绝；`chosen` 仍记录路由的选择。这条由框架测试
+  `test_an_auto_turn_falls_back_when_the_routed_skill_cannot_run` 钉住。

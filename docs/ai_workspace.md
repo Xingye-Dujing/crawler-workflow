@@ -65,6 +65,12 @@ Key 只存浏览器 `localStorage`，随请求体发送（拉模型列表走 `X-
 `workflow`、`charts`、`report`、`research`、`python`、`conductor`、`skill_author`、`developer`。
 技能声明提示词、上下文来源、只读工具和所需能力；用户技能是数据，可 Fork/编辑/删除，不能包含代码或写操作。
 
+**“自动”是一个真实的选择，不是空串**：面板默认 `skill='auto'`，框架的 `Skills.route` 用
+`suggested`（整句 +5）、`keywords`（+词长）与技能 id 的英文词（+3）打分，回合把 `{requested, chosen}`
+写进 `meta.context.skill`。所以每个内置技能都要声明中英 `keywords`——只按 id/suggested 打分时实测
+18 条真实提问只对 2 条；选中的技能在本机不可用时回落 `general` 而不是报错。
+读数与语料：`tools/eval_skill_routing.py`、`docs/testing/model-eval.md`；回归：`tests/unit/ai/test_skill_routing.py`。
+
 **能力技能（capability skill）**：每个能力（16 个节点、37 个分析算子、30 个图表类型与 10 个平台）在自己的清单第七段
 （`ai=Ai(...)`）声明七段技能内容：何时用/何时不用（含最近的可混淆技能）、前置、步骤、示例、模板 JSON、
 命名拒绝、验收。算子、图表与平台的前置/步骤/失败/验收由各自契约机械推导（模板从必填框生成），

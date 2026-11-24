@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**455**
-- 用例（定义数，参数化会展开成更多次运行）：**8784**
+- 文件：**456**
+- 用例（定义数，参数化会展开成更多次运行）：**8789**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -147,7 +147,7 @@
 | `tests/unit/accounts/test_run_ownership.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/accounts/test_scoped_stores.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/ai/test_ai_host_adapter.py` | 16 | 0 | 0 | 0 |
-| `tests/unit/ai/test_ai_workspace_blueprint.py` | 15 | 0 | 0 | 0 |
+| `tests/unit/ai/test_ai_workspace_blueprint.py` | 16 | 0 | 0 | 0 |
 | `tests/unit/ai/test_artifact_previews.py` | 10 | 0 | 0 | 0 |
 | `tests/unit/ai/test_artifact_validators.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/ai/test_catbus_skill.py` | 11 | 0 | 0 | 0 |
@@ -164,6 +164,7 @@
 | `tests/unit/ai/test_python_scripts.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/ai/test_recipes.py` | 6 | 0 | 0 | 0 |
 | `tests/unit/ai/test_reference_text.py` | 6 | 0 | 0 | 0 |
+| `tests/unit/ai/test_skill_routing.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/ai/test_vocabulary.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/ai/test_workflow_admin.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_aggression.py` | 20 | 0 | 0 | 0 |

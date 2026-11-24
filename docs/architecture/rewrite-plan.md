@@ -77,8 +77,8 @@
 - [x] H3b 同会话邮箱：排队下一回合 + 插入指引（框架 0.1.4 `turn_inbox`/`mailbox_id`）
 - [x] H4 侧栏最小宽度（实测宽度 + 列宽夹紧 + pointer capture）
 - [x] H5 流式滚动（重绘前后恢复 scrollTop）
-- [ ] H6 原位回答
-- [ ] H7 置顶/归档即时刷新
+- [x] H6 原位回答（`answers.js` 把待答卡挂回提问那一轮；`test_a_restored_pending_question_binds_to_the_turn_that_asked_it`）
+- [x] H7 置顶/归档即时刷新（`_toggleConversationPin`/`_toggleConversationArchive` 之后 `_refreshConversations`；会话列表用例覆盖入口）
 - [x] H8 Python 节点信息卡（脚本/参数/空态）
 - [x] H9 限制默认值（0=不限、输出 32k、表格单页 2k）
 - [x] H10 并发 workers（面板 1-8；API 并行；Ollama 串行）
@@ -89,11 +89,10 @@
 - [x] H15 重试 parity（框架 0.1.11 从 user 行恢复 provider/model/skill/context）
 - [x] H16 stack_pct 验证（`ChartSpec.fields` → validate 阶段命名）
 - [x] H17/H18 视图单实例（转录/面板两个面；按 turn_id 复用节点）
-- [ ] H19 重试气泡
-- [ ] H20 工具结果上限
+- [x] H19 重试气泡（`retry()` + `data-ai-retry`；harness 斜杠命令与 `/api/ai/ws/retry` 路由各有用例）
+- [x] H20 工具结果上限（框架 `tools.max_result_chars` 默认 12000，`test_tool_result_is_bounded`）
 - [x] H21 @-only 消息（框架 0.1.23 空正文 + 结构化 references）
-- [ ] H22 scope 静默失败
-- [ ] H23 限制可见
+- [x] H22 scope 静默失败 / H23 限制可见（`sidebar.js` 渲染 `context_meta.omitted`/`replay_truncated`；`test_the_context_inspector_names_what_was_left_out`）
 - **DoD**：每个 H 有回归测试；fast + ruff + pylint 绿；无 `data/`/`logs/` 写入。
 
 ## P1 内核骨架（1-2 周）
@@ -120,7 +119,7 @@
 - [x] 删除前端验证 if 链；接 `/api/workflow/validate`
 - [x] `/api/node-types` 返回完整清单；`node-types.js` 只做冷启动 fallback
 - [x] 每节点技能骨架 + 示例 + 工具生成（清单第七段；`knowledge.py` 投影 L1/L2，生成 `docs/capabilities/skills/`）
-- [ ] 每节点声明 `emit`/`read` 契约与 `schema_hash`
+- [x] 每节点声明 `emit`/`read` 契约与 `schema_hash`（R1：能算的 `emit_columns`、看不见的 `Ports.opaque`；记录的形状带 `node_schema.schema_hash`）
 - [x] 每节点输出物化为 Asset（`node_assets` 行 + 上游 `input_sha`，每个节点类型自动生效，执行器不opt-in）
 - [x] 完整性门禁全绿（`python tools/doctor.py --all` 全绿，93 个能力，2026-11-24 复核）
 - **DoD**：新增一个节点只加一个清单目录；其它文件 0 改动；全部节点 doctor 绿；fast+device 绿。
@@ -198,8 +197,8 @@
 - [x] **F3 retry 还原原轮**：从 user 行所属 turn 恢复 provider/model/skill，复用该行已存的上下文块（不重读实时
   sources）；不新增 user 行（框架 0.1.11）
 - [x] **RecipeFSM**：`recipe_runs` + 每步证据（P6 使用）——框架 0.1.24
-- [ ] **架构收口**：端口/适配器/`TurnFSM` 拆分（`store.py`/`agent.py`/`tools.py` 减重）
-- [ ] **通用性门禁**：框架仓库内不出现采析绘领域词；宿主只经 `HostAdapter` 注入
+- [x] **架构收口**：端口/适配器/`TurnFSM` 拆分（框架 0.1.26：`store/` + `agent/` + `ports.py`；`tools.py` 只剩注册表与预算）
+- [x] **通用性门禁**：框架仓库内不出现采析绘领域词，宿主只经 `HostAdapter` 注入（框架 `tests/test_no_host_vocabulary.py`）
 
 - **DoD**：上述全绿；本仓库 parity 矩阵每行有等价测试；host 只用框架公开 API，不复制 turn 循环/审批/事件序列化。
 
@@ -229,7 +228,7 @@
 - [x] host 边缘做 wire 映射（`text_delta→text`、`thinking_delta→thinking`、`tool_*`、`citation`）
 - [x] 实机浏览器用例：本地模型真实回答 + 实时行 + 停止
 - [x] 监视器：宿主事件总线把 `runtime.run_events` 映射给框架，交付行回填会话/运行事实
-- [ ] 框架自带 `agent_workspace/web/` 壳与 custom elements（**已决定不做**：保留采析绘自己的
+- [x] 框架自带 `agent_workspace/web/` 壳与 custom elements（**已决定不做**：保留采析绘自己的
   零构建前端，只换后端表面；见 `docs/architecture/rewrite-plan.md#已确认的决策`）
 - **DoD**：前端功能 parity；旧 API 删除后页面无失效入口（本轮已达成，监视器/工作文件夹/附件/Python
   面板均走同一表面）。
@@ -244,12 +243,12 @@
 - [x] catalog/search/load/read + @（`skill_catalog`/`skill_load` + `@` 引用：技能/数据集/运行/工作流/导出/文件/产物/会话）
 - [x] 配方 FSM + 工具遮罩 + 证据勾选（框架 0.1.24：`recipe_runs`/`recipe_evidence`、当前步遮罩、`recipe_start`/`recipe_skip`；产品两条通用配方与 `/recipes` API）
 - [x] 严格/普通模式（本地 `local_only` 供应商自动严格：12 个工具预算；强模型完整列表）
-- [ ] 能力优先策略 + Python 缺口审批 + 审计
-- [ ] qwen3.5:4b/9b 评测集（20-30 个任务）
+- [x] 能力优先策略 + Python 缺口审批 + 审计（`python` 清单的 `when_not_to_use` 写明“先 process”；解释器缺失走 `/python/install` 的显式 `allow_download`；变更加 `ai.auditLog`）
+- [x] qwen3.5:4b/9b 评测集（R6，26 条，`docs/testing/model-eval.md`）
 - [x] 工具覆盖门禁（`backend/ai/coverage.py` + `tests/unit/gates/test_ai_coverage.py`）
 - [x] 工具分层路由（每轮 ≤12 工具：控制 + 核心 + 当前配方步骤必留，其余按用户原话排序）
-- [ ] 技能选择评测
-- [ ] 工具描述质量规范
+- [x] 技能选择评测（R7：`auto` 接框架 `Skills.route`；`tools/eval_skill_routing.py` 18 条，宿主声明中文 cue 后 18/18）
+- [x] 工具描述质量规范（R8，`docs/capabilities/tool-descriptions.md` + `test_tool_descriptions.py`）
 - **DoD**：小模型严格模式完成“选技能→建节点→填参→验证→运行”≥80%；普通模式不退化；技能/工具无孤儿。
 
 ## P7 其它域（3-4 周）
@@ -269,11 +268,11 @@
 - [x] 测试价值清单（`python tools/test_inventory.py` → `docs/testing/value-inventory.md`：逐文件的用例数/无断言/skip/xfail；`tests/unit/gates/test_test_inventory.py` 拒绝陈旧页面、拒绝“无断言又没写理由”的用例，并把无断言总数钉成 33）
 - [x] 删重复/实现细节/永久 skip（skip 10 个全是 OS/环境事实；**无断言用例 33 → 0**：33 条改写为显式断言/assert_* 辅助函数并把总数钉成 0）
 - [x] 节点/算子/图表矩阵生成式（`tools/gen_capability_matrix.py` → `docs/capabilities/matrix.md`：每个能力声明了哪些契约用例、哪些能力有以自己命名的专属测试文件；**不**从测试文本里猜覆盖率）
-- [x] 快测目标 ≤8 分钟；device 目标 ≤20 分钟（**当前 10:56**，预算 ≤12 分钟；8 分钟被“假驱动等真实超时”挡住，需先加时钟接缝，见 `docs/testing/performance.md`）
+- [x] 快测目标 ≤8 分钟；device 目标 ≤20 分钟（**当前 11:07**，fast 12475 passed，预算 ≤12 分钟；8 分钟被“假驱动等真实超时”挡住，需先加时钟接缝，见 `docs/testing/performance.md`）
 - [x] 全量 closure gate（`docs/testing/closure-2026-11-24.md`：fast 12172 passed / 10:56、ruff + 两个 pylint tier 10/10、doctor 全绿、5057 独立数据根冒烟 4 个端点 200）
 - [x] README/AGENTS/docs/crawler_notes/skills 同步（旧路径逐条改指 kernel：`capabilities_kernel/platforms/<id>/manifest.py`、`operators/`、`charts/`；删掉 `ANALYSIS_OPS` 与 `capabilities/model.py`/`fields.py` 的说法；两份技能文档的“加算子/加模式”步骤改成清单流程）
 - [x] 消费者契约测试（`tests/api/test_node_types_contract.py`：服务端 payload ↔ 清单逐项对齐）
-- [x] 性质测试 + nightly mutation（性质测试已有：`tests/unit/foundation/test_properties.py` 的字节上限/幂等/空值不变量，并抓到两个真 bug；**nightly mutation 未做**）
+- [x] 性质测试 + nightly mutation（性质测试：`tests/unit/foundation/test_properties.py` 的字节上限/幂等/空值不变量，并抓到两个真 bug；nightly mutation：R10 `tools/mutation_sweep.py` + `.github/workflows/nightly.yml`，首跑抓出 3 个真盲区）
 - **DoD**：覆盖率不降；fast+ruff+pylint+device+smoke 全绿；无文件待改。
 
 ## P9 发布（1 周）

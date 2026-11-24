@@ -119,6 +119,9 @@ class SkillSpec:
     tools: tuple = ()
     requires: frozenset = frozenset()
     suggested: tuple = ()
+    #: Words the framework's automatic router looks for in a user's sentence (both languages).
+    #: ``suggested`` is a chip the UI shows verbatim; a typed question rarely contains one.
+    keywords: tuple = ()
     ask_policy: str = 'auto'
     builtin: bool = True
     #: A skill that needs a machine (a local CLI, a local runtime). Cloud mode refuses it by name.
@@ -140,6 +143,7 @@ class SkillSpec:
             'tools': list(self.tools),
             'requires': sorted(self.requires),
             'suggested': list(self.suggested),
+            'keywords': list(self.keywords),
             'ask_policy': self.ask_policy,
             'builtin': self.builtin,
             'local_only': self.local_only,
@@ -159,6 +163,7 @@ class SkillSpec:
             'tools': list(self.tools),
             'requires': sorted(self.requires),
             'suggested': list(self.suggested),
+            'keywords': list(self.keywords),
             'ask_policy': self.ask_policy,
             'local_only': self.local_only,
             'version': self.version,

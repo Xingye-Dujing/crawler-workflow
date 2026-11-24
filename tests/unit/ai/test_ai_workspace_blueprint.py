@@ -74,6 +74,14 @@ class TestTheSurface:
         pending = client.get('/api/ai/ws/pending', query_string={'conversation_id': conversation_id}).get_json()
         assert pending['pending'] == []
 
+    def test_auto_reaches_the_frameworks_router_and_says_what_it_chose(self, client):
+        """The panel's default is auto; the turn must record the skill it picked, not answer as
+        general with no trace of the decision."""
+        body = _chat(client, '怎么用这个项目开始？', skill='auto').get_json()
+        meta = next(item for item in body['events'] if item['type'] == 'meta')
+        assert meta['skill'] == 'project'
+        assert meta['context']['skill'] == {'requested': 'auto', 'chosen': 'project'}
+
     def test_an_unknown_turn_is_named(self, client):
         missing = client.get('/api/ai/ws/turns/turn_nope')
         assert missing.status_code == 404

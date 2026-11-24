@@ -205,8 +205,8 @@ def create_blueprint(manager):
             account=account(),
             host=request.host_url.rstrip('/'),
             lang=get_lang(),
-            # The old panel's "auto" is not a skill id; the framework's default (general) is.
-            skill='' if str(payload.get('skill') or '') in ('', 'auto') else str(payload.get('skill')),
+            # "auto" is the framework's own routing request (the turn records context.skill).
+            skill='auto' if str(payload.get('skill') or '') in ('', 'auto') else str(payload.get('skill')),
             provider=str(payload.get('provider') or ''),
             model=str(payload.get('model') or ''),
             api_key=provider_key(),

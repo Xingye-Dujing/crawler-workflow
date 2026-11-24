@@ -85,6 +85,7 @@ def _convert_skill(spec) -> SkillSpec:
         tools=tuple(spec.tools),
         requires=frozenset(spec.requires),
         suggested=tuple(spec.suggested),
+        keywords=tuple(getattr(spec, 'keywords', ())),
         ask_policy=str(spec.ask_policy),
         builtin=bool(spec.builtin),
         local_only=bool(spec.local_only),

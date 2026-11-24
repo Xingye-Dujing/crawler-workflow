@@ -11,7 +11,6 @@ from runtime import account_context
 from runtime.settings import get_setting
 
 from ai import environment, scopes
-from ai.errors import AIError
 from ai.types import SkillSpec
 
 CONTEXT_SOURCES = frozenset({'project', 'canvas', 'dataset', 'run', 'docs', 'code'})
@@ -75,6 +74,7 @@ BUILTIN = {
         ),
         context=('project', 'docs'),
         tools=('project_facts', 'capabilities', 'docs_search'),
+        keywords=('项目', '怎么开始', '功能介绍', '使用说明', '采析绘'),
         suggested=('这个项目怎么开始？', '数据源节点支持哪些采集方式？', '有哪些分析算子？'),
     ),
     'crawl': SkillSpec(
@@ -94,6 +94,7 @@ BUILTIN = {
         ),
         context=('project', 'canvas', 'docs'),
         tools=('catbus_status', 'capabilities', 'docs_search', 'project_facts'),
+        keywords=('采集', '爬虫', '爬取', '抓取', '帖子', '评论采集'),
         suggested=('知乎评论采集需要什么？', '抖音和 B 站的采集方式有什么不同？', '云端能跑哪些平台？'),
     ),
     'catbus': SkillSpec(
@@ -136,6 +137,7 @@ BUILTIN = {
         context=('project', 'docs'),
         tools=('catbus_status', 'capabilities', 'docs_search', 'project_facts', 'run_cmd', 'workspace_import'),
         local_only=True,
+        keywords=('catbus', '猫巴士'),
         suggested=('帮我用 catbus 采集小红书笔记', '本机装了 catbus 吗？', '用 catbus 指令直接抓一批微博数据'),
     ),
     'diagnose': SkillSpec(
@@ -150,6 +152,7 @@ BUILTIN = {
         ),
         context=('project', 'run', 'canvas'),
         tools=('run_status', 'run_console', 'list_runs', 'capabilities', 'docs_search'),
+        keywords=('失败', '报错', '诊断', '为什么', '没完成', '错误'),
         suggested=('这个运行为什么失败？', '哪些节点没有完成？', '继续跑会从哪一步开始？'),
     ),
     'monitor': SkillSpec(
@@ -171,6 +174,7 @@ BUILTIN = {
         ),
         context=('project', 'run', 'canvas'),
         tools=('list_runs', 'run_status', 'run_console', 'project_facts'),
+        keywords=('通知', '监控', '盯', '跑完', '提醒'),
         suggested=('盯着这次运行，失败就告诉我。', '这个节点出结果后通知我。', '运行结束后让 AI 自动分析。'),
     ),
     'python': SkillSpec(
@@ -202,6 +206,7 @@ BUILTIN = {
             'python_write',
             'docs_search',
         ),
+        keywords=('python', '脚本', '批量处理', '脚本库'),
         suggested=(
             '写一个通用的评论去重脚本并保存。',
             '按列分组统计，做成可复用脚本。',
@@ -239,6 +244,7 @@ BUILTIN = {
             'python_scripts',
             'python_run',
         ),
+        keywords=('全流程', '整条', '串起来', '一条龙', '接管', '安排'),
         suggested=('从采集到报告，帮我安排整条流程。', '现在最该做哪一步？', '帮我接管这次运行并盯着它。'),
     ),
     'models': SkillSpec(
@@ -269,6 +275,7 @@ BUILTIN = {
             'docs_search',
         ),
         local_only=True,
+        keywords=('小模型', '哪个模型', '用哪个模型', '向量模型', '零样本', '重排'),
         suggested=('这几条评论用哪个小模型最快？', '这个标签集该用零样本还是微调模型？', '用向量模型找相似评论。'),
     ),
     'model_tuning': SkillSpec(
@@ -287,6 +294,7 @@ BUILTIN = {
         context=('project', 'docs'),
         tools=('models_catalog', 'docs_search', 'code_search', 'analysis_catalog'),
         local_only=True,
+        keywords=('微调', '蒸馏', '量化', '训练', 'onnx', '配方', 'bert'),
         suggested=('怎么把现有模型蒸馏成更小的？', '给我一份六类分类的训练配方。', '这个模型能导出 ONNX 吗？'),
     ),
     'qualitative_coding': SkillSpec(
@@ -316,6 +324,7 @@ BUILTIN = {
             'models_catalog',
         ),
         local_only=True,
+        keywords=('定性编码', '开放编码', '扎根理论', '类目', '备忘录', '主轴编码'),
         suggested=('帮我做第一轮开放编码', '把这些初始码归并成类目', '写一份选择性编码备忘录'),
     ),
     'quantitative_coding': SkillSpec(
@@ -344,6 +353,7 @@ BUILTIN = {
             'models_catalog',
         ),
         local_only=True,
+        keywords=('定量', '内容分析', '码本', '信度', 'kappa', '双人编码', '频次表'),
         suggested=('帮我建立内容分析码本', '做双人编码并报告 kappa', '把编码结果整理成频次表'),
     ),
     'analysis': SkillSpec(
@@ -368,6 +378,7 @@ BUILTIN = {
             'chart_catalog',
             'docs_search',
         ),
+        keywords=('分析', '主题', '情感', '关键词', 'lda', '聚类', '缺失值'),
         suggested=('这份数据适合做什么分析？', '帮我检查列名和缺失值。', '推荐一个主题分析流程。'),
     ),
     'workflow': SkillSpec(
@@ -384,6 +395,7 @@ BUILTIN = {
         ),
         context=('project', 'canvas', 'docs'),
         tools=('project_facts', 'capabilities', 'docs_search', 'dataset_profile', 'dataset_query', 'chart_catalog'),
+        keywords=('工作流', '画布', '连线', '搭一个', '节点'),
         suggested=('帮我搭一个知乎评论分析工作流。', '这个画布缺了什么？', '从采集到图表最短的路径是什么？'),
     ),
     'charts': SkillSpec(
@@ -398,6 +410,7 @@ BUILTIN = {
         ),
         context=('project', 'dataset'),
         tools=('chart_catalog', 'dataset_profile', 'dataset_query', 'docs_search'),
+        keywords=('图表', '可视化', '画一张', '出图', '距离图', '趋势图', '什么图'),
         suggested=('这份数据适合什么图？', '主题距离图需要哪些列？', '给我一个时间趋势图方案。'),
     ),
     'report': SkillSpec(
@@ -419,6 +432,7 @@ BUILTIN = {
             'chart_catalog',
             'docs_search',
         ),
+        keywords=('报告', '摘要', '方法', '局限', '论文', '草稿', '写成报告', '报告草稿'),
         suggested=('根据这次运行写一份结果摘要。', '帮我写方法与局限。', '把分析结果整理成报告草稿。'),
     ),
     'research': SkillSpec(
@@ -433,6 +447,7 @@ BUILTIN = {
         context=('project',),
         tools=('project_facts', 'docs_search', 'web_search', 'fetch_url'),
         requires=frozenset({'web_search'}),
+        keywords=('搜索', '查一下', '最新', '新闻', '公开规则', '资料'),
         suggested=('DeepSeek V4.1 有什么更新？', '查一下这个平台最近的公开规则。'),
     ),
     'skill_author': SkillSpec(
@@ -448,6 +463,7 @@ BUILTIN = {
         ),
         context=('project', 'docs'),
         tools=('project_facts', 'docs_search'),
+        keywords=('技能', '技能包', '创建技能', '保存成技能'),
         suggested=('帮我创建一个“评论情绪速读”技能。', '把这次诊断流程保存成技能。'),
     ),
     'developer': SkillSpec(
@@ -462,6 +478,7 @@ BUILTIN = {
         context=('project', 'docs', 'code'),
         tools=('project_facts', 'docs_search', 'code_search', 'code_read'),
         requires=frozenset({'tools'}),
+        keywords=('源码', '仓库', '代码', '注册', '模块', '补丁', '架构'),
         suggested=('AI 工作区的 provider 在哪里注册？', '运行恢复的入口在哪个模块？'),
     ),
 }
@@ -471,16 +488,6 @@ def all_skills() -> dict:
     """The product's built-in skills visible to this account (a code plugin may add one)."""
     scope = account_context.scope_key()
     return {key: skill for key, skill in BUILTIN.items() if scopes.visible('skills', key, scope)}
-
-
-def get_skill(skill_id: str) -> SkillSpec:
-    key = str(skill_id or 'auto')
-    if key == 'auto':
-        key = 'project'
-    skill = all_skills().get(key)
-    if skill is None:
-        raise AIError('ai.skillUnknown', kind='bad_request', skill=key)
-    return skill
 
 
 def availability(skill: SkillSpec, provider, model: str = '') -> tuple[bool, str]:
