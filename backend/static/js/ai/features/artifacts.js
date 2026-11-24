@@ -109,7 +109,7 @@ Object.assign(AIWorkspace, {
         this._sending = true;
         this._setSending(true);
         try {
-            await this._stream(AI_BASE + '/retry', { conversation_id: this._conversationId, api_key: key });
+            await this._stream('/retry', { conversation_id: this._conversationId, api_key: key });
         } catch (error) {
             if (error.name !== 'AbortError') this._renderError(error.message);
         } finally {
@@ -140,11 +140,11 @@ Object.assign(AIWorkspace, {
             : draft;
         const currentNodes = current && Array.isArray(current.nodes) ? current.nodes : [];
         try {
-            const response = await fetch(AI_BASE + '/artifacts/preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ kind, payload: artifact.payload || {}, current }),
-            }).then((reply) => reply.json());
+            const { data: response } = await AIHttp.post('/artifacts/preview', {
+                kind,
+                payload: artifact.payload || {},
+                current,
+            });
             if (!response.ok) throw new Error(response.error || I18n.t('ai.error'));
             const pv = response.preview || {};
             const items = Array.isArray(pv.items) ? pv.items : [];
@@ -248,13 +248,8 @@ Object.assign(AIWorkspace, {
         if (!artifact) return;
         const text = String((artifact.payload || {}).text || '').trim();
         if (!text) return;
-        fetch(AI_BASE + '/memories', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text }),
-        })
-            .then((response) => response.json())
-            .then((data) => {
+        AIHttp.post('/memories', { text })
+            .then(({ data }) => {
                 if (!data.ok) throw new Error(data.error || 'save failed');
                 this._toast(I18n.t(data.duplicate ? 'ai.memoryDuplicate' : 'ai.memorySaved'));
             })
@@ -268,17 +263,9 @@ Object.assign(AIWorkspace, {
         const artifact = (this._artifactsById || {})[id] || this._artifactById(id);
         if (!artifact) return;
         try {
-            const prepared = await fetch(AI_BASE + '/chart/preview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ spec: artifact.payload || {} }),
-            }).then((response) => response.json());
+            const { data: prepared } = await AIHttp.post('/chart/preview', { spec: artifact.payload || {} });
             if (!prepared.ok) throw new Error(prepared.error || I18n.t('ai.error'));
-            const result = await fetch('/api/visualize/render', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(prepared.request),
-            }).then((response) => response.json());
+            const { data: result } = await ProductHttp.post('/api/visualize/render', prepared.request);
             if (!result.ok) throw new Error(result.error || I18n.t('ai.error'));
             if (typeof renderChartPreview !== 'function') throw new Error(I18n.t('ai.chartPainterMissing'));
             renderChartPreview(result);

@@ -193,7 +193,7 @@ Object.assign(AIWorkspace, {
         this._ensureAssistant();
         this._paintAssistant();
         try {
-            await this._stream(AI_BASE + '/answer', {
+            await this._stream('/answer', {
                 conversation_id: this._conversationId,
                 message_id: current.messageId || current.questionMessageId,
                 question_id: current.questionId,

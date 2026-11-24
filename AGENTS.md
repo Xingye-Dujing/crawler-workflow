@@ -219,6 +219,14 @@ repository root.
   global in the browser tier.
 - **A canvas shortcut belongs to the canvas only while not typing:** `canvas._isTypingTarget()` (what the element IS), not
   a tag list.
+- **A module asks the door, never `fetch`:** `ai/kernel/http.js` is the ONE JSON implementation — `jsonDoor(base)`
+  builds `AIHttp` (`/api/ai/ws`) and `ProductHttp` (the rest of the page); `_stream(path, body)` takes a route, so
+  `AI_BASE` is spelled once. Only that file and `ai/kernel/sse.js` (a stream needs `response.body` and the
+  event-stream `Accept` header) may spell `fetch`; `tests/unit/frontend/test_frontend_ai_boundary.py` refuses a third.
+- **A browser module is ≤600 lines, or frozen:** `tests/js_budget.py` measures every module `index.html` boots
+  (`PAGE`, plus the `splits.json` closure); `GENERATED` and `i18n/` are exempt by name, and the 15 hand-written
+  modules already over the ceiling are a `FROZEN` ratchet that may only shrink (`SLACK` forces a lower number after a
+  split). A new module over the ceiling is red; a split lowers its frozen number in the same change.
 - **History entries are snapshots, identical ones are not entries:** `getState()` deep-copies params; `_pushState()` skips
   an equal state; `restoreState()` is bracketed by `_historySaving`.
 - **The camera is not part of the model:** pan/zoom live in `serializeDraft()`/`settings.view`, NEVER `getState()`;

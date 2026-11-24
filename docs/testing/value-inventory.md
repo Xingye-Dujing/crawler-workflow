@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**452**
-- 用例（定义数，参数化会展开成更多次运行）：**8726**
+- 文件：**453**
+- 用例（定义数，参数化会展开成更多次运行）：**8738**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -321,6 +321,7 @@
 | `tests/unit/foundation/test_times.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_utils.py` | 44 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_accounts.py` | 20 | 0 | 0 | 0 |
+| `tests/unit/frontend/test_frontend_ai_boundary.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_ai_js.py` | 83 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_analysis_badge_js.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_app_state_js.py` | 46 | 0 | 0 | 0 |
@@ -348,7 +349,7 @@
 | `tests/unit/frontend/test_frontend_handlers_exist.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_i18n_js.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_js.py` | 101 | 0 | 0 | 0 |
-| `tests/unit/frontend/test_frontend_js_budget.py` | 10 | 0 | 0 | 0 |
+| `tests/unit/frontend/test_frontend_js_budget.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_label_layout_js.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_menu_js.py` | 28 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_missing_assets_js.py` | 11 | 0 | 0 | 0 |

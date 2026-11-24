@@ -126,8 +126,7 @@ Object.assign(AIWorkspace, {
         while (Date.now() < deadline) {
             if (this._sending || (adopted && this._conversationId && this._conversationId !== conversationId)) break;
             try {
-                const resp = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(conversationId));
-                const data = await resp.json();
+                const { data } = await AIHttp.get('/conversations/' + encodeURIComponent(conversationId));
                 if (!data.ok) break;
                 const messages = data.messages || [];
                 const ids = messages.map((message) => String(message.id));
@@ -175,9 +174,11 @@ Object.assign(AIWorkspace, {
         }
     },
 
-    async _stream(url, body) {
+    /* `path` is a workspace route (``/chat``), not a URL: the prefix is `AIHttp`'s, so this file and
+       the three callers never spell it. */
+    async _stream(path, body) {
         this._abort = new AbortController();
-        await AIStream.post(url, body, (event) => this._onEvent(event), this._abort.signal);
+        await AIStream.post(AIHttp.url(path), body, (event) => this._onEvent(event), this._abort.signal);
     },
 
     _onEvent(event) {

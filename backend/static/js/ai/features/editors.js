@@ -41,8 +41,7 @@ Object.assign(AIWorkspace, {
 
     async _loadSkillForEdit(id) {
         try {
-            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id));
-            const data = await response.json();
+            const { data } = await AIHttp.get('/skills/' + encodeURIComponent(id));
             if (!data.ok) throw new Error(data.error || 'skill not found');
             this._editingSkill = { ...data.skill, builtin: !!data.skill.builtin };
         } catch (e) {
@@ -70,8 +69,7 @@ Object.assign(AIWorkspace, {
             ask_policy: this._dom.panel.querySelector('[data-ai-skill-field="ask_policy"]')?.value || 'auto',
         };
         try {
-            const response = await fetch(AI_BASE + '/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/skills', payload);
             if (!data.ok) throw new Error(data.error || 'save failed');
             this._editingSkill = null;
             await this._loadBootstrap();
@@ -84,8 +82,7 @@ Object.assign(AIWorkspace, {
 
     async _forkSkill(id) {
         try {
-            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id) + '/fork', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/skills/' + encodeURIComponent(id) + '/fork', {});
             if (!data.ok) throw new Error(data.error || 'fork failed');
             await this._loadBootstrap();
             this.openStudio();
@@ -98,7 +95,8 @@ Object.assign(AIWorkspace, {
     async _deleteSkill(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            await fetch(AI_BASE + '/skills/' + encodeURIComponent(id), { method: 'DELETE' });
+            const { data } = await AIHttp.del('/skills/' + encodeURIComponent(id));
+            if (!data.ok) throw new Error(data.error || 'delete failed');
             await this._loadBootstrap();
             this.openStudio();
         } catch (error) {

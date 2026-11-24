@@ -281,8 +281,7 @@ Object.assign(AIWorkspace, {
         const provider = this._bootstrap?.providers?.find((item) => item.id === this._provider);
         if (!provider || !provider.local_only || provider.requires_key) return;
         try {
-            const response = await fetch(AI_BASE + '/providers/' + encodeURIComponent(this._provider) + '/models');
-            const data = await response.json();
+            const { data } = await AIHttp.get('/providers/' + encodeURIComponent(this._provider) + '/models');
             const models = Array.isArray(data.models) ? data.models : [];
             if (!data.ok || !models.length) return;
             provider.models = models.map((item) => ({

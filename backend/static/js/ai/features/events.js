@@ -43,11 +43,7 @@ Object.assign(AIWorkspace, {
             AISettings.save({ scope: this._scope });
             // One owner for one fact: the server setting is what the next page load reads, so the
             // studio's choice is written there instead of living only in localStorage.
-            fetch('/api/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: { ai_context_scope: this._scope } }),
-            }).catch(() => {});
+            ProductHttp.post('/api/settings', { settings: { ai_context_scope: this._scope } }).catch(() => {});
         }
     },
 

@@ -142,8 +142,7 @@ const AIStudio = {
 
     async loadMemory(host) {
         try {
-            const response = await fetch('/api/ai/ws/memories');
-            const data = await response.json();
+            const { data } = await AIHttp.get('/memories');
             if (!data.ok) throw new Error(data.error || 'memories unavailable');
             host._memories = data.memories || [];
             host._memoryLimit = Number(data.limit || 0);
@@ -158,12 +157,7 @@ const AIStudio = {
         const text = String(box?.value || '').trim();
         if (!text) return;
         try {
-            const response = await fetch('/api/ai/ws/memories', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
-            });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/memories', { text });
             if (!data.ok) throw new Error(data.error || 'save failed');
             if (box) box.value = '';
             host._toast(I18n.t(data.duplicate ? 'ai.memoryDuplicate' : 'ai.memorySaved'));
@@ -175,7 +169,8 @@ const AIStudio = {
 
     async deleteMemory(host, memoryId) {
         try {
-            await fetch('/api/ai/ws/memories/' + encodeURIComponent(memoryId), { method: 'DELETE' });
+            const { data } = await AIHttp.del('/memories/' + encodeURIComponent(memoryId));
+            if (!data.ok) throw new Error(data.error || 'delete failed');
             await this.loadMemory(host);
         } catch (error) {
             host._toast(error.message);
@@ -240,8 +235,8 @@ const AIStudio = {
         if (!body) return;
         try {
             const [status, listing] = await Promise.all([
-                fetch('/api/ai/ws/python/status').then((response) => response.json()),
-                fetch('/api/ai/ws/python/scripts').then((response) => response.json()),
+                AIHttp.get('/python/status').then(({ data }) => data),
+                AIHttp.get('/python/scripts').then(({ data }) => data),
             ]);
             const report = status.report || {};
             const line = report.available
@@ -278,8 +273,7 @@ const AIStudio = {
 
     async editPython(host, scriptId) {
         try {
-            const response = await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId));
-            const data = await response.json();
+            const { data } = await AIHttp.get('/python/scripts/' + encodeURIComponent(scriptId));
             if (!data.ok) throw new Error(data.error || 'not found');
             host._pythonScript = data.script;
             AIWorkspace.openStudio('python');
@@ -303,12 +297,7 @@ const AIStudio = {
             code: read('code')?.value || '',
         };
         try {
-            const response = await fetch('/api/ai/ws/python/scripts', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/python/scripts', payload);
             if (!data.ok) throw new Error(data.error || 'save failed');
             host._pythonScript = null;
             host._toast(I18n.t('ai.saved'));
@@ -320,7 +309,8 @@ const AIStudio = {
 
     async deletePython(host, scriptId) {
         try {
-            await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId), { method: 'DELETE' });
+            const { data } = await AIHttp.del('/python/scripts/' + encodeURIComponent(scriptId));
+            if (!data.ok) throw new Error(data.error || 'delete failed');
             AIWorkspace.openStudio('python');
         } catch (error) {
             host._toast(error.message);
@@ -329,12 +319,9 @@ const AIStudio = {
 
     async forkPython(host, scriptId) {
         try {
-            const response = await fetch('/api/ai/ws/python/scripts/' + encodeURIComponent(scriptId) + '/fork', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: scriptId + '_mine' }),
+            const { data } = await AIHttp.post('/python/scripts/' + encodeURIComponent(scriptId) + '/fork', {
+                id: scriptId + '_mine',
             });
-            const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'fork failed');
             host._pythonScript = data.script;
             AIWorkspace.openStudio('python');
@@ -357,12 +344,7 @@ const AIStudio = {
         const scriptId = document.getElementById('ai-python-run-id')?.value || '';
         if (output) output.textContent = I18n.t('ai.pythonRunning');
         try {
-            const response = await fetch('/api/ai/ws/python/run', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ script_id: scriptId, rows, args, max_rows: 200 }),
-            });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/python/run', { script_id: scriptId, rows, args, max_rows: 200 });
             if (!data.ok) throw new Error(data.error || 'run failed');
             if (output) {
                 output.textContent = JSON.stringify({ rows: data.rows, sample: data.sample, stderr: data.stderr, duration_ms: data.duration_ms }, null, 2);
@@ -375,12 +357,7 @@ const AIStudio = {
     async installPython(host) {
         if (!(await host._confirm(I18n.t('ai.pythonDownloadConfirm')))) return;
         try {
-            const response = await fetch('/api/ai/ws/python/install', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ allow_download: true }),
-            });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/python/install', { allow_download: true });
             if (!data.ok) throw new Error(data.error || 'install failed');
             host._toast(I18n.t('ai.pythonInstalled'));
             AIWorkspace.openStudio('python');
@@ -416,8 +393,7 @@ Object.assign(AIWorkspace, {
         body.setAttribute('data-loading', '1');
         body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoading')) + '</div>';
         try {
-            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id));
-            const data = await response.json();
+            const { response, data } = await AIHttp.get('/skills/' + encodeURIComponent(id));
             if (!data.ok) throw new Error(data.error || ('HTTP ' + response.status));
             const skill = data.skill || {};
             const context = (skill.context || []).join(', ') || '—';
@@ -474,11 +450,8 @@ Object.assign(AIWorkspace, {
 
     async _togglePlugin(id, enabled) {
         try {
-            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id) + '/enable', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enabled }),
-            });
+            const { data } = await AIHttp.post('/plugins/' + encodeURIComponent(id) + '/enable', { enabled });
+            if (!data.ok) throw new Error(data.error || 'toggle failed');
             await this._loadBootstrap();
             this.openStudio();
         } catch (error) {
@@ -489,7 +462,8 @@ Object.assign(AIWorkspace, {
     async _deletePlugin(id) {
         if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
         try {
-            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id), { method: 'DELETE' });
+            const { data } = await AIHttp.del('/plugins/' + encodeURIComponent(id));
+            if (!data.ok) throw new Error(data.error || 'delete failed');
             await this._loadBootstrap();
             this.openStudio();
         } catch (error) {
@@ -510,8 +484,7 @@ Object.assign(AIWorkspace, {
         const permissions = (payload.permissions || []).join(', ');
         if (!(await this._confirm((payload.name || payload.id || '') + '\n' + I18n.t('ai.pluginPermissions') + ': ' + permissions))) return;
         try {
-            const response = await fetch(AI_BASE + '/plugins/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-            const data = await response.json();
+            const { data } = await AIHttp.post('/plugins/install', payload);
             if (!data.ok) throw new Error(data.error || 'install failed');
             await this._loadBootstrap();
             this.openStudio();

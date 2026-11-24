@@ -216,8 +216,7 @@ Object.assign(AIWorkspace, {
            clicked next. Every await below is preceded by one token check; the last click wins. */
         const token = (this._selectToken = (this._selectToken || 0) + 1);
         try {
-            const response = await fetch(AI_BASE + '/conversations/' + encodeURIComponent(id));
-            const data = await response.json();
+            const { response, data } = await AIHttp.get('/conversations/' + encodeURIComponent(id));
             if (token !== this._selectToken) return;
             if (!data.ok) {
                 /* A conversation deleted here or in another tab: forget it instead of reopening a

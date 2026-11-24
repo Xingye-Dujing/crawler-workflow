@@ -37,8 +37,7 @@ Object.assign(AIWorkspace, {
         host.hidden = false;
         host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.choose')) + '…</div>';
         try {
-            const response = await fetch(AI_BASE + '/workspace/browse?path=' + encodeURIComponent(path || ''));
-            const data = await response.json();
+            const { response, data } = await AIHttp.get('/workspace/browse?path=' + encodeURIComponent(path || ''));
             if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
             this._folderState = data;
             this._renderFolder();
@@ -93,12 +92,9 @@ Object.assign(AIWorkspace, {
         if (!host) return;
         host.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.workspace.pickWaiting')) + '</div>';
         try {
-            const response = await fetch(AI_BASE + '/workspace/pick', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ start: (this._folderState && this._folderState.path) || '' }),
+            const { response, data } = await AIHttp.post('/workspace/pick', {
+                start: (this._folderState && this._folderState.path) || '',
             });
-            const data = await response.json();
             if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
             if (data.cancelled || !data.path) {
                 this._renderFolder();
@@ -112,12 +108,7 @@ Object.assign(AIWorkspace, {
 
     async _setFolder(path) {
         try {
-            const response = await fetch(AI_BASE + '/workspace', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ path: path || '' }),
-            });
-            const data = await response.json();
+            const { response, data } = await AIHttp.post('/workspace', { path: path || '' });
             if (!data.ok) throw new Error(data.error || 'HTTP ' + response.status);
             if (this._bootstrap) this._bootstrap.workspace = data.workspace;
             this._renderWorkspace();

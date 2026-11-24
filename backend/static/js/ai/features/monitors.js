@@ -83,17 +83,12 @@ Object.assign(AIWorkspace, {
         });
         if (answer !== true) return false;
         try {
-            const response = await fetch(AI_BASE + '/rerun', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    conversation_id: this._conversationId,
-                    run_id: runId,
-                    workflow_name: workflowName,
-                    node_id: nodeId,
-                }),
+            const { data } = await AIHttp.post('/rerun', {
+                conversation_id: this._conversationId,
+                run_id: runId,
+                workflow_name: workflowName,
+                node_id: nodeId,
             });
-            const data = await response.json();
             if (!data.ok) {
                 this._toast(I18n.t('ai.rerunFailed', { detail: data.error || I18n.t('ai.error') }));
                 return false;
@@ -179,7 +174,7 @@ Object.assign(AIWorkspace, {
         if (typeof showDialog !== 'function') return;
         let catalog;
         try {
-            catalog = (await fetch(AI_BASE + '/monitors/catalog').then((reply) => reply.json())).catalog || {};
+            catalog = (await AIHttp.get('/monitors/catalog')).data.catalog || {};
         } catch (error) {
             this._toast(I18n.t('ai.monitor.failed') + ': ' + error.message);
             return;
@@ -226,16 +221,11 @@ Object.assign(AIWorkspace, {
         };
         try {
             const conversationId = await this._ensureConversation();
-            const response = await fetch(AI_BASE + '/monitors', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    conversation_id: conversationId,
-                    spec,
-                    auto_analyze: !!(answer.toggles || {})['ai-mon-auto'],
-                }),
+            const { data } = await AIHttp.post('/monitors', {
+                conversation_id: conversationId,
+                spec,
+                auto_analyze: !!(answer.toggles || {})['ai-mon-auto'],
             });
-            const data = await response.json();
             if (!data.ok) throw new Error(data.error || I18n.t('ai.error'));
             this._bootstrap.monitors = [data.monitor, ...(this._bootstrap.monitors || [])];
             this._renderSide();

@@ -277,7 +277,7 @@ Object.assign(AIWorkspace, {
             agent_mode: this._agentMode || 'build',
         };
         try {
-            await this._stream(AI_BASE + '/chat', body);
+            await this._stream('/chat', body);
         } catch (error) {
             if (error.name !== 'AbortError') this._renderError(error.message);
         } finally {
@@ -312,7 +312,7 @@ Object.assign(AIWorkspace, {
         this._turnEnded = true;
         if (this._abort) this._abort.abort();
         try {
-            await fetch(AI_BASE + '/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: this._conversationId }) });
+            await AIHttp.post('/stop', { conversation_id: this._conversationId });
         } catch (e) {
             /* stopping is best-effort; the stream abort already closed the page side */
         }
@@ -360,10 +360,9 @@ Object.assign(AIWorkspace, {
        (especially a node trace) keeps the model that actually belongs to it. */
     _rememberConversationModel() {
         if (!this._conversationId) return;
-        fetch(AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ provider: this._provider, model: this._model }),
+        AIHttp.patch('/conversations/' + encodeURIComponent(this._conversationId), {
+            provider: this._provider,
+            model: this._model,
         }).catch(() => {});
     },
 

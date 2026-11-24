@@ -1,60 +1,72 @@
-/* The workspace's server boundary.
+/* The page's server boundary.
  *
- * `AIHttp` is the one JSON door (`url`/`get`/`post`/`patch`/`del`, and the raw answer for a multipart
- * upload), and every member below asks it: keeping a route, the refusal it may answer and the field
- * it updates side by side is what makes a failure one sentence.
+ * `jsonDoor(base)` is the ONE JSON implementation (`url`/`fetch`/`get`/`post`/`patch`/`del`, and the
+ * raw answer for a multipart upload or a stream). Two doors are built from it: `AIHttp` for the
+ * workspace's routes and `ProductHttp` for the rest of the page, so a module never spells `fetch` +
+ * `Content-Type` + `.json()` again. Keeping a route, the refusal it may answer and the field it
+ * updates side by side is what makes a failure one sentence.
  * `AI_BASE` lives here too: the one place the page spells the workspace's route prefix.
  */
 
-/* The page's route prefix and its single JSON door. Every member below asks `AIHttp` rather than
- * spelling `fetch` + `Content-Type` again: a route that needs its own status (delete, rename) still
- * gets the raw `response` back, and the body is parsed the same way everywhere. */
 const AI_BASE = '/api/ai/ws';
 
-const AIHttp = {
-    url(path) {
-        return AI_BASE + path;
-    },
+/* A route that needs its own status (delete, rename) still gets the raw `response` back, and the body
+   is parsed the same way everywhere. The only difference between the two doors is the prefix: a
+   chart render or a page setting is the product's route, not the workspace's, and spelling that
+   difference as an empty base is what keeps one implementation instead of two. */
+function jsonDoor(base) {
+    return {
+        base,
 
-    /** The raw answer, for a body that is not JSON (a multipart upload) or a stream. */
-    fetch(path, options) {
-        return fetch(AI_BASE + path, options);
-    },
+        url(path) {
+            return base + path;
+        },
 
-    /** `{response, data}`; an unparseable body reads as `{}` so a caller's `data.ok` is the verdict. */
-    async json(path, options) {
-        const response = await fetch(AI_BASE + path, options);
-        const data = await response.json().catch(() => ({}));
-        return { response, data };
-    },
+        /** The raw answer, for a body that is not JSON (a multipart upload) or a stream. */
+        fetch(path, options) {
+            return fetch(base + path, options);
+        },
 
-    get(path, headers) {
-        return this.json(path, headers ? { headers } : undefined);
-    },
+        /** `{response, data}`; an unparseable body reads as `{}` so a caller's `data.ok` is the verdict. */
+        async json(path, options) {
+            const response = await fetch(base + path, options);
+            const data = await response.json().catch(() => ({}));
+            return { response, data };
+        },
 
-    send(path, method, body, headers) {
-        const options = { method };
-        if (body !== undefined) {
-            options.headers = { 'Content-Type': 'application/json', ...(headers || {}) };
-            options.body = JSON.stringify(body);
-        } else if (headers) {
-            options.headers = headers;
-        }
-        return this.json(path, options);
-    },
+        get(path, headers) {
+            return this.json(path, headers ? { headers } : undefined);
+        },
 
-    post(path, body, headers) {
-        return this.send(path, 'POST', body, headers);
-    },
+        send(path, method, body, headers) {
+            const options = { method };
+            if (body !== undefined) {
+                options.headers = { 'Content-Type': 'application/json', ...(headers || {}) };
+                options.body = JSON.stringify(body);
+            } else if (headers) {
+                options.headers = headers;
+            }
+            return this.json(path, options);
+        },
 
-    patch(path, body, headers) {
-        return this.send(path, 'PATCH', body, headers);
-    },
+        post(path, body, headers) {
+            return this.send(path, 'POST', body, headers);
+        },
 
-    del(path, body, headers) {
-        return this.send(path, 'DELETE', body, headers);
-    },
-};
+        patch(path, body, headers) {
+            return this.send(path, 'PATCH', body, headers);
+        },
+
+        del(path, body, headers) {
+            return this.send(path, 'DELETE', body, headers);
+        },
+    };
+}
+
+const AIHttp = jsonDoor(AI_BASE);
+
+/* The product's own routes (a chart render, a page setting): the same door without the prefix. */
+const ProductHttp = jsonDoor('');
 
 Object.assign(AIWorkspace, {
     async _loadBootstrap() {

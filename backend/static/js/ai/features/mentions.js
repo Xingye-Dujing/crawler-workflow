@@ -308,14 +308,12 @@ Object.assign(AIWorkspace, {
         }
         const query = this._dom.input?.value || '';
         const context = AIContext.collect();
+        const payload = { query, context };
         try {
-            let endpoint = AI_BASE + '/context';
-            let body = { query, context };
-            if (this._conversationId) {
-                endpoint = AI_BASE + '/conversations/' + encodeURIComponent(this._conversationId) + '/context';
-            }
-            const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            const data = await response.json();
+            const path = this._conversationId
+                ? '/conversations/' + encodeURIComponent(this._conversationId) + '/context'
+                : '/context';
+            const { data } = await AIHttp.post(path, payload);
             if (!data.ok) throw new Error(data.error || 'context failed');
             this._contextMeta = data.meta || {};
             this._contextPreview = String(data.context || '');

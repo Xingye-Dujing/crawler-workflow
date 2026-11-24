@@ -16,6 +16,34 @@
 - 最后提交：`d533e057 修改：收口批——去掉两份重复规则，修好 device tier 的陈旧测试并验通 CatBus`（已推 GitHub + Gitee，CI 触发）；框架仓库 `9e1e66a`（0.1.26）
 - 工作区：W7 第 3 件（游标/账本值对象）的改动在本地未提交
 
+## W5 收尾：AI 面板的 fetch 收口 + js_budget 铺到全页（2026-11-25）
+
+W5 留下的两处尾巴，一起收掉。
+
+**一、38 处裸 `fetch` 收进唯一的门。** `ai/kernel/http.js` 现在不是“另一个封装”，而是唯一实现：
+`jsonDoor(base)` 提供 `url`/`fetch`/`get`/`post`/`patch`/`del`，两个门由它构造——`AIHttp`（`/api/ai/ws`）
+与 `ProductHttp`（其余产品路由：图表渲染、页面设置）。`ai/features/` 里 38 处自己拼
+`fetch + Content-Type + JSON.stringify + .json()` 全部改成一次调用；`_stream(path, body)` 改成收
+**路由**而不是整条 URL，于是 `AI_BASE` 全文只有 http.js 一处。
+
+- 顺带补齐的三处：`_deleteSkill`/`deleteMemory`/`deletePython`/`_togglePlugin` 原来把服务端拒绝当成功
+  （`await fetch(...)` 不看 `data.ok`），现在按名字抛出，`_toast` 里出现的是原因而不是“什么都没发生”。
+- **新门禁 `tests/unit/frontend/test_frontend_ai_boundary.py`**：只有 `ai/kernel/http.js`（门本身）与
+  `ai/kernel/sse.js`（流必须拿 `response.body` 与 `Accept: text/event-stream`）可以出现裸 `fetch`；
+  另有“底座只出现一次”“`_stream` 收路由”“feature 模块里门调用 ≥30 次（说明路由是被搬走而不是删掉）”
+  三条，以及合成缺陷自测。`AIHttp.fetch(` 这类门调用不被误判。
+
+**二、`tests/js_budget.py` 的范围从 AI 层铺到整页。** `PAGE = index.html` 是唯一声明：页面 `<script>`
+加载的模块 + `splits.json` 的拆分闭包共 72 个（此前只有 25 个）。19 个既有超限文件里：
+
+- 3 个是 `i18n/*.js` 翻译目录 → 归入 `DATA_DIRS` 豁免（一条字符串一行，产品靠加字符串长大）；
+- 1 个是生成物 `node-types-fallback.js` → 仍在 `GENERATED`（`zenviz-page.js` 不在这个页面上）；
+- 其余 **15 个手写模块进 `FROZEN`**（canvas 2745、workflow 2305、panels/settings 1471 …），
+  规则与 `tests/unit/gates/test_module_budget.py` 同一条：不在表里的必须 ≤600，在表里的**只能变小**
+  （掉超过 60 行就必须把数字改小，否则表就变成“涨回去的许可证”）。
+
+这样整页从此不会再有一个没人管的模块：新模块超 600 直接红，老模块拆完必须把冻结数一起降。
+
 ## W7-5 工具预算：修一处真缺陷，排序换 BM25（2026-11-24）
 
 本来要做“BM25 + embedding + RRF 的检索式路由”。先量真实注册表，量出来的第一件事不是排序差，
@@ -160,14 +188,14 @@ qwen3.5:4b 就是 26/26。所以这层预算换来的是上下文长度与鲁棒
 - `ai/render/`：`markdown.js`（声明 `AIRender` 与转义/表格）、`question.js`、`artifact.js`、`toolcard.js`。
 - `ai/features/`：`dock`/`chat`/`stored`/`composer`/`mentions`/`answers`/`sidebar`/`events`/`artifacts`/`monitors`/
   `folder`/`studio`/`editors`/`watch`。`ai/stream.js`、`ai/render.js`、`ai/studio.js`、`ai/watch.js` 删除（字节在新文件里）。
-- **新门禁 `tests/js_budget.py` + `tests/unit/frontend/test_frontend_js_budget.py`**：单文件 ≤600 行，`SCOPE` 是
-  唯一声明范围的地方（今天是 `ai-workspace.js` 的 splits 闭包），生成物 `zenviz-page.js`/`node-types-fallback.js`
+- **新门禁 `tests/js_budget.py` + `tests/unit/frontend/test_frontend_js_budget.py`**：单文件 ≤600 行，`PAGE` 是
+  唯一声明范围的地方（当时是 `ai-workspace.js` 的 splits 闭包），生成物 `zenviz-page.js`/`node-types-fallback.js`
   按名字豁免；带“超预算必须报出文件名/恰好在预算上通过/生成物豁免只有一处声明”的合成缺陷自测。
-  页面级铺开会让 19 个既有文件变红（canvas.js 2637 等），那是后续片要显式改范围的事，不是现在的豁免。
+  **2026-11-25 已铺到整页**（82 个模块，15 个既有超限文件进 `FROZEN` 棘轮），见上文 W5 收尾一节。
 - 一处必须修的行为：bootstrap 的模型清单答复在用户切走 provider 之后返回时，会把旧 provider 的模型写回去；
   `_loadBootstrap` 现在也拒绝一个页面已经离开的 provider 的答复（`test_the_local_daemons_real_models…` 仍绿）。
-- 未做（已写在文件头，不假装做了）：`AIHttp` 还没有收养面板里约 30 处单次 `fetch`（studio 插件开关、文件夹、
-  技能 CRUD、监控）。
+- 未做（2026-11-25 已补上）：`AIHttp` 还没有收养面板里约 30 处单次 `fetch`（studio 插件开关、文件夹、
+  技能 CRUD、监控）——现在 38 处全部走 `AIHttp`/`ProductHttp`，见上文 W5 收尾一节。
 
 ## W3：ai/tools 拆包（2026-11-24）
 
