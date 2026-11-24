@@ -13,8 +13,22 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`6e8b0757 功能更新：P8 第四片——能力 × 测试矩阵生成物`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`5fd16be4 修改：P8 文档与技能收尾——旧路径逐条改指能力清单`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 文档与技能收尾（2026-11-24）
+
+- 旧路径逐条改指能力清单：`capabilities/platforms/<id>.py` → `capabilities_kernel/platforms/<id>/manifest.py`；
+  `capabilities/model.py`/`fields.py` → `capabilities_kernel/platform.py`/`platforms/_fields.py`
+  （agent_practices、crawler_rules×2、best_practices、`docs/capabilities/nodes/source.md`、
+  `.opencode/skills/crawler-platform` 三处）。
+- 流程类说法改对：`analysis-charts` 的“加算子”改为写清单（reads/writes/needs_llm/panel），分析层表与面板都是
+  投影；`docs/analysis.md` 不再声称与 `ANALYSIS_OPS` 一一对应。
+- `capabilities-kernel.md` 的生成物清单补上 `docs/capabilities/matrix.md` 与
+  `docs/testing/value-inventory.md`（各自的工具与 freshness 门禁）。
+- rewrite-plan：勾上“README/AGENTS/docs/skills 同步”，性能基线改 10:56。
+- 验证：文档/引号/矩阵/清单门禁 + capabilities **444 passed**。
+- **P8 剩余**：消费者契约测试、性质测试 + nightly mutation（计划内，未做）。
 
 ## P8 第四片：能力 × 测试矩阵（2026-11-24）
 
