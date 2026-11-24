@@ -13,8 +13,21 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`eb885cfb 功能更新：分析面板首批算子表单由清单渲染`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`69f87e7d 功能更新：分析面板第二批——topic 家族 8 个算子表单清单化`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## 分析面板：第二批（topic 家族，2026-11-24）
+
+- 迁移 topic_model / topic_by_stage / topic_label / topic_map / topic_salience / topic_timeline /
+  topic_flow / topic_coherence（累计 14/37）。共享盒子在 `operators/_panel.py`：`N_TOPICS`、
+  `TOPIC_METHOD`、`EMBEDDING_MODEL`、`TOPIC_MAX_FEATURES`；每步自己的 topp 标签与提示用
+  `dataclasses.replace(..., hint_key=...)` 挂在各自的盒子上。
+- `tests/api/test_analysis_api.py` 的面板契约改为**清单优先**：`_panel_fields` 先读
+  `operator_entries()['panel']`，没有才解析 JS；块覆盖测试要求 `rendered | declared == 全部算子`
+  且两者不相交。
+- 验证：capabilities/analysis/frontend/api/表面门禁 **6338 passed**（约 7.5 分钟，未跑全量）；
+  ruff 全绿；两个 pylint tier 10.00/10。
+- **剩余**：23 个算子的面板块（时间 4、统计/关联/事件 12、图与文本 7）。
 
 ## 分析面板：首批算子表单清单化（2026-11-24）
 
