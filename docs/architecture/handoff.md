@@ -2,8 +2,25 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`50ca1505 功能更新：P7 第一类——37 个分析算子清单化`；框架仓库 `cf6d89f`（0.1.25）
-- 工作区：干净（唯一未跟踪/未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+- 最后提交：`f272770a 功能更新：P7 第二类——30 个图表类型清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 第二类：30 个图表类型清单化（2026-11-24）
+
+- **新增能力种类 `chart`**：`capabilities_kernel/charts/<id>/manifest.py`（`ChartManifest`，见
+  `capabilities_kernel/chart.py`）。字段词汇集中到 `charts/_fields.py`：同一个 x/value 框只声明一次。
+  清单声明字段/角色/必填/默认/控件、`any_of` 组、`echarts_only`/`latex_buildable`、文献视图必读列、
+  面板槽位与七段技能；`chart_manifest()` 从字段契约推导技能其余五段与模板（填必填框与 `any_of` 组）。
+- **`services.charts.registry` 改为投影**：`SPECS = registry.manifests('chart')`，`ChartSpec`/`FieldSpec`/
+  `FAMILY_*`/`FIELD_ROLES`/`NUMERIC_ROLES` 从 kernel 复用；派生元组与 `spec_for`/`chart_profiles`/
+  `chart_problems`/`chart_preflight` 未变。16 个控制台绘图函数改名为公开 `build_<id>` 并成为清单 handler，
+  文献图 handler 指向 `services.biblio.charts.*`。
+- **技能与生成物**：每个图表生成 `docs/capabilities/charts/<id>.md`（字段表/引擎/文献列）与七段技能页；
+  `knowledge.render/l2` 为图表增加 Fields 段；`@` 候选列表不再截断（框架负责筛选），三类能力技能都出现。
+- **验证**：全量 fast tier **11920 passed**（唯一失败是候选被 40 条截断，已修并复跑）；charts/ai/capabilities
+  子集 1648 + 1060 passed；ruff check/format 全绿；product 与 tests pylint **10.00/10**；doctor 全绿。
+- **未做**：`panels/node-chart.js` 仍按控件名注册小部件（声明与控件已由测试钉住，但表单仍是手写渲染）；
+  平台（第三类）清单化；图表级 `preflight` 仍由 `chart_preflight` 承担（未搬进清单）。
 
 ## P7 第一类：37 个分析算子清单化（2026-11-24）
 
@@ -33,6 +50,7 @@
 | `f661b4a8` | P6 第四片：配方进度条与跳过（输入框上方，状态只来自服务端） |
 | `d46b8a1b` | P6 第五片：严格模式工具预算（本地供应商 12 个工具，控制/核心/配方步骤必留），框架 0.1.25 |
 | `50ca1505` | P7 第一类：37 个分析算子清单化（契约/读写形状/策略/七段技能；analysis 旧表全部改为投影） |
+| `f272770a` | P7 第二类：30 个图表类型清单化（字段/引擎/文献列/七段技能；registry 改为投影，绘图函数公开为 handler） |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
