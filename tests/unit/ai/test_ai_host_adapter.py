@@ -136,13 +136,12 @@ class TestStrictMode:
     def test_every_skill_keeps_its_own_tools_inside_the_budget(self, host):
         """The offer list a local model sees: at most the budget, and never missing the skill's own."""
         from agent_workspace.tools import CONTROL_TOOLS, ToolRegistry
-        from ai import skills
 
         registry = ToolRegistry(store=None, host=host, settings=None, context=None, workspace_provider=None)
         for spec in host.tools():
             registry.register(spec)
         universal = set(legacy_tools.UNIVERSAL_TOOLS)
-        for skill_id, skill in skills.BUILTIN.items():
+        for skill_id, skill in legacy_skills.BUILTIN.items():
             own = tuple(name for name in skill.tools if name not in universal)
             if not own:
                 continue
