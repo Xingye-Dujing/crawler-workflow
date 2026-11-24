@@ -279,6 +279,8 @@ def operator_entries() -> tuple[dict, ...]:
                     'hintKey': box.hint_key,
                     'placeholder': box.placeholder,
                     'hideWhen': list(box.hide_when),
+                    'roleKeys': list(box.role_keys),
+                    'toggleParam': box.toggle_param,
                 }
                 for box in manifest.panel
             ],

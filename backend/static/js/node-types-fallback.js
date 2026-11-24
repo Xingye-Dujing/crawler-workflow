@@ -3272,7 +3272,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "col1, col2 (empty = all)",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "how",
@@ -3292,7 +3294,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3347,7 +3351,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "col1, col2 (empty = all)",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "value",
@@ -3358,7 +3364,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "method",
@@ -3382,7 +3390,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3449,7 +3459,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "col1, col2 (empty = all)",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "mode",
@@ -3469,7 +3481,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3534,7 +3548,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "max_distance",
@@ -3545,7 +3561,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.dedupeSimilarHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3597,7 +3615,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "model",
@@ -3608,7 +3628,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "threshold",
@@ -3619,7 +3641,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3691,7 +3715,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "model",
@@ -3702,7 +3728,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "query",
@@ -3713,7 +3741,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "top_k",
@@ -3724,7 +3754,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3798,7 +3830,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "op",
@@ -3858,7 +3892,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "value",
@@ -3875,7 +3911,9 @@ window.NODE_TYPE_CATALOGUE = {
               "is_null",
               "not_null"
             ]
-          ]
+          ],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "filter_keep",
@@ -3895,7 +3933,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "settings.filterRowsHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -3983,7 +4023,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "col1, col2 (empty = all)",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4025,7 +4067,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "rename_to",
@@ -4036,7 +4080,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4076,7 +4122,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "col1, col2 (empty = all)",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4118,7 +4166,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "dtype",
@@ -4150,7 +4200,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4208,7 +4260,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "ascending",
@@ -4219,7 +4273,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4271,7 +4327,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "frac",
@@ -4282,7 +4340,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "seed",
@@ -4293,7 +4353,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4353,7 +4415,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "agg_col",
@@ -4364,7 +4428,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "agg_func",
@@ -4396,7 +4462,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "group_order_col",
@@ -4407,7 +4475,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "agg_metrics",
@@ -4418,7 +4488,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4528,7 +4600,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "left_on",
@@ -4539,7 +4613,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "right_on",
@@ -4550,7 +4626,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.joinHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4609,7 +4687,154 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 160,
       "needsLlm": false,
       "writes": "unknown",
-      "panel": [],
+      "panel": [
+        {
+          "key": "roles",
+          "canonical": "",
+          "labelKey": "",
+          "control": "roles",
+          "default": "",
+          "options": [],
+          "hintKey": "settings.antiJoinHint",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [
+            "settings.antiJoinKeepRole",
+            "settings.antiJoinBasisRole"
+          ],
+          "toggleParam": "swap_tables"
+        },
+        {
+          "key": "keep_mode",
+          "canonical": "keep",
+          "labelKey": "settings.antiJoinKeep",
+          "control": "select",
+          "default": "exclude",
+          "options": [
+            {
+              "value": "exclude",
+              "labelKey": "settings.antiJoinExclude"
+            },
+            {
+              "value": "keep",
+              "labelKey": "settings.antiJoinKeepOnly"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "left_on",
+          "canonical": "left_on",
+          "labelKey": "settings.antiJoinLeft",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "right_on",
+          "canonical": "right_on",
+          "labelKey": "settings.antiJoinRight",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "match_mode",
+          "canonical": "mode",
+          "labelKey": "settings.matchMode",
+          "control": "select",
+          "default": "trim",
+          "options": [
+            {
+              "value": "exact",
+              "labelKey": "matchMode.exact"
+            },
+            {
+              "value": "trim",
+              "labelKey": "matchMode.trim"
+            },
+            {
+              "value": "url",
+              "labelKey": "matchMode.url"
+            },
+            {
+              "value": "text",
+              "labelKey": "matchMode.text"
+            },
+            {
+              "value": "similar",
+              "labelKey": "matchMode.similar"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "ignore_case",
+          "canonical": "ignore_case",
+          "labelKey": "settings.matchIgnoreCase",
+          "control": "checkbox",
+          "default": false,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "max_distance",
+          "canonical": "max_distance",
+          "labelKey": "settings.matchDistance",
+          "control": "number",
+          "default": 8,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [
+            "match_mode",
+            [
+              "",
+              "exact",
+              "trim",
+              "url",
+              "text"
+            ]
+          ],
+          "roleKeys": [],
+          "toggleParam": ""
+        },
+        {
+          "key": "swap_tables",
+          "canonical": "swap_tables",
+          "labelKey": "settings.swapTables",
+          "control": "checkbox",
+          "default": false,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
+        }
+      ],
       "reads": {
         "one": [],
         "some": [],
@@ -4719,7 +4944,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "expr",
@@ -4730,7 +4957,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4783,7 +5012,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "bin_new_col",
@@ -4794,7 +5025,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "bins",
@@ -4805,7 +5038,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "4 或 0, 60, 80, 100",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "bin_labels",
@@ -4816,7 +5051,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "low, mid, high",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4888,7 +5125,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "time_new_col",
@@ -4899,7 +5138,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "time_part",
@@ -4931,7 +5172,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -4999,7 +5242,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "phase_new_col",
@@ -5010,7 +5255,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "phase_edges",
@@ -5021,7 +5268,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "phase_labels",
@@ -5032,7 +5281,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "phase_order_col",
@@ -5043,7 +5294,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.phaseHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5125,7 +5378,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stages_min_days",
@@ -5136,7 +5391,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stages_max_windows",
@@ -5147,7 +5404,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stages_peak_ratio",
@@ -5158,7 +5417,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.stagesHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5230,7 +5491,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "n_topics",
@@ -5241,7 +5504,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_method",
@@ -5265,7 +5530,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "embedding_model",
@@ -5276,7 +5543,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_topn",
@@ -5287,7 +5556,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_max_features",
@@ -5298,7 +5569,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.topicHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5394,7 +5667,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stage_col",
@@ -5405,7 +5680,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stage_order_col",
@@ -5416,7 +5693,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "stage_topic_counts",
@@ -5427,7 +5706,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_topn",
@@ -5438,7 +5719,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_max_features",
@@ -5449,7 +5732,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_sample_n",
@@ -5460,7 +5745,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_method",
@@ -5484,7 +5771,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "embedding_model",
@@ -5495,7 +5784,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "word_source",
@@ -5515,7 +5806,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "settings.topicStageHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5657,7 +5950,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_samples_col",
@@ -5668,7 +5963,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_summary_col",
@@ -5679,7 +5976,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_on_fail",
@@ -5703,7 +6002,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_max_topics",
@@ -5714,7 +6015,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.topicLabelHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5802,7 +6105,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cluster_text_col",
@@ -5813,7 +6118,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cluster_summary_col",
@@ -5824,7 +6131,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cluster_on_fail",
@@ -5848,7 +6157,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cluster_max_groups",
@@ -5859,7 +6170,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cluster_sample_n",
@@ -5870,7 +6183,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.clusterLabelHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -5969,7 +6284,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_label_col",
@@ -5980,7 +6297,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_name_col",
@@ -5991,7 +6310,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_freq_col",
@@ -6002,7 +6323,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_summary_col",
@@ -6013,7 +6336,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_on_fail",
@@ -6037,7 +6362,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_max_groups",
@@ -6048,7 +6375,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "review_members",
@@ -6059,7 +6388,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.clusterReviewHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6198,7 +6529,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "reply_floor_col",
@@ -6209,7 +6542,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "reply_parent_col",
@@ -6220,7 +6555,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "reply_article_col",
@@ -6231,7 +6568,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.replyGraphHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6305,7 +6644,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "compare_value_col",
@@ -6316,7 +6657,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "compare_agg",
@@ -6336,7 +6679,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "settings.compareHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6405,7 +6750,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "n_topics",
@@ -6416,7 +6763,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_method",
@@ -6440,7 +6789,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "embedding_model",
@@ -6451,7 +6802,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_topn",
@@ -6462,7 +6815,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_max_features",
@@ -6473,7 +6828,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.topicMapHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6569,7 +6926,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "n_topics",
@@ -6580,7 +6939,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_method",
@@ -6604,7 +6965,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "embedding_model",
@@ -6615,7 +6978,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_topn",
@@ -6626,7 +6991,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_lambda",
@@ -6637,7 +7004,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_max_features",
@@ -6648,7 +7017,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.topicSalienceHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6754,7 +7125,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "timeline_topic_col",
@@ -6765,7 +7138,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "timeline_words_col",
@@ -6776,7 +7151,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "timeline_size_col",
@@ -6787,7 +7164,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "timeline_order_col",
@@ -6798,7 +7177,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "timeline_overlap",
@@ -6809,7 +7190,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.timelineHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -6903,7 +7286,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_topic_col",
@@ -6914,7 +7299,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_words_col",
@@ -6925,7 +7312,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_weights_col",
@@ -6936,7 +7325,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_order_col",
@@ -6947,7 +7338,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_label_col",
@@ -6958,7 +7351,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "flow_min_similarity",
@@ -6969,7 +7364,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.flowHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -7073,7 +7470,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "coherence_min_topics",
@@ -7084,7 +7483,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "coherence_max_topics",
@@ -7095,7 +7496,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_topn",
@@ -7106,7 +7509,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "coherence_max_documents",
@@ -7117,7 +7522,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "topic_max_features",
@@ -7128,7 +7535,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.coherenceHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -7220,7 +7629,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cooccur_topn",
@@ -7231,7 +7642,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cooccur_min_count",
@@ -7242,7 +7655,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "cooccur_window",
@@ -7253,7 +7668,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.cooccurHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -7325,7 +7742,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_col",
@@ -7336,7 +7755,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "index_new_col",
@@ -7347,7 +7768,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_positive",
@@ -7358,7 +7781,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_neutral",
@@ -7369,7 +7794,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "label_negative",
@@ -7380,7 +7807,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "score_col",
@@ -7391,7 +7820,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "evolution_order_col",
@@ -7402,7 +7833,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.evolutionHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -7514,7 +7947,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_value_col",
@@ -7525,7 +7960,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_method",
@@ -7553,7 +7990,9 @@ window.NODE_TYPE_CATALOGUE = {
           ],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_horizon",
@@ -7564,7 +8003,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_window",
@@ -7575,7 +8016,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_season",
@@ -7586,7 +8029,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_alpha",
@@ -7597,7 +8042,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_beta",
@@ -7608,7 +8055,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_gamma",
@@ -7619,7 +8068,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "forecast_min_periods",
@@ -7630,7 +8081,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.forecastHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {
@@ -7768,7 +8221,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_index_col",
@@ -7779,7 +8234,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_intensity_col",
@@ -7790,7 +8247,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_volume_col",
@@ -7801,7 +8260,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_streak",
@@ -7812,7 +8273,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_swing",
@@ -7823,7 +8286,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_heating",
@@ -7834,7 +8299,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         },
         {
           "key": "alert_volume_floor",
@@ -7845,7 +8312,9 @@ window.NODE_TYPE_CATALOGUE = {
           "options": [],
           "hintKey": "settings.alertHint",
           "placeholder": "",
-          "hideWhen": []
+          "hideWhen": [],
+          "roleKeys": [],
+          "toggleParam": ""
         }
       ],
       "reads": {

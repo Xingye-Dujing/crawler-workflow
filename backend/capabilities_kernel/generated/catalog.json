@@ -3465,7 +3465,7 @@
     {
       "kind": "operator",
       "id": "drop_null",
-      "digest": "e933b2ece48b0246432a4f0242ee5ad3c101c627414f530cbc0e766030056671",
+      "digest": "160853633d6e05da71ea5df11067f7fbff821913d1a26928e092cc30eea32c73",
       "manifest": {
         "identity": {
           "id": "drop_null",
@@ -3538,7 +3538,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "how",
@@ -3560,7 +3562,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -3637,7 +3641,7 @@
     {
       "kind": "operator",
       "id": "fill_null",
-      "digest": "1a3e87e9389dd1448f03f11b2b31005a749efa145a6c29f12c0bcf58091faad1",
+      "digest": "9ccecb76d0a1a1826d3b2e4fa887922558a9cc46e0708f5aecd08a4a2662c1e9",
       "manifest": {
         "identity": {
           "id": "fill_null",
@@ -3726,7 +3730,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "value",
@@ -3739,7 +3745,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "method",
@@ -3765,7 +3773,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -3842,7 +3852,7 @@
     {
       "kind": "operator",
       "id": "drop_duplicates",
-      "digest": "e7d48affccc20ba2d793d5af6036aa659732ea72d019b57d64093e8cca1e117f",
+      "digest": "c5aefcd642b6c484eba229da39b0ad972275372e4fb8611c7e5b9ed869d4f5be",
       "manifest": {
         "identity": {
           "id": "drop_duplicates",
@@ -3929,7 +3939,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "mode",
@@ -3951,7 +3963,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4028,7 +4042,7 @@
     {
       "kind": "operator",
       "id": "dedupe_similar",
-      "digest": "e1a55324cc1a7d137d2cbcdf43df7ec33a943ee2c4558e9a9db85da937037a15",
+      "digest": "3b0c860ea8eb656880e0628efed6e8231bb91d3ae98b64d3292c16b444e64800",
       "manifest": {
         "identity": {
           "id": "dedupe_similar",
@@ -4098,7 +4112,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "max_distance",
@@ -4111,7 +4127,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.dedupeSimilarHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4183,7 +4201,7 @@
     {
       "kind": "operator",
       "id": "semantic_dedupe",
-      "digest": "a4eaa794ed985965cbe29a90441becab30279af4d0f254fda8756bedb529963c",
+      "digest": "f1fa58089dcf959db7cc4cedd6e6df4b787174043d3ca644135344f8219d901a",
       "manifest": {
         "identity": {
           "id": "semantic_dedupe",
@@ -4281,7 +4299,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "model",
@@ -4294,7 +4314,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "threshold",
@@ -4307,7 +4329,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4379,7 +4403,7 @@
     {
       "kind": "operator",
       "id": "similar_to",
-      "digest": "538a9eeadc9442388d8ad5792c6b953b6101a66b1d103b9efd09ca7f03433e4b",
+      "digest": "851d570b5aed7d1b2078288ded5588c2c3ed5972854a94b70bac5b09b51f99e8",
       "manifest": {
         "identity": {
           "id": "similar_to",
@@ -4484,7 +4508,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "model",
@@ -4497,7 +4523,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "query",
@@ -4510,7 +4538,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "top_k",
@@ -4523,7 +4553,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4596,7 +4628,7 @@
     {
       "kind": "operator",
       "id": "filter_rows",
-      "digest": "67931a1aa3ff5c26a2ab3e7098cae9cea46b434fc969d8f03f9f2518458839e0",
+      "digest": "81647fd2c4d9f66bd9c6b23c25be0509e5de5e0165e01b2ca2a3243eab8185eb",
       "manifest": {
         "identity": {
           "id": "filter_rows",
@@ -4710,7 +4742,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "op",
@@ -4723,7 +4757,9 @@
             "option_label_prefix": "settings.filterOp.",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "value",
@@ -4742,7 +4778,9 @@
                 "is_null",
                 "not_null"
               ]
-            ]
+            ],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "filter_keep",
@@ -4764,7 +4802,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.filterRowsHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4841,7 +4881,7 @@
     {
       "kind": "operator",
       "id": "select_columns",
-      "digest": "94d78b3d52a74e01d787c896d2b3f97379d054699b655924aa3a39e0f426d66a",
+      "digest": "52b966dbcb8fd6ea1d67f4fdcd61bc332e9355efc8c15efba699f80e019663d0",
       "manifest": {
         "identity": {
           "id": "select_columns",
@@ -4897,7 +4937,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -4969,7 +5011,7 @@
     {
       "kind": "operator",
       "id": "rename_columns",
-      "digest": "d1339dce5619c72a3f6041db0666d7f83d7585e8a7f644af48d13ab092b45d24",
+      "digest": "e1fd05bf45b94da1b0dd54d45d124eab06a5cf7a4a9c7e73fd2c9c682d2e9799",
       "manifest": {
         "identity": {
           "id": "rename_columns",
@@ -5023,7 +5065,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "rename_to",
@@ -5036,7 +5080,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -5110,7 +5156,7 @@
     {
       "kind": "operator",
       "id": "strip_whitespace",
-      "digest": "fed917e8b39ce84a3e80b5784e10c7eeaf0387f0ee9ea1c827f39abdfa369ef3",
+      "digest": "87a21c71a349cc6cda46dec678d793aee29d290e7a645dc95f750818a0f18e5a",
       "manifest": {
         "identity": {
           "id": "strip_whitespace",
@@ -5166,7 +5212,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "col1, col2 (empty = all)",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -5238,7 +5286,7 @@
     {
       "kind": "operator",
       "id": "convert_type",
-      "digest": "9ad618d0674cac68d4600d357774ed91c9c614d70f4e2926d3a7e7f708366ab8",
+      "digest": "fca9df793e0864c9cb915d4f0ee5bd6eae4a72230e86129af6133bebd8e809eb",
       "manifest": {
         "identity": {
           "id": "convert_type",
@@ -5314,7 +5362,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "dtype",
@@ -5348,7 +5398,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -5425,7 +5477,7 @@
     {
       "kind": "operator",
       "id": "sort_rows",
-      "digest": "b9047c0f66d2159d123a6e3ab5fafb6593626fdf1ce56655444345e54536144a",
+      "digest": "36fa9744aad69ec44c1bb12f7dee5783219adde3be8479daa1a7e47550d29401",
       "manifest": {
         "identity": {
           "id": "sort_rows",
@@ -5495,7 +5547,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "ascending",
@@ -5508,7 +5562,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -5580,7 +5636,7 @@
     {
       "kind": "operator",
       "id": "sample_rows",
-      "digest": "44e05d79516d98ca9c354ab74442d2dec2ad8d5d2238b9f491496c2b10c7d290",
+      "digest": "d400b46edbc96132efe9cfe6231f261f1b91c757fe80989c5467569d3c6950cc",
       "manifest": {
         "identity": {
           "id": "sample_rows",
@@ -5662,7 +5718,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "frac",
@@ -5675,7 +5733,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "seed",
@@ -5688,7 +5748,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -5759,7 +5821,7 @@
     {
       "kind": "operator",
       "id": "groupby_agg",
-      "digest": "b666ac53253992c2a22b7d1f3e5df6fbc768b99f15f22aba0b4a69a1ebfe733c",
+      "digest": "df97e03a180652279406633bf8dc9cf91be2cd98c151f672b13206aa8353cabc",
       "manifest": {
         "identity": {
           "id": "groupby_agg",
@@ -5882,7 +5944,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "agg_col",
@@ -5895,7 +5959,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "agg_func",
@@ -5929,7 +5995,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "group_order_col",
@@ -5942,7 +6010,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "agg_metrics",
@@ -5955,7 +6025,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -6030,7 +6102,7 @@
     {
       "kind": "operator",
       "id": "join_tables",
-      "digest": "912ee276bccb3b0df7c4e87d3a997f3340785cf299d94727e7999a03b6edb75b",
+      "digest": "73993bfa9aba5b0461d57a149ba1de6c502215f135102297738c6c153f132f25",
       "manifest": {
         "identity": {
           "id": "join_tables",
@@ -6138,7 +6210,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "left_on",
@@ -6151,7 +6225,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "right_on",
@@ -6164,7 +6240,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.joinHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -6244,7 +6322,7 @@
     {
       "kind": "operator",
       "id": "anti_join",
-      "digest": "90004a3b98d7d7ca0879175210792f6c77e9c204759426bd86221c313d4d2f85",
+      "digest": "ea9d2b6d7ee00f70d906b386e89bb5c3d1e9c06b62f7b6a26ef08b3ef06e6bb9",
       "manifest": {
         "identity": {
           "id": "anti_join",
@@ -6382,7 +6460,149 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "roles",
+            "canonical": "",
+            "label_key": "",
+            "control": "roles",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "settings.antiJoinHint",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [
+              "settings.antiJoinKeepRole",
+              "settings.antiJoinBasisRole"
+            ],
+            "toggle_param": "swap_tables"
+          },
+          {
+            "key": "keep_mode",
+            "canonical": "keep",
+            "label_key": "settings.antiJoinKeep",
+            "control": "select",
+            "default": "exclude",
+            "options": [
+              [
+                "exclude",
+                "settings.antiJoinExclude"
+              ],
+              [
+                "keep",
+                "settings.antiJoinKeepOnly"
+              ]
+            ],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "left_on",
+            "canonical": "left_on",
+            "label_key": "settings.antiJoinLeft",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "right_on",
+            "canonical": "right_on",
+            "label_key": "settings.antiJoinRight",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "match_mode",
+            "canonical": "mode",
+            "label_key": "settings.matchMode",
+            "control": "select",
+            "default": "trim",
+            "options": [],
+            "options_param": "mode",
+            "option_label_prefix": "matchMode.",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "ignore_case",
+            "canonical": "ignore_case",
+            "label_key": "settings.matchIgnoreCase",
+            "control": "checkbox",
+            "default": false,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "max_distance",
+            "canonical": "max_distance",
+            "label_key": "settings.matchDistance",
+            "control": "number",
+            "default": 8,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [
+              "match_mode",
+              [
+                "",
+                "exact",
+                "trim",
+                "url",
+                "text"
+              ]
+            ],
+            "role_keys": [],
+            "toggle_param": ""
+          },
+          {
+            "key": "swap_tables",
+            "canonical": "swap_tables",
+            "label_key": "settings.swapTables",
+            "control": "checkbox",
+            "default": false,
+            "options": [],
+            "options_param": "",
+            "option_label_prefix": "",
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.anti_join:anti_join",
           "quiet": false
@@ -6460,7 +6680,7 @@
     {
       "kind": "operator",
       "id": "column_calc",
-      "digest": "922ad1a59972e65e2b5e1b56ba2e147ba4eb80ef2bbf8ae3f0a67366b12a98fd",
+      "digest": "fe4e23972dd5cd568de258bc5e3b9e3bd3c0728e0bb2aabac3f477de34e95a0b",
       "manifest": {
         "identity": {
           "id": "column_calc",
@@ -6536,7 +6756,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "expr",
@@ -6549,7 +6771,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -6621,7 +6845,7 @@
     {
       "kind": "operator",
       "id": "bin_column",
-      "digest": "963f79215db0f0ea84ef912cfb79510328d8bce15d2f28f6acc38a85df9654b2",
+      "digest": "e8a563897d522b5884e49ffadf372fd5ec78657f7458e7248ab3e3693630e83e",
       "manifest": {
         "identity": {
           "id": "bin_column",
@@ -6724,7 +6948,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "bin_new_col",
@@ -6737,7 +6963,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "bins",
@@ -6750,7 +6978,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "4 或 0, 60, 80, 100",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "bin_labels",
@@ -6763,7 +6993,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "low, mid, high",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -6836,7 +7068,7 @@
     {
       "kind": "operator",
       "id": "extract_time",
-      "digest": "db9bc58b5eab2e58852dd92e54ecb16cc1d64ef8740dc3fd005fbbb6a07319da",
+      "digest": "787f0d88a56ee3e68a50752bd70dff13d9b47c0b97a4e31a25345c279adb439b",
       "manifest": {
         "identity": {
           "id": "extract_time",
@@ -6931,7 +7163,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "time_new_col",
@@ -6944,7 +7178,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "time_part",
@@ -6978,7 +7214,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -7051,7 +7289,7 @@
     {
       "kind": "operator",
       "id": "bin_time",
-      "digest": "947adf67f75dfa81365479daa866eb031f6734dd88cabe4c121b614c3248fd03",
+      "digest": "90bc778306e30f36f7c08f2d004b2b384f6c83b9e172d22ee546c16eb7a62952",
       "manifest": {
         "identity": {
           "id": "bin_time",
@@ -7173,7 +7411,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "phase_new_col",
@@ -7186,7 +7426,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "phase_edges",
@@ -7199,7 +7441,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "phase_labels",
@@ -7212,7 +7456,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "phase_order_col",
@@ -7225,7 +7471,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.phaseHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -7309,7 +7557,7 @@
     {
       "kind": "operator",
       "id": "suggest_stages",
-      "digest": "f4816920dbb0471113db6a4aa63fba56ab9d483d4d1c9d30794e7ed013ceca39",
+      "digest": "0844c3b7731695e6f5b93cd7acf7213871cc8328dbbc156f854d68697e45ee40",
       "manifest": {
         "identity": {
           "id": "suggest_stages",
@@ -7416,7 +7664,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stages_min_days",
@@ -7429,7 +7679,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stages_max_windows",
@@ -7442,7 +7694,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stages_peak_ratio",
@@ -7455,7 +7709,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.stagesHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -7528,7 +7784,7 @@
     {
       "kind": "operator",
       "id": "topic_model",
-      "digest": "cc397ad78de8e7d85d00b4731fd35ee587d3d9748f7ea21f40a67d722feedfbd",
+      "digest": "82f628dd831a494319a50356ebf894a63ed30dc38a5a0463bf0f5e92dd38ed81",
       "manifest": {
         "identity": {
           "id": "topic_model",
@@ -7663,7 +7919,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "n_topics",
@@ -7676,7 +7934,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_method",
@@ -7702,7 +7962,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "embedding_model",
@@ -7715,7 +7977,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_topn",
@@ -7728,7 +7992,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_max_features",
@@ -7741,7 +8007,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.topicHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -7814,7 +8082,7 @@
     {
       "kind": "operator",
       "id": "topic_by_stage",
-      "digest": "987838c41b73fc90ce968b8e68a5a3a24b83e856854340034a940cad5b6ef5ac",
+      "digest": "4984842b2f165764cdfab43a54aadbe667d1d525c8e04cd1b9fcca4ce6520484",
       "manifest": {
         "identity": {
           "id": "topic_by_stage",
@@ -8015,7 +8283,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stage_col",
@@ -8028,7 +8298,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stage_order_col",
@@ -8041,7 +8313,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "stage_topic_counts",
@@ -8054,7 +8328,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_topn",
@@ -8067,7 +8343,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_max_features",
@@ -8080,7 +8358,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_sample_n",
@@ -8093,7 +8373,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_method",
@@ -8119,7 +8401,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "embedding_model",
@@ -8132,7 +8416,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "word_source",
@@ -8154,7 +8440,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.topicStageHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -8233,7 +8521,7 @@
     {
       "kind": "operator",
       "id": "topic_label",
-      "digest": "1ac38a48f0d70d156eed863632bdbb71cc417a1afd3d3c840f1f75d399983d40",
+      "digest": "6bb35e3a3ef744c3e4e1f17e900862efd2fd5bf8d6911db339fd98fc948fb726",
       "manifest": {
         "identity": {
           "id": "topic_label",
@@ -8356,7 +8644,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_samples_col",
@@ -8369,7 +8659,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_summary_col",
@@ -8382,7 +8674,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_on_fail",
@@ -8408,7 +8702,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_max_topics",
@@ -8421,7 +8717,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.topicLabelHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -8507,7 +8805,7 @@
     {
       "kind": "operator",
       "id": "cluster_label",
-      "digest": "d9f09cffd9efa2a28aef4252267a46c8def0b63435b9130554f10adeb91d213d",
+      "digest": "162904a4c380224fe99478550d8a669ec660e75e6304b2ab1062e9916f64385c",
       "manifest": {
         "identity": {
           "id": "cluster_label",
@@ -8640,7 +8938,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cluster_text_col",
@@ -8653,7 +8953,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cluster_summary_col",
@@ -8666,7 +8968,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cluster_on_fail",
@@ -8692,7 +8996,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cluster_max_groups",
@@ -8705,7 +9011,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cluster_sample_n",
@@ -8718,7 +9026,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.clusterLabelHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -8801,7 +9111,7 @@
     {
       "kind": "operator",
       "id": "cluster_review",
-      "digest": "61fa913a4e940dc75049e1bd854c311429ba262efbd25f4c77951f6cc2450357",
+      "digest": "d3613e09f2a574d60b6d76801ebd6b1ac507d45a73a22f878286cc08b102920a",
       "manifest": {
         "identity": {
           "id": "cluster_review",
@@ -8990,7 +9300,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_label_col",
@@ -9003,7 +9315,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_name_col",
@@ -9016,7 +9330,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_freq_col",
@@ -9029,7 +9345,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_summary_col",
@@ -9042,7 +9360,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_on_fail",
@@ -9068,7 +9388,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_max_groups",
@@ -9081,7 +9403,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "review_members",
@@ -9094,7 +9418,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.clusterReviewHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -9178,7 +9504,7 @@
     {
       "kind": "operator",
       "id": "reply_graph",
-      "digest": "217642fcea8abdafa453e2c562c4a465ee5217314b2b6144a67705db163ed623",
+      "digest": "45c84ca0941c20d29621f1c98f9eb5d0e8f6d9612ef08c01a78496fb89884af9",
       "manifest": {
         "identity": {
           "id": "reply_graph",
@@ -9282,7 +9608,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "reply_floor_col",
@@ -9295,7 +9623,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "reply_parent_col",
@@ -9308,7 +9638,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "reply_article_col",
@@ -9321,7 +9653,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.replyGraphHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -9413,7 +9747,7 @@
     {
       "kind": "operator",
       "id": "compare_platform",
-      "digest": "c6661eb9967221e46b0be4bfeadd55e65fe5200026af6e26baf15fe9ebb6cb3c",
+      "digest": "b9db03bdfbed6bf7d577c5c4d5edbb5075143df336fd58fcf7cbf3d60eb7d00a",
       "manifest": {
         "identity": {
           "id": "compare_platform",
@@ -9504,7 +9838,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "compare_value_col",
@@ -9517,7 +9853,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "compare_agg",
@@ -9539,7 +9877,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.compareHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -9621,7 +9961,7 @@
     {
       "kind": "operator",
       "id": "topic_map",
-      "digest": "8084742549f7c89672b1a7ecb71f62cf79fbbdc327ab3752c26ae2f44219e0a0",
+      "digest": "cc5fc1a0885006cca3d2b625dbd4b5e14d7c709bc60bb4b2fa6905b853d90108",
       "manifest": {
         "identity": {
           "id": "topic_map",
@@ -9758,7 +10098,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "n_topics",
@@ -9771,7 +10113,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_method",
@@ -9797,7 +10141,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "embedding_model",
@@ -9810,7 +10156,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_topn",
@@ -9823,7 +10171,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_max_features",
@@ -9836,7 +10186,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.topicMapHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -9909,7 +10261,7 @@
     {
       "kind": "operator",
       "id": "topic_salience",
-      "digest": "d474a8cdcbffeefc7c8fe1dc038944594b08ef1a26dfec95f5b95ee7b2131ccd",
+      "digest": "7be5184d251df586f9b861519bfa784ca254aa145f683be307ff9ebe6082eeb1",
       "manifest": {
         "identity": {
           "id": "topic_salience",
@@ -10060,7 +10412,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "n_topics",
@@ -10073,7 +10427,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_method",
@@ -10099,7 +10455,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "embedding_model",
@@ -10112,7 +10470,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_topn",
@@ -10125,7 +10485,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_lambda",
@@ -10138,7 +10500,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_max_features",
@@ -10151,7 +10515,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.topicSalienceHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -10224,7 +10590,7 @@
     {
       "kind": "operator",
       "id": "topic_timeline",
-      "digest": "424a4aba5e2cd52199ff001c92240c74853a428aa4bfe8a6e5bafaa991ffa998",
+      "digest": "e8ac566c2c49800effd971a2c3b65e52aea65fb254b7d33f0291b896403908ce",
       "manifest": {
         "identity": {
           "id": "topic_timeline",
@@ -10363,7 +10729,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "timeline_topic_col",
@@ -10376,7 +10744,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "timeline_words_col",
@@ -10389,7 +10759,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "timeline_size_col",
@@ -10402,7 +10774,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "timeline_order_col",
@@ -10415,7 +10789,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "timeline_overlap",
@@ -10428,7 +10804,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.timelineHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -10520,7 +10898,7 @@
     {
       "kind": "operator",
       "id": "topic_flow",
-      "digest": "1ec2438b5f2caff196b8c628079c061c6b8d8138cb343e104813f8506d804d36",
+      "digest": "5cf803392a7430771e570c995f8224aaf131c79df9845d717ca781f25c95f5ef",
       "manifest": {
         "identity": {
           "id": "topic_flow",
@@ -10673,7 +11051,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_topic_col",
@@ -10686,7 +11066,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_words_col",
@@ -10699,7 +11081,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_weights_col",
@@ -10712,7 +11096,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_order_col",
@@ -10725,7 +11111,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_label_col",
@@ -10738,7 +11126,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "flow_min_similarity",
@@ -10751,7 +11141,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.flowHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -10843,7 +11235,7 @@
     {
       "kind": "operator",
       "id": "topic_coherence",
-      "digest": "a00ad042282e4f08c721c8a075ba26cd3274d39aac414cd10d5ffe04a075db68",
+      "digest": "081d3324d0dccb707a2c615d3b93c6681b5972bcf574527ac06ab53794bc980d",
       "manifest": {
         "identity": {
           "id": "topic_coherence",
@@ -10969,7 +11361,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "coherence_min_topics",
@@ -10982,7 +11376,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "coherence_max_topics",
@@ -10995,7 +11391,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_topn",
@@ -11008,7 +11406,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "coherence_max_documents",
@@ -11021,7 +11421,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "topic_max_features",
@@ -11034,7 +11436,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.coherenceHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -11108,7 +11512,7 @@
     {
       "kind": "operator",
       "id": "cooccur",
-      "digest": "8c9f7cb5d22485f2ae23b27588ebf3f20324be672178c2323dfcb38de7136d59",
+      "digest": "a087cfc34bee3bdda3c43f11797b47fd2dcb2f5718c3f7d7358a682876febd81",
       "manifest": {
         "identity": {
           "id": "cooccur",
@@ -11210,7 +11614,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cooccur_topn",
@@ -11223,7 +11629,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cooccur_min_count",
@@ -11236,7 +11644,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "cooccur_window",
@@ -11249,7 +11659,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.cooccurHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -11322,7 +11734,7 @@
     {
       "kind": "operator",
       "id": "sentiment_evolution",
-      "digest": "ac68960229df876605e495406f5921fe1a6479d61a7cfc07c55d9069252c2591",
+      "digest": "771087c4d0c3b3313d8758318ee40b2aefaa5dec38c2f68a831712efcbf3208c",
       "manifest": {
         "identity": {
           "id": "sentiment_evolution",
@@ -11476,7 +11888,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_col",
@@ -11489,7 +11903,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "index_new_col",
@@ -11502,7 +11918,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_positive",
@@ -11515,7 +11933,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_neutral",
@@ -11528,7 +11948,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "label_negative",
@@ -11541,7 +11963,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "score_col",
@@ -11554,7 +11978,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "evolution_order_col",
@@ -11567,7 +11993,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.evolutionHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -11640,7 +12068,7 @@
     {
       "kind": "operator",
       "id": "forecast",
-      "digest": "20091d17f322117e500552c6800a8643b972ebceb4011c757327a3d7364cbd13",
+      "digest": "6a932b5fe763dbadcb31cd6ed42b11d3f32f0cd47a04967b02f205ce204447f2",
       "manifest": {
         "identity": {
           "id": "forecast",
@@ -11835,7 +12263,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_value_col",
@@ -11848,7 +12278,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_method",
@@ -11878,7 +12310,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_horizon",
@@ -11891,7 +12325,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_window",
@@ -11904,7 +12340,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_season",
@@ -11917,7 +12355,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_alpha",
@@ -11930,7 +12370,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_beta",
@@ -11943,7 +12385,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_gamma",
@@ -11956,7 +12400,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "forecast_min_periods",
@@ -11969,7 +12415,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.forecastHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {
@@ -12052,7 +12500,7 @@
     {
       "kind": "operator",
       "id": "alert",
-      "digest": "49784cceae22340beeed8108e872fe60f62fbdfcfa1361e6606e4599e7dc4910",
+      "digest": "3ed5cb3f7890aa34a3ed8f2ec70db9a6d91c0da065e8d34d98ac9d54647a8cdd",
       "manifest": {
         "identity": {
           "id": "alert",
@@ -12213,7 +12661,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_index_col",
@@ -12226,7 +12676,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_intensity_col",
@@ -12239,7 +12691,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_volume_col",
@@ -12252,7 +12706,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_streak",
@@ -12265,7 +12721,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_swing",
@@ -12278,7 +12736,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_heating",
@@ -12291,7 +12751,9 @@
             "option_label_prefix": "",
             "hint_key": "",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           },
           {
             "key": "alert_volume_floor",
@@ -12304,7 +12766,9 @@
             "option_label_prefix": "",
             "hint_key": "settings.alertHint",
             "placeholder": "",
-            "hide_when": []
+            "hide_when": [],
+            "role_keys": [],
+            "toggle_param": ""
           }
         ],
         "execution": {

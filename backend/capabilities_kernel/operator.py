@@ -123,6 +123,12 @@ class PanelField:
     #: ``(param, (values…))``: hide this box while another box holds one of those values (the
     #: comparison's operand box is pointless for ``is_null``/``not_null``).
     hide_when: tuple = ()
+    #: ``control='roles'``: the two roles of a two-table step, worded by these two catalogue keys
+    #: ("filtered table" / "basis"), and the checkbox whose state decides which wired parent fills
+    #: which. A virtual box: it writes nothing, so it needs no canonical parameter.
+    role_keys: tuple = ()
+    toggle_param: str = ''
+    #: ``control='note'``: a sentence above the boxes, no input (a virtual box too).
 
 
 @dataclass(frozen=True)
@@ -262,6 +268,8 @@ class OperatorManifest:
             if key not in names:
                 found.append(f'reads: {key!r} is not a declared parameter')
         panel_keys: set[str] = set()
+        box_keys = {box.key for box in self.panel}
+        controls = ('text', 'number', 'select', 'checkbox', 'note', 'roles')
         for box in self.panel:
             if not str(box.key or '').strip():
                 found.append('panel: a box has no key')
@@ -269,10 +277,19 @@ class OperatorManifest:
             if box.key in panel_keys:
                 found.append(f'panel.{box.key}: declared twice')
             panel_keys.add(box.key)
-            if box.canonical not in names:
+            virtual = box.control in ('note', 'roles')
+            if not virtual and box.canonical not in names:
                 found.append(f'panel.{box.key}: canonical {box.canonical!r} is not a declared parameter')
-            if box.control not in ('text', 'number', 'select', 'checkbox'):
-                found.append(f'panel.{box.key}.control: {box.control!r} is not text/number/select/checkbox')
+            if box.control not in controls:
+                found.append(f'panel.{box.key}.control: {box.control!r} is not one of {", ".join(controls)}')
+            if box.control == 'note' and not str(box.hint_key or '').strip():
+                found.append(f'panel.{box.key}: a note needs hint_key')
+            if box.control == 'roles':
+                if len(box.role_keys) != 2:
+                    found.append(f'panel.{box.key}: roles needs two role keys')
+                toggle = self.param(box.toggle_param)
+                if toggle is None or toggle.type != 'boolean':
+                    found.append(f'panel.{box.key}.toggle_param: {box.toggle_param!r} is not a boolean parameter')
             if box.control == 'select' and not box.options and not box.options_param:
                 found.append(f'panel.{box.key}: a select needs options')
             if box.options_param:
@@ -287,8 +304,8 @@ class OperatorManifest:
                     found.append(f'panel.{box.key}.options: {value!r} has no label')
             if box.hide_when:
                 param, values = box.hide_when
-                if param not in names:
-                    found.append(f'panel.{box.key}.hide_when: {param!r} is not a declared parameter')
+                if param not in box_keys:
+                    found.append(f'panel.{box.key}.hide_when: {param!r} is not another declared box')
                 if not values:
                     found.append(f'panel.{box.key}.hide_when: no values')
         if self.reads.mapping and self.param('mapping') is None:

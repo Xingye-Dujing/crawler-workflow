@@ -1485,7 +1485,8 @@ def _panel_blocks() -> list:
     # the field names read as ordinary string literals.
     body = body.replace("\\'", "'")
     conditions = list(_OP_CONDITION.finditer(body))
-    blocks = [(None, body[: conditions[0].start()])]
+    # With every operation declared in its manifest the body is only the operation picker.
+    blocks = [(None, body[: conditions[0].start()])] if conditions else [(None, body)]
     for index, match in enumerate(conditions):
         stop = conditions[index + 1].start() if index + 1 < len(conditions) else len(body)
         ops = [match.group(1)] if match.group(1) else re.findall(r"'([^']*)'", match.group(2))
@@ -1517,7 +1518,11 @@ def _panel_fields(op: str) -> set:
 
     entry = next((row for row in kernel.operator_entries() if row['id'] == op), None)
     if entry and entry.get('panel'):
-        return {box['key'] for box in entry['panel']}
+        return {
+            box['key']
+            for box in entry['panel']
+            if box.get('control') not in ('note', 'roles') and str(box.get('canonical') or '')
+        }
     fields = set()
     for ops, written in _panel_blocks():
         if ops and op in ops:

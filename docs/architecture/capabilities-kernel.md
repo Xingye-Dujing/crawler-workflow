@@ -201,10 +201,12 @@ AI 词汇表里的 CatBus-only 平台（京东/淘宝/快手/TikTok/闲鱼）不
 `ai.knowledge` 与 `engine.workflow` 的薄封装，所以终端或编辑器里看到的能力不会比产品多一个。
 
 浏览器侧同理：`/api/node-types` 现在同时服务 `types`、`charts` 与 `operators`（`registry.operator_entries()`
-= id/词/分组/声明的参数/读列/写形状），`panels/node-analysis.js` 的“步骤”下拉因此直接渲染清单，
-不再持有 `ANALYSIS_OPS` 字面表；冷页的 `node-types-fallback.js` 也带同一份 `operators`，所以页面在
-fetch 完成前就有可用的下拉。算子的**字段块**仍是手写的（下一片：字段名与 `normalize_analysis_params`
-的映射一起搬进清单）。
+= id/词/分组/声明的参数/读列/写形状/表单盒子），`panels/node-analysis.js` 的“步骤”下拉与**全部 37 个算子的
+字段**都由清单渲染——`renderOperatorPanel` 按 `panel` 的声明顺序画 text/number/select/checkbox，另有两个
+虚拟控件：`note`（一行业务提示、无输入）与 `roles`（双表步骤的“过滤表/基准表”实时角色行，随
+`toggle_param` 指向的复选框更新）。冷页的 `node-types-fallback.js` 也带同一份 `operators`，所以页面在
+fetch 完成前就有可用的下拉。`services.analysis.params` 的翻译表未动：面板键（`topic_topn`、`phase_new_col`）
+仍由它映射到规范参数，清单只声明“哪一格属于哪个参数”。
 
 ## 已迁移的例子
 
