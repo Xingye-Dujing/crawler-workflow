@@ -8,7 +8,7 @@
   页面模型：列表按什么翻页（按钮 / 窗口 / 元素自己的滚动盒）、嵌套内容是否只在展开器后、哪个容器装行、页面真印了哪些列。
   错的页面模型不会报错，它会让汇总、存储、预览三方对一张页面从未给过的表达成一致。**向页面要分母（它自己印的计数），
   按那个分母判分。**
-- **矩阵是“这个平台能采什么”的唯一答案。** `capabilities/platforms/<id>.py` 声明模式、每模式字段（控件、默认、下限、
+- **矩阵是“这个平台能采什么”的唯一答案。** `capabilities_kernel/platforms/<id>/manifest.py` 声明模式、每模式字段（控件、默认、下限、
   上限、必填、`fed_by`）、跑哪个爬虫方法、`region`；`registry.py` 回答查询；`nodes/executors/source.py` 派发；
   `engine/workflow.py::validate` 拒绝；`GET /api/capabilities` 把同一份描述交给面板。新平台/模式是**一条矩阵项**，
   不是四个文件里的 `if platform == …`。字段标签是前端键、必填名是后端键（`field.*`），由
@@ -213,7 +213,7 @@
 - **不假装做不到的事。** CatBus 没有偏移/游标：源节点续跑重放清单、账本挡重复；跨运行水位只界定入库行，这必须打印
   （`catbus.watermarkNote`）；评论逐链接起进程，`url_index` 只记已证明的连续前缀，partial 链接进 `skipped_targets`。
 - **只读能力才进清单，引擎是一等维度。** `write()` 声明的命令带 `mutating: true`，生成时机械排除，`msg *` 另按资源拒绝，
-  适配器测试从 `vocab.ts` 清点 `write(` 与 `mutating` 双向核对。`capabilities/registry.py` + `capabilities/platforms/<id>.py`
+  适配器测试从 `vocab.ts` 清点 `write(` 与 `mutating` 双向核对。`capabilities/registry.py` + `capabilities_kernel/platforms/<id>/manifest.py`
   从清单物化 CatBus 独有模式，`modes_for/mode_for/mode_of_node/crawl_kwargs` 按引擎发问，`as_dict()` 给平台 `engines`、给模式
   `engines` + `cells`；不可运行的一对**列着、置灰、点名**；没被适配器消费的数据条件按名拒绝
   （`catbus_bridge.declared_params`），默认值不算条件。

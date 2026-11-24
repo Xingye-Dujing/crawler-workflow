@@ -46,7 +46,7 @@ $env:CIXI_DRIVER_PATH='C:\path\to\chromedriver.exe'
 
 | 要加的东西 | 位置 | 禁止 |
 |---|---|---|
-| 平台模式/字段 | `capabilities/platforms/<id>.py` + `crawlers/platforms/<id>/` | 在节点/前端加矩阵没有的选项 |
+| 平台模式/字段 | `capabilities_kernel/platforms/<id>/manifest.py` + `crawlers/platforms/<id>/` | 在节点/前端加矩阵没有的选项 |
 | 节点类型 | `nodes/catalog.py` + `nodes/executors/<type>.py` + 注册表 | 前端另写节点表 |
 | 分析算子 | `services/analysis/ops/<op>.py` + 契约/`LLM_OPS` | 静默降级 |
 | 图表 | `services/charts/registry.py` 一条 `ChartSpec` | 改渲染不声明读取列 |

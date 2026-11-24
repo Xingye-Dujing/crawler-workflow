@@ -7,7 +7,7 @@
 
 - 清单：`backend/capabilities_kernel/nodes/source/manifest.py`
 - 行为：`backend/nodes/executors/source.py`
-- 矩阵：`backend/capabilities/platforms/<平台>.py`
+- 矩阵：`backend/capabilities_kernel/platforms/<平台>/manifest.py`
 - 契约测试：`tests/unit/capabilities/test_source_manifest.py`
 
 ## 参数

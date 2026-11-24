@@ -6,14 +6,15 @@ description: Add, change or debug one social-platform crawler in 采析绘 — i
 # Crawler platform work
 
 Read first: `AGENTS.md` → crawler rules pointer, `docs/crawler_rules.md`, the platform's section in
-`docs/crawler_notes.md`, and `backend/capabilities/platforms/<id>.py`. Measurements live in the
-notes, not in guesses.
+`docs/crawler_notes.md`, and `backend/capabilities_kernel/platforms/<id>/manifest.py`. Measurements
+live in the notes, not in guesses.
 
 ## File map
 
 ```text
-backend/capabilities/platforms/<id>.py   # ONE matrix entry: modes, fields, engines, requirements
-backend/capabilities/fields.py           # shared field atoms and mode factories
+backend/capabilities_kernel/platforms/<id>/manifest.py  # ONE capability: modes, fields, engines, requirements, skill
+backend/capabilities_kernel/platforms/_fields.py        # shared field atoms and mode factories
+backend/capabilities_kernel/platform.py                 # Field/Mode/PlatformManifest value types
 backend/crawlers/platforms/<id>/crawler.py  # Selenium list/mode walk; one class per mode family
 backend/crawlers/platforms/<id>/comments.py # comment walk (if the site supports comments)
 backend/crawlers/platforms/<id>/rows.py / overlay.py / dialogs.py
@@ -55,7 +56,9 @@ catbus 的 `.claude/skills/catbus/` 复制），`docs_search` 按任务取其中
 
 ## Recipe: a new list mode
 
-1. Add the mode to `capabilities/platforms/<id>.py` with its fields, engines and requirements.
+1. Add the mode to `capabilities_kernel/platforms/<id>/manifest.py` (`platform_manifest(...)`), reusing
+   the shared atoms/factories from `platforms/_fields.py`; each `Mode` carries fields, engines,
+   requirements and `collects`.
 2. Implement the walk in `crawlers/platforms/<id>/crawler.py`; return rows through the shared
    contract, not a bespoke dict.
 3. Make the node's `emit_columns`/`read_columns` agree with the matrix and the row builder.

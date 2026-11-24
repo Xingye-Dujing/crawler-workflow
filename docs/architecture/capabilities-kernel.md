@@ -125,7 +125,8 @@ backend/capabilities_kernel/
 - `services/validation/engine.py`：`Rule` 与 `validators` 的唯一求值器；`engine/workflow.py` 不再为任何节点类型写 if 分支。
 - `nodes/schema.py`（血缘）：清单声明的 `emit_columns`/`read_columns` 指向 executor 的同一个函数。
 - `manifest.digest()`：声明内容的 SHA-256，供生成物 freshness 门禁使用。
-- 六个固定生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）与能力页面（技能 `docs/capabilities/skills/<kind>s/`、算子说明 `docs/capabilities/operators/`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- 六个固定生成物（`catalog.json`/`openapi.json`/`ai_tools.json`/`capability-schema.json`/`node-types-fallback.js`/`docs/capabilities/index.md`）与能力页面（技能 `docs/capabilities/skills/<kind>s/`、算子说明 `docs/capabilities/operators/`、图表 `charts/`、平台 `platforms/`）由 `tools/gen_capabilities.py` 渲染；`tests/unit/gates/test_capability_completeness.py` 的 `generate.check()` 拒绝陈旧字节。
+- 另有两份来自别的工具的生成物：`docs/capabilities/matrix.md`（能力 × 测试矩阵，`tools/gen_capability_matrix.py`）与 `docs/testing/value-inventory.md`（测试价值清单，`tools/test_inventory.py`），各自的门禁拒绝陈旧页面。
 - `tools/doctor.py`：同一组事实的逐项勾选（含 validator 可解析），`--capability node:<id>` 只看一个能力。
 
 ## 算子清单（`operator` kind）

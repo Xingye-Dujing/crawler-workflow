@@ -51,12 +51,16 @@ backend/services/biblio/                   # importers, metrics, charts, formats
 
 ## Recipe: add an analysis op
 
-1. Add `ops/<op>.py` with the function and its `STEP_PARAMS`/contract entry where shared.
-2. Declare what it reads and emits; if it replaces the table, add the emitted columns to
-   `STEP_REPLACE`/the contract test.
-3. If it is LLM-backed, add it to `LLM_OPS`, consume `ctx['llm']`, and handle cancel/未处理.
-4. Add the panel label in both languages and a frontend `ANALYSIS_OPS` entry only if the renderer
-   needs one (server payload is the authority).
+1. Add `ops/<op>.py` with the function, and its `capabilities_kernel/operators/<op>/manifest.py`
+   (`reads`/`writes`/`enums`/`panel`); the analysis tables (`STEP_PARAMS`, write tables, `OPS`,
+   `LLM_OPS`) are projections of that manifest — never edit them by hand.
+2. Declare what it reads and emits in the manifest (`reads.one/some/nonblank/mapping`) and the output
+   shape (`writes=replace/add/...`); the lineage view and the chart contracts read those.
+3. If it is LLM-backed, set `needs_llm=True` (it joins `LLM_OPS`), consume `llm`/`cancel`/`store`, and
+   leave rows `未处理` on Stop so the node settles PARTIAL.
+4. Declare the settings form in `panel=(...)` with `PanelField` (text/number/select/checkbox, plus the
+   `note`/`roles` virtual controls); the panel renders it, so no `panels/node-analysis.js` edit and no
+   `ANALYSIS_OPS` entry is needed.
 5. Add unit cases for the column contract + a tiny frame; add a chart contract case if it feeds one.
 6. Update `docs/analysis.md` if the visible behavior changed.
 

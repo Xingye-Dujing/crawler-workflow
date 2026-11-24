@@ -29,7 +29,7 @@
   支持一个条目”，下个条目就会复制出第二份，两份必然漂移。
 - **平台采集是插件。** `crawlers/platforms/__init__.py` 的说明就是契约：`<id>/crawler.py` 放该站的选择器、端点、
   页面内 JS、行里的列名；`<id>/comments.py` 同理；共享机械只在 `crawlers/engine/` 与 `crawlers/core/`。能力声明
-  `capabilities/platforms/<id>.py` 与爬虫目录一一对应，`test_capabilities_layout` 钉住“一个文件一个平台、顺序即面板
+  `capabilities_kernel/platforms/<id>/manifest.py` 与爬虫目录一一对应，`test_capabilities_layout` 钉住“一个清单一个平台、顺序即面板
   顺序、不向上导入”。`capabilities/registry.py` 曾经是 1577 行、九个平台同处的模块；拆开的代价正是为了消灭
   “加一个平台要改五个文件”的漏改。
 - **共享工厂可以收一个通用参数，平台文件自己回答。** 例如评论表单的 `comment_mode(..., replies=True)`：共享层只
