@@ -70,7 +70,9 @@ def running(app_module, monkeypatch):
     # The back-off now wakes on the run's cancel_event; a fresh unset one says
     # "nobody stopped" so the retry path is the only variable under test.
     monkeypatch.setitem(app_module.execution_state, 'cancel_event', threading.Event())
-    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.01)
+    # The product reads the back-off from its settings store now; patching the old Config constant
+    # left the real 45 s wait in place, which is why this file used to cost 90 s.
+    monkeypatch.setattr(_source_plugin(), 'get_setting', lambda key: 0.01 if key == 'wall_retry_backoff' else None)
     state.reset_console_state()
     return app_module.execution_state
 
@@ -161,7 +163,7 @@ def test_a_stop_cut_short_the_back_off_cancels_the_retry(app_module, running, mo
     import threading
     import time
 
-    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 30)
+    monkeypatch.setattr(_source_plugin(), 'get_setting', lambda key: 30 if key == 'wall_retry_backoff' else None)
     running['cancel_event'] = threading.Event()
     running['cancel_event'].set()
     crawler = _Crawler()
@@ -176,7 +178,7 @@ def test_a_live_back_off_ends_by_itself_and_allows_the_retry(app_module, running
     proving the previous test's False came from the cancel, not from a broken wait."""
     import threading
 
-    monkeypatch.setattr(app_module.Config, 'WALL_RETRY_BACKOFF', 0.05)
+    monkeypatch.setattr(_source_plugin(), 'get_setting', lambda key: 0.05 if key == 'wall_retry_backoff' else None)
     running['cancel_event'] = threading.Event()
     crawler = _Crawler()
     assert _source_plugin().backoff_for_retry(crawler, 'weibo') is True

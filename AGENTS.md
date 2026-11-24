@@ -172,6 +172,10 @@ repository root.
   that asserts nothing without a recorded reason (the reasons live in the tool), and a no-assert
   total other than **zero** — every such case was rewritten to state its claim. A skip is allowed
   only for a fact of the OS/environment — an unconditional one is a case that proves nothing here.
+- **The fast tier has a measured budget** (`docs/testing/performance.md`, currently **11:36** against a
+  ≤12 min budget; the 8 min target waits on a clock seam for fake drivers). A change that adds real
+  waiting says so in the commit and updates the doc; a 10 s case is a stale seam before it is a
+  performance problem.
 
 - **Isolation happens at conftest import; the suite fails if `data/` or `logs/` gains a byte.**
 - **A warning is a test that noticed something and passed anyway — fix it, never mute it** (no `filterwarnings`).

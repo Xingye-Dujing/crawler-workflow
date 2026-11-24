@@ -83,6 +83,11 @@
   被用户当场纠正。判据不是“这次改了几个文件”，而是“它能破坏哪些域”：那次是 analysis/frontend/capabilities/api/gates，
   跑这五个域即可（5557 passed，约 7 分钟），全量留给下一批收口。跳过全量时，在提交说明里写明跑了哪些域，
   让 CI（每次 push 的三系统 fast + ruff + 两个 pylint tier）当兜底。
+- **一个还在给已废弃常量打补丁的测试会“通过”，代价是把真实超时等满。** 产品把
+  `Config.WALL_RETRY_BACKOFF` 改成读设置里的 `wall_retry_backoff` 之后，`test_collision_retry.py`
+  仍在补丁旧常量，于是每次都等满 45 秒；`has_more=false` 的行走仍在向站点要下一页，等满 10 秒窗口×8。
+  单例超过 10 秒先问“它补丁的对象/product 读的对象是同一个吗”，再谈性能。实测与预算见
+  `docs/testing/performance.md`。
 - **隔离发生在 conftest 导入时。** collection 先导入所有模块，而 `app.py` 在导入那刻就把路径冻进单例，晚一步的迁移无效。
 - **两个 pytest 会话可以同时跑，所以清理只能回收“空着”的旧根。** 每个会话的临时根按 pid 命名，但“保留最新三个”的清理会把**正在跑的那个**根删掉——
   最长的那次运行按 mtime 永远是最旧的。它的 `data/`、`settings.json`、数据库在一半消失，于是那次全量报出十几个彼此无关的失败

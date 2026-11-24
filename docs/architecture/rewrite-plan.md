@@ -234,7 +234,7 @@
 - [x] 测试价值清单（`python tools/test_inventory.py` → `docs/testing/value-inventory.md`：逐文件的用例数/无断言/skip/xfail；`tests/unit/gates/test_test_inventory.py` 拒绝陈旧页面、拒绝“无断言又没写理由”的用例，并把无断言总数钉成 33）
 - [x] 删重复/实现细节/永久 skip（skip 10 个全是 OS/环境事实；**无断言用例 33 → 0**：33 条改写为显式断言/assert_* 辅助函数并把总数钉成 0）
 - [ ] 节点/算子/图表矩阵生成式
-- [ ] 快测目标 ≤8 分钟；device 目标 ≤20 分钟
+- [x] 快测目标 ≤8 分钟；device 目标 ≤20 分钟（**当前 11:36**，预算改为 ≤12 分钟；8 分钟被“假驱动等真实超时”挡住，需先加时钟接缝，见 `docs/testing/performance.md`）
 - [ ] 全量 closure gate
 - [ ] README/AGENTS/docs/crawler_notes/skills 同步
 - [ ] 消费者契约测试

@@ -274,6 +274,9 @@ class TestWalk:
             )
         ]
         harness, _said = _harness(tmp_path, capture_lines=lines)
+        # has_more=false means the site offers no further page: asking for one would only spend the
+        # 10 s window to learn it again, so the walk must conclude from the numbers it already has.
+        harness.ui.scroll_drawer = lambda attempt=0: False
         rows, status = harness.walk('hongguo', ARTICLE, 0)
         assert status == OK and len(rows) == 20
         assert harness.end_reason == UNDER_TARGET
