@@ -235,7 +235,11 @@ def _effective_bert_model(op: str, params: dict) -> str:
     return named or str(params.get('bert_model') or '').strip() or default_model_path_for(op)
 
 
-def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
+def emit_columns(
+    node: dict,
+    merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str] | None:
     """The process op's own column table, or unknown for the data-dependent ops.
 
     ``OUTPUT_REPLACE_COLUMNS`` / ``OUTPUT_ADD_COLUMNS`` are declared beside the op itself; this is

@@ -908,7 +908,7 @@
           "result_key_column"
         ]
       },
-      "emit_columns": "",
+      "emit_columns": "nodes.executors.verify:emit_columns",
       "read_columns": "nodes.executors.verify:read_columns"
     },
     {

@@ -183,7 +183,11 @@ def _output_of(params: dict, upstream: list[str] | None) -> list[str] | None:
     return cols
 
 
-def emit_columns(node: dict, merged: list[str] | None) -> list[str] | None:
+def emit_columns(
+    node: dict,
+    merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str] | None:
     return _output_of(node_params(node), merged)
 
 

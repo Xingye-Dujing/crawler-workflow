@@ -39,7 +39,12 @@ MANIFEST = Manifest(
         ParamSpec(name='swap_tables', type='boolean', default=False, widget='switch'),
         ParamSpec(name='ignore_case', type='boolean', default=False, widget='switch'),
     ),
-    ports=Ports(rows='table', inputs=2, read_columns='nodes.executors.verify:read_columns'),
+    ports=Ports(
+        rows='table',
+        inputs=2,
+        emit_columns='nodes.executors.verify:emit_columns',
+        read_columns='nodes.executors.verify:read_columns',
+    ),
     execution=Execution(handler='nodes.executors.verify:run'),
     validators=('nodes.executors.verify:validate_node',),
     ui=Ui(form='custom', custom_renderer='verify'),

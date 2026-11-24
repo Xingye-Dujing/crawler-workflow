@@ -35,7 +35,7 @@ sandbox.fetch = async () =>
     );
 
 const events = [];
-await sandbox.AIStream.post('/api/ai/chat', {}, (event) => events.push(event));
+await sandbox.AIStream.post('/chat', {}, (event) => events.push(event));
 
 /* The runtime chip and the skill selector are the two surfaces that tell a desktop or cloud user
    what this host can do; drive the real methods rather than a copied table. */

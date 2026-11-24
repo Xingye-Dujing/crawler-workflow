@@ -5,7 +5,7 @@
     {
       "kind": "node",
       "id": "name",
-      "digest": "96a1b3525068cc15c8a4b176a6d1dd019425b5c742ca7bcb539e95c38a08659b",
+      "digest": "0d06d25f7aad72b027aea9de3823d80273c3c3e0eb22c0edcffe0839771a6e39",
       "manifest": {
         "identity": {
           "id": "name",
@@ -51,7 +51,8 @@
           "rows": "none",
           "inputs": 0,
           "emit_columns": "nodes.executors.name:emit_columns",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.name:run",
@@ -145,7 +146,7 @@
     {
       "kind": "node",
       "id": "source",
-      "digest": "5ba1b35907fb71d5e7874275e330bb1b55b0099a4144aa401ed6293ebc0bb846",
+      "digest": "d0246621f3b394bf5ed8cdcf65202d84a84f92459379b01e861e71f187d4ce28",
       "manifest": {
         "identity": {
           "id": "source",
@@ -162,7 +163,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": "a crawl table's columns come from the platform and mode, which no static view sees"
         },
         "execution": {
           "handler": "nodes.executors.source:run",
@@ -244,7 +246,7 @@
     {
       "kind": "node",
       "id": "upload",
-      "digest": "5afa5214398ec81b767fb6282ff04b52518d490df088bd82df7997fc90aa8a00",
+      "digest": "5b3a83e0e6dc165bc923b9b5b37c19f2def243cc41fef862a0da7fcdd86013b8",
       "manifest": {
         "identity": {
           "id": "upload",
@@ -304,7 +306,8 @@
           "rows": "table",
           "inputs": 0,
           "emit_columns": "nodes.executors.upload:emit_columns",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.upload:run",
@@ -384,7 +387,7 @@
     {
       "kind": "node",
       "id": "resume",
-      "digest": "c7bb4e75b181ae30918625de5db0ad08dc97c5b967f852bfe90f9ad2193528c5",
+      "digest": "7d679a6694495a01e01f46e552ca18c51d9e66223afbb8152a77911540fb750e",
       "manifest": {
         "identity": {
           "id": "resume",
@@ -444,7 +447,8 @@
           "rows": "table",
           "inputs": 0,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": "the adopted table's columns belong to the earlier run's node, not to this canvas"
         },
         "execution": {
           "handler": "nodes.executors.resume:run",
@@ -519,7 +523,7 @@
     {
       "kind": "node",
       "id": "comment",
-      "digest": "ccde31b5a4728dba1480c62cb6ff51b3d4d4d612783362d2d9d128f44147c104",
+      "digest": "0404ec4f7c2d6ab3e5999aa0fcd36e8522ae3dc8abe3e959a839149b3cfb7ee1",
       "manifest": {
         "identity": {
           "id": "comment",
@@ -638,7 +642,8 @@
           "rows": "table",
           "inputs": 0,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": "a comment table is the platform's own columns, built at run time"
         },
         "execution": {
           "handler": "nodes.executors.comment:run",
@@ -731,7 +736,7 @@
     {
       "kind": "node",
       "id": "process",
-      "digest": "fc2e6f89c41e2ac41c9eee8e10fdc2041b7747655077cac417b500e9f1e600f4",
+      "digest": "7f59c629bdc6784ddafb5c85cd8fc850c858737353f7e32d626ee1eb4387bc36",
       "manifest": {
         "identity": {
           "id": "process",
@@ -836,7 +841,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "nodes.executors.process:emit_columns",
-          "read_columns": "nodes.executors.process:read_columns"
+          "read_columns": "nodes.executors.process:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.process:run",
@@ -922,7 +928,7 @@
     {
       "kind": "node",
       "id": "python",
-      "digest": "d83ae2671245b1e6c031687920111ca56bf3cfe9ede104412459f385af9a2114",
+      "digest": "ea8745dac5ee4423f44061372337a04690d2a4fb4728736d67ff2a171edae63f",
       "manifest": {
         "identity": {
           "id": "python",
@@ -996,7 +1002,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": "the saved script decides its own output columns (CIXI_OUTPUT)"
         },
         "execution": {
           "handler": "nodes.executors.python_node:run",
@@ -1074,7 +1081,7 @@
     {
       "kind": "node",
       "id": "analysis",
-      "digest": "daff9c02c3189df5f8db9fad29c82eaf8b2f6a039d7a2ee29ad82462e2cbac3a",
+      "digest": "600f008330d88d0437162640d20d8e2ddc9e393ba41bbf2a37b73b2071aaae8f",
       "manifest": {
         "identity": {
           "id": "analysis",
@@ -1204,7 +1211,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "nodes.executors.analysis:emit_columns",
-          "read_columns": "nodes.executors.analysis:read_columns"
+          "read_columns": "nodes.executors.analysis:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.analysis:run",
@@ -1279,7 +1287,7 @@
     {
       "kind": "node",
       "id": "tokenize",
-      "digest": "e599c14e802732ff0f6534b808d9c92a007dfb67d0cbaf8a372dfc62af583f3c",
+      "digest": "9ea58a5c7120aa825b019d9338c0a11a1add698a9ee36d90d646e38e8db75de8",
       "manifest": {
         "identity": {
           "id": "tokenize",
@@ -1343,7 +1351,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "nodes.executors.tokenize:emit_columns",
-          "read_columns": "nodes.executors.tokenize:read_columns"
+          "read_columns": "nodes.executors.tokenize:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.tokenize:run",
@@ -1426,7 +1435,7 @@
     {
       "kind": "node",
       "id": "biblio",
-      "digest": "6a1f467932ea3ae82eb74036dd403a693d33848b4559cf279242eb2130061b14",
+      "digest": "bda5965cf61487dab673ffce019569c39898f37382be828b6dcb99cf2f48f946",
       "manifest": {
         "identity": {
           "id": "biblio",
@@ -2287,7 +2296,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "nodes.executors.biblio:emit_columns",
-          "read_columns": "nodes.executors.biblio:read_columns"
+          "read_columns": "nodes.executors.biblio:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.biblio:run",
@@ -2376,7 +2386,7 @@
     {
       "kind": "node",
       "id": "verify",
-      "digest": "1318897d6762d68b5bb9c74ddc0068825bf558d9cf0bc251bba9b43adefe4457",
+      "digest": "3b3a90072dfd1a9b82bfb6c33808263c7153d72d86de8d5bce54a2f8e3c402d4",
       "manifest": {
         "identity": {
           "id": "verify",
@@ -2522,8 +2532,9 @@
         "ports": {
           "rows": "table",
           "inputs": 2,
-          "emit_columns": "",
-          "read_columns": "nodes.executors.verify:read_columns"
+          "emit_columns": "nodes.executors.verify:emit_columns",
+          "read_columns": "nodes.executors.verify:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.verify:run",
@@ -2602,7 +2613,7 @@
     {
       "kind": "node",
       "id": "fuse",
-      "digest": "02493c3b2b5c931c79f92371c4d0ca86012b4fdfede4124977e27b440bd9f3a2",
+      "digest": "4035b2d677f33982adb52ac9ce1c40f08264938e27e7ece600efde0e464a4e9d",
       "manifest": {
         "identity": {
           "id": "fuse",
@@ -2774,7 +2785,8 @@
           "rows": "table",
           "inputs": -1,
           "emit_columns": "nodes.executors.fuse:emit_columns",
-          "read_columns": "nodes.executors.fuse:read_columns"
+          "read_columns": "nodes.executors.fuse:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.fuse:run",
@@ -2859,7 +2871,7 @@
     {
       "kind": "node",
       "id": "accumulate",
-      "digest": "159c8c6764d6b57b527caf6d28ed312b4a209f7d6ff105afd29ef40509d978da",
+      "digest": "fe7e9426fd468e876140c47b52c2485c3c1fcd074676ac532bbc6bc6d9babac4",
       "manifest": {
         "identity": {
           "id": "accumulate",
@@ -2922,7 +2934,8 @@
           "rows": "table",
           "inputs": 1,
           "emit_columns": "nodes.executors.accumulate:emit_columns",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.accumulate:run",
@@ -3000,7 +3013,7 @@
     {
       "kind": "node",
       "id": "visualize",
-      "digest": "44d61a0290e8b7ee1da53df6d9fb632b38107e3df2dffd9f1f3cb1321bd061af",
+      "digest": "d6fdbfa21c711359909383027c030a98242aa8773cdd0222f2005ddcb329ef5e",
       "manifest": {
         "identity": {
           "id": "visualize",
@@ -3158,7 +3171,8 @@
           "rows": "pdf",
           "inputs": -1,
           "emit_columns": "",
-          "read_columns": "nodes.executors.visualize:read_columns"
+          "read_columns": "nodes.executors.visualize:read_columns",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.visualize:run",
@@ -3239,7 +3253,7 @@
     {
       "kind": "node",
       "id": "compile",
-      "digest": "6258074515dea77dc663936a57b74d7ce67f974856e84627e867a95e66c7324f",
+      "digest": "c3d07e4b9f862a4e2e140cb5a6c275216cd0570035928bfe6c5feeab132aa25b",
       "manifest": {
         "identity": {
           "id": "compile",
@@ -3256,7 +3270,8 @@
           "rows": "pdf",
           "inputs": -1,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": ""
         },
         "execution": {
           "handler": "nodes.executors.compile:run",
@@ -3326,7 +3341,7 @@
     {
       "kind": "node",
       "id": "output",
-      "digest": "f8853869317dcfaa46e8aba479ba11b472ddee24a524d4cf0b4322ab23abadaf",
+      "digest": "5c0ca8ad82f2a973b13398db274618e4c2fc0e97441999d36c6d898716f4f2fb",
       "manifest": {
         "identity": {
           "id": "output",
@@ -3386,7 +3401,8 @@
           "rows": "table",
           "inputs": -1,
           "emit_columns": "",
-          "read_columns": ""
+          "read_columns": "",
+          "opaque": "a terminal: it writes the incoming table to disk and emits no table of its own"
         },
         "execution": {
           "handler": "nodes.executors.output:run",

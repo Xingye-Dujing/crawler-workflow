@@ -11,10 +11,48 @@
   当场纠正的那次：只改了算子下拉与相关测试，却准备跑全量）。
 - 用户语言中文；歧义要问；后端/Python 改动只用 edit/write，禁止脚本重写仓库文件。
 
-- 日期：2026-11-24
+- 日期：2026-11-25
 - 分支：`main`
-- 最后提交：`d533e057 修改：收口批——去掉两份重复规则，修好 device tier 的陈旧测试并验通 CatBus`（已推 GitHub + Gitee，CI 触发）；框架仓库 `9e1e66a`（0.1.26）
-- 工作区：W7 第 3 件（游标/账本值对象）的改动在本地未提交
+- 最后提交：`44af8e05 重构：严格模式工具预算——排序没话可说时不裁剪（框架 0.1.29）`（已推 GitHub + Gitee，CI 触发）；
+  框架仓库 `7887558`（0.1.29）
+- 工作区：R1（列契约 + `Ports.opaque`）与 P5 收尾改动在本地未提交
+
+## R1：列契约只有一个答案，看不见的表要说出理由（2026-11-25）
+
+`rewrite-plan` 的 R1 记的是“`resume`/`verify`/`python` 三个产出表的节点没有 `ports.emit_columns`”。量下来三件事：
+
+- **`verify` 能算，而且必须用每根线算。** 它的报告是**清单那一侧**的列 + 五个审计列（`采集状态`/`应有数量`/
+  实际数量/缺失数量/完成度），而行是 `dict(清单行)` 再 update。`compute_columns` 原来只给钩子 fan-in 的**并集**，
+  而并集里还有结果表的列（`评论内容`…）：照并集建模会把它们也承诺给下游，于是一个读结果列的节点静态检查通过、
+  运行期才按名失败——正是 R1 想消掉的那类“两种报法”。
+  所以钩子签名扩成 `emit_columns(node, merged, parents)`：`parents` 是按连线顺序的父列（`None` 表示那根线未知），
+  两表节点自己回答“哪一根是清单”，`swap_tables` 就在同一处翻转。其余 8 个钩子只加了一个不用的形参。
+- **`resume`/`python` 算不出来，`output` 是终点。** 复用节点的列属于上一轮的那个节点、Python 的列来自脚本的
+  `CIXI_OUTPUT`、终点只把进来的表写到磁盘。给它们编一个形状就是把“不知道”写成“知道”。
+- **于是沉默不再是答案。** `Ports` 新增 `opaque: str`（具名理由），`Manifest.problems()` 加一条：`kind='node'` 且
+  `rows='table'` 的清单必须有 `emit_columns` 或 `opaque`，两者同时出现也报错。这条规则被完整度门禁和
+  `tools/doctor.py --all` 的 `structure` 行同时读到（同一份 `problems()`，两扇门不会互相矛盾）。五个清单各自写下
+  理由：`comment`（平台自己的列）、`source`（平台 × 模式）、`resume`（上一轮的表）、`python`（脚本的输出）、
+  `output`（终点）。
+
+产物已重新生成（`tools/gen_capabilities.py`）：`ai_tools.json`/`capability-schema.json`/`catalog.json`/
+`node-types-fallback.js`/`docs/capabilities/index.md`。**所有节点的 digest 都变了**——digest 覆盖整个 `Ports`，
+新增字段（即使为空）也是声明的一部分，这是它的本意，不是噪音。
+
+测试：`tests/unit/capabilities/test_verify_manifest.py::TestTheOutputContract` 六条（清单侧、`swap_tables`、
+结果列绝不承诺、审计列去重、未知/单线仍未知、真实图按连线顺序走一遍）；`test_node_schema.py` 的未建模集合去掉
+`verify`，并新增一条“未建模的表必须在清单里写明理由”。
+
+## P5 收尾：切换是既成事实，清掉测试里的旧端点字样（2026-11-25）
+
+P4/P5 收口（2026-11-23）已经把前端全部切到 `/api/ai/ws`、删掉 `api/ai.py` 与旧引擎、`ai_workspace` 开关也已移除
+（`runtime/flags.py` 的 `FLAGS` 为空）。这次只做了两件收尾：
+
+- `tests/frontend/harness_ai.mjs` 里 `AIStream.post('/api/ai/chat', …)` 改成 `/chat`——门已经把路径拼到
+  `AI_BASE` 后面，旧写法实际请求的是 `/api/ai/ws/api/ai/chat`，只在桩下“碰巧对”。
+- `harness_ai_workspace.mjs` 的注释还写着“`/api/ai/answer` 404s”，改成回答路由的说法。
+
+核对：`backend/static/js` 里没有一处非 `/api/ai/ws` 的 AI 调用，`backend/api/ai.py` 不存在。
 
 ## W5 收尾：AI 面板的 fetch 收口 + js_budget 铺到全页（2026-11-25）
 

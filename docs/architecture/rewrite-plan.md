@@ -39,7 +39,7 @@
 
 | # | 事实 | 验收 |
 |---|---|---|
-| R1 | `resume`/`verify`/`python` 三个产出表的节点没有 `ports.emit_columns`；`output` 是终点，可解释 | 三个清单声明 `emit_columns`，`doctor.py --all` 与完整性门禁全绿 |
+| R1 | ~~`resume`/`verify`/`python` 三个产出表的节点没有 `ports.emit_columns`；`output` 是终点，可解释~~ **已完成（2026-11-25）** | 能算的算（`verify` 的报告列）、算不出的具名（`Ports.opaque`），`Manifest.problems()` + `doctor --all` + 完整性门禁全绿 |
 | R2 | ~~`core/asset.py` 的 `DataAsset` 无人 import；节点输出没有资产身份~~ **已完成（2026-11-24）** | `node_assets` 行 + `input_sha` 血缘（`engine/run/asset.py`），`test_no_dead_modules` 的豁免已删 |
 
 ### 框架自身的层

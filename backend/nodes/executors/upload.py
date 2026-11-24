@@ -17,7 +17,11 @@ from nodes.context import NodeCall, node_params
 from services.datasets.frames import json_safe_records as _json_safe_records
 
 
-def emit_columns(node: dict, _merged: list[str] | None) -> list[str] | None:
+def emit_columns(
+    node: dict,
+    _merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str] | None:
     """The columns the referenced dataset really holds, read from its stored meta.
 
     No ``dataset_id`` (or a dataset that is gone) is UNKNOWN, never an empty list: the lineage

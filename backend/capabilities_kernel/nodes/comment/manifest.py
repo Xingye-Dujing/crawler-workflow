@@ -39,7 +39,11 @@ MANIFEST = Manifest(
         ParamSpec(name='recrawl', type='boolean', default=False, widget='switch'),
         ParamSpec(name='format', type='string', default='csv', enum=('csv', 'json'), widget='select'),
     ),
-    ports=Ports(rows='table', inputs=0),
+    ports=Ports(
+        rows='table',
+        inputs=0,
+        opaque="a comment table is the platform's own columns, built at run time",
+    ),
     execution=Execution(handler='nodes.executors.comment:run'),
     rules=(
         Rule(

@@ -747,7 +747,7 @@ out.answerRefs = {
 };
 
 /* A restored pending card has no live message element. The answer request must still carry the
-   assistant row that asked it, or /api/ai/answer 404s with "找不到消息：". */
+   assistant row that asked it, or the answer route refuses the row by name ("找不到消息："). */
 workspace._messages = [];
 workspace._conversationId = 'c-restored';
 workspace._current = null;

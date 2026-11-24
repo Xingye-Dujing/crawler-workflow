@@ -249,6 +249,12 @@
   `services.validation.contracts` 记录优先、`emit_columns` 兜底，引擎按清单的 `ports.read_columns` 报
   `engine.missing_column`；任一上游未知就沉默。前端只渲染 `validation.perNode`——一份 `reads × columns` 的 JS 差集
   会在服务端已经有答案时再造一个会漂移的判官。
+  **“看不见”是要说出来的第三种答案，不是沉默**：`rows='table'` 的节点要么声明 `emit_columns`，要么在 `ports.opaque`
+  写出为什么运行前不知道列（爬虫的平台列、复用的上一轮表、Python 脚本的 `CIXI_OUTPUT`、终点）。沉默曾被当成“没有列”，
+  而下游无法区分两者——`engine.missing_column` 会因此漏报，运行期再按名失败。现在它是一条 `Manifest.problems()` 失败。
+  **一个钩子拿到的是每根线，不只是并集**：`verify` 的报告是清单那一侧的列加五个审计列；并集会把结果表的列（`评论内容`）
+  也承诺给下游，于是读结果列的节点静态检查通过、运行期才失败。所以 `emit_columns(node, merged, parents)` 同时给出
+  按连线顺序的父列，两表节点自己回答“哪一根是清单”。
   **运行后才知道的质量事实由能力的 `postcheck` 说出来，而且不能改状态**：`postcheck(node, rows, inputs)` 在节点
   DONE 之后运行，只打一行控制台（`engine.empty_output` 这类 warning）；行已经产出并存好，把完成节点改成失败既救不回
   数据，又会让 继续 重跑一遍。哪些 0 行是用户要的答案（`filter_rows`/`join_tables`/`anti_join`）必须写在能力自己的

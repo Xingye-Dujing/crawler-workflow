@@ -30,7 +30,11 @@ MANIFEST = Manifest(
         when_to_use='When the corpus is a platform search, a board, an author page or a link list.',
     ),
     params=(),
-    ports=Ports(rows='table', inputs=1),
+    ports=Ports(
+        rows='table',
+        inputs=1,
+        opaque="a crawl table's columns come from the platform and mode, which no static view sees",
+    ),
     execution=Execution(handler='nodes.executors.source:run'),
     validators=('nodes.executors.source:validate_node',),
     ui=Ui(form='custom', custom_renderer='source', defaults_from='capabilities'),

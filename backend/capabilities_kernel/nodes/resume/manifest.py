@@ -33,7 +33,11 @@ MANIFEST = Manifest(
         ParamSpec(name='resume_node_id', type='string', default='', widget='text'),
         ParamSpec(name='resume_limit', type='integer', default=0, minimum=0, widget='number'),
     ),
-    ports=Ports(rows='table', inputs=0),
+    ports=Ports(
+        rows='table',
+        inputs=0,
+        opaque="the adopted table's columns belong to the earlier run's node, not to this canvas",
+    ),
     execution=Execution(handler='nodes.executors.resume:run'),
     ui=Ui(form='custom', custom_renderer='resume'),
     ai=Ai(

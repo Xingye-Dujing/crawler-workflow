@@ -41,7 +41,11 @@ def validate_node(node: dict, context) -> list[dict]:
     return problems
 
 
-def emit_columns(node: dict, merged: list[str] | None) -> list[str]:
+def emit_columns(
+    node: dict,
+    merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str]:
     """The record table a biblio node writes, from the fixed columns of its entity type."""
     return biblio_output_columns(node_params(node), merged or [])
 

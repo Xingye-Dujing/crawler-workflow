@@ -55,7 +55,11 @@ def validate_node(node: dict, context) -> list[dict]:
     return problems
 
 
-def emit_columns(_node: dict, merged: list[str] | None) -> list[str] | None:
+def emit_columns(
+    _node: dict,
+    merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str] | None:
     """It appends rows and passes the table through, so the schema IS the upstream schema
     (unknown when the upstream is unknown)."""
     return merged

@@ -65,10 +65,10 @@ OUTPUT_MODES = ('gaps', 'all')
 def read_columns(node: dict) -> list[str]:
     """The columns the audit will read from its fan-in, so diagnostics can flag a typo.
 
-    Diagnostics compares these against the UNION of both parents (the run's fan-in does not
-    tell the static view which wire is which), which is the honest reach of the check: a name
-    neither table holds is provably wrong, while a name only the other table holds is a role
-    mistake this view cannot see.
+    Diagnostics compares these against the UNION of both parents, which is the honest reach of a
+    READ check: a name neither table holds is provably wrong, while a name only the other table
+    holds is a role mistake. ``emit_columns`` below can be stricter because it is handed the wires
+    in order.
     """
     params = node_params(node)
     found = [
@@ -77,6 +77,31 @@ def read_columns(node: dict) -> list[str]:
         str(params.get('expected_count_column') or '').strip(),
     ]
     return [column for column in found if column]
+
+
+def emit_columns(
+    node: dict,
+    _merged: list[str] | None,
+    parents: list[list[str] | None] | None = None,
+) -> list[str] | None:
+    """The report keeps the LIST's own columns and appends the five audit ones.
+
+    ``merged`` cannot answer this: the fan-in union also carries the result table's columns
+    (评论内容/评论作者 …), which the report never has — promising them would let a downstream read
+    of a result-only column pass validation and then fail at run time. The ordered wires can: the
+    first is the list, the second the result, and ``swap_tables`` flips them. Two wires are required
+    for that to be knowable; with fewer (or an unknown list side) the answer is None.
+    """
+    if not parents or len(parents) != 2:
+        return None
+    order = list(parents)
+    if as_bool(node_params(node).get('swap_tables'), False):
+        order.reverse()
+    list_columns = order[0]
+    if list_columns is None:
+        return None
+    columns = list(dict.fromkeys(str(column) for column in list_columns))
+    return columns + [column for column in REPORT_COLUMNS if column not in columns]
 
 
 def validate_node(node: dict, context) -> list[dict]:

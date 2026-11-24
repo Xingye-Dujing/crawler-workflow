@@ -66,7 +66,10 @@ a defect, not a shortcut.
   + one `nodes/executors/<type>.py` registered through it; the browser reads `/api/node-types` → `node-types.js`, never a
   second list. A form is `ui.form='schema'` (the generic renderer draws its params) or `ui.custom_renderer='<id>'` (the
   owning module registers it with `registerSettingsRenderer`); `openSettings` has no per-type if chain, and an unknown
-  renderer is refused by name in the panel.
+  renderer is refused by name in the panel. **A table either declares its columns or says why it cannot**: `Ports` carries
+  `emit_columns` (the lineage hook, handed `merged` plus the parent wires in order) or `opaque` (a named reason: a
+  platform's crawl columns, an adopted run's table, a script's own output). Silence is a `Manifest.problems()` failure —
+  to a consumer it reads exactly like "no columns to check".
 - **Analysis ops**: one `services/analysis/ops/<op>.py` + the `OPS` table; add its enum/contract/gate in the same
   change (`contracts.py`, `validate_step`, the gate tests).
 - **Chart types**: one `ChartSpec` in `services/charts/registry.py` (fields, roles, required boxes, own

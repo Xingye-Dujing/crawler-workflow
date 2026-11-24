@@ -33,7 +33,11 @@ MANIFEST = Manifest(
         ParamSpec(name='timeout', type='integer', default=120, minimum=1, maximum=3600, widget='number'),
         ParamSpec(name='max_rows', type='integer', default=200000, minimum=1, widget='number'),
     ),
-    ports=Ports(rows='table', inputs=1),
+    ports=Ports(
+        rows='table',
+        inputs=1,
+        opaque='the saved script decides its own output columns (CIXI_OUTPUT)',
+    ),
     execution=Execution(handler='nodes.executors.python_node:run'),
     ui=Ui(form='custom', custom_renderer='python'),
     ai=Ai(

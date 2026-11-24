@@ -33,7 +33,11 @@ MANIFEST = Manifest(
         ParamSpec(name='format', type='string', default='csv', widget='text'),
         ParamSpec(name='filename', type='string', default='export.csv', widget='text'),
     ),
-    ports=Ports(rows='table', inputs=-1),
+    ports=Ports(
+        rows='table',
+        inputs=-1,
+        opaque='a terminal: it writes the incoming table to disk and emits no table of its own',
+    ),
     execution=Execution(handler='nodes.executors.output:run'),
     validators=('nodes.executors.output:validate_node',),
     ui=Ui(form='custom', custom_renderer='output'),

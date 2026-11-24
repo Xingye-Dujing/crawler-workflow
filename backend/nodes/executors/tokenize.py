@@ -26,7 +26,11 @@ OUTPUT_COLUMNS: dict[str, tuple[str, ...]] = {
 READ_PARAMS = ('text_column',)
 
 
-def emit_columns(node: dict, _merged: list[str] | None) -> list[str]:
+def emit_columns(
+    node: dict,
+    _merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str]:
     """What this node emits, per ``output_mode`` — the table above is the whole answer."""
     mode = str(node_params(node).get('output_mode') or 'word_freq')
     return list(OUTPUT_COLUMNS.get(mode, ()))

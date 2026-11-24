@@ -24,7 +24,11 @@ def validate_node(node: dict, _context) -> list[dict]:
     return fuse.collect_problems(node.get('params') or {})
 
 
-def emit_columns(_node: dict, _merged: list[str] | None) -> list[str]:
+def emit_columns(
+    _node: dict,
+    _merged: list[str] | None,
+    _parents: list[list[str] | None] | None = None,
+) -> list[str]:
     """A fusion node's output is a fixed contract, not a projection of its inputs: that is the
     whole point — downstream reads canonical names whatever the sources called their columns."""
     return list(fuse.OUTPUT_COLUMNS)

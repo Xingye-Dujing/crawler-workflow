@@ -10,12 +10,16 @@ missing-column flag: the whole point is to never tell the user a column is absen
 we cannot actually see the table (AGENTS: refuse by name, never guess a shape).
 
 **A node type's column rule lives with the node type.** A plugin in ``nodes/executors/<type>.py``
-may declare ``emit_columns(node, merged)``; this module walks the graph, folds the fan-in and asks.
-A plugin that declares nothing is unknown — that is the answer, not a gap: ``source``, ``comment``,
-``resume``, ``output``, ``compile`` and ``visualize`` are exactly the nodes whose table no static
-view can see. The old shape (one 340-line module holding eighteen ``elif ntype == …`` branches,
-with the process/analysis/biblio/fuse/upload rules written inside it) meant a new node type
-silently answered "unknown" from a chain nobody had edited.
+may declare ``emit_columns(node, merged, parents)``; this module walks the graph, folds the fan-in
+and asks. ``merged`` is the union of the parent columns in wire order (``None`` when any parent is
+unknown); ``parents`` is the same information per wire, for the two-table nodes whose role is the
+connection order (``verify`` keeps only the list's columns and appends its audit ones). A plugin
+that declares no hook is opaque — and its manifest names the reason (``ports.opaque``), so "no
+columns to check" is a statement, never a silence: ``source``, ``comment``, ``resume``, ``output``,
+``compile`` and ``visualize`` are exactly the nodes whose table no static view can see. The old
+shape (one 340-line module holding eighteen ``elif ntype == …`` branches, with the
+process/analysis/biblio/fuse/upload rules written inside it) meant a new node type silently
+answered "unknown" from a chain nobody had edited.
 
 A consumer's declared reads are its manifest's ``ports.read_columns``; ``services.validation``
 checks them against the producer's recorded or declared shape, so this module holds no second
@@ -80,7 +84,8 @@ def compute_columns(nodes: dict, connections: list) -> dict:
         if emit is None:
             out[nid] = None  # no declared contract: unknown, never a guess
         else:
-            out[nid] = emit(node, _merged_columns(out, upstream.get(nid, [])))
+            parents = [out.get(parent_id) for parent_id in upstream.get(nid, [])]
+            out[nid] = emit(node, _merged_columns(out, upstream.get(nid, [])), parents)
     return out
 
 

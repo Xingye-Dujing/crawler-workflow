@@ -4,7 +4,7 @@
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
 - 文件：**453**
-- 用例（定义数，参数化会展开成更多次运行）：**8739**
+- 用例（定义数，参数化会展开成更多次运行）：**8746**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -186,7 +186,7 @@
 | `tests/unit/analysis/test_ner.py` | 38 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_node_plugins.py` | 11 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_node_results_apply.py` | 3 | 0 | 0 | 0 |
-| `tests/unit/analysis/test_node_schema.py` | 26 | 0 | 0 | 0 |
+| `tests/unit/analysis/test_node_schema.py` | 27 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_operator_cache_measure.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_qualitative_coding.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/analysis/test_quantitative_cache_scope.py` | 4 | 0 | 0 | 0 |
@@ -235,7 +235,7 @@
 | `tests/unit/capabilities/test_tokenize_manifest.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/capabilities/test_upload_manifest.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/capabilities/test_validation_engine.py` | 32 | 0 | 0 | 0 |
-| `tests/unit/capabilities/test_verify_manifest.py` | 9 | 0 | 0 | 0 |
+| `tests/unit/capabilities/test_verify_manifest.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/capabilities/test_visualize_manifest.py` | 12 | 0 | 0 | 0 |
 | `tests/unit/charts/test_chart_preflight.py` | 12 | 0 | 0 | 0 |
 | `tests/unit/charts/test_chart_registry.py` | 30 | 0 | 0 | 0 |

@@ -101,6 +101,11 @@ class Ports:
 
     ``emit_columns``/``read_columns`` are ``module:function`` references rather than callables: the
     manifest must stay importable without pandas, and only the lineage view needs to resolve them.
+
+    ``opaque`` is the named reason a table has no static column contract: a crawl's columns are the
+    site's, an adopted run's are the earlier run's, a Python script's are the script's. A table
+    either declares ``emit_columns`` or says why it cannot — silence is a defect, because it reads
+    downstream exactly like "this table has no columns to check".
     """
 
     rows: str = 'table'
@@ -108,6 +113,9 @@ class Ports:
     inputs: int = 1
     emit_columns: str = ''
     read_columns: str = ''
+    #: Why this table's columns cannot be known before a run. Required only when ``emit_columns``
+    #: is absent and ``rows == 'table'``.
+    opaque: str = ''
 
 
 @dataclass(frozen=True)
@@ -289,6 +297,20 @@ class Manifest:
             found.append(f'ports.rows: {self.ports.rows!r} is not one of {", ".join(ROW_SHAPES)}')
         if self.ports.inputs < -1:
             found.append(f'ports.inputs: {self.ports.inputs} is not -1/0/1/2…')
+        # A table's columns are either declared or named as unknowable. Silence used to be the
+        # third answer, and it is indistinguishable from "no columns" to every consumer.
+        if (
+            self.identity.kind == 'node'
+            and self.ports.rows == 'table'
+            and not self.ports.emit_columns
+            and not str(self.ports.opaque or '').strip()
+        ):
+            found.append('ports.opaque: a table with no emit_columns must name why its columns are unknowable')
+        if self.ports.emit_columns and str(self.ports.opaque or '').strip():
+            found.append('ports.opaque: a declared emit_columns and an opaque reason contradict each other')
+        for reference in (self.ports.emit_columns, self.ports.read_columns):
+            if reference and ':' not in reference:
+                found.append(f'ports: {reference!r} is not module:function')
         if not str(self.execution.handler or '').strip():
             found.append('execution.handler: empty')
         elif ':' not in self.execution.handler:

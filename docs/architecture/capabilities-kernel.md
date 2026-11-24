@@ -23,7 +23,7 @@ backend/capabilities_kernel/
 |---|---|---|
 | 身份 | `Identity` | id/kind/version/标题键/分组/目录位置/何时使用 |
 | 参数 | `ParamSpec` | JSON Schema 子集（type/default/enum/min/max/required）+ 表单 widget/label/placeholder/hint 键 |
-| 端口 | `Ports` | 行形状、输入数、`emit_columns`/`read_columns` 的 `module:function` |
+| 端口 | `Ports` | 行形状、输入数、`emit_columns`/`read_columns` 的 `module:function`、“列不可知”的具名理由 `opaque` |
 | 执行 | `Execution` | 懒加载的 `module:function`、控制台静默策略 |
 | 验证 | `Rule` | 运行前的声明式拒绝（`required_param`/`enum_param`/`upstream_required`/`no_input`/`requires_output`）、`validators` 指向的节点专属检查，以及可选的 `preflight`（对上游样本的数据检查） |
 | UI | `Ui` | 默认 schema 表单（可带 `hint_key`），或 `custom_renderer` 逃生口 |
@@ -54,7 +54,8 @@ backend/capabilities_kernel/
 “这个节点的表有哪些列”有两个来源，强弱不同：
 
 - **记录的形状**：节点结算时（`run_store.finish_node(..., schema=rows)`）把本次真实输出的列并集写进 `node_schema`（排序后的列名 + `schema_hash`），与 `(run_id, node_id)` 一起存，按 `node_fingerprint` 读取。爬虫的列静态看不见，这里就是唯一答案；一次运行后下游就能核对。没有行的表不写形状——空表不能证明“没有列”。
-- **声明的契约**：`ports.emit_columns` 经 `nodes.schema.compute_columns` 折叠 fan-in，回答“第一次运行之前它应该有哪些列”。
+- **声明的契约**：`ports.emit_columns` 经 `nodes.schema.compute_columns` 折叠 fan-in，回答“第一次运行之前它应该有哪些列”。钩子拿到两个东西：`merged`（父列表按连线顺序的并集，任一未知则 `None`）和 `parents`（同一条信息按每根线分开）。单表节点用前者；两表节点（`verify`）用后者——它的报告是**清单那一侧**的列加五个审计列，用并集会把结果表的列也承诺出去。
+- **看不见的表要说出来**：一个 `rows='table'` 的节点要么声明 `emit_columns`，要么在 `ports.opaque` 写出为什么它的列在运行前不可知（爬虫的平台列、复用的上一轮表、Python 脚本自己的 `CIXI_OUTPUT`、终点节点）。沉默曾是第三种答案，而它对下游与“没有列”长得一模一样；现在它是 `Manifest.problems()` 的一条失败，`doctor --all` 与完整度门禁都会报。
 
 `services.validation.contracts.columns_for(workflow)` 在**有效图**上取“记录优先、声明兜底”的 `{节点: 列|None}`；`None` 是“未知”，不是“没有列”。`WorkflowEngine.validate_detailed(columns=...)` 对每个声明了 `ports.read_columns` 的消费者，把所有**数据父节点**（name 不算数据）的列取并集，读列表里不在并集里的列按名报 `engine.missing_column`；任一父节点未知就整条检查沉默（`name` 父节点不占数据槽）。这正是引擎自己的 fan-in 语义，所以 verify/fuse/join 的两侧读法一致。读钩子抛错报 `engine.read_columns_failed`，不 500。
 

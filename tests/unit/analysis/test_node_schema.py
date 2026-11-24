@@ -317,10 +317,11 @@ class TestTheTablesLiveWithTheirOwners:
 
 
 #: Node types whose table no static view can see — declared, not defaulted.
-#: ``verify`` is here on purpose: its report is "the list's own columns plus five computed
-#: ones", and the static model is handed the UNION of both parents — modelling it would promise
-#: the result table's columns, which the node never emits.
-UNMODELLED_OUTPUTS = {'comment', 'compile', 'output', 'resume', 'source', 'verify', 'visualize', 'python'}
+#: Each one's manifest also names the reason (``ports.opaque``), so the answer is stated where the
+#: node is declared rather than only here. ``verify`` left this set when the emit hook started
+#: receiving the wires in order: its report is the list's columns plus five, and the union of both
+#: parents would have promised the result table's columns too.
+UNMODELLED_OUTPUTS = {'comment', 'compile', 'output', 'resume', 'source', 'visualize', 'python'}
 
 #: Node types that read named columns from their input.
 COLUMN_READERS = {'analysis', 'biblio', 'fuse', 'process', 'tokenize', 'verify', 'visualize'}
@@ -356,6 +357,20 @@ class TestTheContractIsDeclaredPerPlugin:
         assert not declared & UNMODELLED_OUTPUTS, (
             f'a declared plugin is still listed as unmodelled: {sorted(declared & UNMODELLED_OUTPUTS)}'
         )
+
+    def test_an_unmodelled_table_names_why_in_its_manifest(self):
+        """Silence read as "no columns" downstream; the reason is now declared, not implied."""
+        from capabilities_kernel import registry
+
+        tableless = []
+        for node_type in sorted(UNMODELLED_OUTPUTS):
+            manifest = registry.manifest_for_node(node_type)
+            if manifest.ports.rows != 'table':
+                tableless.append(node_type)  # `compile`/`visualize` carry a pdf, not a table
+                continue
+            assert manifest.ports.opaque, f'{node_type} emits a table with no stated reason'
+            assert not manifest.ports.emit_columns, f'{node_type} declares both a hook and a reason'
+        assert tableless == ['compile', 'visualize'], f'a table type slipped past the rule: {tableless}'
 
     def test_a_reader_is_a_plugin_that_declares_one(self):
         plugins = self._plugins()

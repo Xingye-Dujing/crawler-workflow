@@ -1908,7 +1908,7 @@ window.NODE_TYPE_CATALOGUE = {
       "ports": {
         "rows": "table",
         "inputs": 2,
-        "emitColumns": "",
+        "emitColumns": "nodes.executors.verify:emit_columns",
         "readColumns": "nodes.executors.verify:read_columns"
       },
       "ui": {
