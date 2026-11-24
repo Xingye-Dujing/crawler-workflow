@@ -16,6 +16,38 @@ function analysisOps() {
        a form nobody can submit. */
     return ids.length ? ids : ['drop_null'];
 }
+/* The operator's form profile from the capability manifests; null before the catalogue loads. */
+function analysisOperator(op) {
+    if (typeof NodeTypes === 'undefined' || !NodeTypes.operator) return null;
+    return NodeTypes.operator(op);
+}
+
+/* A migrated operator renders exactly the boxes its manifest declares, in declaration order.
+   An empty ``panel`` means the hand-written block below still draws it: the migration shrinks. */
+function renderOperatorPanel(nodeId, p, profile) {
+    var html = '';
+    (profile.panel || []).forEach(function (field) {
+        if (field.hideWhen && field.hideWhen.length === 2) {
+            if ((field.hideWhen[1] || []).indexOf(p[field.hideWhen[0]]) >= 0) return;
+        }
+        if (field.control === 'select') {
+            html += renderParamSelect(nodeId, p, field.key, field.labelKey, field.default,
+                (field.options || []).map(function (o) {
+                    return { v: o.value, l: o.labelKey ? I18n.t(o.labelKey) : o.value };
+                }));
+        } else if (field.control === 'checkbox') {
+            html += renderParamCheckbox(nodeId, p, field.key, field.labelKey, field.default);
+        } else {
+            html += renderParamInput(nodeId, p, field.key, field.labelKey, field.control, field.default, field.placeholder);
+        }
+        if (field.hintKey) {
+            html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
+                I18n.t(field.hintKey) + '</div></div>';
+        }
+    });
+    return html;
+}
+
 /* The matching modes a two-table step offers, pinned against
    services/analysis/matching.MATCH_MODES by tests/api/test_analysis_api.py. */
 var MATCH_MODES = ['exact', 'trim', 'url', 'text', 'similar'];
@@ -37,53 +69,18 @@ function renderAnalysisSettings(nodeId, p) {
         '</select></div>';
 
     var op = p.operation || 'drop_null';
-    if (['drop_null', 'fill_null', 'drop_duplicates', 'select_columns', 'strip_whitespace'].indexOf(op) >= 0) {
+    /* A migrated operation's boxes come from its manifest; the blocks below are the shrinking rest. */
+    var profile = analysisOperator(op);
+    if (profile && profile.panel && profile.panel.length) {
+        return html + renderOperatorPanel(nodeId, p, profile);
+    }
+    if (['select_columns', 'strip_whitespace'].indexOf(op) >= 0) {
         html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.columns') + '</label>' +
             '<input class="settings-input" value="' + escapeHtml(p.columns || '') + '" placeholder="col1, col2 (empty = all)" ' +
             'onchange="updateParam(\'' + nodeId + '\',\'columns\',this.value)"></div>';
     }
-    if (op === 'drop_null') {
-        /* 'any' drops a row with one empty cell, 'all' only when every selected
-           cell is empty — the two produce very different tables, so the choice
-           has to be on the panel and not buried in a default. */
-        html += renderParamSelect(nodeId, p, 'how', 'settings.dropHow', 'any',
-            [{ v: 'any', l: I18n.t('settings.dropHowAny') }, { v: 'all', l: I18n.t('settings.dropHowAll') }]);
-    }
-    if (op === 'drop_duplicates') {
-        /* Exact text and normalised text are different questions about the same table: a
-           comment farm's repost is a NEW string and the same comment. Naming both here is
-           what keeps the node from answering the second while the user asked the first. */
-        html += renderParamSelect(nodeId, p, 'mode', 'settings.dedupeMode', 'exact',
-            [{ v: 'exact', l: I18n.t('settings.dedupeModeExact') },
-             { v: 'normalized', l: I18n.t('settings.dedupeModeNormalized') }]);
-    }
-    if (op === 'dedupe_similar') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
-            renderParamInput(nodeId, p, 'max_distance', 'settings.dedupeDistance', 'number', 8) +
-            '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.dedupeSimilarHint') + '</div></div>';
-    }
-
-    /* Model-backed similarity steps. The encoder is a real local model; a blank model name falls
-       back to the declared small Chinese encoder, and an unavailable explicit name refuses. */
-    if (op === 'semantic_dedupe') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
-            renderParamInput(nodeId, p, 'model', 'settings.bertModel', 'text', 'BAAI/bge-small-zh-v1.5') +
-            renderParamInput(nodeId, p, 'threshold', 'settings.semanticThreshold', 'number', 0.92);
-    }
-    if (op === 'similar_to') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>' +
-            renderParamInput(nodeId, p, 'model', 'settings.bertModel', 'text', 'BAAI/bge-small-zh-v1.5') +
-            renderParamInput(nodeId, p, 'query', 'settings.queryText', 'text', '') +
-            renderParamInput(nodeId, p, 'top_k', 'settings.topK', 'number', 10);
-    }
-
+    /* The model-backed similarity steps and the dedupe of near-duplicates are migrated: their
+       boxes come from the manifests. */
     /* ── The event study: when, which subjects, and which way the crowd leaned ──
        These four are the paper-replication steps. They share one shape — name the
        column, name the new column — so they are rendered together rather than one
@@ -326,15 +323,6 @@ function renderAnalysisSettings(nodeId, p) {
         html += renderParamInput(nodeId, p, 'evolution_order_col', 'settings.evolutionOrderColumn', 'text', '');
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.evolutionHint') + '</div></div>';
-    }
-    if (op === 'fill_null') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.value') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.value || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'value\',this.value)"></div>';
-        /* A method and a literal value are different operations; leaving method
-           empty means "fill with the value above". */
-        html += renderParamSelect(nodeId, p, 'method', 'settings.fillMethod', '',
-            [{ v: '', l: I18n.t('settings.fillMethodValue') }, { v: 'ffill', l: 'ffill' }, { v: 'bfill', l: 'bfill' }]);
     }
     if (op === 'filter_rows') {
         /* The condition is READ IN FULL WORDS rather than as the wire token (`ne`, `not_in`):

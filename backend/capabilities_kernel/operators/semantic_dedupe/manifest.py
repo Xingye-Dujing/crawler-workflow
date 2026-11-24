@@ -1,7 +1,8 @@
 """Drop semantically duplicate rows using a local sentence encoder."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN, MODEL
 
 MANIFEST = operator_manifest(
     'semantic_dedupe',
@@ -20,4 +21,9 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMN,
+        MODEL,
+        PanelField('threshold', 'threshold', 'settings.semanticThreshold', control='number', default=0.92),
+    ),
 )

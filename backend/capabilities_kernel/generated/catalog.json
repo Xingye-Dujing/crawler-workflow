@@ -3465,7 +3465,7 @@
     {
       "kind": "operator",
       "id": "drop_null",
-      "digest": "33ad591b8c7de94a83b0f29304da3d2872c601944ea2303e88e13d9f351c791b",
+      "digest": "7217dee421e6aef019082f23a3adedfa03e8a3b7c8f624568e557cb6f698fa54",
       "manifest": {
         "identity": {
           "id": "drop_null",
@@ -3526,6 +3526,39 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "columns",
+            "canonical": "columns",
+            "label_key": "settings.columns",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "col1, col2 (empty = all)",
+            "hide_when": []
+          },
+          {
+            "key": "how",
+            "canonical": "how",
+            "label_key": "settings.dropHow",
+            "control": "select",
+            "default": "any",
+            "options": [
+              [
+                "any",
+                "settings.dropHowAny"
+              ],
+              [
+                "all",
+                "settings.dropHowAll"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.drop_null:drop_null",
           "quiet": false
@@ -3600,7 +3633,7 @@
     {
       "kind": "operator",
       "id": "fill_null",
-      "digest": "bf42193e91fc1c024d1ea459a28fbf4094dc5d97364e5e81a53be4962fa2613b",
+      "digest": "bd4e38a009fcc99a63c054cef60869f162563221f690b4c8caf798acaa5f5c1e",
       "manifest": {
         "identity": {
           "id": "fill_null",
@@ -3677,6 +3710,54 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "columns",
+            "canonical": "columns",
+            "label_key": "settings.columns",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "col1, col2 (empty = all)",
+            "hide_when": []
+          },
+          {
+            "key": "value",
+            "canonical": "value",
+            "label_key": "settings.value",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "method",
+            "canonical": "method",
+            "label_key": "settings.fillMethod",
+            "control": "select",
+            "default": "",
+            "options": [
+              [
+                "",
+                "settings.fillMethodValue"
+              ],
+              [
+                "ffill",
+                ""
+              ],
+              [
+                "bfill",
+                ""
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.fill_null:fill_null",
           "quiet": false
@@ -3751,7 +3832,7 @@
     {
       "kind": "operator",
       "id": "drop_duplicates",
-      "digest": "a4073d9e59e06ffd3e814665d1c968edd80c4bd626edee42a980f551664e5c00",
+      "digest": "fa6a8c5ddc189f36bcb69be27f29bfaa0bdf3bf66e9eaa774838c5445e13e51a",
       "manifest": {
         "identity": {
           "id": "drop_duplicates",
@@ -3826,6 +3907,39 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "columns",
+            "canonical": "columns",
+            "label_key": "settings.columns",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "col1, col2 (empty = all)",
+            "hide_when": []
+          },
+          {
+            "key": "mode",
+            "canonical": "mode",
+            "label_key": "settings.dedupeMode",
+            "control": "select",
+            "default": "exact",
+            "options": [
+              [
+                "exact",
+                "settings.dedupeModeExact"
+              ],
+              [
+                "normalized",
+                "settings.dedupeModeNormalized"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.drop_duplicates:drop_duplicates",
           "quiet": false
@@ -3900,7 +4014,7 @@
     {
       "kind": "operator",
       "id": "dedupe_similar",
-      "digest": "5b94a936e6acd49d54de03c51e8239f150b754b05e2d8e2e25687e3181a467ca",
+      "digest": "d09d2cf62a6150c3c786a9c8db4ea282d4c7dfbe70ed6e2121d8aeb63e0589de",
       "manifest": {
         "identity": {
           "id": "dedupe_similar",
@@ -3958,6 +4072,30 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "max_distance",
+            "canonical": "max_distance",
+            "label_key": "settings.dedupeDistance",
+            "control": "number",
+            "default": 8,
+            "options": [],
+            "hint_key": "settings.dedupeSimilarHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.dedupe_similar:dedupe_similar",
           "quiet": false
@@ -4027,7 +4165,7 @@
     {
       "kind": "operator",
       "id": "semantic_dedupe",
-      "digest": "e21eb4799cae5365d47e8c4c4f85dc2fbbeb345973fb7f41bfca4af3311e34e7",
+      "digest": "e9d53813dba37da29d866f8074720cf9f66d694247856593b67b2a0dc5ca9b09",
       "manifest": {
         "identity": {
           "id": "semantic_dedupe",
@@ -4113,6 +4251,41 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "model",
+            "canonical": "model",
+            "label_key": "settings.bertModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "threshold",
+            "canonical": "threshold",
+            "label_key": "settings.semanticThreshold",
+            "control": "number",
+            "default": 0.92,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.semantic_dedupe:semantic_dedupe",
           "quiet": false
@@ -4182,7 +4355,7 @@
     {
       "kind": "operator",
       "id": "similar_to",
-      "digest": "5378b5a137e2e3d56ad98719a85f8d360e918d3b866f775222a1ae24f132e084",
+      "digest": "6fcd43b5433fc71cfcc0d09af0a475274aecb4c220509d370dc9c5cf03bb6b2a",
       "manifest": {
         "identity": {
           "id": "similar_to",
@@ -4275,6 +4448,52 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "model",
+            "canonical": "model",
+            "label_key": "settings.bertModel",
+            "control": "text",
+            "default": "BAAI/bge-small-zh-v1.5",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "query",
+            "canonical": "query",
+            "label_key": "settings.queryText",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "top_k",
+            "canonical": "top_k",
+            "label_key": "settings.topK",
+            "control": "number",
+            "default": 10,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.similar_to:similar_to",
           "quiet": false
@@ -4345,7 +4564,7 @@
     {
       "kind": "operator",
       "id": "filter_rows",
-      "digest": "66bd60e30e98c7a670f82ac5f8fba27869b0d1228d5ae0ef7cd99dc35d801ec7",
+      "digest": "ea517ca2996a248d30609c8551f42ee5875343b494fb9074ccec104165531901",
       "manifest": {
         "identity": {
           "id": "filter_rows",
@@ -4447,6 +4666,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.filter_rows:filter_rows",
           "quiet": false
@@ -4521,7 +4741,7 @@
     {
       "kind": "operator",
       "id": "select_columns",
-      "digest": "0699d43f727fcca83b815848cba6b939a9e7cdeabf96be35263dcc169cc7f627",
+      "digest": "a2efc0ca60492f69c22d5368ebc875b8b1a5f601e0284444d6dca9cd90f8c39c",
       "manifest": {
         "identity": {
           "id": "select_columns",
@@ -4565,6 +4785,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.select_columns:select_columns",
           "quiet": false
@@ -4634,7 +4855,7 @@
     {
       "kind": "operator",
       "id": "rename_columns",
-      "digest": "4aecc0d250e8f8331fb88f9b608dc52388a427e8a34809e67a15cac49d6bcd77",
+      "digest": "2d838657fc635e045508f522a1ad4d089d543809feb72bf66518915753d1ecc6",
       "manifest": {
         "identity": {
           "id": "rename_columns",
@@ -4676,6 +4897,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.rename_columns:rename_columns",
           "quiet": false
@@ -4747,7 +4969,7 @@
     {
       "kind": "operator",
       "id": "strip_whitespace",
-      "digest": "6f04f7602aae9418771edcc2a5eec098497c6e5a0ed3dc182454fafc72e40972",
+      "digest": "fbb5f6eb6465614abc5fb695d7b6c5379167a2b94496b8e1b5d89ee5d7c2f6d7",
       "manifest": {
         "identity": {
           "id": "strip_whitespace",
@@ -4791,6 +5013,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.strip_whitespace:strip_whitespace",
           "quiet": false
@@ -4860,7 +5083,7 @@
     {
       "kind": "operator",
       "id": "convert_type",
-      "digest": "df4dee455914392ff9b4cb33a7dfb7f837d21c9a7a14246f7fcec02bd912e931",
+      "digest": "be7207e5f7e59f45ab6703a26dc83b801711c6c05cffee365c8f86a5e76ae9f6",
       "manifest": {
         "identity": {
           "id": "convert_type",
@@ -4924,6 +5147,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.convert_type:convert_type",
           "quiet": false
@@ -4998,7 +5222,7 @@
     {
       "kind": "operator",
       "id": "sort_rows",
-      "digest": "60cad9c6c8dfa06657cc3c0aa5805b802dedab61b3217cb8c751bf17aab425b2",
+      "digest": "11a3f132a063369cba5be1bfae77ac7be866b4f3c165f6238299932d32d35c53",
       "manifest": {
         "identity": {
           "id": "sort_rows",
@@ -5056,6 +5280,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.sort_rows:sort_rows",
           "quiet": false
@@ -5125,7 +5350,7 @@
     {
       "kind": "operator",
       "id": "sample_rows",
-      "digest": "ee2fcb788228ed0876348c95a85cf22404c25a8354598263399e5a8a8b7733ff",
+      "digest": "d6d34eed7ad7388e81d9ddf83aa6700f7b620760d8967f2722e83b8764689bf6",
       "manifest": {
         "identity": {
           "id": "sample_rows",
@@ -5195,6 +5420,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.sample_rows:sample_rows",
           "quiet": false
@@ -5263,7 +5489,7 @@
     {
       "kind": "operator",
       "id": "groupby_agg",
-      "digest": "47dc9b86dfc96da9280b5efd0ee85ea376b92301883426e1e035e15c167fec09",
+      "digest": "9c3ffc60f7e02d77d20943f16ad158bcee32bb25dd9ac70ecc6ca3ebf98c76ff",
       "manifest": {
         "identity": {
           "id": "groupby_agg",
@@ -5374,6 +5600,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.groupby_agg:groupby_agg",
           "quiet": false
@@ -5446,7 +5673,7 @@
     {
       "kind": "operator",
       "id": "join_tables",
-      "digest": "f3166099388d235edaec889853ead1da03c46a4967695a72a82dc0175d196596",
+      "digest": "05ea4030270bddeddd9c56d2c7b1e5606b001bc6374557ea4f39b431606984d7",
       "manifest": {
         "identity": {
           "id": "join_tables",
@@ -5525,6 +5752,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.join_tables:join_tables",
           "quiet": false
@@ -5602,7 +5830,7 @@
     {
       "kind": "operator",
       "id": "anti_join",
-      "digest": "b1f798949899628c1e638f2187a4e890405e4d3c45d598877d0904c960122768",
+      "digest": "90004a3b98d7d7ca0879175210792f6c77e9c204759426bd86221c313d4d2f85",
       "manifest": {
         "identity": {
           "id": "anti_join",
@@ -5740,6 +5968,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.anti_join:anti_join",
           "quiet": false
@@ -5817,7 +6046,7 @@
     {
       "kind": "operator",
       "id": "column_calc",
-      "digest": "5b54ca8dbfc87b679ff535a8bb33f9e7b8844f84e934058c198e99d7bcc8d347",
+      "digest": "ddd7a88edbffac73648b1c2dbc9d3d43f78240d6cfd364fc2d9ac9b0fccf9c82",
       "manifest": {
         "identity": {
           "id": "column_calc",
@@ -5881,6 +6110,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.column_calc:column_calc",
           "quiet": false
@@ -5950,7 +6180,7 @@
     {
       "kind": "operator",
       "id": "bin_column",
-      "digest": "6632f9f0705052b922a07045e27511f7f33386d0d147ad0c420de554c56d6e5d",
+      "digest": "b7eaeaeb8381eebf1dd9c4d20c7a226cbb4771126bf94019dfefe2cef65eb1de",
       "manifest": {
         "identity": {
           "id": "bin_column",
@@ -6041,6 +6271,7 @@
           "add_maybe": [],
           "add_from_column": true
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.bin_column:bin_column",
           "quiet": false
@@ -6111,7 +6342,7 @@
     {
       "kind": "operator",
       "id": "extract_time",
-      "digest": "f764644233dea7bb318bdd85d462966f53125fcc86d420029febb016fdb3de4a",
+      "digest": "c3304fe0916a17c5ded5abe28bf9fe7cea7eb805f320b6914009dbef6fa1d21a",
       "manifest": {
         "identity": {
           "id": "extract_time",
@@ -6194,6 +6425,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.extract_time:extract_time",
           "quiet": false
@@ -6264,7 +6496,7 @@
     {
       "kind": "operator",
       "id": "bin_time",
-      "digest": "859206644c1fe5b2ee530c71f84f911ddd6eba6f458c0bb1a9516c882151a0a5",
+      "digest": "ccea720b66239cfa8215079d6b3142e673733c4fc05ea1747cf84aecd2a62536",
       "manifest": {
         "identity": {
           "id": "bin_time",
@@ -6374,6 +6606,7 @@
           ],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.bin_time:bin_time",
           "quiet": false
@@ -6455,7 +6688,7 @@
     {
       "kind": "operator",
       "id": "suggest_stages",
-      "digest": "73fb7c7e5c283c674feec14b090dcd1073c407499036eaef9cd679fdd314157b",
+      "digest": "bd09d1c1a43c9a3441090676b3b5b8740258c39880c799e1e5045f76aadf7962",
       "manifest": {
         "identity": {
           "id": "suggest_stages",
@@ -6550,6 +6783,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.suggest_stages:suggest_stages",
           "quiet": false
@@ -6620,7 +6854,7 @@
     {
       "kind": "operator",
       "id": "topic_model",
-      "digest": "94dcf300a69fdde360b40a85e76700e5cc9097702c72a0637873f7b86f9eb6e0",
+      "digest": "322fe8895f039c40291f709351f163f3505cafb8c257a09a580c477951de5375",
       "manifest": {
         "identity": {
           "id": "topic_model",
@@ -6743,6 +6977,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_model:topic_model",
           "quiet": false
@@ -6813,7 +7048,7 @@
     {
       "kind": "operator",
       "id": "topic_by_stage",
-      "digest": "cdae59e1fc259e3dd74802d6d291a04f572c854feddbd2c7477e20ead21220a0",
+      "digest": "ab9fc525b966234b68747b0c7deb95ea40a03a2651dca12637d840c6370aaa96",
       "manifest": {
         "identity": {
           "id": "topic_by_stage",
@@ -7002,6 +7237,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_by_stage:topic_by_stage",
           "quiet": false
@@ -7078,7 +7314,7 @@
     {
       "kind": "operator",
       "id": "topic_label",
-      "digest": "408939354ae58aa3c64f93985a0890596671e46293149c0923ea5abb7689d0b3",
+      "digest": "ef1d19b906b457794f0cb853acd0be7de78fcda2f2433912fa6c9e1fb1ab2269",
       "manifest": {
         "identity": {
           "id": "topic_label",
@@ -7189,6 +7425,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_label:topic_label",
           "quiet": false
@@ -7272,7 +7509,7 @@
     {
       "kind": "operator",
       "id": "cluster_label",
-      "digest": "4f28e21f18b2e6571dc05fc1facb519161825078ce2dae0458eb5e5eeb99895d",
+      "digest": "d953b3fc745cdd0534db12de56e484ebe0e20c6256edb99ce7a818e8a0ca1ac8",
       "manifest": {
         "identity": {
           "id": "cluster_label",
@@ -7393,6 +7630,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.cluster_label:cluster_label",
           "quiet": false
@@ -7473,7 +7711,7 @@
     {
       "kind": "operator",
       "id": "cluster_review",
-      "digest": "995839a36a4d9484c2e719a47099176de695cf93a5b8668072f72946bd3974c5",
+      "digest": "d927a7e6f51990bd8781ec634ae8f8e5763f56d3151d91aea8467ad12eec5477",
       "manifest": {
         "identity": {
           "id": "cluster_review",
@@ -7650,6 +7888,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.cluster_review:cluster_review",
           "quiet": false
@@ -7731,7 +7970,7 @@
     {
       "kind": "operator",
       "id": "reply_graph",
-      "digest": "ca107995d7381c593dc1a6aa2f924abb9185b3cc850cd010b6c9fb087030c0cc",
+      "digest": "1578ff2332ddfe99825f59331d6f7d9522897ca63084435c0309ba4e463d06f2",
       "manifest": {
         "identity": {
           "id": "reply_graph",
@@ -7823,6 +8062,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.reply_graph:reply_graph",
           "quiet": false
@@ -7912,7 +8152,7 @@
     {
       "kind": "operator",
       "id": "compare_platform",
-      "digest": "4fdf0c60b93e39fa6327f0cc509e58eaa1348850edb8095e360f9a5033b9e138",
+      "digest": "3245dae3fcba44bfbb592b29c9f69c4c3a116c6171c902fa4a592545704a8e76",
       "manifest": {
         "identity": {
           "id": "compare_platform",
@@ -7991,6 +8231,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.compare_platform:compare_platform",
           "quiet": false
@@ -8070,7 +8311,7 @@
     {
       "kind": "operator",
       "id": "topic_map",
-      "digest": "a6b80cce0527fdeb5fe661d0f8b30e4fb0795ffe1fe47d9db27afe887c0bd5d3",
+      "digest": "c4539d6bdf59aa87995bafa7656de76aae20691f86a770673ac418495b2c810a",
       "manifest": {
         "identity": {
           "id": "topic_map",
@@ -8195,6 +8436,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_map:topic_map",
           "quiet": false
@@ -8265,7 +8507,7 @@
     {
       "kind": "operator",
       "id": "topic_salience",
-      "digest": "acb3482c7356c0e39b9ec3d0533dd6763c4c7085205c356d8b7e92cffcb7b96a",
+      "digest": "8f1c14b5ae0bcd1e00f906b7f5f8e37e95dc73d4b981ec84451257440ede65e9",
       "manifest": {
         "identity": {
           "id": "topic_salience",
@@ -8404,6 +8646,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_salience:topic_salience",
           "quiet": false
@@ -8474,7 +8717,7 @@
     {
       "kind": "operator",
       "id": "topic_timeline",
-      "digest": "fdabdd4d913543eec59ac260e169e01b14d94d111a11553a6de79c7d1e7ee667",
+      "digest": "06ded7068c48b3226cde4f589b1b5fb0b0f36a7dd431f3ecab484b80a1545eba",
       "manifest": {
         "identity": {
           "id": "topic_timeline",
@@ -8601,6 +8844,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_timeline:topic_timeline",
           "quiet": false
@@ -8690,7 +8934,7 @@
     {
       "kind": "operator",
       "id": "topic_flow",
-      "digest": "d33a69350a998d51a11a6ba8286e92f69606ef37c6dfcec0aa5747953c673c6a",
+      "digest": "3d242e53377d724a1294dcb2bc753aefe94402c088d4a0113a72108030f6e155",
       "manifest": {
         "identity": {
           "id": "topic_flow",
@@ -8831,6 +9075,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_flow:topic_flow",
           "quiet": false
@@ -8920,7 +9165,7 @@
     {
       "kind": "operator",
       "id": "topic_coherence",
-      "digest": "25f55f27b2ca0108945ed4b4d854ed08bb7d3b329940ff1a10dc53f9fb5678c6",
+      "digest": "afdee685ff8716b73453bd4334a86b1e3c4d0ceb9027a78b620972bbbebe13b4",
       "manifest": {
         "identity": {
           "id": "topic_coherence",
@@ -9034,6 +9279,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.topic_coherence:topic_coherence",
           "quiet": false
@@ -9105,7 +9351,7 @@
     {
       "kind": "operator",
       "id": "cooccur",
-      "digest": "04a489e097a228b7c41ee1b78eb65c072a4d0ab849859ec52b72ec6e569d2803",
+      "digest": "aac9c79ca81e70e7ec6224f882d9b3895106bc106ba149cc5b2b4eff5ae8fed5",
       "manifest": {
         "identity": {
           "id": "cooccur",
@@ -9195,6 +9441,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.cooccur:cooccur",
           "quiet": false
@@ -9265,7 +9512,7 @@
     {
       "kind": "operator",
       "id": "sentiment_evolution",
-      "digest": "2538499f3b94c23766edc15366fd1db08e3e163ad2f04d51a28438cc476afc12",
+      "digest": "e52026d70c915b076f6fc59a3b8f72cdf8b3bcb4ae058f99493c614b9413ccb5",
       "manifest": {
         "identity": {
           "id": "sentiment_evolution",
@@ -9407,6 +9654,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.sentiment_evolution:sentiment_evolution",
           "quiet": false
@@ -9477,7 +9725,7 @@
     {
       "kind": "operator",
       "id": "forecast",
-      "digest": "42edd1977234b84190bff9b21fc42194ecc94ffc4cf873dcdbc9bb20d76d8f0b",
+      "digest": "e4b2720e80cfd5893e0bcc3a1f90782589273d0fb7a76097ea2311f9dffa6236",
       "manifest": {
         "identity": {
           "id": "forecast",
@@ -9660,6 +9908,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.forecast:forecast",
           "quiet": false
@@ -9740,7 +9989,7 @@
     {
       "kind": "operator",
       "id": "alert",
-      "digest": "feb98169f594be0279a00837b9737c0a04cf9c09b0aed0b752c3e703d7364a98",
+      "digest": "3b42e6c54b74103d57440b544f6c81345de6439b4204ce970b402a962a404133",
       "manifest": {
         "identity": {
           "id": "alert",
@@ -9889,6 +10138,7 @@
           "add_maybe": [],
           "add_from_column": false
         },
+        "panel": [],
         "execution": {
           "handler": "services.analysis.ops.alert:alert",
           "quiet": false

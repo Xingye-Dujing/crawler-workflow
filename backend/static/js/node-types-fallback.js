@@ -3262,6 +3262,39 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 10,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [
+        {
+          "key": "columns",
+          "canonical": "columns",
+          "labelKey": "settings.columns",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "col1, col2 (empty = all)",
+          "hideWhen": []
+        },
+        {
+          "key": "how",
+          "canonical": "how",
+          "labelKey": "settings.dropHow",
+          "control": "select",
+          "default": "any",
+          "options": [
+            {
+              "value": "any",
+              "labelKey": "settings.dropHowAny"
+            },
+            {
+              "value": "all",
+              "labelKey": "settings.dropHowAll"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [
@@ -3304,6 +3337,54 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 20,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [
+        {
+          "key": "columns",
+          "canonical": "columns",
+          "labelKey": "settings.columns",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "col1, col2 (empty = all)",
+          "hideWhen": []
+        },
+        {
+          "key": "value",
+          "canonical": "value",
+          "labelKey": "settings.value",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "method",
+          "canonical": "method",
+          "labelKey": "settings.fillMethod",
+          "control": "select",
+          "default": "",
+          "options": [
+            {
+              "value": "",
+              "labelKey": "settings.fillMethodValue"
+            },
+            {
+              "value": "ffill",
+              "labelKey": ""
+            },
+            {
+              "value": "bfill",
+              "labelKey": ""
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [
@@ -3358,6 +3439,39 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 30,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [
+        {
+          "key": "columns",
+          "canonical": "columns",
+          "labelKey": "settings.columns",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "col1, col2 (empty = all)",
+          "hideWhen": []
+        },
+        {
+          "key": "mode",
+          "canonical": "mode",
+          "labelKey": "settings.dedupeMode",
+          "control": "select",
+          "default": "exact",
+          "options": [
+            {
+              "value": "exact",
+              "labelKey": "settings.dedupeModeExact"
+            },
+            {
+              "value": "normalized",
+              "labelKey": "settings.dedupeModeNormalized"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [],
         "some": [
@@ -3410,6 +3524,30 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 40,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "max_distance",
+          "canonical": "max_distance",
+          "labelKey": "settings.dedupeDistance",
+          "control": "number",
+          "default": 8,
+          "options": [],
+          "hintKey": "settings.dedupeSimilarHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -3449,6 +3587,41 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 50,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "model",
+          "canonical": "model",
+          "labelKey": "settings.bertModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "threshold",
+          "canonical": "threshold",
+          "labelKey": "settings.semanticThreshold",
+          "control": "number",
+          "default": 0.92,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -3508,6 +3681,52 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 60,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "model",
+          "canonical": "model",
+          "labelKey": "settings.bertModel",
+          "control": "text",
+          "default": "BAAI/bge-small-zh-v1.5",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "query",
+          "canonical": "query",
+          "labelKey": "settings.queryText",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "top_k",
+          "canonical": "top_k",
+          "labelKey": "settings.topK",
+          "control": "number",
+          "default": 10,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -3569,6 +3788,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 70,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -3644,6 +3864,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 80,
       "needsLlm": false,
       "writes": "select",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [
@@ -3673,6 +3894,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 90,
       "needsLlm": false,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [],
@@ -3700,6 +3922,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 100,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [
@@ -3729,6 +3952,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 110,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -3774,6 +3998,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 120,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -3813,6 +4038,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 130,
       "needsLlm": false,
       "writes": "passthrough",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [],
@@ -3860,6 +4086,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 140,
       "needsLlm": false,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [
           "group_col",
@@ -3940,6 +4167,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 150,
       "needsLlm": false,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [],
@@ -3996,6 +4224,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 160,
       "needsLlm": false,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [],
@@ -4095,6 +4324,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 170,
       "needsLlm": false,
       "writes": "add",
+      "panel": [],
       "reads": {
         "one": [],
         "some": [],
@@ -4135,6 +4365,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 180,
       "needsLlm": false,
       "writes": "add",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -4194,6 +4425,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 190,
       "needsLlm": false,
       "writes": "add",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -4249,6 +4481,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 200,
       "needsLlm": false,
       "writes": "add",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -4318,6 +4551,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 210,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -4377,6 +4611,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 220,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -4460,6 +4695,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 230,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column",
@@ -4589,6 +4825,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 240,
       "needsLlm": true,
       "writes": "add",
+      "panel": [],
       "reads": {
         "one": [
           "words_col"
@@ -4664,6 +4901,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 250,
       "needsLlm": true,
       "writes": "dynamic",
+      "panel": [],
       "reads": {
         "one": [
           "group_col",
@@ -4750,6 +4988,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 260,
       "needsLlm": true,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [
           "group_col",
@@ -4876,6 +5115,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 270,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "author_col",
@@ -4937,6 +5177,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 280,
       "needsLlm": false,
       "writes": "dynamic",
+      "panel": [],
       "reads": {
         "one": [
           "platform_col"
@@ -4993,6 +5234,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 290,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -5076,6 +5318,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 300,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -5169,6 +5412,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 310,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "stage_col",
@@ -5250,6 +5494,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 320,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "stage_col",
@@ -5341,6 +5586,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 330,
       "needsLlm": false,
       "writes": "unknown",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -5420,6 +5666,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 340,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -5479,6 +5726,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 350,
       "needsLlm": false,
       "writes": "dynamic",
+      "panel": [],
       "reads": {
         "one": [
           "column"
@@ -5578,6 +5826,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 360,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column",
@@ -5703,6 +5952,7 @@ window.NODE_TYPE_CATALOGUE = {
       "order": 370,
       "needsLlm": false,
       "writes": "replace",
+      "panel": [],
       "reads": {
         "one": [
           "column",

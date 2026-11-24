@@ -140,6 +140,17 @@ var NodeTypes = window.NodeTypes || {
         return null;
     },
 
+    /* One operator's profile: the settings form renders ``panel`` (its declared boxes) when it has
+       any, so a migrated operation needs no block in panels/node-analysis.js. */
+    operator(key) {
+        this._seed();
+        const list = this._operators || [];
+        for (let i = 0; i < list.length; i++) {
+            if (list[i].id === key) return JSON.parse(JSON.stringify(list[i]));
+        }
+        return null;
+    },
+
     labelKey(type) {
         const entry = this.entry(type);
         return entry ? String(entry.labelKey || '') : '';

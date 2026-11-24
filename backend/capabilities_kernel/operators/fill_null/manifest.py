@@ -1,7 +1,8 @@
 """Fill empty cells with a literal value or a forward/backward fill."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMNS
 
 MANIFEST = operator_manifest(
     'fill_null',
@@ -25,5 +26,17 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(some=('columns',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMNS,
+        PanelField('value', 'value', 'settings.value'),
+        PanelField(
+            'method',
+            'method',
+            'settings.fillMethod',
+            control='select',
+            default='',
+            options=(('', 'settings.fillMethodValue'), ('ffill', ''), ('bfill', '')),
+        ),
+    ),
     labels=(('method', 'settings.fillMethod'),),
 )

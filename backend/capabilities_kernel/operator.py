@@ -97,6 +97,31 @@ class Writes:
 
 
 @dataclass(frozen=True)
+class PanelField:
+    """One box of the analysis node's step form, and the canonical parameter it feeds.
+
+    The panel's field names and the operation's keyword arguments are two different vocabularies
+    (``topic_topn`` feeds ``topn``; ``filter_keep`` feeds ``keep``), and the translator between them
+    is ``services.analysis.params``. Declaring the box here lets the form be rendered from the
+    manifest while that translator keeps working unchanged — a migrated operation shows exactly the
+    boxes, labels, defaults and order it always had.
+    """
+
+    key: str
+    canonical: str
+    label_key: str
+    control: str = 'text'  # text | number | select | checkbox
+    default: Any = ''
+    #: ``((value, label_key), …)`` for a select; the labels are the browser catalogue's words.
+    options: tuple = ()
+    hint_key: str = ''
+    placeholder: str = ''
+    #: ``(param, (values…))``: hide this box while another box holds one of those values (the
+    #: comparison's operand box is pointless for ``is_null``/``not_null``).
+    hide_when: tuple = ()
+
+
+@dataclass(frozen=True)
 class OperatorManifest:
     """One analysis operator, the sections the capability kernel and the analysis layer both read."""
 
@@ -104,6 +129,9 @@ class OperatorManifest:
     params: tuple[ParamSpec, ...] = ()
     reads: Reads = field(default_factory=Reads)
     writes: Writes = field(default_factory=Writes)
+    #: The settings form's boxes, in the order the panel draws them. Empty means "the hand-written
+    #: form still draws this operation" — the migration is a shrinking list, not a flag day.
+    panel: tuple[PanelField, ...] = ()
     execution: Execution = field(default_factory=Execution)
     #: A step the pipeline hands the run's LLM client, Stop flag and answer store.
     needs_llm: bool = False
@@ -229,6 +257,30 @@ class OperatorManifest:
         for key in (*self.reads.one, *self.reads.some, *self.reads.nonblank, *self.reads.two_table_keys):
             if key not in names:
                 found.append(f'reads: {key!r} is not a declared parameter')
+        panel_keys: set[str] = set()
+        for box in self.panel:
+            if not str(box.key or '').strip():
+                found.append('panel: a box has no key')
+                continue
+            if box.key in panel_keys:
+                found.append(f'panel.{box.key}: declared twice')
+            panel_keys.add(box.key)
+            if box.canonical not in names:
+                found.append(f'panel.{box.key}: canonical {box.canonical!r} is not a declared parameter')
+            if box.control not in ('text', 'number', 'select', 'checkbox'):
+                found.append(f'panel.{box.key}.control: {box.control!r} is not text/number/select/checkbox')
+            if box.control == 'select' and not box.options:
+                found.append(f'panel.{box.key}: a select needs options')
+            for value, label in box.options:
+                # An empty label key means "show the stored value itself" (``ffill``).
+                if label is None:
+                    found.append(f'panel.{box.key}.options: {value!r} has no label')
+            if box.hide_when:
+                param, values = box.hide_when
+                if param not in names:
+                    found.append(f'panel.{box.key}.hide_when: {param!r} is not a declared parameter')
+                if not values:
+                    found.append(f'panel.{box.key}.hide_when: no values')
         if self.reads.mapping and self.param('mapping') is None:
             found.append('reads.mapping: no mapping parameter is declared')
         for key in (*self.reads.one, *self.reads.some):
@@ -403,6 +455,7 @@ def operator_manifest(
     params: tuple[ParamSpec, ...] = (),
     reads: Reads | None = None,
     writes: Writes | None = None,
+    panel: tuple[PanelField, ...] = (),
     needs_llm: bool = False,
     empty_by_design: bool = False,
     when_not_to_use: tuple[str, ...] = (),
@@ -452,6 +505,7 @@ def operator_manifest(
         params=params,
         reads=reads,
         writes=writes,
+        panel=panel,
         execution=Execution(handler=handler),
         needs_llm=needs_llm,
         empty_by_design=empty_by_design,

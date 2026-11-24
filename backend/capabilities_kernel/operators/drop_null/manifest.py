@@ -1,7 +1,8 @@
 """Drop rows that carry empty cells in the named columns."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMNS
 
 MANIFEST = operator_manifest(
     'drop_null',
@@ -18,5 +19,16 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(some=('columns',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMNS,
+        PanelField(
+            'how',
+            'how',
+            'settings.dropHow',
+            control='select',
+            default='any',
+            options=(('any', 'settings.dropHowAny'), ('all', 'settings.dropHowAll')),
+        ),
+    ),
     labels=(('how', 'settings.dropHow'),),
 )

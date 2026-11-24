@@ -259,6 +259,20 @@ def operator_entries() -> tuple[dict, ...]:
             'order': manifest.identity.order,
             'needsLlm': manifest.needs_llm,
             'writes': manifest.writes.mode,
+            'panel': [
+                {
+                    'key': box.key,
+                    'canonical': box.canonical,
+                    'labelKey': box.label_key,
+                    'control': box.control,
+                    'default': box.default,
+                    'options': [{'value': value, 'labelKey': label} for value, label in box.options],
+                    'hintKey': box.hint_key,
+                    'placeholder': box.placeholder,
+                    'hideWhen': list(box.hide_when),
+                }
+                for box in manifest.panel
+            ],
             'reads': {
                 'one': list(manifest.reads.one),
                 'some': list(manifest.reads.some),

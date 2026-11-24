@@ -1,7 +1,8 @@
 """Rank rows by semantic similarity to a literal query."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN, MODEL
 
 MANIFEST = operator_manifest(
     'similar_to',
@@ -20,4 +21,10 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',), nonblank=('query',)),
     writes=Writes(mode='replace', columns=('rank', 'row_index', 'text', 'similarity')),
+    panel=(
+        COLUMN,
+        MODEL,
+        PanelField('query', 'query', 'settings.queryText'),
+        PanelField('top_k', 'top_k', 'settings.topK', control='number', default=10),
+    ),
 )

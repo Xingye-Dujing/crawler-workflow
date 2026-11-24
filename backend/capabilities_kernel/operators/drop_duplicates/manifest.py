@@ -1,7 +1,8 @@
 """Drop duplicate rows by exact text or by normalised text."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMNS
 
 MANIFEST = operator_manifest(
     'drop_duplicates',
@@ -25,5 +26,16 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(some=('columns',)),
     writes=Writes(mode='passthrough'),
+    panel=(
+        COLUMNS,
+        PanelField(
+            'mode',
+            'mode',
+            'settings.dedupeMode',
+            control='select',
+            default='exact',
+            options=(('exact', 'settings.dedupeModeExact'), ('normalized', 'settings.dedupeModeNormalized')),
+        ),
+    ),
     labels=(('mode', 'settings.dedupeMode'),),
 )

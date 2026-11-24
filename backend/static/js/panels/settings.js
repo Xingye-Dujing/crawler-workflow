@@ -1406,9 +1406,10 @@ function twoTableRoleLine(nodeId, swapped, firstLabelKey, secondLabelKey) {
 }
 
 /* ── Shared settings UI helpers ── */
-function renderParamInput(nodeId, p, key, labelKey, type, defVal) {
+function renderParamInput(nodeId, p, key, labelKey, type, defVal, placeholder) {
     return '<div class="settings-group"><label class="settings-label">' + I18n.t(labelKey) + '</label>' +
         '<input class="settings-input" type="' + type + '" value="' + escapeHtml(p[key] !== undefined ? p[key] : defVal) + '" ' +
+        (placeholder ? 'placeholder="' + escapeHtml(placeholder) + '" ' : '') +
         'onchange="updateParam(\'' + nodeId + '\',\'' + key + '\',this.value)"></div>';
 }
 function renderParamSelect(nodeId, p, key, labelKey, defVal, options) {

@@ -8,6 +8,7 @@ operator the panel offers without a manifest fails here first.
 """
 
 import json
+from pathlib import Path
 
 import pytest
 from capabilities_kernel import generate, registry
@@ -109,6 +110,50 @@ class TestTheBadgeNamesTheBoxThePanelShows:
             if key not in tables[lang]
         ]
         assert missing == []
+
+
+class TestTheDeclaredPanelIsTheForm:
+    """A migrated operator's boxes come from its manifest; the hand-written block is gone."""
+
+    def _sample(self, box):
+        if box.control == 'select':
+            return box.default if box.default != '' else (box.options[0][0] if box.options else '')
+        if box.control == 'checkbox':
+            return False
+        if box.control == 'number':
+            return box.default if box.default != '' else 1
+        return 'x'
+
+    def test_migrated_panels_normalize_to_declared_parameters(self):
+        from services.analysis.params import normalize_analysis_params
+
+        for manifest in MANIFESTS:
+            if not manifest.panel:
+                continue
+            values = {box.key: self._sample(box) for box in manifest.panel}
+            normalized = normalize_analysis_params(manifest.identity.id, values)
+            declared = {spec.name for spec in manifest.params}
+            unknown = set(normalized) - declared
+            assert not unknown, f'{manifest.identity.id}: normalizer produced {sorted(unknown)}'
+
+    def test_a_legacy_block_cannot_outlive_the_migration(self):
+        source = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'node-analysis.js'
+        text = source.read_text(encoding='utf-8')
+        assert 'renderOperatorPanel' in text, 'the generic renderer disappeared'
+        migrated = [manifest.identity.id for manifest in MANIFESTS if manifest.panel]
+        assert len(migrated) >= 6, 'the migrated set shrank'
+        for identifier in migrated:
+            assert f"op === '{identifier}'" not in text, f'{identifier} is declared AND hand-written'
+
+    def test_every_operator_still_has_a_box_somewhere(self):
+        source = Path(__file__).resolve().parents[3] / 'backend' / 'static' / 'js' / 'panels' / 'node-analysis.js'
+        text = source.read_text(encoding='utf-8')
+        orphaned = [
+            manifest.identity.id
+            for manifest in MANIFESTS
+            if not manifest.panel and f"'{manifest.identity.id}'" not in text
+        ]
+        assert orphaned == [], f'operators with neither a declared panel nor a form: {orphaned}'
 
 
 class TestTheDeclaredSkillTeachesTheDeclaredStep:
