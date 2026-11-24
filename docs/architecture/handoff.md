@@ -13,8 +13,8 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`816a0d1e 功能更新：P8 尾巴——消费者契约测试 + 性质测试（顺带修出两个真 bug）`；框架仓库 `cf6d89f`（0.1.25）
-- 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+- 最后提交：`1710bc66 修改：重构第一、二片——分层门禁落地 + 运行决策抽出（W0/W1/W2-1）`；框架仓库 `cf6d89f`（0.1.25）
+- 工作区：干净
 
 ## W0/W1：清单校准 + 分层门禁（2026-11-24）
 
@@ -51,6 +51,28 @@
 - **全量 fast tier 实测（本批收口）**：`12234 passed / 7 skipped / 386 deselected`；同一份代码连测两次
   **12:37** 与 **10:36**（抖动 ±10%，最慢的全是“等满真实超时”的假驱动用例）。12 分钟线目前是**骑线**，
   不算有余量；归因与下一步（`crawlers/engine/` 的可注入就绪探针）写进 `docs/testing/performance.md`。
+
+## W2：engine/run/ 包（2026-11-24）
+
+- `engine/run.py`（1900 行）拆成包，按**问题**而不是按行数：`decide`（纯决策）/ `node`（单节点持久结算）/
+  `walk`（图遍历与并行池）/ `records`（记录开·关·采用·擦除）/ `settle`（结算 + 终局句 + 终局常量）/
+  `worker`（线程全身）/ `claim`（`begin_run`）/ `stop`（停止与浏览器回收）。`engine.decide` 随之搬进
+  `engine/run/decide.py`；`run/__init__.py` 重导出公开名，所以 `engine.run.begin_run`、`.stop_run`、
+  `.start_next_queued`、`.run_node_durable` 等地址一个都没变（`api/workflow.py`、`queue`、`run_schedule`、
+  `app.py` 都不需要改）。
+- **两个 seam 要跟着属主走**：① 测试里 patch `engine.run.X` 的地方改成 patch 真正读它的子模块
+  （`engine.run.claim.threading`、`engine.run.node.stop_requested`/`add_log`、`engine.run.worker.close_run`/
+  `get_run_store`、`engine.run.walk._run_single_workflow`）；② `tests/api/conftest.py` 的 console 转发从
+  1 条变成 4 条（node/walk/records/worker），普查门禁按 AST 自动要求，新增打印模块必须登记。
+- `settle.py` 是把 `_run_worker` 里唯一一段“计数即判决”的代码提出来：`settle_attempt`（先 `settle_nodes`
+  再数 broken）/ `finish_line`（skipped→stopped→failed 三个从句）/ `verdict`（停止压过失败、一个 broken
+  压过 completed）。`tests/unit/runs/test_run_settle.py` 12 例逐条钉住（停止不算失败、画布删掉的节点不算、
+  skipped 两头都不算）。
+- 门禁同步：`test_run_worker_module_scope.py` 改成读包内每个 `.py`；`test_module_budget.py` 删掉
+  `engine/run.py: 1900`（包内最大模块 ~480 行）；`test_console_buffer.py` 扫描包内全部模块；
+  `test_reusable_expand.py` 的调用点改读 `run/claim.py`。
+- 验证：gates + runs + accounts **1863**；api **2834**；workflows/executors/foundation/desktop/scheduling/
+  ai/frontend **2713**；ruff 全绿。未做：`core/asset.py` 接线（下一片）。
 
 ## P8 尾巴：消费者契约 + 性质测试（2026-11-24）
 - **消费者契约** `tests/api/test_node_types_contract.py`：`/api/node-types` 的每个节点 defaults 键必须是

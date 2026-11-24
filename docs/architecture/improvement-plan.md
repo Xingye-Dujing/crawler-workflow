@@ -52,25 +52,31 @@
 - **删掉 16 个空的 `capabilities_kernel/nodes/<id>/__init__.py`**：charts/operators/platforms 都没有，
   这些是迁移脚手架；`doctor.py --all` 仍全绿。
 
-## W2 运行引擎拆分（进行中：决策已抽出，Asset 与拆包未做）
+## W2 运行引擎拆分（包已拆完；Asset 未接）
 
 `engine/run.py` 1900 行、`_run_worker` 465 行、`begin_run` 305 行，是全仓最贵的知识。做法是
 **函数核 / 命令壳**，不是重写：
 
-- [x] 四个记录决策搬进 `engine/decide.py`，纯函数、无 store：`record_has_component` /
-  `record_belongs` / `split_records` / `choose_record`。采用仍然“消耗候选”（调用方 pop 返回的
-  下标），因为同一画布可以有两个同名组件。`tests/unit/runs/test_continue_record.py` 覆盖全部
-  旧用例 + 一条随机性质（100 组行集，永不在指纹之间串台）。
-- [ ] `engine/run/` 包：`claim.py` / `worker.py` / `node.py` / `records.py` / `settle.py` / `stop.py`
+- [x] 四个记录决策搬进 `engine/run/decide.py`（原 `engine/decide.py`），纯函数、无 store：
+  `record_has_component` / `record_belongs` / `split_records` / `choose_record`。采用仍然“消耗候选”
+  （调用方 pop 返回的下标），因为同一画布可以有两个同名组件。`tests/unit/runs/test_continue_record.py`
+  覆盖全部旧用例 + 一条随机性质（200 组行集，永不在指纹之间串台）。
+- [x] `engine/run/` 包：`claim.py`（认领与队列）/ `worker.py`（线程全身）/ `node.py`（单节点持久结算）/
+  `walk.py`（图遍历与并行池）/ `records.py`（记录开/关/采用/擦除）/ `settle.py`（结算与终局句）/ `stop.py`（停止）/
+  `decide.py`（纯决策）。公开名由 `run/__init__.py` 重导出，`engine.run.begin_run` 等地址不变；`engine/run.py`
+  从预算表删除（新的最大模块 ~480 行，仍在 600 线内）。补丁目标随属主迁移（`engine.run.claim.threading`、
+  `engine.run.node.add_log` 等），console 接缝普查已把四个会打印的子模块逐条登记。
 - [ ] `core/asset.py` 接上：节点结算写 asset 行，复用键含上游资产哈希
 
 ```text
-engine/run/decide.py    纯函数：should_reuse / adopt_record / rerun_invalidates / stop_verdict / split_records
-engine/run/claim.py     begin_run 的认领与队列（drop:true 语义）
-engine/run/worker.py    循环体：取一个节点 → 决策 → 执行 → 结算 → 推进游标
-engine/run/node.py      run_node_durable + preflight/postcheck 调用点
-engine/run/records.py   _continue_record / _component_run / _close_component_record
-engine/run/settle.py    结算；stop.py：停止
+engine/run/decide.py    纯函数：record_has_component / record_belongs / split_records / choose_record
+engine/run/claim.py     begin_run 的认领与队列（drop:true 语义）+ 身份/状态回滚
+engine/run/worker.py    _run_worker：开 store → 组件串行/并行 → 结算 → 终局 → 交还队列槽
+engine/run/node.py      run_node_durable + execute_node + 复用/跳过/失败/PARTIAL + postcheck
+engine/run/walk.py      _run_single_workflow / _run_workflow_wrapper / _mark_dead_workflow / _stopping
+engine/run/records.py   record_export_stamp / _component_run / _close_component_record / 重跑擦除
+engine/run/settle.py    settle_attempt / finish_line / verdict（先结算再读终局）
+engine/run/stop.py      stop_run 与浏览器回收
 ```
 
 验收：

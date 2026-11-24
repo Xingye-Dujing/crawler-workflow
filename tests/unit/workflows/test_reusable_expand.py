@@ -235,7 +235,7 @@ class TestCallSites:
         from pathlib import Path
 
         engine_dir = Path(__file__).resolve().parents[3] / 'backend' / 'engine'
-        run_source = (engine_dir / 'run.py').read_text(encoding='utf-8')
+        run_source = (engine_dir / 'run' / 'claim.py').read_text(encoding='utf-8')
         schedule_source = (engine_dir / 'run_schedule.py').read_text(encoding='utf-8')
         # Two doors, two expansions — one in the module that starts a run, one in the module the
         # clock is wired to. Reading them separately is what keeps this honest: after the schedule

@@ -1,6 +1,6 @@
 """Which record this attempt writes, and whether it splits — the decisions, without the I/O.
 
-``engine/run.py`` used to hold these four as private helpers between 1984 lines of loop and store
+The run package used to hold these four as private helpers between 1984 lines of loop and store
 calls, so the only way to test "a same-named component of another canvas must not adopt this row"
 was to run a whole workflow. The rules are pure: they read dicts and sets and answer a bool or an
 index. The caller keeps every side effect (the pop that consumes an adopted row, ``start_run``,

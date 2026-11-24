@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**441**
-- 用例（定义数，参数化会展开成更多次运行）：**8597**
+- 文件：**442**
+- 用例（定义数，参数化会展开成更多次运行）：**8610**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -423,6 +423,7 @@
 | `tests/unit/runs/test_run_log_writer.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_memory_note.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_postcheck.py` | 4 | 0 | 0 | 0 |
+| `tests/unit/runs/test_run_settle.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_started_event.py` | 1 | 0 | 0 | 0 |
 | `tests/unit/runs/test_run_store.py` | 127 | 0 | 0 | 0 |
 | `tests/unit/runs/test_stop_wiring.py` | 11 | 0 | 0 | 0 |

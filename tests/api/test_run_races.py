@@ -61,6 +61,17 @@ def _run_module():
     return engine.run
 
 
+def _worker_module():
+    """``engine.run.worker`` — the module whose ``_run_worker`` opens the store and settles the run.
+
+    A patch on ``engine.run`` would be read by nobody: the package re-exports the function, it does
+    not hold the worker's globals.
+    """
+    import engine.run.worker
+
+    return engine.run.worker
+
+
 class TestTheRunStartHasOneAddress:
     """The seam rule slice 8/9 bought: one module owns ``begin_run``, and callers name the module."""
 
@@ -370,18 +381,18 @@ class TestBusyClaimUsesThreadLiveness:
         this press, so the flag stood on a run that had already published its verdict — the panel
         pinned to “正在停止…”, and ``stop_requested()`` handed that stale stop to every crawl that
         came after it."""
-        from engine import run as run_module
+        from engine.run import worker as worker_module
 
         entered = threading.Event()
         proceed = threading.Event()
-        real_close = run_module.close_run
+        real_close = worker_module.close_run
 
         def park_inside_settlement(*args, **kwargs):
             entered.set()
             proceed.wait(10)
             return real_close(*args, **kwargs)
 
-        monkeypatch.setattr(run_module, 'close_run', park_inside_settlement)
+        monkeypatch.setattr(worker_module, 'close_run', park_inside_settlement)
         workflow, name = _upload_flow(client, paste, 'stop-during-settlement')
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
         assert started.status_code == 200, started.get_json()
@@ -820,10 +831,10 @@ class TestStoreFailures:
         def refuse():
             raise OSError('runs.db is not a database')
 
-        # The worker resolves the store through ``engine.run``, so that is where the refusal goes —
-        # a patch on ``app`` would leave the real store in place and this case would report a clean
-        # failure it never caused.
-        monkeypatch.setattr(_run_module(), 'get_run_store', refuse)
+        # The worker resolves the store through ``engine.run.worker``, so that is where the refusal
+        # goes — a patch on ``app`` (or on the package) would leave the real store in place and this
+        # case would report a clean failure it never caused.
+        monkeypatch.setattr(_worker_module(), 'get_run_store', refuse)
         workflow, name = _upload_flow(client, paste, 'no-store')
         started = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
         assert started.status_code == 200, started.get_json()
@@ -839,7 +850,7 @@ class TestStoreFailures:
         blob = '\n'.join(client.get('/api/workflow/status').get_json()['logs'])
         assert 'store' in blob.lower() or 'run record' in blob.lower(), blob
         # The next run must be able to start at all.
-        monkeypatch.setattr(_run_module(), 'get_run_store', lambda: app_module._RUN_STORE)
+        monkeypatch.setattr(_worker_module(), 'get_run_store', lambda: app_module._RUN_STORE)
         again = client.post('/api/workflow/execute', json={'workflow': workflow, 'workflow_name': name})
         assert again.get_json().get('ok') is True and not again.get_json().get('queued')
         assert _wait(app_module)

@@ -325,14 +325,19 @@ class TestConsoleReset:
     def test_the_run_start_empties_the_console_in_exactly_one_place(self, console):
         """Neither module that starts a run may re-implement the reset.
 
-        The scan covers ``app.py`` AND ``engine/run.py`` because the run start moved to the second
-        one — the rule is about the code that opens a run, not about which file it sat in. The
-        console's own write paths join the list (``engine/run_logs.py`` since 2026-10-29): a reset
-        re-implemented anywhere the console is written is the same drift, whichever module hosts it.
+        The scan covers ``app.py`` AND every module of the ``engine/run/`` package because the run
+        start moved to the second one — the rule is about the code that opens a run, not about which
+        file it sat in. The console's own write paths join the list (``engine/run_logs.py`` since
+        2026-10-29): a reset re-implemented anywhere the console is written is the same drift,
+        whichever module hosts it.
         """
         app = console[0]
         backend = Path(app.__file__).parent
-        names = ('app.py', 'engine/run.py', 'engine/run_logs.py')
+        names = (
+            'app.py',
+            'engine/run_logs.py',
+            *(path.relative_to(backend).as_posix() for path in sorted((backend / 'engine' / 'run').glob('*.py'))),
+        )
         sources = {name: (backend / name).read_text(encoding='utf-8') for name in names}
         for name, source in sources.items():
             assert "execution_state['logs'] = []" not in source, (

@@ -612,7 +612,7 @@ class TestAnotherAccountsRunIsNotYours:
         admin_id = _me(admin_client)['user_id']
         _create(admin_client, 'alice')
         alice = _settle_password(_login(_new_client(admin_client), 'alice', PASSWORD))
-        monkeypatch.setattr('engine.run.workflow_needs_llm', lambda _workflow: True)
+        monkeypatch.setattr('engine.run.claim.workflow_needs_llm', lambda _workflow: True)
 
         execution_state['user_id'] = admin_id
         execution_state['username'] = 'admin'
@@ -653,7 +653,7 @@ class TestAnotherAccountsRunIsNotYours:
         """``Thread.start`` can raise on a loaded box. The claim had already stamped the run id and
         the owner; a handler that cleared only ``running`` left every later status answer naming a
         run with no record, and every OTHER account reading ``foreign_run``."""
-        import engine.run as run_module
+        import engine.run.claim as claim_module
 
         admin_id = _me(admin_client)['user_id']
         execution_state['user_id'] = admin_id
@@ -676,7 +676,7 @@ class TestAnotherAccountsRunIsNotYours:
             def is_alive(self):
                 return False
 
-        monkeypatch.setattr(run_module.threading, 'Thread', _NeverStarts)
+        monkeypatch.setattr(claim_module.threading, 'Thread', _NeverStarts)
         answer = _post(
             admin_client,
             '/api/workflow/execute',

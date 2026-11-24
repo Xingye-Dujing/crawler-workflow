@@ -197,7 +197,9 @@ def test_a_parallel_workflow_thread_runs_as_the_runs_owner(monkeypatch):
         seen.append(account_context.scope_key())
         return {}
 
-    monkeypatch.setattr(run_engine, '_run_single_workflow', fake_single)
+    from engine.run import walk as walk_module
+
+    monkeypatch.setattr(walk_module, '_run_single_workflow', fake_single)
     previous_lang = state.execution_state.get('lang')
     state.execution_state['lang'] = 'en'
     try:

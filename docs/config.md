@@ -74,7 +74,7 @@
 | `WALL_RETRY_BACKOFF` / `COOKIE_PREFLIGHT_TIMEOUT` / `COOKIE_PREFLIGHT_TTL` / `COOKIE_PREFLIGHT_MAX_PARALLEL` | 撞墙退避 / 预检预算 / 结论缓存 / 预检并发 | `45.0` / `45` / `300` / `4` |
 | `WECHAT_BODY_MAX_CHARS` | 公众号正文保留字符数，0 表示全留 | `0` |
 
-运行期间 `execution_state['results']` 会把每个节点的结果留在内存里，这一项没有上限。单节点产出超过 `engine/run.py` 的 `HEAVY_RESULT_ROWS`（默认 10 万行）时控制台打印提示，提示不改数据。
+运行期间 `execution_state['results']` 会把每个节点的结果留在内存里，这一项没有上限。单节点产出超过 `engine/run/node.py` 的 `HEAVY_RESULT_ROWS`（默认 10 万行）时控制台打印提示，提示不改数据。
 
 ## 云端部署（cloud 模式）
 

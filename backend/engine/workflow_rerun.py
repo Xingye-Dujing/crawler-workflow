@@ -109,7 +109,7 @@ def rerun_node(
     # Never park it: a queued rerun would wipe its subtree at drain time, minutes later, when the
     # canvas the user is looking at has moved on — so a busy server refuses this press by name.
     # The erase itself is NOT done here: it travels in the payload and the worker performs it once
-    # the slot is genuinely ours (see :func:`engine.run._rerun_request`).
+    # the slot is genuinely ours (see :func:`engine.run.records._rerun_request`).
     payload = {
         'workflow': workflow,
         'node_id': node_id,

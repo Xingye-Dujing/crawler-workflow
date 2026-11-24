@@ -1,7 +1,7 @@
 """Cloud transport refusal — one sentence about a local-only model transport on a cloud host.
 
 The flag is the server's (``python app.py cloud``), so this lives in one place both the run
-orchestration (``engine/run.py``) and the ``/api/llm/*`` Blueprint can call. Depends only on
+orchestration (``engine/run/claim.py``) and the ``/api/llm/*`` Blueprint can call. Depends only on
 ``Config`` and ``i18n`` — no run state — so it sits in ``runtime/`` as a process-wide policy with
 no test seam to move.
 """

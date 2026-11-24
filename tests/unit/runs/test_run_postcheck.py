@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from engine import run as run_module
+from engine.run import node as run_module
 
 pytestmark = pytest.mark.unit
 

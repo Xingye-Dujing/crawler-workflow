@@ -1,4 +1,4 @@
-"""The record decisions behind a 继续 press (``engine.decide``).
+"""The record decisions behind a 继续 press (``engine.run.decide``).
 
 A split-serial canvas opens one record per workflow as its turn arrives, and the resume path
 adopts the PREVIOUS attempt's row by workflow NAME. The rule worth pinning: adoption CONSUMES the
@@ -8,15 +8,16 @@ components the same run_id — the second component's ``start_run`` upsert reset
 its verdict overwrote it, and the other same-named row of the previous attempt became an orphan
 nothing adopts.
 
-The functions moved out of ``engine/run.py`` into ``engine/decide.py`` on 2026-11-24: they were
-pure already, and this file proves it without a store, a lock or a workflow.
+The functions moved out of the run module on 2026-11-24: they were pure already, and this file
+proves it without a store, a lock or a workflow. The 1900-line module became the ``engine/run/``
+package the same day, and the decisions moved with it.
 """
 
 import random
 
 import pytest
 
-from engine.decide import choose_record, record_belongs, record_has_component, split_records
+from engine.run.decide import choose_record, record_belongs, record_has_component, split_records
 
 pytestmark = pytest.mark.unit
 

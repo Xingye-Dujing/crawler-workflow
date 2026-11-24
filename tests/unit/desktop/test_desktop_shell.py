@@ -227,11 +227,11 @@ class TestTheMenuTheme:
 
 
 class TestTheRunOutcomeNotification:
-    """``engine.run`` decides WHEN; the shell decides HOW. The decision is what this pins."""
+    """``engine.run.worker`` decides WHEN; the shell decides HOW. The decision is what this pins."""
 
     @pytest.fixture()
     def run_module(self, monkeypatch):
-        from engine import run as run_engine
+        from engine.run import worker as run_engine
 
         sent = []
         monkeypatch.setattr(desktop, 'active', lambda: True)

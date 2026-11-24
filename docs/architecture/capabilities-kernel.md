@@ -67,7 +67,7 @@ backend/capabilities_kernel/
 `Manifest.postcheck='module:function'` 是 `preflight` 的对侧：它在节点**结算为 DONE 之后**收到
 `postcheck(node, rows, inputs)`——本次真正产出的行、以及它真正收到的上游表。适合静态契约看不到的事实（“这次输出真的非空”“写出的列不是整列空白”）。
 
-- 运行循环在打印“节点完成”之后调用 `engine.run._postcheck_node`；每条 finding 都经 `t(message_key, nid, **context)` 打一行控制台（`add_log`），并随运行日志持久化。
+- 运行循环在打印“节点完成”之后调用 `engine.run.walk._postcheck_node`（实现在 `engine/run/node.py`）；每条 finding 都经 `t(message_key, nid, **context)` 打一行控制台（`add_log`），并随运行日志持久化。
 - **只上控制台，不改状态**：行已经产出并存好，质量结论不能让一个完成的节点变成失败；下游该跳过仍跳过。钩子抛错/返回畸形报 `engine.postcheck_failed`，不打断运行。
 - 目前唯一的使用者是 `analysis`：非空输入产出 0 行时报 `engine.empty_output`（warning）；含
   `filter_rows`/`join_tables`/`anti_join` 的流水线豁免——0 行就是用户要的答案；输入为空由运行循环按“跳过”处理。

@@ -3,9 +3,9 @@
 One object, one job: it remembers that the user asked THIS run to end, and the run's own
 loops ask it. It is not a thread pool and never was one in practice — ``execute``,
 ``run_parallel`` and ``run_serial`` were built to run the nodes of one workflow level
-concurrently and were never called (the level loop in :meth:`engine.run._run_single_workflow`
+concurrently and were never called (the level loop in :func:`engine.run.walk._run_single_workflow`
 is serial; what a ``parallel`` run actually runs concurrently is its WORKFLOWS, one thread
-each, in ``engine.run``). Three methods and a ``ThreadPoolExecutor`` therefore sat there
+each, in ``engine.run.walk``). Three methods and a ``ThreadPoolExecutor`` therefore sat there
 claiming a capability the product does not have, and the one thing the Stop route does —
 ``execution_state['executor'].stop()`` — wrote to an event no loop ever read, so pressing
 停止 during a long BERT/classify/export node answered ``ok`` while that node ran on.

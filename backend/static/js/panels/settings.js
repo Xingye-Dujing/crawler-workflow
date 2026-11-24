@@ -1368,7 +1368,7 @@ function nodeNeedsLlm(params, nodeOperation) {
 /* ── Two-table roles (analysis anti-join / crawl audit) ──
    A step that compares two tables decides its roles by CONNECTION ORDER: the first data
    wire is the table being worked on, the second is the other table. That rule lives in the
-   engine (`engine/run.py` reads `connections` in order); the panel only READS the same list
+   engine (`engine/run/walk.py` reads `connections` in order); the panel only READS the same list
    so the user can check it without counting boxes. A name-node wire carries no rows and
    never occupies a role, so it is left out on both sides of the comparison. */
 function upstreamTableParents(nodeId) {

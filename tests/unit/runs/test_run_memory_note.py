@@ -18,17 +18,17 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture
 def exec_():
-    """``engine.run``, imported inside the test and never at module scope.
+    """``engine.run.node``, imported inside the test and never at module scope.
 
-    The notice lives with the code that counts the rows, so the test asks that module and not
-    ``app`` — and ``app`` no longer has an opinion about ``HEAVY_RESULT_ROWS`` to lend. A
-    function-scope import is still required: ``tests/unit/gates/test_test_tiers.py`` refuses a
-    module-level heavy import because collection would build the services against the
-    repository's real ``data/``.
+    The notice lives with the code that counts the rows and grades them, so the test asks that
+    module and not ``app`` — and ``app`` no longer has an opinion about ``HEAVY_RESULT_ROWS`` to
+    lend. A function-scope import is still required: ``tests/unit/gates/test_test_tiers.py`` refuses
+    a module-level heavy import because collection would build the services against the repository's
+    real ``data/``.
     """
-    import engine.run
+    import engine.run.node
 
-    return engine.run
+    return engine.run.node
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ The threads do NOT inherit it. ``threading.Thread`` and ``ThreadPoolExecutor`` b
 with the default (``None``) — verified on this box's CPython 3.11 — so whoever starts a thread or
 submits to a pool re-binds the account inside that body. That is what
 ``sessions.preflight._probe_scoped``, ``services.runs.queue._save_owner_mirror`` and
-``engine.run._run_workflow_wrapper`` do; a new pool that calls :func:`runtime.paths.active`
+``engine.run.walk._run_workflow_wrapper`` do; a new pool that calls :func:`runtime.paths.active`
 without one silently writes the local owner's tree.
 
 ``None`` is meaningful: no account bound means the local, login-free owner — the checkout-level

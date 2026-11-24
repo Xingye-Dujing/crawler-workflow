@@ -8,7 +8,8 @@ from sessions import profiles
 def _forward_run_console(monkeypatch):
     """A test's patch of ``app.add_log`` still captures what the run worker prints.
 
-    The orchestration resolves ``add_log`` in its own module (``engine.run``), so patching the app
+    The orchestration resolves ``add_log`` in its own module (``engine.run.node``,
+    ``engine.run.walk``, ``engine.run.records``, ``engine.run.worker``), so patching the app
     re-export alone would silence only the app-side lines and let the worker print into the real
     buffer — the case would then assert on console text it never captured. Same call-time lookup
     the executor seams already use (``tests/executor_seams.py``).
@@ -39,7 +40,6 @@ def _forward_run_console(monkeypatch):
     import nodes.executors.visualize
     from executor_seams import forward
 
-    import engine.run
     import engine.run_schedule
     import services.analysis.llm
     import services.charts.outputs
@@ -54,7 +54,6 @@ def _forward_run_console(monkeypatch):
     # and assert on a list the module never filled.
     forward(monkeypatch, api.biblio, 'add_log', app_module)
     forward(monkeypatch, api.report, 'add_log', app_module)
-    forward(monkeypatch, engine.run, 'add_log', app_module)
     forward(monkeypatch, engine.run_schedule, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.accumulate, 'add_log', app_module)
     forward(monkeypatch, nodes.executors.analysis, 'add_log', app_module)
@@ -78,6 +77,17 @@ def _forward_run_console(monkeypatch):
     forward(monkeypatch, services.runs.queue, 'add_log', app_module)
     forward(monkeypatch, services.runs.settlement, 'add_log', app_module)
     forward(monkeypatch, api.sessions, 'add_log', app_module)
+    # The 1900-line engine/run.py became the engine/run/ package on 2026-11-24; the census
+    # gate below enumerates the modules that print, so each is forwarded by name.
+    import engine.run.node
+    import engine.run.records
+    import engine.run.walk
+    import engine.run.worker
+
+    forward(monkeypatch, engine.run.node, 'add_log', app_module)
+    forward(monkeypatch, engine.run.records, 'add_log', app_module)
+    forward(monkeypatch, engine.run.walk, 'add_log', app_module)
+    forward(monkeypatch, engine.run.worker, 'add_log', app_module)
 
 
 @pytest.fixture(autouse=True)
