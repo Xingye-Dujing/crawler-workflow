@@ -13,8 +13,25 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`3d85100c 功能更新：分析面板第三批——时间/事件 6 个算子表单清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`6bcd90cb 功能更新：分析面板收口——36/37 个算子表单由清单渲染`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## 分析面板收口（36/37，2026-11-24）
+
+- 第三批剩余 16 个算子迁完（cluster_label / cluster_review / cooccur / reply_graph / compare_platform /
+  filter_rows / rename_columns / convert_type / sort_rows / sample_rows / groupby_agg / join_tables /
+  column_calc / bin_column / select_columns / strip_whitespace）；`node-analysis.js` 只剩算子下拉、
+  预览按钮与 **anti_join** 的块。
+- 新通用能力：`PanelField.options_param` + `option_label_prefix`——select 选项从已声明参数的 enum 派生
+  （`filter_rows` 的 12 种比较不再抄第二份）；`problems()` 拒绝 options 与 options_param 并存。
+  `filter_rows` 的值框用 `hide_when=('op', ('is_null','not_null'))` 隐藏。
+- **保留手写 anti_join（1/37）**：`twoTableRoleLine` 按 `swap_tables` 实时显示“过滤表/基准表”，
+  通用渲染表达不了；条件出现的 `max_distance` 本可用 hide_when，但角色行不行。
+- **自伤记录**：给 sentiment_evolution 加 panel 时把 `reads=`/`writes=` 整段替换掉，契约变空、写入模式
+  退化为 passthrough；被“未配置表单不得毁行”用例抓到并修复。教训：向 `operator_manifest(...)` 追加参数时，
+  编辑锚点必须包含被保留的行。
+- 验证（全量收口）：**12168 passed / 7 skipped**；ruff check+format 全绿；product 与 tests pylint
+  **10.00/10**；doctor 全绿。
 
 ## 分析面板：第三批（时间/事件，2026-11-24）
 
