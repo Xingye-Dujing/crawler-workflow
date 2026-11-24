@@ -18,6 +18,7 @@ The table domains live in sibling mixins (base/ledger/progress/upkeep); the publ
 names below are the surface every caller and test has always imported from here.
 """
 
+from .assets import AssetsMixin
 from .base import BaseMixin, RowCache
 from .identity import (
     NODE_DONE,
@@ -77,5 +78,5 @@ __all__ = [
 ]
 
 
-class RunStore(BaseMixin, QueueMixin, RunsMixin, NodesMixin, RowsMixin, FilesMixin, LogMixin, UpkeepMixin):
+class RunStore(BaseMixin, QueueMixin, RunsMixin, NodesMixin, RowsMixin, FilesMixin, LogMixin, UpkeepMixin, AssetsMixin):
     """The durable ledger. Every mixin is a table domain; this class is their one name."""

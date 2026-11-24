@@ -66,7 +66,11 @@
   `decide.py`（纯决策）。公开名由 `run/__init__.py` 重导出，`engine.run.begin_run` 等地址不变；`engine/run.py`
   从预算表删除（新的最大模块 ~480 行，仍在 600 线内）。补丁目标随属主迁移（`engine.run.claim.threading`、
   `engine.run.node.add_log` 等），console 接缝普查已把四个会打印的子模块逐条登记。
-- [ ] `core/asset.py` 接上：节点结算写 asset 行，复用键含上游资产哈希
+- [x] `core/asset.py` 接上：节点结算写 asset 行（`node_assets`，一节点一运行一行），复用键含上游资产哈希
+  ——`engine/run/asset.py` 填记录、`services/runs/store/assets.py` 存/查/删，`engine/run/node.py` 在三处
+  结算路径写入，并在复用判定里多问一句 `lineage_conflict`。规则是**只知道不一致才拒绝**：没有资产行、
+  没有记录 input_sha、上游本就没有资产，都退回原来的结构规则（老库不会被一条新规则改判）。
+  重跑/改指纹/删运行都会连带删掉资产行，否则子节点会拿一张已经不存在的表的哈希做比较。
 
 ```text
 engine/run/decide.py    纯函数：record_has_component / record_belongs / split_records / choose_record
@@ -114,19 +118,21 @@ ai/render/   markdown.js  question.js  artifact.js  toolcard.js
 零构建、`index.html` 顺序、`splits.json` 登记全部不变；新增“单文件 ≤600 行”的前端门禁
 （`zenviz-page.js`、`node-types-fallback.js` 是生成物，豁免）。
 
-## W6 框架收口（agent-workspace）
+## W6 框架收口（agent-workspace）——已完成 0.1.26
 
 对齐 [`framework-parity.md`](framework-parity.md) 已写下的目标，用绞杀式迁移，公开 API 一个不改：
 
-| 现在 | 目标 |
+| 现在 | 结果 |
 |---|---|
-| `store.py` 1093 行 / 90+ 方法 / 16 个聚合 | `store/` 每聚合一文件 + `base.py`（连接/迁移）+ `uow.py`；`Store` 变薄门面 |
-| `agent.py` 925 行；`run()` 380 行生成器；6 个控制工具 `if name ==` | `agent/` 包；`CONTROL_TOOLS` 处理器表；`messages.py` 三个纯函数 |
-| `service.py` 889 行，组合根 + 门面 + 运行时状态 | `turn_runner.py` 拆出；`service.py` 只装配与转发 |
-| `Agent(self)` 拿整个门面 | `ports.py` 五个 Protocol（`TurnStore`/`EventSink`/`Provider`/`ToolRunner`/`PolicyEngine`） |
+| `store.py` 1220 行 / 88 方法 / 16 个聚合 | [x] `store/` 每聚合一 mixin + `base.py`（连接 + 调用时解析的 `_db` + schema）；`Store` 是薄合成。`uow.py` **未做**：每张表一个 write、无跨表事务需求，硬加一层只会多一个转发 |
+| `agent.py` 971 行；`run()` 380 行生成器；6 个控制工具 `if name ==` | [x] `agent/` 包：`turn`/`dispatch`（`CONTROL_TOOLS` 处理器表，三态返回）/`messages`/`prompt`/`resume`/`limits` |
+| `service.py` 1012 行，组合根 + 门面 + 运行时状态 | [x] `turn_runner.py` 拆出（`ask`/`_run_turn`/`subscribe`/`_TurnOutcome`…）；service 669 行，只装配与转发 |
+| `Agent(self)` 拿整个门面 | [x] `ports.py` 一域一个 Protocol（13 个 + `AgentServices`），比原计划的五个更窄、也够用 |
 
-验收不是“文件变小”，而是**用假 store + 假 provider 跑完一轮含提问/审批/产物的 turn，不构造
-`AgentWorkspace`**；框架 224 用例与宿主 parity 全绿；新增“框架不出现宿主领域词”的门禁。
+验收（都做了）：**用假 store + 假 provider 跑完一轮含工具调用与产物的 turn，不构造 `AgentWorkspace`**
+（`tests/test_turn_without_workspace.py`，另含暂停路径）；框架 259 用例与宿主 parity 全绿；
+“框架不出现宿主领域词”的门禁（`tests/test_no_host_vocabulary.py`）；结构门禁
+（`tests/test_architecture_seams.py`：控制工具表、无 `name ==` 链、ports 不撒谎）。
 
 ## W7 算法与增量
 

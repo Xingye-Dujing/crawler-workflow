@@ -295,6 +295,10 @@ repository root.
   fan-in survives on one live input); validate/naming/fingerprint/execution run on that graph.
 - **Reuse has four rules:** `done` and `restored` are reusable; a zero-row result is never reused; the source node is never
   adopted (resumes by cursor); `begin_node` `dropped_stale` cancels reuse.
+- **Reuse also asks what the input was, not just the fingerprint:** `node_assets` records each node's content `sha256` and the
+  `input_sha` of its parents (`engine/run/asset.py`), and a stored child is NOT restored when the parents' content changed.
+  Only a KNOWN mismatch refuses (no asset row, no `input_sha`, an upstream with no asset all stay on the structural rule), and
+  anything that drops a node's rows — a rerun, a changed fingerprint, a deleted run — drops its asset row with them.
 - **Retention must release what it destroyed:** `purge` also calls `forget_run_items`; an explicit `delete_run` *keeps*
   claims.
 

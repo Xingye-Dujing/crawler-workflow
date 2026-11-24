@@ -13,8 +13,32 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`1710bc66 修改：重构第一、二片——分层门禁落地 + 运行决策抽出（W0/W1/W2-1）`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`a237eb0a 修改：运行引擎拆包——engine/run/ 按问题拆成八个模块（W2 第二片）`；框架仓库 `9e1e66a`（0.1.26）
 - 工作区：干净
+
+## W6：框架 0.1.26（2026-11-24）
+
+框架侧两次提交（`aeeb11d`、`9e1e66a`），宿主侧换 wheel + 记文档：
+
+- **`store.py`（1220 行、88 方法、16 聚合）→ `store/` 包**：`base`（连接 + `_db` 调用时解析 + schema）、
+  `transcript`（会话/消息/轮次/事件/pending/命令/邮箱）、`steps`（步骤 + trace）、`usage`、`memory`（记忆 + 偏好）、
+  `library`（产物/技能/文件/脚本）、`monitors`、`recipes`。`Store` 是它们的合成，公开方法一个不少。
+- **`agent.py`（971 行）→ `agent/` 包**：`turn`（循环本体）、`dispatch`（**`CONTROL_TOOLS` 处理器表**，六个控制工具
+  不再是一串 `if name ==`，处理器返回 content/answered/pause 三态）、`messages`（transcript→provider、孤立
+  `tool_use` 修复、窗口裁剪）、`prompt`（系统提示词、用户行、引用、steering）、`resume`（回答暂停）、`limits`。
+- **`service.py` → `turn_runner.py`**：`ask`/`_open_turn`/`_run_turn`/`subscribe`/`_record_event`/`_consume_commands`/
+  `_handoff_unused_steer`/`_report_turn` 与 `_TurnOutcome` 搬出，`AgentWorkspace` 改为 `TurnRunner` 的合成；
+  service 929 → 669 行，只剩装配与转发。
+- **新增 `ports.py`**：一域一个 `Protocol`（store/tools/recipes/approvals/tracing/context/skills/costs/references/
+  catalog/settings/host/artifact_registry）+ `AgentServices` 合成，替代无类型的 services 袋。
+- **三个新门禁（框架自带）**：`tests/test_architecture_seams.py`（控制工具表 == tools 声明、处理器是 Agent 的方法、
+  dispatch 不得再出现 `name == '…'`、ports 承诺的成员必须在真 workspace 上存在）；`tests/test_turn_without_workspace.py`
+  （假 store/假 provider 跑完一轮：工具调用 → 产物 → 回答，另跑暂停路径，全程不构造 `AgentWorkspace`）；
+  `tests/test_no_host_vocabulary.py`（`agent_workspace/` 出现宿主产品名或平台 id 即红——顺带把 config/host 里
+  两处指向具体宿主的措辞改成通用说法）。框架 259 用例绿，ruff F/E9 绿。
+- **宿主接入**：`vendor/agent_workspace-0.1.26-py3-none-any.whl`（重建于框架 checkout，
+  `python -m pip wheel --no-deps -w dist .`），`requirements.txt` 与 `desktop/requirements-runtime.txt` 两处 pin
+  同步；换 wheel 后宿主 `tests/unit/ai` + AI 表面 **177 passed**。
 
 ## W0/W1：清单校准 + 分层门禁（2026-11-24）
 
@@ -52,7 +76,7 @@
   **12:37** 与 **10:36**（抖动 ±10%，最慢的全是“等满真实超时”的假驱动用例）。12 分钟线目前是**骑线**，
   不算有余量；归因与下一步（`crawlers/engine/` 的可注入就绪探针）写进 `docs/testing/performance.md`。
 
-## W2：engine/run/ 包（2026-11-24）
+## W2：engine/run/ 包 + 节点资产（2026-11-24）
 
 - `engine/run.py`（1900 行）拆成包，按**问题**而不是按行数：`decide`（纯决策）/ `node`（单节点持久结算）/
   `walk`（图遍历与并行池）/ `records`（记录开·关·采用·擦除）/ `settle`（结算 + 终局句 + 终局常量）/
@@ -72,7 +96,17 @@
   `engine/run.py: 1900`（包内最大模块 ~480 行）；`test_console_buffer.py` 扫描包内全部模块；
   `test_reusable_expand.py` 的调用点改读 `run/claim.py`。
 - 验证：gates + runs + accounts **1863**；api **2834**；workflows/executors/foundation/desktop/scheduling/
-  ai/frontend **2713**；ruff 全绿。未做：`core/asset.py` 接线（下一片）。
+  ai/frontend **2713**；ruff 全绿。
+- **节点资产接线（同一天）**：`core/asset.py` 终于有写方。`node_assets` 表（`(run_id, node_id)` 主键，
+  sha256/size/uri/parents/input_sha）由 `services/runs/store/assets.py` 的 `AssetsMixin` 管；`engine/run/asset.py`
+  负责把一次节点的产出填成 `DataAsset`（表按行、图表/compile 的 dict 按一份文档），再写行；`engine/run/node.py`
+  在 applied-trace、PARTIAL、DONE 三处结算后写入，并在复用判定里加一条 `lineage_conflict`。**只知道不一致
+  才拒绝**：没有资产行/没有 input_sha/上游本无资产都退回结构规则，老库不会被改判；改指纹、重跑节点、删除运行
+  都会连带删资产（否则子节点会拿一张已不存在的表的哈希比较）。新测试 `tests/unit/runs/test_run_asset.py` 20 例，
+  其中三例用真 `RunStore` 走 `run_node_durable`：首次运行写资产、同上游的 继续 恢复不重跑、上游内容变了就重跑。
+  `core.asset` 从 `ORPHAN_EXEMPTIONS` 里删掉（门禁会拒绝过期豁免）。
+- **下一步**：W6（框架 `Store`/`Agent` 拆分与 `ports.py`），然后 W3（`ai/tools` 拆片）、W4（sessions 纯判定）、
+  W5、W7。
 
 ## P8 尾巴：消费者契约 + 性质测试（2026-11-24）
 - **消费者契约** `tests/api/test_node_types_contract.py`：`/api/node-types` 的每个节点 defaults 键必须是

@@ -361,6 +361,7 @@ ZH = {
     'run.watermarkLoaded': '跨运行水位：从上次完成的边界 {boundary} 开始，遇到它即停止',
     'run.preflightSamplesFailed': '数据预检样本读取失败（不影响静态校验）',
     'run.schemaReadFailed': '数据契约读取失败（不影响静态校验）',
+    'run.assetSkipped': '节点 {nid} 的资产记录不成立，已跳过：{why}',
     'run.watermarkNoNew': '已到上次的边界 {boundary}，本次没有更新的条目',
     'run.watermarkNoScope': '跨运行水位需要运行上下文里的节点指纹；直接调用执行器时不能启用',
     'run.watermarkSaved': '跨运行水位已更新：{boundary}（本次新采 {n} 条）',
@@ -873,6 +874,7 @@ EN = {
     ),
     'run.preflightSamplesFailed': 'Could not read the data-preflight sample; static validation is unaffected',
     'run.schemaReadFailed': 'Could not read the stored data contract; static validation is unaffected',
+    'run.assetSkipped': 'The asset record for node {nid} is not valid and was skipped: {why}',
     'run.watermarkNoNew': 'Reached the previous boundary {boundary}; no newer items this run',
     'run.watermarkNoScope': (
         'A cross-run watermark needs the node fingerprint from a run context; a direct executor call cannot enable it'

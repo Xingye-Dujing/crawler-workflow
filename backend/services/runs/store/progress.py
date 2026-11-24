@@ -62,6 +62,7 @@ class NodesMixin:
                     ).rowcount
                 self._conn.execute('DELETE FROM node_rows WHERE run_id = ? AND node_id = ?', (run_id, node_id))
                 self._conn.execute('DELETE FROM node_schema WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+                self._conn.execute('DELETE FROM node_assets WHERE run_id = ? AND node_id = ?', (run_id, node_id))
                 cleared += self._conn.execute(
                     'DELETE FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id)
                 ).rowcount
@@ -98,6 +99,9 @@ class NodesMixin:
             # The stored shape described the rows just dropped: a consumer must not validate the
             # new definition against the old table's columns.
             self._execute('DELETE FROM node_schema WHERE run_id = ? AND node_id = ?', (run_id, node_id))
+            # …and so did the content identity: a child reuse that compared against the old
+            # table's hash would keep rows computed from a definition that no longer exists.
+            self._execute('DELETE FROM node_assets WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         self._execute(
             'INSERT INTO node_runs (run_id, node_id, node_type, title, fingerprint, status, row_count, '
             'component, component_name, started_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?) '

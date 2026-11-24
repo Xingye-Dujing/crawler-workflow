@@ -10,7 +10,8 @@ Three rules, each one a defect that was actually present on 2026-11-24:
    ``MAX_CONTENT_LENGTH`` — the inner layer reaching for the composition root. The root now
    registers a hook instead.
 3. **No module is unreachable.** ``core/asset.py`` was a 116-line contract nobody imported while
-   ``AGENTS.md`` called it "the shared identity of a node output"; 16 empty
+   ``AGENTS.md`` called it "the shared identity of a node output" (since 2026-11-24 it has a writer:
+   ``engine/run/asset.py`` and ``services/runs/store/assets.py``); 16 empty
    ``capabilities_kernel/nodes/<id>/__init__.py`` files were scaffolding for packages that are
    discovered by walking ``manifest.py``. ``test_no_dead_modules`` refuses both.
 
@@ -71,7 +72,6 @@ CORE_EXCEPTIONS: dict[str, dict[str, str]] = {
 #: that will consume it. An entry that stops being an orphan fails the gate: exemptions are debt,
 #: not furniture.
 ORPHAN_EXEMPTIONS: dict[str, str] = {
-    'core.asset': 'P2/R2: node output assets have no writer yet; wired in W2',
     'crawlers.platforms.hongguo.addon': 'mitmdump runs the file by path, it is never imported',
     'crawlers.platforms.instagram.dialogs': 'popup word list; W4 decides import-or-delete',
     'crawlers.platforms.youtube.dialogs': 'popup word list; W4 decides import-or-delete',

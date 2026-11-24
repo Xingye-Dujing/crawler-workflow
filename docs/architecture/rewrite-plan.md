@@ -40,15 +40,15 @@
 | # | 事实 | 验收 |
 |---|---|---|
 | R1 | `resume`/`verify`/`python` 三个产出表的节点没有 `ports.emit_columns`；`output` 是终点，可解释 | 三个清单声明 `emit_columns`，`doctor.py --all` 与完整性门禁全绿 |
-| R2 | `core/asset.py` 的 `DataAsset` 无人 import；节点输出没有资产身份 | 节点结算写 asset 行；复用键含上游资产哈希；`test_no_dead_modules` 不再需要豁免它 |
+| R2 | ~~`core/asset.py` 的 `DataAsset` 无人 import；节点输出没有资产身份~~ **已完成（2026-11-24）** | `node_assets` 行 + `input_sha` 血缘（`engine/run/asset.py`），`test_no_dead_modules` 的豁免已删 |
 
 ### 框架自身的层
 
 | # | 事实 | 验收 |
 |---|---|---|
-| R3 | `store.py` 1093 行 / 90+ 方法，覆盖 16 个聚合 | 拆成 `store/<聚合>.py` + `Store` 薄门面；框架 224 用例与宿主 parity 全绿 |
-| R4 | `agent.py` 925 行；`run()` 是 380 行生成器；6 个控制工具走 `if name ==` | 拆成 `agent/` 包 + `CONTROL_TOOLS` 处理器表；`Agent` 只依赖 `ports.py` |
-| R5 | 框架没有“不出现宿主领域词”的门禁 | `tests/test_no_domain_vocabulary.py` 绿 |
+| R3 | ~~`store.py` 1093 行 / 90+ 方法，覆盖 16 个聚合~~ **已完成（0.1.26）** | `store/` 八个 mixin + `Store` 薄门面；框架 259 用例与宿主 parity 全绿 |
+| R4 | ~~`agent.py` 925 行；`run()` 是 380 行生成器；6 个控制工具走 `if name ==`~~ **已完成（0.1.26）** | `agent/` 包 + `CONTROL_TOOLS` 处理器表；`Agent` 只依赖 `ports.py` |
+| R5 | ~~框架没有“不出现宿主领域词”的门禁~~ **已完成（0.1.26）** | `tests/test_no_host_vocabulary.py` 绿（并抓出 config/host 两处措辞） |
 
 ### 评测与规范
 
@@ -121,7 +121,7 @@
 - [x] `/api/node-types` 返回完整清单；`node-types.js` 只做冷启动 fallback
 - [x] 每节点技能骨架 + 示例 + 工具生成（清单第七段；`knowledge.py` 投影 L1/L2，生成 `docs/capabilities/skills/`）
 - [ ] 每节点声明 `emit`/`read` 契约与 `schema_hash`
-- [ ] 每节点输出物化为 Asset
+- [x] 每节点输出物化为 Asset（`node_assets` 行 + 上游 `input_sha`，每个节点类型自动生效，执行器不opt-in）
 - [x] 完整性门禁全绿（`python tools/doctor.py --all` 全绿，93 个能力，2026-11-24 复核）
 - **DoD**：新增一个节点只加一个清单目录；其它文件 0 改动；全部节点 doctor 绿；fast+device 绿。
 

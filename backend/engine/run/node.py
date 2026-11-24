@@ -21,6 +21,7 @@ from runtime.state import _completed_lock, _wf_local, add_log, ambient, executio
 
 from analyzers.llm_client import ABORT_MARK
 from crawlers.core.faults import CrawlerStopped
+from engine.run.asset import lineage_conflict, record_asset
 from i18n import t
 from services.runs.store import (
     NODE_DONE,
@@ -148,6 +149,11 @@ def run_node_durable(
         # ledger still prevents any double-append.
         and int(stored.get('row_count') or 0) > 0
         and ntype != 'source'
+        # …and the rows must have been computed from the content that is upstream NOW. The
+        # fingerprint says the node was not edited; it cannot say the parent's table is the same
+        # one. Only a KNOWN mismatch refuses (see ``engine.run.asset.lineage_conflict``), so an
+        # older run keeps the structural rule.
+        and not lineage_conflict(store, run_id, nid, upstream)
     )
     # Rows stored for an *edited* node describe something else, so begin_node
     # drops them and reports it: they are gone, and there is nothing to reuse.
@@ -203,6 +209,7 @@ def run_node_durable(
         rows = applied['result']
         store.replace_rows(run_id, nid, rows, label=label)
         add_log(t('run.applied_trace_result', nid=label, n=len(rows)), wf_idx=wf_idx)
+        record_asset(store, ctx, node, nid, rows, upstream)
         store.finish_node(run_id, nid, NODE_DONE, schema=schema_of_rows(rows))
         return rows, NODE_DONE
 
@@ -297,6 +304,7 @@ def run_node_durable(
         # DONE would let resume restore it and the 未处理 gaps would stay
         # forever. PARTIAL keeps the rows but marks the node for a re-run,
         # where the answer cache makes only the missing rows cost anything.
+        record_asset(store, ctx, node, nid, result, upstream)
         store.finish_node(run_id, nid, NODE_PARTIAL, schema=schema_of_rows(result))
         return result, NODE_PARTIAL
     # Close the node's visible LLM trace (a no-op for nodes without one). This is the ONE generic
@@ -325,6 +333,9 @@ def run_node_durable(
         NODE_DONE,
         schema=schema_of_rows(result) if isinstance(result, list) else None,
     )
+    # The content identity of what this node produced: written last, so a row only ever names a
+    # table that the store really holds (see ``engine/run/asset.py``).
+    record_asset(store, ctx, node, nid, result, upstream)
     return result, NODE_DONE
 
 

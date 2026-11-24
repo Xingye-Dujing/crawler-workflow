@@ -163,6 +163,27 @@ class BaseMixin:
                     updated_at TEXT,
                     PRIMARY KEY (run_id, node_id)
                 );
+                -- What each node's output IS, as bytes: the sha256 and size of the content it
+                -- produced, plus the digest of its parents' assets. ``node_schema`` answers "does
+                -- this table have the columns my consumer reads"; this answers "is the table still
+                -- the one my child was computed from". A node with no rows writes no row.
+                CREATE TABLE IF NOT EXISTS node_assets (
+                    run_id TEXT NOT NULL,
+                    node_id TEXT NOT NULL,
+                    asset_id TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    kind TEXT NOT NULL,
+                    owner TEXT NOT NULL DEFAULT '',
+                    origin TEXT NOT NULL DEFAULT '',
+                    sha256 TEXT NOT NULL,
+                    size INTEGER NOT NULL DEFAULT 0,
+                    uri TEXT NOT NULL DEFAULT '',
+                    parents_json TEXT NOT NULL DEFAULT '[]',
+                    input_sha TEXT NOT NULL DEFAULT '',
+                    meta_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT,
+                    PRIMARY KEY (run_id, node_id)
+                );
                 CREATE TABLE IF NOT EXISTS item_seen (
                     scope TEXT NOT NULL,
                     item_key TEXT NOT NULL,

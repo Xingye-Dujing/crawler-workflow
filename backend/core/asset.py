@@ -3,21 +3,26 @@
 Today a node's output is a list of dicts in a run store; the chart, the report and the AI each reach
 it through a different path, and nothing names the bytes. An asset fixes that with a small, explicit
 record: who owns it, which node/run produced it, the hash and size of the content, where it lives,
-and which assets it was derived from. The store and the materialisation hooks arrive in P2; this
-module is the contract they share.
+and which assets it was derived from. The run store writes one row per node settlement
+(``services/runs/store/assets.py``) and a child's reuse asks whether its parents' hashes still match
+(``engine/run/asset.py``); this module is the contract they share.
 
 It lives in ``core`` because every layer reads it (run store, nodes, API, AI) and it imports only the
 standard library, so no domain package is dragged into a reader that only wants the shape.
 ``services/components/catalog.py`` also has an ``Asset``, but that is a downloadable component
 payload with URLs and per-OS parts, not this.
 
-``schema`` is versioned because the run store will persist these records. A reader that meets a
+``schema`` is versioned because the run store persists these records. A reader that meets a
 newer schema refuses it by name rather than interpreting fields it does not know.
+
+The three digest helpers below are here for the same reason: they are the definition of "the same
+content", and two different canonicalisations would make two hashes of one table.
 """
 
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field, fields
@@ -34,6 +39,41 @@ _ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]*$')
 _SHA256 = re.compile(r'^[0-9a-f]{64}$')
 
 _REQUIRED = ('id', 'kind', 'owner', 'origin', 'sha256', 'size', 'uri')
+
+
+def _canonical(value) -> bytes:
+    """One value's canonical bytes: sorted keys, no spaces, UTF-8, no NaN.
+
+    Canonical because the digest IS an identity: two readers that load the same table must get the
+    same hash whatever order their dicts were built in, and a locale-dependent encoding would make
+    the answer depend on the machine that wrote it.
+    """
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'), default=str).encode('utf-8')
+
+
+def content_digest(chunks) -> tuple[str, int]:
+    """``(sha256, byte size)`` of a content sequence, hashed one chunk per line.
+
+    The streaming form is what makes this affordable on a 100k-row table: nothing is concatenated
+    into one big string, and the bytes hashed are exactly the bytes ``size`` counts.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    for chunk in chunks:
+        payload = _canonical(chunk) + b'\n'
+        digest.update(payload)
+        size += len(payload)
+    return digest.hexdigest(), size
+
+
+def rows_digest(rows) -> tuple[str, int]:
+    """The content identity of a node's output table."""
+    return content_digest(rows)
+
+
+def artifact_digest(product) -> tuple[str, int]:
+    """The content identity of a non-tabular product (a chart spec, a staged document)."""
+    return content_digest([product])
 
 
 class AssetError(ValueError):

@@ -311,7 +311,7 @@ class RunsMixin:
         # ``run_log`` too: the console lines are per-run bookkeeping, so the retention policy that
         # deletes the run also reclaims its (potentially large) log — the growth cap for storing
         # every line rather than a bounded tail.
-        for table in ('node_rows', 'node_schema', 'node_runs', 'runs', 'run_files', 'run_log'):
+        for table in ('node_rows', 'node_schema', 'node_assets', 'node_runs', 'runs', 'run_files', 'run_log'):
             cur = self._execute(f'DELETE FROM {table} WHERE run_id = ?', (run_id,))
             counts[table] = cur.rowcount
         return counts
