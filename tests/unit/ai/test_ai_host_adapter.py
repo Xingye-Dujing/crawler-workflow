@@ -123,8 +123,37 @@ class TestTheReferenceSeam:
 
 
 class TestStrictMode:
-    def test_the_universal_verbs_survive_a_relevance_cut(self, host):
-        assert set(host.core_tools()) == set(legacy_tools.UNIVERSAL_TOOLS)
+    def test_only_the_unblocking_verbs_are_core(self, host):
+        """``core_tools`` is a priority group, not the universal list.
+
+        It used to return all of ``UNIVERSAL_TOOLS`` (21 names). The framework kept every core verb
+        and checked the count afterwards, so a "12 tool" turn was offered 27 — and not one tool of
+        the active skill. Measured on the real registry, every skill lost its own verbs.
+        """
+        assert set(host.core_tools()) == {'request_dataset_access', 'skill_load'}
+        assert set(host.core_tools()) < set(legacy_tools.UNIVERSAL_TOOLS)
+
+    def test_every_skill_keeps_its_own_tools_inside_the_budget(self, host):
+        """The offer list a local model sees: at most the budget, and never missing the skill's own."""
+        from agent_workspace.tools import CONTROL_TOOLS, ToolRegistry
+        from ai import skills
+
+        registry = ToolRegistry(store=None, host=host, settings=None, context=None, workspace_provider=None)
+        for spec in host.tools():
+            registry.register(spec)
+        universal = set(legacy_tools.UNIVERSAL_TOOLS)
+        for skill_id, skill in skills.BUILTIN.items():
+            own = tuple(name for name in skill.tools if name not in universal)
+            if not own:
+                continue
+            offered = {
+                row['name']
+                for row in registry.schemas(
+                    set(skill.tools) | universal, query='这个数据集里有多少行', limit=12, priority=tuple(skill.tools)
+                )
+            }
+            assert set(own) <= offered, f'{skill_id} lost its own tools to the budget: {sorted(set(own) - offered)}'
+            assert len(offered - set(CONTROL_TOOLS)) <= max(12, len(own) + len(host.core_tools()))
 
     def test_strict_mode_is_on_by_default_and_can_be_read_from_settings(self, host):
         assert host.settings().get('tools.strict_local') is True

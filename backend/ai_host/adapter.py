@@ -319,8 +319,15 @@ class CaiXiHuiHost(DefaultHostAdapter):
         return legacy_tools.UNIVERSAL_TOOLS
 
     def core_tools(self) -> tuple[str, ...]:
-        """Strict mode keeps these even when the relevance cut trims the rest."""
-        return legacy_tools.UNIVERSAL_TOOLS
+        """Strict mode's priority group: the verbs a turn cannot get unstuck without.
+
+        Deliberately NOT all of ``UNIVERSAL_TOOLS``. Declaring twenty-one names here made the
+        12-tool budget meaningless: the framework kept them all and checked the count afterwards, so
+        a local model was offered 27 tools — none of them the active skill's own. "Offered to every
+        turn" (``universal_tools``) is eligibility, not immunity; only the verb that unblocks a
+        refused read and the one that loads a skill's body earn a guaranteed slot.
+        """
+        return ('request_dataset_access', 'skill_load')
 
     # ── run monitors ────────────────────────────────────────────────────────
 
