@@ -188,11 +188,17 @@ kernel，再补九段：identity 的 `category` 就是 `cn`/`overseas`，`execut
 
 一个清单要被哪些表面服务，写成数据而不是口头约定：`tests/unit/gates/test_capability_surfaces.py`
 的 `SURFACES` 按 kind 列出表面（`runtime:*` 服务端注册表、`api:chart-profiles`、`generated:*` 生成物、
-`ai:skill-catalog`/`ai:vocabulary`、`docs:page`/`docs:skill`），并对每个 (kind, surface) 双向断言：
-清单里的每个 id 都在表面上（不漏），表面上的每个 id 都在清单里（不多）。它第一次跑就抓到三件事：
-OpenAPI 里 node 与 operator 共用 `NodeParams.` 前缀（现在拆成 `OperatorParams.`）、前端目录的 key
-写成 `types` 而实际是 `nodes`、AI 词汇表里的
-CatBus-only 平台（京东/淘宝/快手/TikTok/闲鱼）不属于本树（门禁显式排除而不是假装它们不存在）。
+`ai:skill-catalog`/`ai:vocabulary`、`mcp:capabilities`、`cli:capabilities`、
+`docs:page`/`docs:skill`），并对每个 (kind, surface) 双向断言：清单里的每个 id 都在表面上（不漏），
+表面上的每个 id 都在清单里（不多）。它第一次跑就抓到三件事：OpenAPI 里 node 与 operator 共用
+`NodeParams.` 前缀（现在拆成 `OperatorParams.`）、前端目录的 key 写成 `types` 而实际是 `nodes`、
+AI 词汇表里的 CatBus-only 平台（京东/淘宝/快手/TikTok/闲鱼）不属于本树（门禁显式排除而不是假装它们
+不存在）。
+
+浏览器之外的两种用法也读同一份清单：`services.mcp`（JSON-RPC，工具
+`capabilities_list`/`capabilities_show`/`workflow_validate`，`tools/mcp_server.py` 走 stdio）与
+`services.capability_cli`（`python tools/capability_cli.py list|show|validate`）。两者都只是
+`ai.knowledge` 与 `engine.workflow` 的薄封装，所以终端或编辑器里看到的能力不会比产品多一个。
 
 ## 已迁移的例子
 

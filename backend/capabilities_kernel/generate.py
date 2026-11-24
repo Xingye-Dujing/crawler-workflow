@@ -110,8 +110,8 @@ def _node_schema(manifest) -> dict:
     return out
 
 
-def _chart_schema(manifest) -> dict:
-    """The OpenAPI half of a chart type: the boxes it reads and how it is drawn."""
+def _chart_schema() -> dict:
+    """The OpenAPI shape of one chart type (its declaration is data; this is the wire contract)."""
     return {
         'type': 'object',
         'required': ['key', 'family', 'echartsOnly', 'latexBuildable', 'fields'],
@@ -143,8 +143,8 @@ def _chart_schema(manifest) -> dict:
     }
 
 
-def _platform_schema(manifest) -> dict:
-    """The OpenAPI half of a platform: its region and every mode's form."""
+def _platform_schema() -> dict:
+    """The OpenAPI shape of one platform (its declaration is data; this is the wire contract)."""
     return {
         'type': 'object',
         'required': ['platform', 'region', 'modes'],
@@ -264,9 +264,9 @@ def _openapi_payload() -> dict:
         elif manifest.identity.kind == 'operator':
             schemas[f'OperatorParams.{manifest.identity.id}'] = _node_schema(manifest)
         elif manifest.identity.kind == 'chart':
-            schemas[f'ChartFields.{manifest.identity.id}'] = _chart_schema(manifest)
+            schemas[f'ChartFields.{manifest.identity.id}'] = _chart_schema()
         elif manifest.identity.kind == 'platform':
-            schemas[f'PlatformModes.{manifest.identity.id}'] = _platform_schema(manifest)
+            schemas[f'PlatformModes.{manifest.identity.id}'] = _platform_schema()
     return {
         'openapi': '3.1.0',
         'info': {

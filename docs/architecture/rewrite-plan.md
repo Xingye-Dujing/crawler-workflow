@@ -224,7 +224,7 @@
 - [x] 平台清单化（10 个：`capabilities_kernel/platforms/<id>/manifest.py` 声明模式/字段/采集行为/登录与机器要求/运行建议与七段技能；`capabilities.platforms.CAPABILITIES` 与 `capabilities.registry` 全部由其投影，爬虫类成为清单 handler）
 - [ ] 面板/停靠/设置清单化
 - [x] 生成物与门禁（catalog/openapi/ai_tools/前端目录/能力页与技能页 + freshness；OpenAPI 为每类能力生成 `NodeParams.`/`OperatorParams.`/`ChartFields.`/`PlatformModes.` schema）
-- [ ] 多表面生成：MCP server / CLI / UI 表单（API、AI 工具、文档、生成物已覆盖）
+- [x] 多表面生成：OpenAPI / MCP server（stdio，`tools/mcp_server.py`）/ CLI（`tools/capability_cli.py`）/ AI 工具 / 文档（UI 表单随“面板/停靠/设置清单化”）
 - [x] 同一清单的七个表面一致性门禁（`tests/unit/gates/test_capability_surfaces.py`：每种能力 × 每个应服务的表面，双向断言“没有漏、没有多”）
 - **DoD**：每个域新增一项只改一个清单；doctor 全绿；多表面生成无漂移。
 

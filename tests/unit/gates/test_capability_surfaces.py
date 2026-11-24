@@ -32,6 +32,8 @@ SURFACES: dict[str, tuple[str, ...]] = {
         'generated:ai-tools',
         'ai:skill-catalog',
         'ai:vocabulary',
+        'mcp:capabilities',
+        'cli:capabilities',
         'docs:page',
         'docs:skill',
     ),
@@ -42,6 +44,8 @@ SURFACES: dict[str, tuple[str, ...]] = {
         'generated:ai-tools',
         'ai:skill-catalog',
         'ai:vocabulary',
+        'mcp:capabilities',
+        'cli:capabilities',
         'docs:page',
         'docs:skill',
     ),
@@ -54,6 +58,8 @@ SURFACES: dict[str, tuple[str, ...]] = {
         'generated:ai-tools',
         'ai:skill-catalog',
         'ai:vocabulary',
+        'mcp:capabilities',
+        'cli:capabilities',
         'docs:page',
         'docs:skill',
     ),
@@ -64,6 +70,8 @@ SURFACES: dict[str, tuple[str, ...]] = {
         'generated:ai-tools',
         'ai:skill-catalog',
         'ai:vocabulary',
+        'mcp:capabilities',
+        'cli:capabilities',
         'docs:page',
         'docs:skill',
     ),
@@ -123,6 +131,14 @@ def _offered(surface: str, kind: str) -> set[str]:
         return {row['capability'][len(prefix) :] for row in payload['tools'] if row['capability'].startswith(prefix)}
     if surface == 'ai:skill-catalog':
         return {row['capability'] for row in knowledge.catalog(kind)}
+    if surface == 'mcp:capabilities':
+        from services.mcp import capabilities_list
+
+        return {row['capability'] for row in capabilities_list(kind=kind)['skills']}
+    if surface == 'cli:capabilities':
+        from services.capability_cli import listed
+
+        return {row['capability'] for row in listed(kind=kind)}
     if surface == 'ai:vocabulary':
         from ai import vocabulary
 

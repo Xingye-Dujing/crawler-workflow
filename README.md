@@ -133,6 +133,7 @@ ECharts 与 Matplotlib 双引擎的论文风格图表、知识图谱与叠加图
 - **本机 Ollama 也能用工具**：模型列表来自守护进程的 `/api/tags`（不再写死一个模型），`tools`/思考开关按 `/api/show` 的逐模型能力回答，请求按模型真实上下文长度下发 `num_ctx`；工具调用与结果按 `role: tool` 原样回放。
 - **技能与插件**：内置技能只读，可 Fork；用户技能是数据（提示词 + 上下文来源 + 只读工具）。插件支持声明式技能包、Provider 包、HTTP 工具包与仅本地/管理员的代码插件，云端按名拒绝代码插件。Provider/工具/代码包会写进整个进程共用的表，所以开启账号系统时只有管理员能安装；技能包是本账号的数据，人人可装。**安装是机器级的，使用不是**：某个账号装的工具/Provider/技能只在该账号自己的对话里出现，别的账号既看不到也调不动。停用或卸载会真正撤掉它的工具与 Provider，不是只改个标签。
 - 架构与权限： [`docs/ai_workspace.md`](docs/ai_workspace.md)。
+- **能力树在终端与编辑器里也能用**：`python tools/capability_cli.py list [--kind chart] | show chart.bar | validate 画布.json`；MCP 客户端可把 `python tools/mcp_server.py` 注册为 stdio 服务，得到 `capabilities_list`、`capabilities_show`、`workflow_validate` 三个工具。两者都读同一个能力清单与同一个校验引擎，终端看到的能力不会比产品多一个。
 
 ## 设置与采集节奏
 
