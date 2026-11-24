@@ -2,8 +2,21 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`9c8fddf2 功能更新：P7 多表面——MCP server 与能力 CLI`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`7e1652a4 功能更新：分析节点的算子下拉改由能力清单渲染`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## 面板清单化（第一半，2026-11-24）
+
+- `registry.operator_entries()` 成为浏览器的算子投影（id/词/分组/槽位/是否用模型/写形状/读列/声明参数），
+  `/api/node-types` 同时返回 `types`/`charts`/`operators`，冷页的 `node-types-fallback.js` 与
+  `capability-schema.json` 带同一份；`node-analysis.js` 删除手写 `ANALYSIS_OPS`，步骤下拉渲染
+  `NodeTypes.operators()`。
+- 门禁：算子新增 `api:operators`、`generated:frontend-schema` 两条表面断言；“第二份算子名单”扫描阈值
+  4→10（整份下拉才算拷贝）。
+- **剩下的一半**：37 个算子的**字段块**仍手写；搬它要同时把面板字段名与 `normalize_analysis_params`
+  的映射放进清单，否则旧画布的面板会显示空框。
+- 验证：analysis/frontend/capabilities/api/gates **5557 passed**；表面+capabilities 514 passed；ruff
+  全绿；product 与 tests pylint 10.00/10（按“小改动只跑相关域”的口径，未跑全量）。
 
 ## P7 多表面：MCP server 与能力 CLI（2026-11-24）
 
@@ -102,6 +115,7 @@
 | `6a8c4025` | P7 第三类：10 个采集平台清单化（模式/字段/登录与机器要求/七段技能；值类型搬进 kernel，爬虫类成为 handler） |
 | `a36c997a` | P7 七表面一致性门禁（每类能力 × 每个表面双向断言）+ OpenAPI 图表/平台 schema |
 | `9c8fddf2` | P7 多表面：MCP server（stdio，3 个工具）与能力 CLI（list/show/validate），门禁新增两条表面 |
+| `7e1652a4` | 面板清单化（第一半）：算子下拉改由 `NodeTypes.operators()` 渲染，删掉 `ANALYSIS_OPS` |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
