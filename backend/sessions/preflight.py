@@ -44,27 +44,26 @@ from i18n import get_lang, set_lang, t
 from services import pool
 from services.ingest import catbus
 from services.pool import selector as pool_selector
-from sessions import profiles
+from sessions import profiles, verdict
 from sessions.cookies import CookieManager
 from sessions.session_state import has_session as _has_session
+from sessions.verdict import (
+    COOLING,
+    EXPIRED,
+    NO_COOKIE,
+    NO_LOGIN,
+    NOT_CRAWLABLE,
+    UNKNOWN,
+    VALID,
+    classify_probe,
+)
 
 logger = logging.getLogger(__name__)
 
-VALID = 'valid'
-EXPIRED = 'expired'
-UNKNOWN = 'unknown'
-NO_COOKIE = 'nocookie'
-NO_LOGIN = 'nologin'
-NOT_CRAWLABLE = 'notcrawlable'
-#: The pool benched this login/exit; a run would spend an attempt the whole feature exists
-#: to avoid. It reads as its own verdict because the user's next action ("wait", or
-#: "unfreeze in the pool panel") is neither "log in again" nor "try anyway".
-COOLING = 'cooling'
-
-#: The verdicts a run may not start on. Kept as one tuple because the endpoint and the
-#: browser both have to agree, and “过期就不得执行” is the user's decision, not a
-#: detail to be rediscovered in two places.
-BLOCKING = (EXPIRED, NO_COOKIE, COOLING)
+#: The verdicts a run may not start on, re-exported under the name the endpoint and the live
+#: tests use. The decision itself is :data:`sessions.verdict.BLOCKING` — one tuple, so the
+#: endpoint and the browser cannot disagree about “过期就不得执行”.
+BLOCKING = verdict.BLOCKING
 
 _cache: dict[tuple, dict] = {}
 _lock = threading.Lock()
@@ -96,29 +95,16 @@ def invalidate(platform: str = None) -> None:
 
 
 def _cache_key(platform: str, account: str = '', use_profile: bool = None) -> tuple:
-    """The ONE key a verdict is stored under.
+    """The ONE key a verdict is stored under, with this module's two inputs resolved.
 
-    The scope comes first: two accounts can hold *different* sessions for the same platform and
-    the same account label, and a verdict is about one of those files. Keying by platform alone
-    let one account's “已失效” refuse the other's healthy run.
-
-    ``entry_key``/``entry_of`` above already fold ``default`` onto the platform's own login,
-    and :func:`entry_key`'s docstring names the cost of getting this wrong: two spellings of
-    one login landing in two cache slots is how a probe runs a browser twice and answers
-    “没有登录” from the slot nobody filled. The panel's 验证 wrote the folded name while the
-    preflight at Run read the blank one, so the “已失效” the user had just measured never
-    blocked the run.
-
-    ``use_profile`` is the third dimension, and it was missing: which session the probe READS
-    depends on it — with browser profiles on it is ``chrome_profile/<platform>/<account>``, with
-    them off it is the cookie file. A run with profiles enabled therefore cached its verdict under
-    a key a later run with profiles disabled also looked in, and the second run was gated on a
-    session it does not use (or cleared by a wall the other one hit). ``None`` means "ask the
-    setting", which is what ``has_session_to_test`` does, so the key stores that resolved answer
-    rather than the caller's spelling.
+    The fold and the four dimensions are :func:`sessions.verdict.cache_key`; what happens
+    here is the two questions only this module can answer: which account is asking
+    (``account_context``) and which session the probe reads (``use_profile``). ``None``
+    means "ask the setting", which is what ``has_session_to_test`` does, so the key stores
+    that resolved answer rather than the caller's spelling.
     """
     active = profiles.is_enabled() if use_profile is None else bool(use_profile)
-    return account_context.scope_key(), str(platform), CookieManager.path_segment(account), bool(active)
+    return verdict.cache_key(account_context.scope_key(), platform, account, active)
 
 
 def cached(platform: str, account: str = '', use_profile: bool = None) -> dict | None:
@@ -128,46 +114,18 @@ def cached(platform: str, account: str = '', use_profile: bool = None) -> dict |
         entry = _cache.get(key)
         if not entry:
             return None
-        if time.monotonic() - entry['at'] > float(get_setting('cookie_preflight_ttl')):
+        if not verdict.is_fresh(entry['at'], time.monotonic(), get_setting('cookie_preflight_ttl')):
             _cache.pop(key, None)
             return None
         return dict(entry)
 
 
-def _remember(platform: str, verdict: dict, account: str = '', use_profile: bool = None) -> None:
-    """Cache only the two verdicts that are facts about the session.
-
-    An ``unknown`` is not one: it says the check did not happen, and reusing it for
-    five minutes would keep a run going on an answer the site never gave. Re-asking
-    costs one bounded page load, which is what the first press already paid.
-    """
-    if verdict.get('state') not in (VALID, EXPIRED):
+def _remember(platform: str, verdict_data: dict, account: str = '', use_profile: bool = None) -> None:
+    """Cache only the verdicts that are facts about the session (see :func:`verdict.cacheable`)."""
+    if not verdict.cacheable(verdict_data.get('state')):
         return
     with _lock:
-        _cache[_cache_key(platform, account, use_profile)] = {**verdict, 'at': time.monotonic()}
-
-
-def classify_probe(facts: dict) -> str:
-    """``valid`` / ``expired`` / ``unknown``, from the bare facts a browser came back with.
-
-    The order is the whole point: a failure to observe outranks a wall, because an
-    unverifiable page is not evidence of a dead cookie. Whether the page was a wall or
-    risk control is :meth:`crawlers.core.crawler.Crawler.check_intercept`'s judgement, and this
-    function inherits it rather than re-reading the page.
-
-    ``unreachable`` is checked before even ``login_wall``, and this is the one place its
-    cost is visible: verdicts are *cached*. A browser that wrote its own error page never
-    showed the site this session, so answering “Cookie 可用” here would park a claim about
-    a cookie in the path of every run that starts — with no probe behind it and no way for
-    the user to see that nothing was tested.
-    """
-    if facts.get('error') or facts.get('unreachable'):
-        return UNKNOWN
-    if facts.get('login_wall'):
-        return EXPIRED
-    if facts.get('risk_blocked'):
-        return UNKNOWN
-    return VALID
+        _cache[_cache_key(platform, account, use_profile)] = {**verdict_data, 'at': time.monotonic()}
 
 
 def record(platform: str, facts: dict, account: str = '', use_profile: bool = None) -> dict:
@@ -182,30 +140,12 @@ def record(platform: str, facts: dict, account: str = '', use_profile: bool = No
     mode if the switch moved while the probe ran; the caller knows, so it passes it in.
     """
     account = CookieManager.key(account)
-    verdict = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
-    _remember(platform, verdict, account, use_profile)
-    return verdict
+    answer = _verdict(str(platform), classify_probe(facts), probed=True, account=account)
+    _remember(platform, answer, account, use_profile)
+    return answer
 
 
-#: One sentence per state, from the backend catalogue. An unmapped state falls back to
-#: the “无法核对” wording rather than raising: a verdict the browser cannot name must
-#: not be the reason a run fails to start.
-_REASONS = {
-    VALID: 'cookie.pre.valid',
-    EXPIRED: 'cookie.pre.expired',
-    UNKNOWN: 'cookie.pre.unknown',
-    NO_COOKIE: 'cookie.verify.noCookie',
-    NO_LOGIN: 'cookie.pre.noLogin',
-    NOT_CRAWLABLE: 'cookie.pre.notCrawlable',
-    COOLING: 'cookie.pre.cooling',
-}
-
-
-def _reason_key(state: str) -> str:
-    return _REASONS.get(state, 'cookie.pre.unknown')
-
-
-def describe(verdict: dict) -> str:
+def describe(verdict_data: dict) -> str:
     """The user-facing sentence for one verdict, rendered from the backend catalogue.
 
     Server-side on purpose: the wording belongs with the crawler that decided it, and
@@ -213,14 +153,16 @@ def describe(verdict: dict) -> str:
     drift apart (the same reason ``/api/cookies/flow`` ships its guidance already
     translated).
     """
-    platform = str(verdict.get('platform') or '')
-    text = t(str(verdict.get('why_key') or _reason_key(str(verdict.get('state') or ''))), platform=platform)
+    platform = str(verdict_data.get('platform') or '')
+    text = t(
+        str(verdict_data.get('why_key') or verdict.reason_key(str(verdict_data.get('state') or ''))), platform=platform
+    )
     # A named account is part of the fact: “知乎 Cookie 已失效” sent the user to refresh
     # the login that was never the dead one when the node had chosen a second account.
-    account = str(verdict.get('account') or '')
+    account = str(verdict_data.get('account') or '')
     if account:
         text += t('cookie.pre.account', account=account)
-    detail = str(verdict.get('detail') or '')
+    detail = str(verdict_data.get('detail') or '')
     return f'{text}（{detail}）' if detail else text
 
 
@@ -231,9 +173,9 @@ def _verdict(
         'platform': platform,
         'account': str(account or '').strip(),
         'state': state,
-        'blocking': state in BLOCKING,
+        'blocking': verdict.is_blocking(state),
         'detail': detail,
-        'why_key': why_key or _reason_key(state),
+        'why_key': why_key or verdict.reason_key(state),
         'probed': probed,
     }
 
@@ -518,18 +460,18 @@ def probe(
         # profile is already the best evidence about the session there is.
         return _verdict(platform, UNKNOWN, detail=t('cookie.pre.busy', platform=platform), account=account)
     facts = _probe_live(platform, use_profile=use_profile, account=account)
-    verdict = _verdict(platform, classify_probe(facts), probed=True, account=account)
+    answer = _verdict(platform, classify_probe(facts), probed=True, account=account)
     if facts.get('risk_blocked'):
         # ``classify_probe`` folds a captcha into UNKNOWN (it must not call a session dead),
         # but the pool still needs the fact: dropping it means a probe that SAW a risk page
         # records nothing and the exit is never benched.
-        verdict['risk_blocked'] = True
-    if verdict['state'] == UNKNOWN and not facts.get('error'):
-        verdict['detail'] = t('cookie.pre.riskControl')
-    elif verdict['state'] == UNKNOWN:
-        verdict['detail'] = facts['error']
-    _remember(platform, verdict, account, use_profile)
-    return verdict
+        answer['risk_blocked'] = True
+    if answer['state'] == UNKNOWN and not facts.get('error'):
+        answer['detail'] = t('cookie.pre.riskControl')
+    elif answer['state'] == UNKNOWN:
+        answer['detail'] = facts['error']
+    _remember(platform, answer, account, use_profile)
+    return answer
 
 
 def _probe_catbus(platform: str, account: str = '') -> dict:
@@ -702,15 +644,15 @@ def _pool_verdict(platform: str, use_profile, fresh: bool) -> dict:
         candidate = pool.claim(platform)
         if candidate is not None:
             try:
-                verdict = probe(platform, use_profile=use_profile, fresh=fresh, account=candidate.account)
+                answer = probe(platform, use_profile=use_profile, fresh=fresh, account=candidate.account)
             finally:
                 pool.release(candidate)
-            facts = _facts_of(verdict)
+            facts = _facts_of(answer)
             pool.observe(platform, candidate.account, facts, exit_id=candidate.exit_id)
             snapshot = pool.snapshot(platform)
         else:
-            verdict = _verdict(platform, COOLING, account=account, why_key='cookie.pre.poolCooling')
-            return verdict
+            answer = _verdict(platform, COOLING, account=account, why_key='cookie.pre.poolCooling')
+            return answer
     if not snapshot['usable']:
         return _verdict(
             platform,
@@ -726,15 +668,15 @@ def _pool_verdict(platform: str, use_profile, fresh: bool) -> dict:
     return _verdict(platform, VALID, account=account)
 
 
-def _facts_of(verdict: dict) -> dict:
+def _facts_of(answer: dict) -> dict:
     """A concrete verdict back into the bare facts :func:`services.pool.health.observe` reads.
 
     One mapping, so a live preflight records the same evidence a crawl would.
     """
-    state = str((verdict or {}).get('state') or '')
+    state = str((answer or {}).get('state') or '')
     if state == EXPIRED:
         return {'login_wall': True}
-    if (verdict or {}).get('risk_blocked'):
+    if (answer or {}).get('risk_blocked'):
         # A captcha/risk page is visible evidence even though classify_probe keeps the
         # verdict UNKNOWN (a captcha is not proof the cookie died). The pool still benches
         # the exit for the risk duration instead of pretending nothing was measured.

@@ -38,7 +38,7 @@ from crawlers.core.crawler import Crawler
 from crawlers.engine import times
 from crawlers.engine.counters import parse_count
 from crawlers.engine.jsonpath import collect, get_in, runs_text
-from crawlers.platforms.youtube import innertube
+from crawlers.platforms.youtube import dialogs, innertube
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -286,6 +286,13 @@ class YouTubeCrawler(Crawler):
     #: ``ytcfg`` is on every page and this one is the cheapest to reach; nothing
     #: is scraped from it — it exists to give the JSON calls an origin.
     crawl_entry = 'https://www.youtube.com/'
+
+    #: The EU consent sheet (“在我们继续之前”) covers the document a fresh, cookie-less
+    #: session lands on, and ``_boot`` reads its API key and context out of that very
+    #: document. Accepting is harmless and the sheet blocks everything behind it, so it is
+    #: clicked away through the shared :meth:`Crawler.open` hook; with a consent cookie
+    #: already stored the poll finds nothing and costs one script call.
+    prompts = (dialogs.CONSENT,)
 
     POLITE_BASE = 0.12
     POLITE_SPREAD = 0.08

@@ -9,24 +9,14 @@ import time
 from core.atomic import replace as atomic_replace
 
 from i18n import t
+from sessions import naming
 
 logger = logging.getLogger(__name__)
 
-#: An account label is the ONLY extra segment a cookie filename gains, and it comes from
-#: a text box in the panel, so it is held to the same shape as a platform name: it enters
-#: a filesystem path. ``@`` separates platform from account and no part may contain it,
-#: which is what keeps ``zhihu@work_cookies.json`` unambiguously "zhihu, account work".
-#: The empty account is the platform's default login and keeps the pre-multi-account
-#: filename byte-for-byte, so an existing single-account user's files never move.
-#:
-#: The character set is "what a path segment may say and what this tool may fold safely":
-#: letters, digits, ``_`` and ``-``. ``.`` and ``..`` are out because they are path parts,
-#: ``/`` ``\\`` ``@`` because they are structure, and a space because the panel writes the
-#: name into filenames that a shell or a script has to quote afterwards. Uppercase IS
-#: accepted at the box, but it is not a distinct account: the key is lowercased here, on a
-#: filesystem where ``Work`` and ``work`` are the same file — two spellings of one login is
-#: exactly the thing this file refuses to keep.
-ACCOUNT_RE = re.compile(r'^[a-z0-9_-]{1,24}$')
+#: The account-label rule lives in :mod:`sessions.naming` — the fold that names a cookie file
+#: also names a profile directory, and one rule in two files is how the two drift apart. This
+#: name stays public because the profile side and the docs point at it.
+ACCOUNT_RE = naming.ACCOUNT_RE
 
 
 def _has_expiry(row: dict):
@@ -66,14 +56,9 @@ class CookieManager:
     #: thing cannot have two rules. It is also the only name that is spelled two ways: the
     #: empty string is its historical spelling (every file, node parameter and workflow written
     #: before multi-account support left it blank), so both arrive here and one path leaves.
-    #: :meth:`key` is the single place that folds them together; nothing else may test for
-    #: ``''`` to mean "the default account".
-    DEFAULT_ACCOUNT = 'default'
-
-    # The character rule is the module-level ``ACCOUNT_RE`` and this is that same object, not
-    # a second literal: a rule written twice is a rule that can drift into two (it did — the
-    # filename pattern gained ``-`` while the copy below still refused it).
-    _ACCOUNT_RE = ACCOUNT_RE
+    #: :meth:`key` and :meth:`path_segment` are the folds themselves, from
+    #: :mod:`sessions.naming`; nothing else may test for ``''`` to mean "the default account".
+    DEFAULT_ACCOUNT = naming.DEFAULT_ACCOUNT
 
     @classmethod
     def key(cls, account: str) -> str:
@@ -83,13 +68,12 @@ class CookieManager:
         building uses the reverse (:meth:`path_segment`), because the default login's file
         name predates the name.
         """
-        text = str(account or '').strip().lower()
-        return cls.DEFAULT_ACCOUNT if text == '' else text
+        return naming.account_name(account)
 
     @classmethod
     def is_default(cls, account: str) -> bool:
         """Whether *account* names the platform's own login, under either spelling."""
-        return cls.key(account) == cls.DEFAULT_ACCOUNT
+        return naming.is_default(account)
 
     @classmethod
     def path_segment(cls, account: str) -> str:
@@ -101,7 +85,7 @@ class CookieManager:
         account too, and a ``default`` probe that keyed itself apart from a blank one would
         ask the same question twice and answer it twice.
         """
-        return '' if cls.is_default(account) else cls.key(account)
+        return naming.account_segment(account)
 
     def __init__(self, cookie_dir):
         """*cookie_dir* is a directory or a zero-argument callable returning one.
@@ -140,8 +124,7 @@ class CookieManager:
         accepted because it is that same account's historical spelling, not a second kind of
         account. Folding happens in :meth:`key`, so no caller tests for ``''``.
         """
-        text = str(account or '').strip().lower()
-        return text == '' or bool(cls._ACCOUNT_RE.match(text))
+        return naming.is_account_label(account)
 
     def path_for(self, platform: str, account: str = '') -> str:
         """Where this account's session lives — the one answer to that question.
@@ -158,11 +141,9 @@ class CookieManager:
         if not self.is_supported(platform):
             raise ValueError(f'Unsupported platform: {platform}')
         account = self.key(account)
-        if not self._ACCOUNT_RE.match(account):
+        if not naming.ACCOUNT_RE.match(account):
             raise ValueError(f'Invalid account: {account}')
-        segment = self.path_segment(account)
-        stem = f'{platform}@{segment}' if segment else platform
-        return os.path.join(self.cookie_dir, f'{stem}_cookies.json')
+        return os.path.join(self.cookie_dir, naming.cookie_filename(platform, account))
 
     def account_files(self, platform: str) -> list:
         """The named accounts that already have a saved cookie file, sorted.
@@ -182,13 +163,13 @@ class CookieManager:
                 if not name.startswith(prefix) or not name.endswith('_cookies.json'):
                     continue
                 account = name[len(prefix) : -len('_cookies.json')]
-                if account == self.DEFAULT_ACCOUNT:
+                if account == naming.DEFAULT_ACCOUNT:
                     # A file named ``zhihu@default_cookies.json`` would be a SECOND name for
                     # the platform's own login, which the path rule above never writes. Ignored
                     # rather than listed, so the panel cannot offer two entries that save to
                     # different files while meaning the same account.
                     continue
-                if self._ACCOUNT_RE.match(account):
+                if naming.ACCOUNT_RE.match(account):
                     out.append(account)
         return sorted(out)
 
@@ -212,17 +193,17 @@ class CookieManager:
         if not self.is_supported(platform):
             return []
         named = self.account_files(platform)
-        entries = [self.DEFAULT_ACCOUNT] if self.exists(platform) else []
+        entries = [naming.DEFAULT_ACCOUNT] if self.exists(platform) else []
         entries += named
-
-        def _born(account: str) -> tuple:
+        born: dict[str, float] = {}
+        for account in entries:
             try:
                 info = os.stat(self.path_for(platform, account))
             except OSError:
-                return (float('inf'), account)
-            return (min(info.st_ctime, info.st_mtime), account)
-
-        return sorted(entries, key=_born)
+                born[account] = float('inf')
+                continue
+            born[account] = min(info.st_ctime, info.st_mtime)
+        return naming.account_order(entries, born)
 
     def has_any(self, platform: str) -> bool:
         """Whether this platform has a saved login for ANY account.
@@ -238,18 +219,10 @@ class CookieManager:
 
         “如果有多个留空就需要默认账号后面自动加数字”: the default file is one file, and a second
         unnamed save would otherwise overwrite the first login with no sentence saying so. The
-        generated label is ASCII (``default2``, ``default3``…) because it enters a filename — the
-        *display* of it is “默认账号2”, which is what the user reads (``account_label_key``).
-
-        A platform with no default login yet answers ``default`` — the name of that slot — so
-        every account the panel lists is spelled the same way: a word that fits the rule.
+        decision itself (``default``, then ``default2``, ``default3``…) is
+        :func:`sessions.naming.next_free_label`; this asks it which files exist.
         """
-        if not self.exists(platform):
-            return self.DEFAULT_ACCOUNT
-        step = 2
-        while self.exists(platform, f'default{step}'):
-            step += 1
-        return f'default{step}'
+        return naming.next_free_label(self.accounts_in_order(platform))
 
     @classmethod
     def account_label_key(cls, account: str) -> tuple:

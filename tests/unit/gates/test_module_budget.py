@@ -1,7 +1,7 @@
 """Module size is a ratchet, not a target: a file over budget may only get smaller.
 
 A 600-line ceiling is the line where a Python module stops being one thing you can hold in your
-head (the same threshold the god-module detectors use). 33 hand-written modules are above it on
+head (the same threshold the god-module detectors use). 32 hand-written modules are above it on
 2026-11-24; forcing them all to shrink in one change would be a rewrite, so each is **frozen at its
 current size** here. The rules:
 
@@ -32,7 +32,6 @@ SLACK = 100
 #: Hand-written code modules above the ceiling, frozen at their 2026-11-24 size.
 #: Lowering a number here is the reward for a split; raising one needs a reason in the review.
 BUDGETS: dict[str, int] = {
-    'ai/tools.py': 1697,
     'crawlers/core/crawler.py': 1241,
     'api/ai_workspace.py': 1205,
     'api/sessions.py': 1153,
@@ -42,7 +41,7 @@ BUDGETS: dict[str, int] = {
     'core/machine.py': 978,
     'services/ingest/catbus.py': 928,
     'crawlers/platforms/zhihu/crawler.py': 892,
-    'sessions/profiles.py': 889,
+    'sessions/profiles.py': 776,
     'crawlers/platforms/weibo/crawler.py': 884,
     'nodes/executors/source.py': 881,
     'app.py': 859,
@@ -51,7 +50,7 @@ BUDGETS: dict[str, int] = {
     'capabilities/registry.py': 789,
     'crawlers/platforms/douyin/crawler.py': 776,
     'services/accounts/service.py': 763,
-    'sessions/preflight.py': 747,
+    'sessions/preflight.py': 689,
     'nodes/executors/comment.py': 746,
     'services/analysis/topic_kernels.py': 726,
     'crawlers/platforms/cnki/crawler.py': 720,

@@ -1,7 +1,8 @@
 """YouTube's EU consent sheet: “在我们继续之前”, accepted — it blocks everything behind it.
 
-Declared here because the sheet is a property of the site. Nothing mounts it yet (a known gap recorded by
-the 2026-10 refactor; wiring it changes real-site behaviour and needs its own live evidence).
+Declared here because the sheet is a property of the site, and mounted by
+``YouTubeCrawler.prompts``: ``_boot`` reads the page's API key and innertube context out of the
+document the sheet covers, so a refused navigation would take the whole crawl with it.
 """
 
 from crawlers.engine.popup import Prompt

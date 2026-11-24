@@ -73,8 +73,6 @@ CORE_EXCEPTIONS: dict[str, dict[str, str]] = {
 #: not furniture.
 ORPHAN_EXEMPTIONS: dict[str, str] = {
     'crawlers.platforms.hongguo.addon': 'mitmdump runs the file by path, it is never imported',
-    'crawlers.platforms.instagram.dialogs': 'popup word list; W4 decides import-or-delete',
-    'crawlers.platforms.youtube.dialogs': 'popup word list; W4 decides import-or-delete',
     'runtime.events': 'P1 contract, imported by its gate test only; W6 re-decides',
     'runtime.flags': 'P1 migration switches, read by its gate test only; W6 re-decides',
     'runtime.fsm': 'P1 contract, imported by its gate test only; W6 re-decides',

@@ -41,144 +41,32 @@ from core.config import Config
 from runtime import account_context, paths
 from runtime.settings import get_setting
 
-from sessions.cookies import ACCOUNT_RE, CookieManager
+from sessions import lanes, naming
+from sessions.lanes import forget_lock, is_busy, lock_for
 
 #: Written inside a platform's directory the first time it is used. Its presence is
 #: the whole difference between "import the saved cookie file" and "leave this
 #: profile's own session alone".
 MARKER = '.crawler-profile.json'
 
-#: An account label nests a sub-directory, so it is held to the same shape as the
-#: cookie filename uses: letters, digits, ``_`` and ``-``, up to 24 of them. This is
-#: ``services.cookies.ACCOUNT_RE`` — the SAME compiled object, not a copy — because
-#: a label the jar accepts and the directory refuses would save a login whose device can
-#: never be opened, and that split is invisible from either side alone.
-#:
-#: The blank account is the platform's default device and keeps the historical
-#: ``<root>/<platform>`` directory byte-for-byte; ``default`` is that same account's name
-#: (the fold lives in ``CookieManager.key``), so it nests nothing either.
-_ACCOUNT_RE = ACCOUNT_RE
-
-
-def _account_part(account: str) -> str:
-    """The validated account segment, or ``''`` for the default (no nesting).
-
-    Raises on a label that is neither blank nor a safe word — the same refusal the
-    cookie file makes, so a profile directory can never be walked out of the root.
-    """
-    account = str(account or '').strip().lower()
-    if not account or account == CookieManager.DEFAULT_ACCOUNT:
-        return ''
-    if not _ACCOUNT_RE.match(account):
-        raise ValueError(f'Invalid account: {account}')
-    return account
-
-
-# ─── one browser per profile ────────────────────────────────────
-#
-# chromedriver writes into ``<user-data-dir>/Default/Preferences`` *before* the
-# browser starts, so two sessions created in the same profile at the same moment
-# cannot both come up: one of them dies with ``session not created / failed to
-# write prefs file`` (measured 2026-09: 2 failures in 8 barrier-synchronised
-# attempts, and the failure is a race, not a schedule — it can pass ten times in a
-# row then take down a node). A parallel canvas is exactly where this bites,
-# because two workflows that crawl the same platform are started by the same
-# thread pool.
-#
-# The profile is what makes the run "the same device" to a site, so the answer is
-# not a second directory per consumer: it is one browser at a time per profile,
-# which is also what the user's own browser does. Different platforms keep running
-# in parallel — only the same profile serialises.
-
-_LOCKS: dict[str, threading.Lock] = {}
-_LOCKS_GUARD = threading.Lock()
-
-
-def _dir_key(path: str) -> str:
-    return os.path.normcase(os.path.abspath(str(path or '')))
-
-
-def lock_for(path: str) -> threading.Lock:
-    """The lock that owns *path*, created on first use.
-
-    A plain ``Lock``, deliberately **not** an ``RLock``: the browser is closed from a
-    helper thread (``_close_login_browser`` gives ``quit()`` a bounded grace on a side
-    thread so a hand-closed window cannot hang the run), and an RLock can only be
-    released by the thread that took it — with one, every real crawl finished and left
-    its profile claimed, so the next crawl of that platform waited out the whole
-    timeout. The reentrancy an RLock would buy is not needed either: a workflow never
-    holds two browsers for one platform at a time.
-    """
-    key = _dir_key(path)
-    with _LOCKS_GUARD:
-        lock = _LOCKS.get(key)
-        if lock is None:
-            lock = threading.Lock()
-            _LOCKS[key] = lock
-        return lock
-
-
-def forget_lock(path: str) -> None:
-    """Drop the lane registered for a directory that no longer exists.
-
-    Only a rename needs this today: the map is keyed on an absolute path, so a directory
-    that moved leaves its old key behind. Nothing breaks by keeping it (an unheld ``Lock``
-    answers any later acquirer), but a rename done twice with the same name would otherwise
-    hand back the lane of a device that was replaced — and the whole point of the key is that
-    one path is one device.
-    """
-    with _LOCKS_GUARD:
-        _LOCKS.pop(_dir_key(path), None)
+#: The closing half of the profile lane, re-exported under the name the crawler imports. The
+#: bookkeeping lives in :mod:`sessions.lanes` — chromedriver writes ``Default/Preferences``
+#: *before* the browser starts, so two sessions in one directory at the same moment cannot both
+#: come up, and one lane per directory is the answer; this module owns the path policy.
+release_profile = lanes.release_profile
 
 
 def acquire_profile(path: str, timeout: float = None, abort=None):
     """Take exclusive use of *path*; return the lock, or None if it stayed busy.
 
-    None is an answer the caller must not ignore: proceeding anyway is the crash
-    this prevents. The timeout exists because a browser that was killed without
-    closing would otherwise park every later run of that platform.
-
-    ``abort`` makes the wait cancellable in half-second slices: a run the user
-    stopped must not sit out the timeout behind a browser the stop has already
-    closed — the wait ending on Stop is what lets the worker reach its finally
-    and turn the record from 运行中 into its verdict. Without it the acquire
-    stays the single blocking call it always was.
+    None is an answer the caller must not ignore: proceeding anyway is the crash this
+    prevents. The timeout exists because a browser that was killed without closing would
+    otherwise park every later run of that platform, and this module is the one that reads the
+    configured default; the wait itself — its slices, its abort, its deadline — is
+    :func:`sessions.lanes.acquire`.
     """
-    lock = lock_for(path)
     lock_timeout = float(get_setting('profile_lock_timeout') or Config.PROFILE_LOCK_TIMEOUT)
-    if abort is None:
-        return lock if lock.acquire(timeout=timeout if timeout is not None else lock_timeout) else None
-    deadline = time.monotonic() + (timeout if timeout is not None else lock_timeout)
-    while True:
-        if abort():
-            return None
-        left = deadline - time.monotonic()
-        if left <= 0:
-            return None
-        if lock.acquire(timeout=min(0.5, left)):
-            return lock
-
-
-def release_profile(lock) -> None:
-    if lock is not None:
-        with contextlib.suppress(RuntimeError):
-            lock.release()
-
-
-def is_busy(path: str) -> bool:
-    """Whether some browser holds *path* at this instant.
-
-    Advisory only — the answer is stale the moment it is returned, and a caller that
-    *needed* ownership would take :func:`acquire_profile` instead. It exists for the
-    pre-run cookie probe: opening a second browser into a profile a live crawl owns
-    would park that probe behind ``PROFILE_LOCK_TIMEOUT`` (longer than any crawl) and
-    tell the user nothing about their cookie they could act on.
-    """
-    lock = lock_for(path)
-    if lock.acquire(blocking=False):
-        release_profile(lock)
-        return False
-    return True
+    return lanes.acquire(path, timeout if timeout is not None else lock_timeout, abort)
 
 
 def root_dir() -> str:
@@ -213,7 +101,7 @@ def rename_account(platform: str, account: str, to: str) -> bool:
     not a rename, it is a corrupt device.
     """
     account = str(account or '').strip()
-    to = _account_part(str(to or '').strip().lower())
+    to = naming.profile_segment(str(to or '').strip().lower())
     if not account or not to:
         raise ValueError('Only a named account can be renamed')
     source = platform_dir(platform, account)
@@ -253,7 +141,7 @@ def delete(platform: str, account: str = '') -> str:
     """
     import shutil
 
-    part = _account_part(str(account or '').strip().lower())
+    part = naming.profile_segment(str(account or '').strip().lower())
     if not part:
         raise ValueError('Default account owns no separate profile directory')
     path = platform_dir(platform, part)
@@ -288,8 +176,7 @@ def platform_dir(platform: str, account: str = '') -> str:
         # directory as its source. No such platform exists in the matrix — this is the
         # refusal that keeps it from becoming a silent alias.
         raise ValueError(f'Reserved profile name: {base}')
-    part = _account_part(account)
-    return os.path.join(root_dir(), base, part) if part else os.path.join(root_dir(), base)
+    return naming.profile_path(root_dir(), base, account)
 
 
 def profile_dir_for(platform: str, enabled: bool = None, account: str = '') -> str | None:

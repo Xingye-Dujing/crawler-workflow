@@ -24,6 +24,7 @@ checked against) and the page a login starts from.
 import logging
 
 from crawlers.core.crawler import Crawler
+from crawlers.platforms.instagram import dialogs
 from i18n import t
 
 logger = logging.getLogger(__name__)
@@ -53,3 +54,8 @@ class InstagramCrawler(LoginOnlyCrawler):
 
     domain = 'www.instagram.com'
     login_url = 'https://www.instagram.com/'
+    #: The 打开通知 ask covers the page right after a login, and this crawler opens the login
+    #: page through the shared :meth:`Crawler.open` hook — the panel's 验证 probe and the
+    #: pre-flight visit included. 打开 is on the prompt's forbidden list because it hands the
+    #: browser a native permission dialog no DOM click can close; 以后再说 is the answer.
+    prompts = (dialogs.NOTIFICATIONS,)
