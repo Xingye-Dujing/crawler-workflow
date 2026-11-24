@@ -133,8 +133,9 @@ class TestStrictMode:
         assert set(host.core_tools()) == {'request_dataset_access', 'skill_load'}
         assert set(host.core_tools()) < set(legacy_tools.UNIVERSAL_TOOLS)
 
-    def test_every_skill_keeps_its_own_tools_inside_the_budget(self, host):
-        """The offer list a local model sees: at most the budget, and never missing the skill's own."""
+    def test_a_ranked_query_keeps_the_budget_and_the_skills_own_tools(self, host):
+        """An English question reaches the descriptions: the 12-slot budget holds and the skill's
+        own verbs are inside it."""
         from agent_workspace.tools import CONTROL_TOOLS, ToolRegistry
 
         registry = ToolRegistry(store=None, host=host, settings=None, context=None, workspace_provider=None)
@@ -148,11 +149,49 @@ class TestStrictMode:
             offered = {
                 row['name']
                 for row in registry.schemas(
-                    set(skill.tools) | universal, query='这个数据集里有多少行', limit=12, priority=tuple(skill.tools)
+                    set(skill.tools) | universal,
+                    query='dataset rows count',
+                    limit=12,
+                    priority=tuple(skill.tools),
                 )
             }
             assert set(own) <= offered, f'{skill_id} lost its own tools to the budget: {sorted(set(own) - offered)}'
-            assert len(offered - set(CONTROL_TOOLS)) <= max(12, len(own) + len(host.core_tools()))
+            # A skill's own list is the floor of the budget: python declares eight verbs of its own,
+            # so its turn is offered 13 slots rather than 12 — the budget, not a ceiling.
+            ceiling = max(12, len(skill.tools))
+            assert len(offered - set(CONTROL_TOOLS)) <= ceiling, f'{skill_id} exceeded the budget: {sorted(offered)}'
+
+    def test_a_query_the_ranking_cannot_read_offers_the_whole_allowlist(self, host):
+        """A Chinese question against English descriptions scores 0 for every tool.
+
+        The 12-slot cut then has nothing to decide with — it was an alphabetical tie-break that
+        dropped four of the routing eval's own verbs (``workflow_run``, ``workflow_validate``, …)
+        while the full offer list already scores 26/26 on both local models. So the registry offers
+        the allowlist instead, and it says so: the largest allowlist this host declares
+        (``conductor``) came to 36 tools, measured here rather than assumed.
+        """
+        from agent_workspace.tools import CONTROL_TOOLS, ToolRegistry
+
+        registry = ToolRegistry(store=None, host=host, settings=None, context=None, workspace_provider=None)
+        for spec in host.tools():
+            registry.register(spec)
+        universal = set(legacy_tools.UNIVERSAL_TOOLS)
+        widest = 0
+        for skill_id, skill in legacy_skills.BUILTIN.items():
+            allowed = set(skill.tools) | universal
+            offered = {
+                row['name']
+                for row in registry.schemas(
+                    allowed,
+                    query='这个数据集里有多少行',
+                    limit=12,
+                    priority=tuple(skill.tools),
+                )
+            }
+            assert allowed <= offered, f'{skill_id} lost {sorted(allowed - offered)} to a cut on no signal'
+            assert offered <= allowed | set(CONTROL_TOOLS), f'{skill_id} was offered tools outside its allowlist'
+            widest = max(widest, len(offered - set(CONTROL_TOOLS)))
+        assert widest <= 40, f'the widest allowlist grew to {widest} tools — re-measure the local models first'
 
     def test_strict_mode_is_on_by_default_and_can_be_read_from_settings(self, host):
         assert host.settings().get('tools.strict_local') is True

@@ -389,6 +389,12 @@ repository root.
   `request_approval` when auto-consent is off.
 - **Context is generated, budgeted and redacted**: project facts come from the existing registries, live data is re-read
   per account, and an omission is reported in `context_meta`/the inspector.
+- **A ranking with nothing to say may not shorten the list**: strict mode's 12-tool budget ranks a local turn's tools with
+  BM25, and a Chinese question against English descriptions scores 0 for every tool — the cut is then alphabetical, drops
+  the verbs the user named, and buys no accuracy (the full list is 26/26 on both local models). So the registry cuts only
+  when the ranking decided something, and `context_meta.tooling` reports `offered` *and* `budget`, never a `limit` the
+  turn did not apply. Shortening that list for real needs a multilingual embedding; splitting `UNIVERSAL_TOOLS` into
+  must/may cannot (which "may" ones appear is still a ranking question).
 - **Plugins are data first**: declarative skill/provider/tool packs are portable; local code plugins are local/admin only
   and cloud mode refuses them by name. Plugin UI uses OMM-ZEN host components, never arbitrary CSS/HTML.
 - **Run monitors are a notification channel, not a poll**: the AI proposes `present_artifact(kind="monitor")`, the user arms

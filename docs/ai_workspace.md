@@ -244,9 +244,11 @@ AI 工作区是采析绘自己的 agent/harness，不只是问答：
   精确聚合）；API `GET /api/ai/ws/recipes`、`POST /recipes/start`、`POST /recipes/skip`。前端在输入框上方画
   步骤条（当前步/完成/跳过），跳过按钮只调用 `/recipes/skip`，不推进本地状态。
 
-**严格模式**：本地供应商（`local_only`，如 Ollama）每轮只下发 12 个工具；控制工具、`HostAdapter.core_tools()`
+**严格模式**：本地供应商（`local_only`，如 Ollama）每轮下发 12 个工具；控制工具、`HostAdapter.core_tools()`
 与当前配方步骤工具必留，其余按用户原话与工具名/描述重合排序。云端/强模型保持完整列表。开关是框架的
-`tools.strict_local`（默认开），不写在前端。
+`tools.strict_local`（默认开），不写在前端。**排序没有信号时（中文提问对英文描述全 0 分）不下发这份裁剪**：
+按字母切掉用户点名的动词换不来准确率，此时给出整张允许表（最宽 36 个），`context_meta.tooling.offered` 会
+大于 `budget`，这是正常的；要缩短它得先有多语言 embedding。
 - **每一步都在历史里**：一轮的块流按模型真实顺序保存——技能（自动路由或用户选择）→ 思考 → 工具（名称、
   参数摘要、结果）→ 计划 → 回答；刷新后同一份块流重绘，不靠“回答完再分块”。
 
