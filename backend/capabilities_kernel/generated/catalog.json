@@ -6342,7 +6342,7 @@
     {
       "kind": "operator",
       "id": "extract_time",
-      "digest": "c3304fe0916a17c5ded5abe28bf9fe7cea7eb805f320b6914009dbef6fa1d21a",
+      "digest": "6d1c5a0509d95dbb7773cfeb62138bd4c359154d6eaa7116ad2ba110d1b58c84",
       "manifest": {
         "identity": {
           "id": "extract_time",
@@ -6425,7 +6425,62 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "time_new_col",
+            "canonical": "new_col",
+            "label_key": "settings.newColumn",
+            "control": "text",
+            "default": "日期",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "time_part",
+            "canonical": "part",
+            "label_key": "settings.timePart",
+            "control": "select",
+            "default": "date",
+            "options": [
+              [
+                "date",
+                "settings.timePartDate"
+              ],
+              [
+                "hour",
+                "settings.timePartHour"
+              ],
+              [
+                "weekday",
+                "settings.timePartWeekday"
+              ],
+              [
+                "month",
+                "settings.timePartMonth"
+              ],
+              [
+                "year",
+                "settings.timePartYear"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.extract_time:extract_time",
           "quiet": false
@@ -6496,7 +6551,7 @@
     {
       "kind": "operator",
       "id": "bin_time",
-      "digest": "ccea720b66239cfa8215079d6b3142e673733c4fc05ea1747cf84aecd2a62536",
+      "digest": "885a8fbf8348cb878f3fead023393a3c795a685a84e2e7f12961e90bedfd20c4",
       "manifest": {
         "identity": {
           "id": "bin_time",
@@ -6606,7 +6661,63 @@
           ],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "phase_new_col",
+            "canonical": "new_col",
+            "label_key": "settings.newColumn",
+            "control": "text",
+            "default": "阶段",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "phase_edges",
+            "canonical": "edges",
+            "label_key": "settings.phaseEdges",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "phase_labels",
+            "canonical": "labels",
+            "label_key": "settings.phaseLabels",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "phase_order_col",
+            "canonical": "order_new_col",
+            "label_key": "settings.phaseOrderColumn",
+            "control": "text",
+            "default": "阶段序号",
+            "options": [],
+            "hint_key": "settings.phaseHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.bin_time:bin_time",
           "quiet": false
@@ -6688,7 +6799,7 @@
     {
       "kind": "operator",
       "id": "suggest_stages",
-      "digest": "bd09d1c1a43c9a3441090676b3b5b8740258c39880c799e1e5045f76aadf7962",
+      "digest": "a085fd71a0ee2adbd5f9adadceb8fcedcbfdfaed71e7f4fa7428980e1abd3719",
       "manifest": {
         "identity": {
           "id": "suggest_stages",
@@ -6783,7 +6894,52 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stages_min_days",
+            "canonical": "min_days",
+            "label_key": "settings.stagesMinDays",
+            "control": "number",
+            "default": 3,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stages_max_windows",
+            "canonical": "max_windows",
+            "label_key": "settings.stagesMaxWindows",
+            "control": "number",
+            "default": 6,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "stages_peak_ratio",
+            "canonical": "peak_ratio",
+            "label_key": "settings.stagesPeakRatio",
+            "control": "number",
+            "default": 2,
+            "options": [],
+            "hint_key": "settings.stagesHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.suggest_stages:suggest_stages",
           "quiet": false
@@ -10177,7 +10333,7 @@
     {
       "kind": "operator",
       "id": "sentiment_evolution",
-      "digest": "e52026d70c915b076f6fc59a3b8f72cdf8b3bcb4ae058f99493c614b9413ccb5",
+      "digest": "ea4772dab0ceeac26d395a039982ba288250b056870389cac484da3d4b8fa60e",
       "manifest": {
         "identity": {
           "id": "sentiment_evolution",
@@ -10304,22 +10460,109 @@
           }
         ],
         "reads": {
-          "one": [
-            "column"
-          ],
+          "one": [],
           "some": [],
           "nonblank": [],
           "mapping": false,
           "two_table_keys": []
         },
         "writes": {
-          "mode": "dynamic",
+          "mode": "passthrough",
           "columns": [],
           "add": [],
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "column",
+            "canonical": "column",
+            "label_key": "settings.column",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_col",
+            "canonical": "label_col",
+            "label_key": "settings.labelColumn",
+            "control": "text",
+            "default": "sentiment",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "index_new_col",
+            "canonical": "new_col",
+            "label_key": "settings.newColumn",
+            "control": "text",
+            "default": "sentiment_index",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_positive",
+            "canonical": "positive",
+            "label_key": "settings.labelPositive",
+            "control": "text",
+            "default": "positive",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_neutral",
+            "canonical": "neutral",
+            "label_key": "settings.labelNeutral",
+            "control": "text",
+            "default": "neutral",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "label_negative",
+            "canonical": "negative",
+            "label_key": "settings.labelNegative",
+            "control": "text",
+            "default": "negative",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "score_col",
+            "canonical": "score_col",
+            "label_key": "settings.scoreColumn",
+            "control": "text",
+            "default": "score",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "evolution_order_col",
+            "canonical": "order_col",
+            "label_key": "settings.evolutionOrderColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "settings.evolutionHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.sentiment_evolution:sentiment_evolution",
           "quiet": false
@@ -10341,20 +10584,18 @@
             "要做预测用 forecast；要触发预警用 alert。"
           ],
           "prerequisites": [
-            "An upstream table (the analysis node’s input).",
-            "`column` names a column that must exist (default: none — required)."
+            "An upstream table (the analysis node’s input)."
           ],
           "steps": [
             "Put a step `{\"op\": \"sentiment_evolution\", …}` in the analysis node’s `steps`, or set `operation` to `sentiment_evolution`.",
-            "A missing column, a blank required box or a value outside a declared select refuses by name.",
-            "The step returns a fresh table whose column names come from the step’s own parameters."
+            "A missing column, a blank required box or a value outside a declared select refuses by name."
           ],
           "examples": [
             {
               "type": "analysis",
               "params": {
                 "operation": "sentiment_evolution",
-                "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
+                "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
               }
             }
           ],
@@ -10362,7 +10603,7 @@
             "type": "analysis",
             "params": {
               "operation": "sentiment_evolution",
-              "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {\"column\": \"正文\"}}]"
+              "steps": "[{\"op\": \"sentiment_evolution\", \"params\": {}}]"
             }
           },
           "failures": [
@@ -10371,7 +10612,7 @@
             "A value outside a declared select: `analysis.bad_option`."
           ],
           "acceptance": [
-            "The output column names equal the parameters the step was given."
+            "Rows are filtered or reordered; the upstream columns are unchanged."
           ]
         },
         "tests": {
@@ -10390,7 +10631,7 @@
     {
       "kind": "operator",
       "id": "forecast",
-      "digest": "e4b2720e80cfd5893e0bcc3a1f90782589273d0fb7a76097ea2311f9dffa6236",
+      "digest": "2fa6f65bab24df8ae321b56671fd145c8458a71b975718b871837602b03a0798",
       "manifest": {
         "identity": {
           "id": "forecast",
@@ -10573,7 +10814,135 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "forecast_period_col",
+            "canonical": "column",
+            "label_key": "settings.forecastPeriodColumn",
+            "control": "text",
+            "default": "period",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_value_col",
+            "canonical": "value_col",
+            "label_key": "settings.forecastValueColumn",
+            "control": "text",
+            "default": "sentiment_index",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_method",
+            "canonical": "method",
+            "label_key": "settings.forecastMethod",
+            "control": "select",
+            "default": "moving_average",
+            "options": [
+              [
+                "moving_average",
+                "settings.forecastMethodMa"
+              ],
+              [
+                "holt",
+                "settings.forecastMethodHolt"
+              ],
+              [
+                "seasonal_naive",
+                "settings.forecastMethodSeasonalNaive"
+              ],
+              [
+                "holt_winters",
+                "settings.forecastMethodHoltWinters"
+              ]
+            ],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_horizon",
+            "canonical": "horizon",
+            "label_key": "settings.forecastHorizon",
+            "control": "number",
+            "default": 3,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_window",
+            "canonical": "window",
+            "label_key": "settings.forecastWindow",
+            "control": "number",
+            "default": 3,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_season",
+            "canonical": "season",
+            "label_key": "settings.forecastSeason",
+            "control": "number",
+            "default": 7,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_alpha",
+            "canonical": "alpha",
+            "label_key": "settings.forecastAlpha",
+            "control": "number",
+            "default": 0.5,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_beta",
+            "canonical": "beta",
+            "label_key": "settings.forecastBeta",
+            "control": "number",
+            "default": 0.3,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_gamma",
+            "canonical": "gamma",
+            "label_key": "settings.forecastGamma",
+            "control": "number",
+            "default": 0.35,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "forecast_min_periods",
+            "canonical": "min_periods",
+            "label_key": "settings.forecastMinPeriods",
+            "control": "number",
+            "default": 4,
+            "options": [],
+            "hint_key": "settings.forecastHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.forecast:forecast",
           "quiet": false
@@ -10654,7 +11023,7 @@
     {
       "kind": "operator",
       "id": "alert",
-      "digest": "3b42e6c54b74103d57440b544f6c81345de6439b4204ce970b402a962a404133",
+      "digest": "56cde1ee7be7950390fd82ae03bb8576996f251f2a9545ed4d6da7cffdd6292e",
       "manifest": {
         "identity": {
           "id": "alert",
@@ -10803,7 +11172,96 @@
           "add_maybe": [],
           "add_from_column": false
         },
-        "panel": [],
+        "panel": [
+          {
+            "key": "alert_period_col",
+            "canonical": "column",
+            "label_key": "settings.alertPeriodColumn",
+            "control": "text",
+            "default": "period",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_index_col",
+            "canonical": "index_col",
+            "label_key": "settings.alertIndexColumn",
+            "control": "text",
+            "default": "sentiment_index",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_intensity_col",
+            "canonical": "intensity_col",
+            "label_key": "settings.alertIntensityColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_volume_col",
+            "canonical": "volume_col",
+            "label_key": "settings.alertVolumeColumn",
+            "control": "text",
+            "default": "",
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_streak",
+            "canonical": "streak",
+            "label_key": "settings.alertStreak",
+            "control": "number",
+            "default": 2,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_swing",
+            "canonical": "swing",
+            "label_key": "settings.alertSwing",
+            "control": "number",
+            "default": 0.2,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_heating",
+            "canonical": "heating",
+            "label_key": "settings.alertHeating",
+            "control": "number",
+            "default": 0.15,
+            "options": [],
+            "hint_key": "",
+            "placeholder": "",
+            "hide_when": []
+          },
+          {
+            "key": "alert_volume_floor",
+            "canonical": "volume_floor",
+            "label_key": "settings.alertVolumeFloor",
+            "control": "number",
+            "default": 0.6,
+            "options": [],
+            "hint_key": "settings.alertHint",
+            "placeholder": "",
+            "hide_when": []
+          }
+        ],
         "execution": {
           "handler": "services.analysis.ops.alert:alert",
           "quiet": false

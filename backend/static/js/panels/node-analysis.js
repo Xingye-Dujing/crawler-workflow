@@ -85,39 +85,7 @@ function renderAnalysisSettings(nodeId, p) {
        These four are the paper-replication steps. They share one shape — name the
        column, name the new column — so they are rendered together rather than one
        block per operation with the same three inputs copied into each. */
-    if (op === 'extract_time') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'time_new_col', 'settings.newColumn', 'text', '日期');
-        html += renderParamSelect(nodeId, p, 'time_part', 'settings.timePart', 'date',
-            [{ v: 'date', l: I18n.t('settings.timePartDate') },
-             { v: 'hour', l: I18n.t('settings.timePartHour') },
-             { v: 'weekday', l: I18n.t('settings.timePartWeekday') },
-             { v: 'month', l: I18n.t('settings.timePartMonth') },
-             { v: 'year', l: I18n.t('settings.timePartYear') }]);
-    }
-    if (op === 'bin_time') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'phase_new_col', 'settings.newColumn', 'text', '阶段');
-        html += renderParamInput(nodeId, p, 'phase_edges', 'settings.phaseEdges', 'text', '');
-        html += renderParamInput(nodeId, p, 'phase_labels', 'settings.phaseLabels', 'text', '');
-        html += renderParamInput(nodeId, p, 'phase_order_col', 'settings.phaseOrderColumn', 'text', '阶段序号');
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.phaseHint') + '</div></div>';
-    }
-    if (op === 'suggest_stages') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'stages_min_days', 'settings.stagesMinDays', 'number', 3);
-        html += renderParamInput(nodeId, p, 'stages_max_windows', 'settings.stagesMaxWindows', 'number', 6);
-        html += renderParamInput(nodeId, p, 'stages_peak_ratio', 'settings.stagesPeakRatio', 'number', 2);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.stagesHint') + '</div></div>';
-    }
+    /* The event-study and topic boxes are declared in the operator manifests (panel=...). */
     /* The topic family's boxes are declared in the operator manifests (panel=...): nothing here. */
     if (op === 'cluster_label') {
         html += renderParamInput(nodeId, p, 'cluster_group_col', 'settings.clusterGroupColumn', 'text', 'cluster');
@@ -173,52 +141,7 @@ function renderAnalysisSettings(nodeId, p) {
         html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
             I18n.t('settings.compareHint') + '</div></div>';
     }
-    if (op === 'forecast') {
-        html += renderParamInput(nodeId, p, 'forecast_period_col', 'settings.forecastPeriodColumn', 'text', 'period');
-        html += renderParamInput(nodeId, p, 'forecast_value_col', 'settings.forecastValueColumn', 'text', 'sentiment_index');
-        html += renderParamSelect(nodeId, p, 'forecast_method', 'settings.forecastMethod', 'moving_average',
-            [{ v: 'moving_average', l: I18n.t('settings.forecastMethodMa') },
-             { v: 'holt', l: I18n.t('settings.forecastMethodHolt') },
-             { v: 'seasonal_naive', l: I18n.t('settings.forecastMethodSeasonalNaive') },
-             { v: 'holt_winters', l: I18n.t('settings.forecastMethodHoltWinters') }]);
-        html += renderParamInput(nodeId, p, 'forecast_horizon', 'settings.forecastHorizon', 'number', 3);
-        html += renderParamInput(nodeId, p, 'forecast_window', 'settings.forecastWindow', 'number', 3);
-        html += renderParamInput(nodeId, p, 'forecast_season', 'settings.forecastSeason', 'number', 7);
-        html += renderParamInput(nodeId, p, 'forecast_alpha', 'settings.forecastAlpha', 'number', 0.5);
-        html += renderParamInput(nodeId, p, 'forecast_beta', 'settings.forecastBeta', 'number', 0.3);
-        html += renderParamInput(nodeId, p, 'forecast_gamma', 'settings.forecastGamma', 'number', 0.35);
-        html += renderParamInput(nodeId, p, 'forecast_min_periods', 'settings.forecastMinPeriods', 'number', 4);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.forecastHint') + '</div></div>';
-    }
-    if (op === 'alert') {
-        html += renderParamInput(nodeId, p, 'alert_period_col', 'settings.alertPeriodColumn', 'text', 'period');
-        html += renderParamInput(nodeId, p, 'alert_index_col', 'settings.alertIndexColumn', 'text', 'sentiment_index');
-        // Blank means "that half of the rule is not wanted", exactly like the 强度 column box on
-        // 情感演化曲线, so these two start empty rather than pre-filled.
-        html += renderParamInput(nodeId, p, 'alert_intensity_col', 'settings.alertIntensityColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'alert_volume_col', 'settings.alertVolumeColumn', 'text', '');
-        html += renderParamInput(nodeId, p, 'alert_streak', 'settings.alertStreak', 'number', 2);
-        html += renderParamInput(nodeId, p, 'alert_swing', 'settings.alertSwing', 'number', 0.2);
-        html += renderParamInput(nodeId, p, 'alert_heating', 'settings.alertHeating', 'number', 0.15);
-        html += renderParamInput(nodeId, p, 'alert_volume_floor', 'settings.alertVolumeFloor', 'number', 0.6);
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.alertHint') + '</div></div>';
-    }
-    if (op === 'sentiment_evolution') {
-        html += '<div class="settings-group"><label class="settings-label">' + I18n.t('settings.column') + '</label>' +
-            '<input class="settings-input" value="' + escapeHtml(p.column || '') + '" ' +
-            'onchange="updateParam(\'' + nodeId + '\',\'column\',this.value)"></div>';
-        html += renderParamInput(nodeId, p, 'label_col', 'settings.labelColumn', 'text', 'sentiment');
-        html += renderParamInput(nodeId, p, 'index_new_col', 'settings.newColumn', 'text', 'sentiment_index');
-        html += renderParamInput(nodeId, p, 'label_positive', 'settings.labelPositive', 'text', 'positive');
-        html += renderParamInput(nodeId, p, 'label_neutral', 'settings.labelNeutral', 'text', 'neutral');
-        html += renderParamInput(nodeId, p, 'label_negative', 'settings.labelNegative', 'text', 'negative');
-        html += renderParamInput(nodeId, p, 'score_col', 'settings.scoreColumn', 'text', 'score');
-        html += renderParamInput(nodeId, p, 'evolution_order_col', 'settings.evolutionOrderColumn', 'text', '');
-        html += '<div class="settings-group"><div style="font-size:11px;color:var(--text-dim);">' +
-            I18n.t('settings.evolutionHint') + '</div></div>';
-    }
+    /* forecast / alert / sentiment_evolution read their boxes from the operator manifests. */
     if (op === 'filter_rows') {
         /* The condition is READ IN FULL WORDS rather than as the wire token (`ne`, `not_in`):
            the request "delete the rows holding this value" is answered by picking 删除匹配的行,

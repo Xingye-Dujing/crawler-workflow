@@ -1,7 +1,7 @@
 """Flag secondary outbreaks on a period/value curve."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'alert',
@@ -24,5 +24,22 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column', 'index_col')),
     writes=Writes(mode='replace', columns=('period', 'signal', 'value', 'threshold', 'reason')),
+    panel=(
+        PanelField('alert_period_col', 'column', 'settings.alertPeriodColumn', default='period'),
+        PanelField('alert_index_col', 'index_col', 'settings.alertIndexColumn', default='sentiment_index'),
+        PanelField('alert_intensity_col', 'intensity_col', 'settings.alertIntensityColumn'),
+        PanelField('alert_volume_col', 'volume_col', 'settings.alertVolumeColumn'),
+        PanelField('alert_streak', 'streak', 'settings.alertStreak', control='number', default=2),
+        PanelField('alert_swing', 'swing', 'settings.alertSwing', control='number', default=0.2),
+        PanelField('alert_heating', 'heating', 'settings.alertHeating', control='number', default=0.15),
+        PanelField(
+            'alert_volume_floor',
+            'volume_floor',
+            'settings.alertVolumeFloor',
+            control='number',
+            default=0.6,
+            hint_key='settings.alertHint',
+        ),
+    ),
     labels=(('index_col', 'settings.alertIndexColumn'),),
 )

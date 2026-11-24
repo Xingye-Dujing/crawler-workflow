@@ -1,7 +1,8 @@
 """Derive a calendar part (day/hour/weekday/month/year) from a timestamp column."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'extract_time',
@@ -25,4 +26,22 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column',)),
     writes=Writes(mode='add', add=(('new_col', '日期'),)),
+    panel=(
+        COLUMN,
+        PanelField('time_new_col', 'new_col', 'settings.newColumn', default='日期'),
+        PanelField(
+            'time_part',
+            'part',
+            'settings.timePart',
+            control='select',
+            default='date',
+            options=(
+                ('date', 'settings.timePartDate'),
+                ('hour', 'settings.timePartHour'),
+                ('weekday', 'settings.timePartWeekday'),
+                ('month', 'settings.timePartMonth'),
+                ('year', 'settings.timePartYear'),
+            ),
+        ),
+    ),
 )

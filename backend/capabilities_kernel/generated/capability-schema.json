@@ -4424,7 +4424,62 @@
       "order": 190,
       "needsLlm": false,
       "writes": "add",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "time_new_col",
+          "canonical": "new_col",
+          "labelKey": "settings.newColumn",
+          "control": "text",
+          "default": "日期",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "time_part",
+          "canonical": "part",
+          "labelKey": "settings.timePart",
+          "control": "select",
+          "default": "date",
+          "options": [
+            {
+              "value": "date",
+              "labelKey": "settings.timePartDate"
+            },
+            {
+              "value": "hour",
+              "labelKey": "settings.timePartHour"
+            },
+            {
+              "value": "weekday",
+              "labelKey": "settings.timePartWeekday"
+            },
+            {
+              "value": "month",
+              "labelKey": "settings.timePartMonth"
+            },
+            {
+              "value": "year",
+              "labelKey": "settings.timePartYear"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -4480,7 +4535,63 @@
       "order": 200,
       "needsLlm": false,
       "writes": "add",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "phase_new_col",
+          "canonical": "new_col",
+          "labelKey": "settings.newColumn",
+          "control": "text",
+          "default": "阶段",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "phase_edges",
+          "canonical": "edges",
+          "labelKey": "settings.phaseEdges",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "phase_labels",
+          "canonical": "labels",
+          "labelKey": "settings.phaseLabels",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "phase_order_col",
+          "canonical": "order_new_col",
+          "labelKey": "settings.phaseOrderColumn",
+          "control": "text",
+          "default": "阶段序号",
+          "options": [],
+          "hintKey": "settings.phaseHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -4550,7 +4661,52 @@
       "order": 210,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stages_min_days",
+          "canonical": "min_days",
+          "labelKey": "settings.stagesMinDays",
+          "control": "number",
+          "default": 3,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stages_max_windows",
+          "canonical": "max_windows",
+          "labelKey": "settings.stagesMaxWindows",
+          "control": "number",
+          "default": 6,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "stages_peak_ratio",
+          "canonical": "peak_ratio",
+          "labelKey": "settings.stagesPeakRatio",
+          "control": "number",
+          "default": 2,
+          "options": [],
+          "hintKey": "settings.stagesHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column"
@@ -6389,12 +6545,99 @@
       "category": "time",
       "order": 350,
       "needsLlm": false,
-      "writes": "dynamic",
-      "panel": [],
+      "writes": "passthrough",
+      "panel": [
+        {
+          "key": "column",
+          "canonical": "column",
+          "labelKey": "settings.column",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_col",
+          "canonical": "label_col",
+          "labelKey": "settings.labelColumn",
+          "control": "text",
+          "default": "sentiment",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "index_new_col",
+          "canonical": "new_col",
+          "labelKey": "settings.newColumn",
+          "control": "text",
+          "default": "sentiment_index",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_positive",
+          "canonical": "positive",
+          "labelKey": "settings.labelPositive",
+          "control": "text",
+          "default": "positive",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_neutral",
+          "canonical": "neutral",
+          "labelKey": "settings.labelNeutral",
+          "control": "text",
+          "default": "neutral",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "label_negative",
+          "canonical": "negative",
+          "labelKey": "settings.labelNegative",
+          "control": "text",
+          "default": "negative",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "score_col",
+          "canonical": "score_col",
+          "labelKey": "settings.scoreColumn",
+          "control": "text",
+          "default": "score",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "evolution_order_col",
+          "canonical": "order_col",
+          "labelKey": "settings.evolutionOrderColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "settings.evolutionHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
-        "one": [
-          "column"
-        ],
+        "one": [],
         "some": [],
         "nonblank": [],
         "mapping": false,
@@ -6490,7 +6733,135 @@
       "order": 360,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "forecast_period_col",
+          "canonical": "column",
+          "labelKey": "settings.forecastPeriodColumn",
+          "control": "text",
+          "default": "period",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_value_col",
+          "canonical": "value_col",
+          "labelKey": "settings.forecastValueColumn",
+          "control": "text",
+          "default": "sentiment_index",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_method",
+          "canonical": "method",
+          "labelKey": "settings.forecastMethod",
+          "control": "select",
+          "default": "moving_average",
+          "options": [
+            {
+              "value": "moving_average",
+              "labelKey": "settings.forecastMethodMa"
+            },
+            {
+              "value": "holt",
+              "labelKey": "settings.forecastMethodHolt"
+            },
+            {
+              "value": "seasonal_naive",
+              "labelKey": "settings.forecastMethodSeasonalNaive"
+            },
+            {
+              "value": "holt_winters",
+              "labelKey": "settings.forecastMethodHoltWinters"
+            }
+          ],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_horizon",
+          "canonical": "horizon",
+          "labelKey": "settings.forecastHorizon",
+          "control": "number",
+          "default": 3,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_window",
+          "canonical": "window",
+          "labelKey": "settings.forecastWindow",
+          "control": "number",
+          "default": 3,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_season",
+          "canonical": "season",
+          "labelKey": "settings.forecastSeason",
+          "control": "number",
+          "default": 7,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_alpha",
+          "canonical": "alpha",
+          "labelKey": "settings.forecastAlpha",
+          "control": "number",
+          "default": 0.5,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_beta",
+          "canonical": "beta",
+          "labelKey": "settings.forecastBeta",
+          "control": "number",
+          "default": 0.3,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_gamma",
+          "canonical": "gamma",
+          "labelKey": "settings.forecastGamma",
+          "control": "number",
+          "default": 0.35,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "forecast_min_periods",
+          "canonical": "min_periods",
+          "labelKey": "settings.forecastMinPeriods",
+          "control": "number",
+          "default": 4,
+          "options": [],
+          "hintKey": "settings.forecastHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column",
@@ -6616,7 +6987,96 @@
       "order": 370,
       "needsLlm": false,
       "writes": "replace",
-      "panel": [],
+      "panel": [
+        {
+          "key": "alert_period_col",
+          "canonical": "column",
+          "labelKey": "settings.alertPeriodColumn",
+          "control": "text",
+          "default": "period",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_index_col",
+          "canonical": "index_col",
+          "labelKey": "settings.alertIndexColumn",
+          "control": "text",
+          "default": "sentiment_index",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_intensity_col",
+          "canonical": "intensity_col",
+          "labelKey": "settings.alertIntensityColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_volume_col",
+          "canonical": "volume_col",
+          "labelKey": "settings.alertVolumeColumn",
+          "control": "text",
+          "default": "",
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_streak",
+          "canonical": "streak",
+          "labelKey": "settings.alertStreak",
+          "control": "number",
+          "default": 2,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_swing",
+          "canonical": "swing",
+          "labelKey": "settings.alertSwing",
+          "control": "number",
+          "default": 0.2,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_heating",
+          "canonical": "heating",
+          "labelKey": "settings.alertHeating",
+          "control": "number",
+          "default": 0.15,
+          "options": [],
+          "hintKey": "",
+          "placeholder": "",
+          "hideWhen": []
+        },
+        {
+          "key": "alert_volume_floor",
+          "canonical": "volume_floor",
+          "labelKey": "settings.alertVolumeFloor",
+          "control": "number",
+          "default": 0.6,
+          "options": [],
+          "hintKey": "settings.alertHint",
+          "placeholder": "",
+          "hideWhen": []
+        }
+      ],
       "reads": {
         "one": [
           "column",

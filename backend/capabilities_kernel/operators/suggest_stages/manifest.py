@@ -1,7 +1,8 @@
 """Propose lifecycle phases from the volume curve of a timestamp column."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
+from capabilities_kernel.operators._panel import COLUMN
 
 MANIFEST = operator_manifest(
     'suggest_stages',
@@ -22,5 +23,18 @@ MANIFEST = operator_manifest(
     writes=Writes(
         mode='replace',
         columns=('序号', '起点', '终点', '天数', '行数', '峰值日', '峰值计数', '依据'),
+    ),
+    panel=(
+        COLUMN,
+        PanelField('stages_min_days', 'min_days', 'settings.stagesMinDays', control='number', default=3),
+        PanelField('stages_max_windows', 'max_windows', 'settings.stagesMaxWindows', control='number', default=6),
+        PanelField(
+            'stages_peak_ratio',
+            'peak_ratio',
+            'settings.stagesPeakRatio',
+            control='number',
+            default=2,
+            hint_key='settings.stagesHint',
+        ),
     ),
 )

@@ -1,7 +1,7 @@
 """Extrapolate a period/value curve forward."""
 
 from capabilities_kernel.manifest import ParamSpec
-from capabilities_kernel.operator import Reads, Writes, operator_manifest
+from capabilities_kernel.operator import PanelField, Reads, Writes, operator_manifest
 
 MANIFEST = operator_manifest(
     'forecast',
@@ -32,5 +32,36 @@ MANIFEST = operator_manifest(
     ),
     reads=Reads(one=('column', 'value_col')),
     writes=Writes(mode='replace', columns=('period', 'actual', 'predicted', 'lower', 'upper', 'horizon')),
+    panel=(
+        PanelField('forecast_period_col', 'column', 'settings.forecastPeriodColumn', default='period'),
+        PanelField('forecast_value_col', 'value_col', 'settings.forecastValueColumn', default='sentiment_index'),
+        PanelField(
+            'forecast_method',
+            'method',
+            'settings.forecastMethod',
+            control='select',
+            default='moving_average',
+            options=(
+                ('moving_average', 'settings.forecastMethodMa'),
+                ('holt', 'settings.forecastMethodHolt'),
+                ('seasonal_naive', 'settings.forecastMethodSeasonalNaive'),
+                ('holt_winters', 'settings.forecastMethodHoltWinters'),
+            ),
+        ),
+        PanelField('forecast_horizon', 'horizon', 'settings.forecastHorizon', control='number', default=3),
+        PanelField('forecast_window', 'window', 'settings.forecastWindow', control='number', default=3),
+        PanelField('forecast_season', 'season', 'settings.forecastSeason', control='number', default=7),
+        PanelField('forecast_alpha', 'alpha', 'settings.forecastAlpha', control='number', default=0.5),
+        PanelField('forecast_beta', 'beta', 'settings.forecastBeta', control='number', default=0.3),
+        PanelField('forecast_gamma', 'gamma', 'settings.forecastGamma', control='number', default=0.35),
+        PanelField(
+            'forecast_min_periods',
+            'min_periods',
+            'settings.forecastMinPeriods',
+            control='number',
+            default=4,
+            hint_key='settings.forecastHint',
+        ),
+    ),
     labels=(('method', 'settings.forecastMethod'), ('value_col', 'settings.forecastValueColumn')),
 )
