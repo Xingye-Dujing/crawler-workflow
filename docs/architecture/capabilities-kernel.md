@@ -184,6 +184,16 @@ kernel，再补九段：identity 的 `category` 就是 `cn`/`overseas`，`execut
 从每个模式的必填框推导技能的前置/步骤/失败/验收与 `source` 节点模板。`Field.value_from` 的
 `core.refs` 导入被延迟到方法内：`core.refs` 会拉 pandas，而清单在解析画布时就要加载。
 
+## 表面矩阵与一致性门禁
+
+一个清单要被哪些表面服务，写成数据而不是口头约定：`tests/unit/gates/test_capability_surfaces.py`
+的 `SURFACES` 按 kind 列出表面（`runtime:*` 服务端注册表、`api:chart-profiles`、`generated:*` 生成物、
+`ai:skill-catalog`/`ai:vocabulary`、`docs:page`/`docs:skill`），并对每个 (kind, surface) 双向断言：
+清单里的每个 id 都在表面上（不漏），表面上的每个 id 都在清单里（不多）。它第一次跑就抓到三件事：
+OpenAPI 里 node 与 operator 共用 `NodeParams.` 前缀（现在拆成 `OperatorParams.`）、前端目录的 key
+写成 `types` 而实际是 `nodes`、AI 词汇表里的
+CatBus-only 平台（京东/淘宝/快手/TikTok/闲鱼）不属于本树（门禁显式排除而不是假装它们不存在）。
+
 ## 已迁移的例子
 
 `backend/capabilities_kernel/nodes/tokenize/manifest.py` 是最初的 pilot：catalogue 槽位 8、默认参数、

@@ -110,6 +110,84 @@ def _node_schema(manifest) -> dict:
     return out
 
 
+def _chart_schema(manifest) -> dict:
+    """The OpenAPI half of a chart type: the boxes it reads and how it is drawn."""
+    return {
+        'type': 'object',
+        'required': ['key', 'family', 'echartsOnly', 'latexBuildable', 'fields'],
+        'properties': {
+            'key': {'type': 'string'},
+            'family': {'type': 'string', 'enum': ['console', 'biblio']},
+            'echartsOnly': {'type': 'boolean'},
+            'latexBuildable': {'type': 'boolean'},
+            'tokenizeCompatible': {'type': 'boolean'},
+            'reads': {'type': 'array', 'items': {'type': 'string'}},
+            'defaults': {'type': 'object', 'additionalProperties': {'type': 'string'}},
+            'controls': {'type': 'array', 'items': {'type': 'string'}},
+            'fields': {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'required': ['name', 'role', 'required'],
+                    'properties': {
+                        'name': {'type': 'string'},
+                        'role': {'type': 'string'},
+                        'required': {'type': 'boolean'},
+                        'requiredWhen': {'type': 'string'},
+                        'control': {'type': 'string'},
+                        'labelKey': {'type': 'string'},
+                    },
+                },
+            },
+        },
+    }
+
+
+def _platform_schema(manifest) -> dict:
+    """The OpenAPI half of a platform: its region and every mode's form."""
+    return {
+        'type': 'object',
+        'required': ['platform', 'region', 'modes'],
+        'properties': {
+            'platform': {'type': 'string'},
+            'region': {'type': 'string', 'enum': ['cn', 'overseas']},
+            'profileRecommended': {'type': 'boolean'},
+            'serialOnly': {'type': 'boolean'},
+            'parallelRecommended': {'type': 'boolean'},
+            'modes': {
+                'type': 'array',
+                'items': {
+                    'type': 'object',
+                    'required': ['key', 'handler', 'rows', 'collects', 'needsSession', 'fields'],
+                    'properties': {
+                        'key': {'type': 'string'},
+                        'labelKey': {'type': 'string'},
+                        'handler': {'type': 'string'},
+                        'rows': {'type': 'string', 'enum': ['posts', 'comments']},
+                        'collects': {'type': 'string'},
+                        'needsSession': {'type': 'boolean'},
+                        'requires': {'type': 'string'},
+                        'fields': {
+                            'type': 'array',
+                            'items': {
+                                'type': 'object',
+                                'required': ['key', 'control', 'required'],
+                                'properties': {
+                                    'key': {'type': 'string'},
+                                    'control': {'type': 'string'},
+                                    'required': {'type': 'boolean'},
+                                    'coerce': {'type': 'string'},
+                                    'labelKey': {'type': 'string'},
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
 def _openapi_payload() -> dict:
     schemas = {
         'NodeType': {
@@ -181,8 +259,14 @@ def _openapi_payload() -> dict:
         },
     }
     for manifest in _manifests():
-        if manifest.identity.kind in ('node', 'operator'):
+        if manifest.identity.kind == 'node':
             schemas[f'NodeParams.{manifest.identity.id}'] = _node_schema(manifest)
+        elif manifest.identity.kind == 'operator':
+            schemas[f'OperatorParams.{manifest.identity.id}'] = _node_schema(manifest)
+        elif manifest.identity.kind == 'chart':
+            schemas[f'ChartFields.{manifest.identity.id}'] = _chart_schema(manifest)
+        elif manifest.identity.kind == 'platform':
+            schemas[f'PlatformModes.{manifest.identity.id}'] = _platform_schema(manifest)
     return {
         'openapi': '3.1.0',
         'info': {

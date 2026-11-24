@@ -223,9 +223,9 @@
 - [x] 图表清单化（30 个：`capabilities_kernel/charts/<id>/manifest.py` 声明字段/角色/控件/引擎/文献必读列与七段技能；`services.charts.registry.SPECS` 全部由其投影，绘图函数公开为 `build_*` 并成为清单 handler）
 - [x] 平台清单化（10 个：`capabilities_kernel/platforms/<id>/manifest.py` 声明模式/字段/采集行为/登录与机器要求/运行建议与七段技能；`capabilities.platforms.CAPABILITIES` 与 `capabilities.registry` 全部由其投影，爬虫类成为清单 handler）
 - [ ] 面板/停靠/设置清单化
-- [ ] 多表面生成：OpenAPI / MCP server / CLI / UI / AI 工具 / 文档
-- [ ] 同一清单的七个表面一致性门禁
-- [ ] 生成物与门禁
+- [x] 生成物与门禁（catalog/openapi/ai_tools/前端目录/能力页与技能页 + freshness；OpenAPI 为每类能力生成 `NodeParams.`/`OperatorParams.`/`ChartFields.`/`PlatformModes.` schema）
+- [ ] 多表面生成：MCP server / CLI / UI 表单（API、AI 工具、文档、生成物已覆盖）
+- [x] 同一清单的七个表面一致性门禁（`tests/unit/gates/test_capability_surfaces.py`：每种能力 × 每个应服务的表面，双向断言“没有漏、没有多”）
 - **DoD**：每个域新增一项只改一个清单；doctor 全绿；多表面生成无漂移。
 
 ## P8 测试瘦身与收口（1-2 周）

@@ -925,7 +925,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.drop_null": {
+      "OperatorParams.drop_null": {
         "type": "object",
         "properties": {
           "columns": {
@@ -943,7 +943,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.fill_null": {
+      "OperatorParams.fill_null": {
         "type": "object",
         "properties": {
           "columns": {
@@ -967,7 +967,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.drop_duplicates": {
+      "OperatorParams.drop_duplicates": {
         "type": "object",
         "properties": {
           "columns": {
@@ -989,7 +989,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.dedupe_similar": {
+      "OperatorParams.dedupe_similar": {
         "type": "object",
         "properties": {
           "column": {
@@ -1005,7 +1005,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.semantic_dedupe": {
+      "OperatorParams.semantic_dedupe": {
         "type": "object",
         "properties": {
           "column": {
@@ -1030,7 +1030,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.similar_to": {
+      "OperatorParams.similar_to": {
         "type": "object",
         "properties": {
           "column": {
@@ -1053,7 +1053,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.filter_rows": {
+      "OperatorParams.filter_rows": {
         "type": "object",
         "properties": {
           "column": {
@@ -1096,7 +1096,7 @@
           "op"
         ]
       },
-      "NodeParams.select_columns": {
+      "OperatorParams.select_columns": {
         "type": "object",
         "properties": {
           "columns": {
@@ -1106,7 +1106,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.rename_columns": {
+      "OperatorParams.rename_columns": {
         "type": "object",
         "properties": {
           "mapping": {
@@ -1116,7 +1116,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.strip_whitespace": {
+      "OperatorParams.strip_whitespace": {
         "type": "object",
         "properties": {
           "columns": {
@@ -1126,7 +1126,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.convert_type": {
+      "OperatorParams.convert_type": {
         "type": "object",
         "properties": {
           "column": {
@@ -1147,7 +1147,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.sort_rows": {
+      "OperatorParams.sort_rows": {
         "type": "object",
         "properties": {
           "column": {
@@ -1161,7 +1161,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.sample_rows": {
+      "OperatorParams.sample_rows": {
         "type": "object",
         "properties": {
           "n": {
@@ -1182,7 +1182,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.groupby_agg": {
+      "OperatorParams.groupby_agg": {
         "type": "object",
         "properties": {
           "group_col": {
@@ -1219,7 +1219,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.join_tables": {
+      "OperatorParams.join_tables": {
         "type": "object",
         "properties": {
           "how": {
@@ -1244,7 +1244,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.anti_join": {
+      "OperatorParams.anti_join": {
         "type": "object",
         "properties": {
           "left_on": {
@@ -1291,7 +1291,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.column_calc": {
+      "OperatorParams.column_calc": {
         "type": "object",
         "properties": {
           "new_col": {
@@ -1305,7 +1305,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.bin_column": {
+      "OperatorParams.bin_column": {
         "type": "object",
         "properties": {
           "column": {
@@ -1327,7 +1327,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.extract_time": {
+      "OperatorParams.extract_time": {
         "type": "object",
         "properties": {
           "column": {
@@ -1352,7 +1352,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.bin_time": {
+      "OperatorParams.bin_time": {
         "type": "object",
         "properties": {
           "column": {
@@ -1378,7 +1378,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.suggest_stages": {
+      "OperatorParams.suggest_stages": {
         "type": "object",
         "properties": {
           "column": {
@@ -1403,7 +1403,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_model": {
+      "OperatorParams.topic_model": {
         "type": "object",
         "properties": {
           "column": {
@@ -1441,7 +1441,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_by_stage": {
+      "OperatorParams.topic_by_stage": {
         "type": "object",
         "properties": {
           "column": {
@@ -1499,7 +1499,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_label": {
+      "OperatorParams.topic_label": {
         "type": "object",
         "properties": {
           "words_col": {
@@ -1531,7 +1531,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.cluster_label": {
+      "OperatorParams.cluster_label": {
         "type": "object",
         "properties": {
           "group_col": {
@@ -1568,7 +1568,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.cluster_review": {
+      "OperatorParams.cluster_review": {
         "type": "object",
         "properties": {
           "group_col": {
@@ -1621,7 +1621,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.reply_graph": {
+      "OperatorParams.reply_graph": {
         "type": "object",
         "properties": {
           "author_col": {
@@ -1643,7 +1643,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.compare_platform": {
+      "OperatorParams.compare_platform": {
         "type": "object",
         "properties": {
           "platform_col": {
@@ -1669,7 +1669,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_map": {
+      "OperatorParams.topic_map": {
         "type": "object",
         "properties": {
           "column": {
@@ -1707,7 +1707,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_salience": {
+      "OperatorParams.topic_salience": {
         "type": "object",
         "properties": {
           "column": {
@@ -1751,7 +1751,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_timeline": {
+      "OperatorParams.topic_timeline": {
         "type": "object",
         "properties": {
           "stage_col": {
@@ -1783,7 +1783,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_flow": {
+      "OperatorParams.topic_flow": {
         "type": "object",
         "properties": {
           "stage_col": {
@@ -1819,7 +1819,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.topic_coherence": {
+      "OperatorParams.topic_coherence": {
         "type": "object",
         "properties": {
           "column": {
@@ -1854,7 +1854,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.cooccur": {
+      "OperatorParams.cooccur": {
         "type": "object",
         "properties": {
           "column": {
@@ -1879,7 +1879,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.sentiment_evolution": {
+      "OperatorParams.sentiment_evolution": {
         "type": "object",
         "properties": {
           "column": {
@@ -1917,7 +1917,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.forecast": {
+      "OperatorParams.forecast": {
         "type": "object",
         "properties": {
           "column": {
@@ -1979,7 +1979,7 @@
         },
         "additionalProperties": true
       },
-      "NodeParams.alert": {
+      "OperatorParams.alert": {
         "type": "object",
         "properties": {
           "column": {
@@ -2021,6 +2021,3386 @@
           }
         },
         "additionalProperties": true
+      },
+      "ChartFields.bar": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.line": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.dual_line": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.stack_pct": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.topic_map": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.topic_terms": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.pie": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.scatter": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.histogram": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.box": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.heatmap": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.model_agreement": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.sankey": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.network": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.knowledge_graph": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.cluster_timeline": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.burst": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.timezone": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.circular": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.landscape": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.biblio_heatmap": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.graph3d": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.variation": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.dual_map": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.geo_map": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.sentiment_overlay": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.topic_overlay": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.concentric": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.wordcloud": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ChartFields.map": {
+        "type": "object",
+        "required": [
+          "key",
+          "family",
+          "echartsOnly",
+          "latexBuildable",
+          "fields"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "family": {
+            "type": "string",
+            "enum": [
+              "console",
+              "biblio"
+            ]
+          },
+          "echartsOnly": {
+            "type": "boolean"
+          },
+          "latexBuildable": {
+            "type": "boolean"
+          },
+          "tokenizeCompatible": {
+            "type": "boolean"
+          },
+          "reads": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "defaults": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "controls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name",
+                "role",
+                "required"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": "string"
+                },
+                "required": {
+                  "type": "boolean"
+                },
+                "requiredWhen": {
+                  "type": "string"
+                },
+                "control": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.zhihu": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.weibo": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.xiaohongshu": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.wechat": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.bilibili": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.douyin": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.hongguo": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.cnki": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.youtube": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlatformModes.twitter": {
+        "type": "object",
+        "required": [
+          "platform",
+          "region",
+          "modes"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "cn",
+              "overseas"
+            ]
+          },
+          "profileRecommended": {
+            "type": "boolean"
+          },
+          "serialOnly": {
+            "type": "boolean"
+          },
+          "parallelRecommended": {
+            "type": "boolean"
+          },
+          "modes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "key",
+                "handler",
+                "rows",
+                "collects",
+                "needsSession",
+                "fields"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "labelKey": {
+                  "type": "string"
+                },
+                "handler": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "string",
+                  "enum": [
+                    "posts",
+                    "comments"
+                  ]
+                },
+                "collects": {
+                  "type": "string"
+                },
+                "needsSession": {
+                  "type": "boolean"
+                },
+                "requires": {
+                  "type": "string"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "key",
+                      "control",
+                      "required"
+                    ],
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "control": {
+                        "type": "string"
+                      },
+                      "required": {
+                        "type": "boolean"
+                      },
+                      "coerce": {
+                        "type": "string"
+                      },
+                      "labelKey": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
