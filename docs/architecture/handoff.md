@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`ba7ca228 功能更新：P8 第三片——快测从 14:23 降到 11:36，并写下预算`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`1cd53c79 功能更新：P8 收口——closure gate 记录 + 全量随机失败根因修复`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 收口（2026-11-24）
+
+- **全量 closure gate 记录下来**：`docs/testing/closure-2026-11-24.md`（提交 `002f9cc5` 时点）：
+  fast tier **12172 passed / 7 skipped / 10:56**；ruff + product/tests pylint **10.00/10**；
+  doctor 全绿；`PORT=5057` + 独立 `CRAWLER_DATA_ROOT` 冒烟：`/api/capabilities`（74 KB）、
+  `/api/node-types`（118 KB）、`/api/settings/schema`、`/` 全部 200，随后关闭并释放端口。文档写明
+  未纳入 device/live/CI/浏览器 AI 实机。
+- **全量随机失败根因**：`tests/api/test_pool_api.py` 用 `accounts[0]` 取自己的行，而该列表来自共享
+  cookie 目录，别的用例留下的登录把它挤走 → 改为按 `platform+account` 选行（`002f9cc5`）。
+- **性能基线**：10:56（xhs 假驱动回答就绪探针后，两个慢例各减 5 s）；预算 ≤12 分钟达标，8 分钟
+  目标仍待 `crawlers/engine/` 的可注入就绪探针（见 `docs/testing/performance.md`）。
 
 ## P8 第三片：快测预算（2026-11-24）
 
