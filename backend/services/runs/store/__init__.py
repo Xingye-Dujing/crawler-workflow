@@ -16,6 +16,8 @@ the model has already answered.
 
 The table domains live in sibling mixins (base/ledger/progress/upkeep); the public
 names below are the surface every caller and test has always imported from here.
+``values`` holds the two durable values those tables are written in — the crawl ``Cursor``
+and a row's ``LedgerKey`` — as types instead of bare dict/str.
 """
 
 from .assets import AssetsMixin
@@ -48,8 +50,11 @@ from .identity import (
 from .ledger import FilesMixin, LogMixin, QueueMixin, RunsMixin
 from .progress import NodesMixin, RowsMixin
 from .upkeep import UpkeepMixin
+from .values import Cursor, LedgerKey
 
 __all__ = [
+    'Cursor',
+    'LedgerKey',
     'NODE_DONE',
     'NODE_FAILED',
     'NODE_PARTIAL',

@@ -671,7 +671,8 @@ def execute_source_node(
     _merge_parts(rows)
     if wall:
         if len(rows) < target_count:
-            if pool_mode and _proved_rows() <= stored_before:
+            attempt = pool.Attempt(pool.health.LOGIN_WALL, _proved_rows() - stored_before, pooled=pool_mode)
+            if pool.decide(attempt).rotates():
                 # Nothing was paid for by this attempt, so a different login may take the
                 # whole walk from the top with nothing to reconcile.
                 raise SessionBlockedError(
@@ -706,7 +707,8 @@ def execute_source_node(
     # already raised in the block above, so reaching here short with ``wall`` set is impossible —
     # the two refusals are mutually exclusive by control flow, not by an added guard.)
     if target_count and len(rows) < target_count and getattr(crawler, 'risk_blocked', False):
-        if pool_mode and _proved_rows() <= stored_before:
+        attempt = pool.Attempt(pool.health.RISK, _proved_rows() - stored_before, pooled=pool_mode)
+        if pool.decide(attempt).rotates():
             raise SessionBlockedError(
                 t('run.riskControlled', platform=platform),
                 reason=pool.health.RISK,

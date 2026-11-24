@@ -13,8 +13,42 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`f05019b2 修改：AI 工具按域拆包——ai/tools/ 七个模块 + 描述规范门禁（W3）`；框架仓库 `9e1e66a`（0.1.26）
-- 工作区：干净
+- 最后提交：`d533e057 修改：收口批——去掉两份重复规则，修好 device tier 的陈旧测试并验通 CatBus`（已推 GitHub + Gitee，CI 触发）；框架仓库 `9e1e66a`（0.1.26）
+- 工作区：W7 第 3 件（游标/账本值对象）的改动在本地未提交
+
+## W7 第 3 件：游标与账本值对象（2026-11-24）
+
+`services/runs/store/values.py` 新增两个 frozen 值对象，`docs/architecture/w7-incremental.md`
+记了验收与证据，这里只记“为什么这样做”和踩到的两处：
+
+- `Cursor.position` 是爬虫自己的词表，`proven`/`total` 是评论引擎那条“已证明前缀”
+  （`url_index`/`url_total`）——两者分开，`proven_prefix()` 拒绝负数/越界/无批次。
+  store 的 `save_cursor` 写下的 JSON 与旧 dict **逐字节相同**，所以老 runs.db 直接能读。
+- `get_cursor` 仍然在“没有游标”时返回 `None`（既有两条用例钉着这个区别），有游标时返回 `Cursor`；
+  因此 `Crawler.resume_of` 从 `isinstance(cursor, dict)` 改成 `Mapping` 并 `dict(...)` 一份——
+  不改这一处，9 个平台的 继续 会静默回到起点。
+- `LedgerKey` 只装 `kind`+`parts`；站点字段表仍留在 `identity.py`（谁认识列名谁在那一层）。
+  顺带把重复的 `_sha1` 收回成 `values.sha1_parts` 一份，`node_fingerprint`/`workflow_fingerprint`/
+  `schema_digest`/`item_key` 共用；键值不变。
+- 没做的：计划里“只有 position 的 Cursor 造不出来”做不到——行什么时候落地只有调用方知道，
+  顺序仍由评论引擎保证；类型只管它能管的那半（这一点写进了 w7 文档，别在下次读到时以为是漏做）。
+
+## W7 第 4 件：轮换规则纯函数化（2026-11-24）
+
+`services/pool/policy.py` 是“能不能花下一个账号”的唯一住址：`Attempt` → `decide()` →
+`Decision(ROTATE|SETTLE)`，无 I/O、无时钟。两个执行器现在只交事实：
+
+- source 的两处 raise（wall / risk）把 `stored_rows = _proved_rows() - stored_before` 交给它；
+  评论执行器的 `if status == BLOCKED and not rows ...` 变成把这一条 link 自己的行数交给 `_rotate`，
+  由 `decide()` 回答。`pool.is_rotatable` 转发删掉了（唯一调用者已改用它）。
+- 检查顺序是规则本身：停止 > 非池模式 > 未归因（network/未知）> 已有行 > 预算耗尽。
+  两个调用点对“未说明原因的 BLOCKED”仍然各自不同（评论当作风控、source settle），
+  这段差异留在调用方，`decide()` 只收已解析的 reason——统一它才是行为变更。
+- 冻结体积：`nodes/executors/comment.py` 747→753、`nodes/executors/source.py` 881→883。
+  涨的是“把事实交给规则”的调用与注释，没有新分支；预算表已同期改。
+- 证据：`tests/unit/pool/test_pool_policy.py`（11 条）＋既有
+  `tests/unit/executors/test_source_pool_rotation.py`、`tests/api/test_comment_pool_rotation.py`
+  不改断言全绿。device tier 的一次真 `login_wall` 观测仍待（花账号，等用户）。
 
 ## 收口批的 device tier：两处测试缺陷（2026-11-24）
 

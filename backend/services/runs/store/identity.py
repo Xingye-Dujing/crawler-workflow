@@ -8,12 +8,13 @@ not a second item.
 """
 
 import contextlib
-import hashlib
 import json
 import math
 
 import pandas as pd
 from sessions.cookies import CookieManager
+
+from .values import LedgerKey, sha1_parts
 
 # Run lifecycle. `running` only ever exists while a process is alive: on startup
 # every leftover `running` row is promoted to `interrupted`, which is exactly
@@ -105,11 +106,6 @@ def _clean(value):
     return str(value)
 
 
-def _sha1(*parts) -> str:
-    joined = '\x1e'.join('' if part is None else str(part) for part in parts)
-    return hashlib.sha1(joined.encode('utf-8')).hexdigest()
-
-
 def schema_columns(columns) -> list[str]:
     """The sorted, non-blank column names of a table shape.
 
@@ -137,7 +133,7 @@ def schema_of_rows(rows) -> list[str]:
 def schema_digest(columns) -> str:
     """The stable identity of a table shape; ``''`` when the shape is unknown."""
     names = schema_columns(columns)
-    return _sha1(*names) if names else ''
+    return sha1_parts(*names) if names else ''
 
 
 def first_text(item: dict, fields) -> str:
@@ -182,35 +178,37 @@ def item_key(item) -> str:
     counts, "展开全文" artefacts, whitespace).
     """
     if not isinstance(item, dict):
-        return _sha1('raw', item)
+        return LedgerKey('raw', (item,)).digest()
     platform = first_text(item, _COMMENT_PLATFORM_FIELDS)
     cid = first_text(item, _COMMENT_ID_FIELDS)
     if cid:
-        return _sha1('comment', platform, cid)
+        return LedgerKey('comment', (platform, cid)).digest()
     body = first_text(item, _COMMENT_BODY_FIELDS)
     if body:
-        return _sha1(
+        return LedgerKey(
             'comment-text',
-            platform,
-            first_text(item, _COMMENT_ARTICLE_FIELDS),
-            first_text(item, _COMMENT_AUTHOR_FIELDS),
-            body[:200],
-            first_text(item, _COMMENT_TIME_FIELDS),
-        )
+            (
+                platform,
+                first_text(item, _COMMENT_ARTICLE_FIELDS),
+                first_text(item, _COMMENT_AUTHOR_FIELDS),
+                body[:200],
+                first_text(item, _COMMENT_TIME_FIELDS),
+            ),
+        ).digest()
     sid = first_text(item, _SITE_ID_FIELDS)
     if sid:
-        return _sha1('site', platform, sid)
+        return LedgerKey('site', (platform, sid)).digest()
     link = _stable_link(first_text(item, _URL_FIELDS))
     if link:
-        return _sha1('url', link)
-    parts = [
+        return LedgerKey('url', (link,)).digest()
+    parts = (
         first_text(item, _TITLE_FIELDS),
         first_text(item, _AUTHOR_FIELDS),
         first_text(item, _BODY_FIELDS)[:200],
-    ]
+    )
     if any(parts):
-        return _sha1('text', *parts)
-    return _sha1('json', _dumps(item))
+        return LedgerKey('text', parts).digest()
+    return LedgerKey('json', (_dumps(item),)).digest()
 
 
 # The labels an Upload node carries about its file, and the label a 工作流命名 node
@@ -348,7 +346,7 @@ def node_fingerprint(node: dict, upstream: tuple = ()) -> str:
     crawler's keyword invalidates it and everything wired after it. Input
     metadata (`_VOLATILE_PARAMS`) is left out.
     """
-    return _sha1(
+    return sha1_parts(
         node.get('type', ''),
         node.get('operation', ''),
         _dumps(stable_params(_script_version_into(node.get('params'), str(node.get('type') or '')))),
@@ -362,7 +360,7 @@ def workflow_fingerprint(workflow: dict) -> str:
     matches on, so tweaking a setting still finds the interrupted run."""
     nodes = workflow.get('nodes') or []
     conns = workflow.get('connections') or []
-    return _sha1(
+    return sha1_parts(
         _dumps(sorted((str(n.get('id')), str(n.get('type'))) for n in nodes if isinstance(n, dict))),
         _dumps(sorted((str(c.get('from')), str(c.get('to'))) for c in conns if isinstance(c, dict))),
     )

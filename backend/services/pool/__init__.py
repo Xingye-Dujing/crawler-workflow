@@ -15,7 +15,7 @@ from runtime.settings import get_setting
 from sessions.cookies import CookieManager
 
 from i18n import platform_label, t
-from services.pool import egress, health, selector, store
+from services.pool import egress, health, policy, selector, store
 
 
 def enabled() -> bool:
@@ -76,14 +76,10 @@ def account_word(account: str) -> str:
     return t(label_key, **label_args) if label_key else str(account or '').strip()
 
 
-def is_rotatable(reason: str) -> bool:
-    """Whether a cooling reason condemns the LOGIN (so a rotation can help).
-
-    Exported because the comment executor decides whether to spend the next account; a caller
-    answering ``observe`` without the ``rotatable`` field (an older/third-party pool) must still
-    get the pool's own rule instead of a silent ``False``.
-    """
-    return health.is_rotatable(reason)
+#: The rotation rule itself — a pure decision both crawl executors ask (see :mod:`services.pool.policy`).
+Attempt = policy.Attempt
+Decision = policy.Decision
+decide = policy.decide
 
 
 def reason_word(reason: str) -> str:
@@ -114,16 +110,20 @@ def exhaustion_message(platform: str, tried: list) -> str:
 
 
 __all__ = [
+    'Attempt',
     'Candidate',
+    'Decision',
     'account_word',
     'candidates',
     'claim',
+    'decide',
     'egress',
     'enabled',
     'exhaustion_message',
     'health',
     'max_attempts',
     'observe',
+    'policy',
     'reason_word',
     'release',
     'selector',

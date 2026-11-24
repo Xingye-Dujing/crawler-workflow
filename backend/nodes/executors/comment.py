@@ -37,6 +37,7 @@ from services.ingest.lifecycle import close_login_browser
 from services.ingest.runtime import item_scope, name_parts, source_stream
 from services.pool import selector as pool_selector
 from services.runs.files import record_file
+from services.runs.store.values import Cursor
 
 
 def validate_node(node: dict, _context) -> list[dict]:
@@ -303,7 +304,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
         # that nothing here would ever close.
         execution_state['active_crawlers'].add(crawler)
 
-    def _rotate(kind: str, facts: dict) -> bool:
+    def _rotate(kind: str, facts: dict, attempt_rows: int) -> bool:
         """Bench the current login/exit and open the next candidate for *kind*.
 
         Returns False when the pool is spent, which lets the link settle as blocked exactly
@@ -327,11 +328,17 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
             run_id=str((ctx or {}).get('run_id') or ''),
             node_id=nid,
         )
-        if verdict.get('rotatable') is None:
-            # An observer that answers only ``reason`` (an older pool, a test double) still gets
-            # the pool's rule: only login_wall/risk condemn the login.
-            verdict['rotatable'] = pool.is_rotatable(verdict.get('reason'))
-        if not verdict.get('rotatable'):
+        # Whether this link may be re-walked under another login is the pool's one rule, asked
+        # with the facts that belong to THIS link (its own row count, the user's stop), never
+        # re-derived here (see services.pool.policy).
+        decision = pool.decide(
+            pool.Attempt(
+                reason=verdict.get('reason') or pool.health.reason_of(facts),
+                stored_rows=attempt_rows,
+                stopped=stop_requested(),
+            )
+        )
+        if not decision.rotates():
             # A network fault (or an unknown failure) is not evidence against the LOGIN. Rotating
             # here spent one account per link and re-attempted a page the site never served; the
             # pool's own rule is that only a login wall / risk response condemns the account.
@@ -550,7 +557,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                         'unreachable': bool(getattr(_crawler, 'unreachable', False)),
                     }
                     rotations += 1
-                    if _rotate(kind, facts):
+                    if _rotate(kind, facts, len(rows)):
                         continue
                 break
             if dead:
@@ -610,7 +617,7 @@ def execute_comment_node(node: dict, headless: bool = True, ctx: dict = None):
                 # cursor at 1 even when 3..10 come back clean; the replay re-walks from 2 and
                 # the ledger refuses rows it already paid for (``item_key`` keys a comment by
                 # its own site id).
-                cursor_sink({'url_index': idx, 'url_total': len(urls)})
+                cursor_sink(Cursor.proven_prefix(idx, len(urls)))
     except BaseException:
         # Whatever the walk raised (a refused adapter, a harness that failed to start, a locked
         # runs.db in the sink, a full export dir), publish the part files first — but suppressed,

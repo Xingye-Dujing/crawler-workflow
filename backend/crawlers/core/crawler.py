@@ -2,7 +2,7 @@ import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from runtime.settings import get_setting
 from selenium.common.exceptions import TimeoutException
@@ -512,8 +512,8 @@ class Crawler(ABC):
     @staticmethod
     def resume_of(kwargs: dict) -> dict:
         """The cursor handed back to a resumed crawl ({} on a fresh one)."""
-        cursor = (kwargs or {}).get('resume')
-        return cursor if isinstance(cursor, dict) else {}
+        cursor = (kwargs or {}).get('resume')  # a stored Cursor reads like the dict this used to be
+        return dict(cursor) if isinstance(cursor, Mapping) else {}
 
     def _create_driver(self):
         """Build this session's browser through :mod:`crawlers.core.browser`, then seed its cookies.

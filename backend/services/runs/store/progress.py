@@ -17,6 +17,7 @@ from .identity import (
     schema_columns,
     schema_digest,
 )
+from .values import Cursor
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class NodesMixin:
         run_id: str,
         node_id: str,
         status: str,
-        cursor: dict = None,
+        cursor: Cursor | dict | None = None,
         error: str = '',
         schema: list = None,
     ):
@@ -155,7 +156,7 @@ class NodesMixin:
         """
         stamp = self.now()
         count = self.row_count(run_id, node_id)
-        cursor_json = _dumps(cursor) if cursor is not None else None
+        cursor_json = _dumps(Cursor.of(cursor).as_dict()) if cursor is not None else None
         self._execute(
             'UPDATE node_runs SET status = ?, row_count = ?, updated_at = ?, finished_at = ?, error = ?, '
             'cursor_json = COALESCE(?, cursor_json) WHERE run_id = ? AND node_id = ?',
@@ -169,20 +170,21 @@ class NodesMixin:
                 (run_id, node_id, _dumps(columns), schema_digest(columns), stamp),
             )
 
-    def save_cursor(self, run_id: str, node_id: str, cursor: dict):
+    def save_cursor(self, run_id: str, node_id: str, cursor: Cursor | dict):
         """Where a crawl got to. Written as it advances, not at the end, so the
         position survives whatever kills the run."""
         self._execute(
             'UPDATE node_runs SET cursor_json = ?, updated_at = ? WHERE run_id = ? AND node_id = ?',
-            (_dumps(cursor), self.now(), run_id, node_id),
+            (_dumps(Cursor.of(cursor).as_dict()), self.now(), run_id, node_id),
         )
 
-    def get_cursor(self, run_id: str, node_id: str) -> dict | None:
+    def get_cursor(self, run_id: str, node_id: str) -> Cursor | None:
+        """The stored position, or ``None`` when this node has never written one."""
         rows = self._query('SELECT cursor_json FROM node_runs WHERE run_id = ? AND node_id = ?', (run_id, node_id))
         if not rows or not rows[0]['cursor_json']:
             return None
         with contextlib.suppress(TypeError, ValueError):
-            return json.loads(rows[0]['cursor_json'])
+            return Cursor.of(json.loads(rows[0]['cursor_json']))
         return None
 
     def settle_nodes(self, run_id: str) -> int:
