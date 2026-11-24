@@ -2,8 +2,23 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`6a8c4025 功能更新：P7 第三类——10 个采集平台清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`a36c997a 功能更新：P7 七表面一致性门禁 + 生成物补齐`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 七表面一致性门禁（2026-11-24）
+
+- **一个表面表**：`tests/unit/gates/test_capability_surfaces.py` 的 `SURFACES` 按 kind 声明该能力必须
+  出现的表面（`runtime:node-types`/`runtime:ops`/`runtime:charts`/`runtime:platforms`、
+  `api:chart-profiles`、`generated:catalog`/`ai-tools`/`frontend-schema`/`openapi`、
+  `ai:skill-catalog`/`ai:vocabulary`、`docs:page`/`docs:skill`），每个 (kind, surface) 双向断言：
+  清单里的 id 一个不漏，表面上的 id 一个不多。
+- **它抓到的三处真实漂移**：node 与 operator 共用 `NodeParams.` 前缀（现为 `OperatorParams.`）；
+  前端目录的 key 被写成 `types` 而实际是 `nodes`；AI 词汇表里的 CatBus-only 平台
+  （京东/淘宝/快手/TikTok/闲鱼）不属于本树——门禁显式排除，而不是假装不存在。
+- **生成物补齐**：OpenAPI 现在为图表（`ChartFields.<id>`）与平台（`PlatformModes.<id>`）生成 schema，
+  四类能力在机器可读接口上一致。
+- **验证**：表面门禁 71 passed；capabilities/gates/ai 1931 passed；ruff 全绿；文档门禁通过。
+- **未做**：MCP server 与 CLI 两个表面；面板/停靠/设置清单化。
 
 ## P7 第三类：10 个采集平台清单化（2026-11-24）
 
@@ -70,6 +85,7 @@
 | `50ca1505` | P7 第一类：37 个分析算子清单化（契约/读写形状/策略/七段技能；analysis 旧表全部改为投影） |
 | `f272770a` | P7 第二类：30 个图表类型清单化（字段/引擎/文献列/七段技能；registry 改为投影，绘图函数公开为 handler） |
 | `6a8c4025` | P7 第三类：10 个采集平台清单化（模式/字段/登录与机器要求/七段技能；值类型搬进 kernel，爬虫类成为 handler） |
+| `a36c997a` | P7 七表面一致性门禁（每类能力 × 每个表面双向断言）+ OpenAPI 图表/平台 schema |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |
