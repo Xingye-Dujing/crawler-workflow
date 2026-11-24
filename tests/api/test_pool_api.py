@@ -22,6 +22,13 @@ def _save_cookie(account='work', platform='weibo'):
     cookie_manager.save(platform, [{'name': 'SUB', 'value': account, 'domain': '.weibo.com'}], account)
 
 
+def _account(client, platform='weibo', account='work'):
+    """This test's own pool row. ``accounts[0]`` assumed the cookie jar held one login — a
+    different test's leftover login made the full run read somebody else's row."""
+    rows = client.get('/api/pool/state').get_json()['accounts']
+    return [row for row in rows if row['platform'] == platform and row['account'] == account][0]
+
+
 def test_state_lists_saved_logins_and_exits_without_secrets(client):
     _save_cookie('work')
     saved = client.post(
@@ -46,12 +53,12 @@ def test_state_lists_saved_logins_and_exits_without_secrets(client):
 def test_an_account_is_frozen_by_the_run_and_unfrozen_by_the_human(client):
     _save_cookie('work')
     store.mark_cooldown('account', 'weibo', 'work', 7200, 'login_wall')
-    frozen = client.get('/api/pool/state').get_json()['accounts'][0]
+    frozen = _account(client)
     assert frozen['state'] == 'cooling' and frozen['cool_until_local']
 
     answer = client.post('/api/pool/account/reset', json={'platform': 'weibo', 'account': 'work'}).get_json()
     assert answer['ok'] is True and answer['count'] == 1
-    assert client.get('/api/pool/state').get_json()['accounts'][0]['state'] == 'ok'
+    assert _account(client)['state'] == 'ok'
 
 
 def test_disable_is_a_manual_stop_that_a_clock_cannot_lift(client):
@@ -59,11 +66,11 @@ def test_disable_is_a_manual_stop_that_a_clock_cannot_lift(client):
     assert client.post(
         '/api/pool/account/disable', json={'platform': 'weibo', 'account': 'work', 'disabled': True}
     ).get_json()['ok']
-    assert client.get('/api/pool/state').get_json()['accounts'][0]['state'] == 'disabled'
+    assert _account(client)['state'] == 'disabled'
     assert client.post(
         '/api/pool/account/disable', json={'platform': 'weibo', 'account': 'work', 'disabled': False}
     ).get_json()['ok']
-    assert client.get('/api/pool/state').get_json()['accounts'][0]['state'] == 'ok'
+    assert _account(client)['state'] == 'ok'
 
 
 def test_an_exit_round_trip_binds_and_deletes(client):
@@ -76,11 +83,11 @@ def test_an_exit_round_trip_binds_and_deletes(client):
         json={'platform': 'weibo', 'account': 'work', 'exit_id': exit_row['id']},
     ).get_json()
     assert bound['ok'] is True
-    assert client.get('/api/pool/state').get_json()['accounts'][0]['exit_id'] == exit_row['id']
+    assert _account(client)['exit_id'] == exit_row['id']
 
     assert client.post('/api/pool/exit/delete', json={'id': exit_row['id']}).get_json()['ok'] is True
     # Deleting the exit releases the binding rather than leaving a login pointing at nothing.
-    assert client.get('/api/pool/state').get_json()['accounts'][0]['exit_id'] == ''
+    assert _account(client)['exit_id'] == ''
     missing = client.post('/api/pool/exit/delete', json={'id': 'nope'})
     assert missing.status_code == 404
 
