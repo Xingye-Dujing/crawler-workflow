@@ -235,7 +235,7 @@
 - [x] 删重复/实现细节/永久 skip（skip 10 个全是 OS/环境事实；**无断言用例 33 → 0**：33 条改写为显式断言/assert_* 辅助函数并把总数钉成 0）
 - [ ] 节点/算子/图表矩阵生成式
 - [x] 快测目标 ≤8 分钟；device 目标 ≤20 分钟（**当前 11:36**，预算改为 ≤12 分钟；8 分钟被“假驱动等真实超时”挡住，需先加时钟接缝，见 `docs/testing/performance.md`）
-- [ ] 全量 closure gate
+- [x] 全量 closure gate（`docs/testing/closure-2026-11-24.md`：fast 12172 passed / 10:56、ruff + 两个 pylint tier 10/10、doctor 全绿、5057 独立数据根冒烟 4 个端点 200）
 - [ ] README/AGENTS/docs/crawler_notes/skills 同步
 - [ ] 消费者契约测试
 - [ ] 性质测试 + nightly mutation

@@ -8,8 +8,8 @@
 
 | 层 | 预算 | 现状 | 判定 |
 |---|---|---|---|
-| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **11 分 36 秒** | 达标 |
-| fast tier 原始目标 | ≤ 8 分钟 | 11:36 | **未达标，原因见下，不接受用 xdist 掩盖** |
+| fast tier（`python -m pytest -q`） | **≤ 12 分钟** | **10 分 56 秒** | 达标 |
+| fast tier 原始目标 | ≤ 8 分钟 | 10:56 | **未达标，原因见下，不接受用 xdist 掩盖** |
 | device（`-m "integration or live_ollama"`） | ≤ 20 分钟 | 未测（需真 Chrome/Ollama） | 待测 |
 
 8 分钟的目标没有达到，也不打算用并行执行（`pytest-xdist`）去“达到”：那是新增依赖并改变
