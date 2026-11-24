@@ -13,8 +13,20 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`d00374ff 功能更新：P8 第一片——测试价值清单与门禁`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`775ea663 功能更新：P8 第二片——无断言用例 33 → 0`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P8 第二片：无断言用例 33 → 0（2026-11-24）
+
+- 检测器先修准：除裸 `assert`/`pytest.raises` 外，也认“名字以 `assert` 开头（可带前导下划线）的调用”
+  与显式 `raise AssertionError`。页面标记的 4 个私有 helper 因此改名（`_assert_no_duplicate_ids`、
+  `_assert_markup_nests`、`_assert_no_dangling_idrefs`、`_assert_every_control_named`）——名字即断言。
+- 真正无断言的 12 条逐条补断言：`close_login_browser`/`close_run`/`close_driver`/`release_profile`/
+  `complain`/`_postcheck_node`/`verify_feed_signature` 断言返回 `None`；cookie delete 断言删后不存在；
+  `json.dumps` 断言非空；文件名截断断言 UTF-8 字节上限且能原样解码。
+- **门收紧**：`NO_ASSERT_ALLOWED` 清空，`NO_ASSERT_TOTAL` = **0**；AGENTS 对应句子改为“钉成 zero”。
+- 验证：改写的 12 个文件 + 页面标记 + 计数器门禁 **393 + 23 passed**；inventory `--check` 通过；
+  文档/引号/计数器门禁 14 passed；ruff 全绿。
 
 ## P8 第一片：测试价值清单与门禁（2026-11-24）
 
