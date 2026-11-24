@@ -25,7 +25,22 @@ loadPageScripts(sandbox, { jsDir, only: ['app.js', 'ai-workspace.js', 'panels/se
 const workspace = sandbox.AIWorkspace;
 workspace.init();
 
+/* The state is ONE record, in ai/kernel/store.js: a write from any module lands there, a reader sees
+   it through the host's accessor, and a subscriber hears the key. Without this, twelve files each
+   holding `this._sending` would be twelve opinions about whether a turn is running. */
+const seen = [];
+const unsubscribe = sandbox.AIStore.subscribe((key, value) => seen.push([key, value]));
+workspace._sending = true;
+workspace._sending = false;
+unsubscribe();
+workspace._sending = true;
+workspace._sending = false;
 const out = {};
+out.store = {
+    notified: seen,
+    reads: workspace._sending,
+    shared: workspace._messages === sandbox.AIStore.state._messages,
+};
 
 /* A repaint draws the transcript it was handed. The count of model rows and the count of drawn
    user messages must both equal the seed — a repaint that records a second copy is the loop. */

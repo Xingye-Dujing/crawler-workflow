@@ -3,8 +3,8 @@
 > 由 `tools/test_inventory.py` 用 `ast` 读出，请勿手改。`python tools/test_inventory.py --check` 比较字节；
 > `tests/unit/gates/test_test_inventory.py` 在 CI 里跑同一份检查，并拒绝“没有断言又没写理由”的用例。
 
-- 文件：**443**
-- 用例（定义数，参数化会展开成更多次运行）：**8630**
+- 文件：**449**
+- 用例（定义数，参数化会展开成更多次运行）：**8695**
 - 无断言的用例：**0**（每一条都必须在 `tools/test_inventory.py` 的豁免表里写明理由）
 - 带 skip/skipif 标记的用例：**10**（环境型 skip 由 `CRAWLER_REQUIRE_*` 变成失败）
 - xfail：**0**
@@ -270,6 +270,7 @@
 | `tests/unit/crawlers/test_hongguo_harvest.py` | 89 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_login_wall.py` | 23 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_pagefetch_timeout.py` | 6 | 0 | 0 | 0 |
+| `tests/unit/crawlers/test_platform_prompts.py` | 3 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_platform_rules.py` | 81 | 0 | 4 | 0 |
 | `tests/unit/crawlers/test_pool_proxy.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/crawlers/test_source_comments_lane.py` | 2 | 0 | 0 | 0 |
@@ -319,7 +320,7 @@
 | `tests/unit/foundation/test_times.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/foundation/test_utils.py` | 44 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_accounts.py` | 20 | 0 | 0 | 0 |
-| `tests/unit/frontend/test_frontend_ai_js.py` | 82 | 0 | 0 | 0 |
+| `tests/unit/frontend/test_frontend_ai_js.py` | 83 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_analysis_badge_js.py` | 8 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_app_state_js.py` | 46 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_async_panels_js.py` | 16 | 0 | 0 | 0 |
@@ -346,6 +347,7 @@
 | `tests/unit/frontend/test_frontend_handlers_exist.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_i18n_js.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_js.py` | 101 | 0 | 0 | 0 |
+| `tests/unit/frontend/test_frontend_js_budget.py` | 10 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_label_layout_js.py` | 7 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_menu_js.py` | 28 | 0 | 0 | 0 |
 | `tests/unit/frontend/test_frontend_missing_assets_js.py` | 11 | 0 | 0 | 0 |
@@ -397,6 +399,7 @@
 | `tests/unit/gates/test_settings_schema.py` | 14 | 0 | 0 | 0 |
 | `tests/unit/gates/test_test_inventory.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/gates/test_test_tiers.py` | 49 | 0 | 0 | 0 |
+| `tests/unit/gates/test_tool_descriptions.py` | 9 | 0 | 0 | 0 |
 | `tests/unit/gates/test_vendored_assets.py` | 15 | 0 | 0 | 0 |
 | `tests/unit/gates/test_zenviz_core_sync.py` | 1 | 0 | 0 | 0 |
 | `tests/unit/i18n/test_i18n.py` | 44 | 0 | 0 | 0 |
@@ -441,6 +444,9 @@
 | `tests/unit/sessions/test_cookie_manager.py` | 46 | 0 | 0 | 0 |
 | `tests/unit/sessions/test_preflight_probe_timeout.py` | 5 | 0 | 0 | 0 |
 | `tests/unit/sessions/test_profile_template_policy.py` | 29 | 0 | 0 | 0 |
+| `tests/unit/sessions/test_session_lanes.py` | 8 | 0 | 0 | 0 |
+| `tests/unit/sessions/test_session_naming.py` | 16 | 0 | 0 | 0 |
+| `tests/unit/sessions/test_session_verdict.py` | 18 | 0 | 0 | 0 |
 | `tests/unit/test_update_feed_signature.py` | 4 | 0 | 0 | 0 |
 | `tests/unit/tools/test_backup.py` | 13 | 0 | 0 | 0 |
 | `tests/unit/tools/test_check_release_version.py` | 3 | 0 | 0 | 0 |

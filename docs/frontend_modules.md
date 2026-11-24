@@ -14,7 +14,7 @@
 4. `node-types.js`、`stats.js`、`menu.js`、`zenviz.js`、`custom-select.js`。
 5. `i18n/` 词典：`settings`、`panels`、`biblio`、`chrome`、`charts`、`nodes`、`crawl`、`pool`、`checks`、`misc`、`accounts`、`components`、`update`、`ai`。
 6. `update.js`、`app.js`、`job-poll.js`、`llm-settings.js`、`app-settings.js`、`floating-panels.js`。
-7. `ai/stream.js`、`ai/render.js`、`ai/settings.js`、`ai/context.js`、`ai/watch.js`、`ai/studio.js`、`ai-workspace.js`。
+7. AI 工作区（`ai-workspace.js` 是入口/接线，状态在 `ai/kernel/store.js`）：`ai/kernel/store.js`、`ai/kernel/dom.js`、`ai/kernel/http.js`、`ai/kernel/sse.js`、`ai/render/markdown.js`、`ai/render/question.js`、`ai/render/artifact.js`、`ai/render/toolcard.js`、`ai/settings.js`、`ai/context.js`、`ai/features/watch.js`、`ai/features/studio.js`、`ai/features/editors.js`、`ai/features/dock.js`、`ai/features/stored.js`、`ai/features/chat.js`、`ai/features/composer.js`、`ai/features/mentions.js`、`ai/features/answers.js`、`ai/features/sidebar.js`、`ai/features/artifacts.js`、`ai/features/monitors.js`、`ai/features/folder.js`、`ai/features/events.js`、`ai-workspace.js`。
 8. `reusable.js`、`components.js`、`schedules.js`、`accounts.js`。
 
 图表工作室页面（`static/zenviz.html`）单独加载 `vendor/zv/*`、`js/zenviz-parse.js`、`js/zenviz-page.js`、`js/zenviz-bridge.js`。
@@ -30,7 +30,14 @@
 | `panels/runs.js` | 运行控制台、视图游标与运行记录管理器 |
 | `panels/files.js` | 已存画布、画布历史与可复用模板三页签 |
 | `panels/data-views.js` | 上传、通用预览、训练、仪表盘与执行历史 |
-| `ai-workspace.js` | AI 工作区：会话、流式渲染、技能、插件、监视器与 Python 工具 |
+| `ai-workspace.js` | AI 工作区入口：`init()` 绑定标记与委托监听，`aiSet*` 转发；状态与各界面在 `ai/kernel/`、`ai/features/`、`ai/render/` 各自文件里 |
+| `ai/kernel/store.js` | 工作区唯一的状态记录与 `AIStore`（读写都落在同一份，写后可订阅） |
+| `ai/kernel/http.js` | `/api/ai/ws` 的唯一边界：`AIHttp` 与每个请求方法 |
+| `ai/kernel/sse.js` | SSE 解码与一轮回答的归约（`_onEvent`）、时钟与重连 |
+| `ai/kernel/dom.js` | 安全 DOM：`AIDom.morph` 一次重绘（签名未变不重建、保留展开与滚动） |
+| `ai/render/*.js` | 模型文本到元素：markdown、问题卡、artifact 卡、工具卡与一轮回答的顺序 |
+| `ai/features/chat.js` 等 | 面板各面：会话记录、composer、侧栏、`@` 菜单、问答、监视器、目录、工作室、设置表单、委托点击 |
+| `ai/settings.js` / `ai/context.js` | 本机偏好与 Key、当前页面上下文 |
 | `zenviz-page.js` / `zenviz-bridge.js` | 图表工作室页面本体与画布侧桥接 |
 | `reusable.js` | 可复用节点的模板、展开与预览 |
 | `accounts.js` / `components.js` / `schedules.js` / `update.js` | 账号、环境与组件、定时任务、自更新面板 |
@@ -45,7 +52,7 @@
 | `canvas.js` | `clipboard.js`、`canvas-view.js`、`canvas-snapshot.js`、`canvas-visuals.js`、`canvas-auto-layout.js` |
 | `workflow.js` | `panels/data-views.js`、`panels/shell.js`、`panels/run-results.js`、`workflow-layout.js`、`chart-preview.js`、`capabilities.js`、`panels/cookies.js`、`panels/source-help.js`、`panels/biblio.js`、`panels/runlog.js`、`panels/exports.js`、`panels/runs.js`、`panels/lexicon.js`、`panels/datasets.js`、`panels/files.js`、`panels/diagnostics.js`、`panels/settings.js`、`job-poll.js` |
 | `panels/settings.js` | `panels/node-analysis.js`、`panels/node-biblio.js`、`panels/node-chart.js`、`panels/node-verify.js`、`panels/node-python.js` |
-| `ai-workspace.js` | `ai/stream.js`、`ai/render.js`、`ai/settings.js`、`ai/context.js`、`ai/watch.js`、`ai/studio.js` |
+| `ai-workspace.js` | `ai/kernel/store.js`、`ai/kernel/dom.js`、`ai/kernel/http.js`、`ai/kernel/sse.js`、`ai/render/markdown.js`、`ai/render/question.js`、`ai/render/artifact.js`、`ai/render/toolcard.js`、`ai/settings.js`、`ai/context.js`、`ai/features/watch.js`、`ai/features/studio.js`、`ai/features/editors.js`、`ai/features/dock.js`、`ai/features/stored.js`、`ai/features/chat.js`、`ai/features/composer.js`、`ai/features/mentions.js`、`ai/features/answers.js`、`ai/features/sidebar.js`、`ai/features/artifacts.js`、`ai/features/monitors.js`、`ai/features/folder.js`、`ai/features/events.js` |
 | — | `theme-boot.js`、`node-types.js`、`stats.js`、`menu.js`、`zenviz.js`、`zenviz-parse.js`、`zenviz-page.js`、`zenviz-bridge.js`、`custom-select.js`、`update.js`、`reusable.js`、`components.js`、`schedules.js`、`accounts.js`、`panels/settings-panel.js`、`panels/phase-log.js`、`i18n/*` |
 
 ## 拆分与加载规则
@@ -56,7 +63,7 @@
 - 契约测试按源码扫描模块时用 `tests/static_assets.py::js_text(name)`，它沿同一张伴生表展开，不会把搬走的半边读成“不存在”。
 - 拆一个对象的成员用 `Object.assign(obj, { … })`，仍是同一个全局；同名成员的段之间必须互不重叠。`tests/unit/frontend/test_frontend_canvas_sections_js.py` 钉住 canvas 家族的这一形状。
 - 切点取在下一个函数自己的注释之前，成员行逐字节不动；切之前按顶层声明清点这一片，确认没有全页工具被一起带走。
-- 不引入打包器或 ES modules；约 800 行是软上限，主题内聚的单对象即便略超也保持原样。
+- 不引入打包器或 ES modules；每个页面模块 ≤600 行，超了就继续拆（`tests/js_budget.py` 声明预算与豁免，`tests/unit/frontend/test_frontend_js_budget.py` 是门禁，当前只量 AI 工作区这一层，其余层逐片纳入）。
 
 ## 验收
 

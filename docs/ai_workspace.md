@@ -6,13 +6,15 @@ AI 工作区是右侧常驻的智能体面板：读项目事实、调用只读�
 ## 1. 结构与请求流
 
 ```text
-index.html → ai-workspace.js
-  ├─ ai/stream.js    SSE 解码（POST + fetch）
-  ├─ ai/render.js    转义 Markdown、引用、问题卡、产物卡、工具卡
-  ├─ ai/settings.js  浏览器本地 Key / 模型 / 偏好
-  ├─ ai/context.js   当前画布草稿、手动 dataset/run id
-  ├─ ai/watch.js     运行监控的投递轮询
-  └─ ai/studio.js    技能、Python 脚本库、插件、权限
+index.html → ai/kernel/store.js（唯一状态记录 + AIWorkspace 对象）
+  ├─ ai/kernel/dom.js    安全 DOM：一次重绘（AIDom.morph）
+  ├─ ai/kernel/http.js   /api/ai/ws 的唯一边界（AIHttp + 每个请求方法）
+  ├─ ai/kernel/sse.js    SSE 解码（POST + fetch）与一轮回答的归约
+  ├─ ai/render/          转义 Markdown、问题卡、产物卡、工具卡（markdown/question/artifact/toolcard）
+  ├─ ai/settings.js      浏览器本地 Key / 模型 / 偏好
+  ├─ ai/context.js       当前画布草稿、手动 dataset/run id
+  └─ ai/features/        会话记录、composer、侧栏、@ 菜单、问答、监视器、目录、工作室、设置表单、
+                         委托点击、运行监控的投递（ai-workspace.js 只留下 init 与接线）
               │
 POST /api/ai/ws/chat → AgentService
   ├─ ContextBuilder   项目事实 / 实时数据 / 文档 / 预算
@@ -167,7 +169,7 @@ AI 用 `present_artifact(kind="monitor")` 提出条件，用户选“自动分�
 - 引擎在 `runtime.run_events` 发布 `run.started` / `node.finished` / `run.finished`；订阅者存在时 `run.log` 每行都发布，由 `ai.monitors` 在工作线程里筛选。
 - `ai.monitors` 匹配条件后写一条持久投递；达到 `max_triggers` 自动结束。事件只含 id、状态、计数，不含爬取正文（控制台行也不进投递，模型用 `run_console` 自己读）。
 - 投递写入在专用线程队列里完成，运行线程不做磁盘 I/O；`run.log` 的筛选命中后也只排队。
-- 浏览器 `ai/watch.js` 轮询投递并在工作区打开/收到事件时反应；自动分析用浏览器里的 Key 发起一轮对话，
+- 浏览器 `ai/features/watch.js` 轮询投递并在工作区打开/收到事件时反应；自动分析用浏览器里的 Key 发起一轮对话，
   用户行标记 `monitor_event`。服务端从不自行花钱，Key 不进监控表。
 
 ## 5. Python 扩展

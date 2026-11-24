@@ -160,6 +160,24 @@ class TestRuntimeSurfaces:
         assert 'no local daemon on a cloud host' in out['providerOptions']
 
 
+class TestOneObservableState:
+    """The workspace's state is one record, and a write anywhere is what a reader then sees.
+
+    Twelve files share `this._sending`; before W5 they shared it by editing one 4,446-line literal.
+    The record and its accessors are the seam that let the split keep that property, so it is pinned
+    rather than assumed: a subscriber hears the key, an unsubscribe silences it, and the array a
+    module mutates IS the store's array.
+    """
+
+    def test_a_write_lands_in_the_one_record_and_notifies(self):
+        out = _run_workspace()['store']
+        assert out['notified'] == [['_sending', True], ['_sending', False]], (
+            f'a state write was not observable (or the unsubscribe was ignored): {out["notified"]}'
+        )
+        assert out['reads'] is False, out
+        assert out['shared'] is True, 'a module held a copy of a state array instead of the record'
+
+
 class TestWorkspaceRepaintAndDelegation:
     """The workspace against the stub page: repaint must terminate, and every dock control clicks.
 

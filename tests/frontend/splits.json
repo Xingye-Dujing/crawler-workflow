@@ -45,11 +45,29 @@
         "panels/node-python.js"
     ],
     "ai-workspace.js": [
-        "ai/stream.js",
-        "ai/render.js",
+        "ai/kernel/store.js",
+        "ai/kernel/dom.js",
+        "ai/kernel/http.js",
+        "ai/kernel/sse.js",
+        "ai/render/markdown.js",
+        "ai/render/question.js",
+        "ai/render/artifact.js",
+        "ai/render/toolcard.js",
         "ai/settings.js",
         "ai/context.js",
-        "ai/watch.js",
-        "ai/studio.js"
+        "ai/features/watch.js",
+        "ai/features/studio.js",
+        "ai/features/editors.js",
+        "ai/features/dock.js",
+        "ai/features/stored.js",
+        "ai/features/chat.js",
+        "ai/features/composer.js",
+        "ai/features/mentions.js",
+        "ai/features/answers.js",
+        "ai/features/sidebar.js",
+        "ai/features/artifacts.js",
+        "ai/features/monitors.js",
+        "ai/features/folder.js",
+        "ai/features/events.js"
     ]
 }

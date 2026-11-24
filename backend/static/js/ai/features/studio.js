@@ -1,3 +1,10 @@
+/* The studio panel and the actions it offers.
+ *
+ * The studio is the workspace's own editor surface: user skills, plugin install/disable, permissions,
+ * memory and the Python script library. Its rendering lives in ai/studio.js (the panel object); what
+ * is added here are the workspace methods that open it and act on a gallery row.
+ */
+
 /* The studio inside the workspace: user skills, plugin install/disable, permissions.
  *
  * Every control is a data attribute; the workspace's delegated click handler performs the action.
@@ -396,4 +403,124 @@ const AIStudio = {
         );
     },
 };
+
+Object.assign(AIWorkspace, {
+    /* The skill row expands into what the skill ACTUALLY carries: its prompt, context sources and
+       tools. Fetched on first open, so a long prompt costs nothing until it is asked for. */
+    async _loadSkillDetail(el) {
+        const body = el.querySelector('.ai-skill-body');
+        if (!body || body.getAttribute('data-loaded') === '1') return;
+        const id = el.getAttribute('data-ai-skill') || '';
+        /* `data-loaded` is set only AFTER the answer arrives: marking it first made one failed
+           request permanent — every later click returned early and the row could never load. */
+        body.setAttribute('data-loading', '1');
+        body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoading')) + '</div>';
+        try {
+            const response = await fetch(AI_BASE + '/skills/' + encodeURIComponent(id));
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || ('HTTP ' + response.status));
+            const skill = data.skill || {};
+            const context = (skill.context || []).join(', ') || '—';
+            const tools = (skill.tools || []).join(', ') || '—';
+            body.innerHTML =
+                '<p class="ai-skill-prompt">' + AIRender.escape(String(skill.prompt || '')) + '</p>' +
+                '<div class="ai-skill-meta"><span>' + AIRender.escape(I18n.t('ai.skillContext')) + ': ' +
+                AIRender.escape(context) + '</span><span>' + AIRender.escape(I18n.t('ai.skillTools')) + ': ' +
+                AIRender.escape(tools) + '</span></div>';
+            body.setAttribute('data-loaded', '1');
+        } catch (error) {
+            body.removeAttribute('data-loading');
+            body.innerHTML = '<div class="ai-hint">' + AIRender.escape(I18n.t('ai.skillLoadFailed')) + '</div>';
+        }
+    },
+
+    /* ─── Entry from a panel outside the workspace ─────────────────────────────
+       A dataset / run / node panel hands over the ids of the thing it is showing and the question
+       to ask. This opens a NEW chat (an entry from a table must not inherit an unrelated
+       conversation), attaches the ids as manual context so the server re-reads that object, and
+       PRE-FILLS the question without sending it: the send button stays the user's, and a prompt
+       they can edit is the point of an entry. */
+    async askAbout(target) {
+        const spec = target || {};
+        const context = {};
+        if (spec.dataset_id) context.dataset_id = String(spec.dataset_id);
+        if (spec.run_id) context.run_id = String(spec.run_id);
+        AIContext.setManual(context);
+        this.open({ context });
+        await this.newChat();
+        if (this._dom.input) {
+            this._dom.input.value = String(spec.prompt || '');
+            this._dom.input.focus();
+        }
+        this._renderContextBar();
+    },
+
+    openStudio(tab) {
+        if (tab) this._studioTab = tab;
+        /* The panel may be closed: a control OUTSIDE it (the Python node's 管理脚本) called this
+           and nothing appeared — `_mode` only decides what the transcript draws. Opening first is
+           what makes that button act; `_renderWelcome` then declines to paint over the studio
+           because the mode is no longer 'chat'. */
+        if (!this._open) this.open({ silent: true });
+        this._mode = 'studio';
+        this._renderStudio();
+        if (this._studioTab === 'python' && typeof AIStudio.loadPython === 'function') {
+            AIStudio.loadPython(this);
+        }
+        if (this._studioTab === 'memory' && typeof AIStudio.loadMemory === 'function') {
+            AIStudio.loadMemory(this);
+        }
+    },
+
+    async _togglePlugin(id, enabled) {
+        try {
+            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id) + '/enable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled }),
+            });
+            await this._loadBootstrap();
+            this.openStudio();
+        } catch (error) {
+            this._toast(error.message);
+        }
+    },
+
+    async _deletePlugin(id) {
+        if (!(await this._confirm(I18n.t('ai.deleteConfirm')))) return;
+        try {
+            await fetch(AI_BASE + '/plugins/' + encodeURIComponent(id), { method: 'DELETE' });
+            await this._loadBootstrap();
+            this.openStudio();
+        } catch (error) {
+            this._toast(error.message);
+        }
+    },
+
+    async _installPlugin() {
+        const box = this._dom.panel.querySelector('[data-ai-plugin-manifest]');
+        if (!box) return;
+        let payload;
+        try {
+            payload = JSON.parse(box.value || '{}');
+        } catch (error) {
+            this._toast(I18n.t('ai.testFail') + ': ' + error.message);
+            return;
+        }
+        const permissions = (payload.permissions || []).join(', ');
+        if (!(await this._confirm((payload.name || payload.id || '') + '\n' + I18n.t('ai.pluginPermissions') + ': ' + permissions))) return;
+        try {
+            const response = await fetch(AI_BASE + '/plugins/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || 'install failed');
+            await this._loadBootstrap();
+            this.openStudio();
+            this._toast(I18n.t('ai.saved'));
+        } catch (error) {
+            this._toast(error.message);
+        }
+    },
+
+});
+
 window.AIStudio = AIStudio;

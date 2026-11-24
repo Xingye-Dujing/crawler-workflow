@@ -36,8 +36,12 @@ def test_query_loader_can_reveal_the_node_trace_conversation():
     # settlement.
     assert "'/api/ai/ws/traces/'" in source
     assert 'message_count' not in source, 'a quiet traditional trace never reaches 2 messages'
-    # The workspace must be opened onto that specific conversation, not the remembered one.
-    workspace = (JS / 'ai-workspace.js').read_text(encoding='utf-8')
+    # The workspace must be opened onto that specific conversation, not the remembered one. Ask the
+    # whole split closure: the opener is `open()` in ai/features/dock.js and the pump is sse.js, so a
+    # test that read only the entry file would report a moved line as a missing behaviour.
+    from static_assets import js_text
+
+    workspace = js_text('ai-workspace.js')
     assert 'opts.conversation' in workspace
     assert 'this.selectConversation(wanted)' in workspace
     # The follow pump must repaint when a NEW row's Q&A lands, or only the first of the 3 rows
