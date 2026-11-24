@@ -2,8 +2,26 @@
 
 - 日期：2026-11-24
 - 分支：`main`
-- 最后提交：`f272770a 功能更新：P7 第二类——30 个图表类型清单化`；框架仓库 `cf6d89f`（0.1.25）
+- 最后提交：`6a8c4025 功能更新：P7 第三类——10 个采集平台清单化`；框架仓库 `cf6d89f`（0.1.25）
 - 工作区：干净（唯一未提交项是 `data/workflows/XHS_图表_词典型v5.json`，用户自己的改动）
+
+## P7 第三类：10 个采集平台清单化（2026-11-24）
+
+- **新增能力种类 `platform`**：`capabilities_kernel/platforms/<id>/manifest.py`（`PlatformManifest`，见
+  `capabilities_kernel/platform.py`）。声明的还是那些站点事实（模式、字段、产出、屏幕行为、是否需登录、
+  机器要求、实测运行建议），只是现在带上了 identity/七段技能/文档/契约测试；工作区里 `skill_load` 能读到
+  “这个平台有哪几种采集、各自要什么、什么时候别用”。
+- **值类型搬进 kernel**：`Capability`/`Mode`/`Field` 与共享原子/模式工厂（`platforms/_fields.py`）离开
+  `capabilities/`；`capabilities/fields.py` 与 `capabilities/model.py` 删除。`Field.value_from` 的
+  `core.refs` 导入延迟到方法内（core.refs 拉 pandas，而清单在解析画布时就要加载）。
+- **投影**：`capabilities.platforms.CAPABILITIES = registry.manifests('platform')`（面板顺序 = `identity.order`），
+  `capabilities.registry`/`catbus` 改读 kernel；爬虫类 `crawlers.platforms.<id>.crawler:<Class>` 成为清单
+  handler，doctor 因此逐个核对“这个平台的爬虫还在”。
+- **生成物**：每个平台生成 `docs/capabilities/platforms/<id>.md`（模式/必填字段/建议/机器要求）与七段技能页。
+- **验证**：api/crawlers/foundation/ai/capabilities **4891 passed**；全量 fast tier **12059 passed**（唯一失败
+  是文档仍引用已删除的 `capabilities/fields.py`/`model.py`，已改指 kernel 并复跑）；ruff check/format 全绿；
+  product 与 tests pylint **10.00/10**；doctor 全绿。
+- **未做**：面板/停靠/设置清单化；多表面生成（MCP server / CLI）；七表面一致性门禁；平台级 `preflight`。
 
 ## P7 第二类：30 个图表类型清单化（2026-11-24）
 
@@ -51,6 +69,7 @@
 | `d46b8a1b` | P6 第五片：严格模式工具预算（本地供应商 12 个工具，控制/核心/配方步骤必留），框架 0.1.25 |
 | `50ca1505` | P7 第一类：37 个分析算子清单化（契约/读写形状/策略/七段技能；analysis 旧表全部改为投影） |
 | `f272770a` | P7 第二类：30 个图表类型清单化（字段/引擎/文献列/七段技能；registry 改为投影，绘图函数公开为 handler） |
+| `6a8c4025` | P7 第三类：10 个采集平台清单化（模式/字段/登录与机器要求/七段技能；值类型搬进 kernel，爬虫类成为 handler） |
 | `6e5fd4c` | 待答问题按 `question_id` 恢复；服务端派生 `message_id`；多选答案写入状态 |
 | `28d9820` | 本地 Ollama 全局强制 `think:false`；过滤残留 thinking/think 标签；UI 开关禁用 |
 | `1b69457` | 架构 ADR、问题台账、实施计划、5 个架构技能 |

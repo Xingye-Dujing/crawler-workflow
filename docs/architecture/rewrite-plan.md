@@ -205,7 +205,7 @@
 ## P6 技能/工具/小模型（2-3 周）
 
 - [x] L1/L2 分类 + 目录生成（16 个节点技能：清单第七段七段内容；`skill_catalog`/`skill_load`；生成页面有 freshness 门禁）
-- [ ] 每节点/算子/图表/平台技能七段内容（节点与算子已完成；图表/平台随各自清单化）
+- [x] 每节点/算子/图表/平台技能七段内容（16 节点、37 算子、30 图表、10 平台，全部由各自清单生成）
 - [x] catalog/search/load/read + @（`skill_catalog`/`skill_load` + `@` 引用：技能/数据集/运行/工作流/导出/文件/产物/会话）
 - [x] 配方 FSM + 工具遮罩 + 证据勾选（框架 0.1.24：`recipe_runs`/`recipe_evidence`、当前步遮罩、`recipe_start`/`recipe_skip`；产品两条通用配方与 `/recipes` API）
 - [x] 严格/普通模式（本地 `local_only` 供应商自动严格：12 个工具预算；强模型完整列表）
