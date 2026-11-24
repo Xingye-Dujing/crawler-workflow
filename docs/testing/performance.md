@@ -19,12 +19,14 @@
 |---|---|---|
 | `unit/i18n/test_i18n.py::TestKeyReachability::test_the_quote_inspection_is_actually_needed` | 16.1 | 遍历全仓文本做引号统计 |
 | `unit/frontend/test_frontend_console_js.py`（setup） | 15.4 | 每个 console 用例重新加载整页 JS |
-| `unit/crawlers/test_xhs_crawler.py`（2 例） | 15.0 ×2 | 假驱动不满足生产代码的 `WebDriverWait`，等满超时 |
-| `integration/test_douyin_crawler.py`（3 例） | 14.0 ×3 | 同上：假驱动的栅格永远“还没到”，等满超时 |
+| `unit/crawlers/test_xhs_crawler.py`（2 例） | 15.0 / 10.0 | 详情页就绪探针（`.title, #detail-title`）与基类 `open()` 的就绪探针各等满一次；已让假驱动回答 `.title` 与 `body`（一个加载完成的页面两样都有），其中一例 15 s → 10 s，剩余仍卡在基类探针 |
+| `integration/test_douyin_crawler.py`（3 例） | 14.0 ×3 | 同一形状：假驱动的栅格永远“还没到”，等满超时；未改 |
 | `unit/update/test_update.py::test_a_helper_that_never_writes_its_receipt_is_refused` | 10.1 | 真子进程等回执超时 |
 
-要再往下走，需要给这些路径加一个**时钟/等待接缝**（生产代码接受 `sleep`/`wait` 可注入，
-默认仍是真实实现），再用假时钟跑这些用例。这是下一步，不是本片的范围。
+要再往下走，需要给这些路径加一个**时钟/等待接缝**：`WebDriverWait` 的超时来自基类 `open()` 与平台
+探针，测试能替换的只有“假驱动答不答”，一旦探针本身没被回答，真实超时就是唯一结局。接缝应当加在
+`crawlers/engine/` 的就绪探针上（可注入的 `wait_for_ready`），再用假时钟跑这些用例；这是下一步，不是
+本片的范围。把假驱动改成“回答探针”能省掉一部分，但省不干净——xhs 的实测就是例子。
 
 ## 本片修掉的（14:23 → 11:36，省 2 分 47 秒）
 

@@ -115,8 +115,13 @@ class SlowDriver:
             raise TimeoutException(RENDERER_TIMEOUT)
 
     def find_element(self, by, selector):
-        if selector == 'body' and self.body_text:
+        if selector == 'body':
+            # A loaded page always has a body; empty text means "no refusal wording on screen".
             return _TextElement(self.body_text)
+        if selector == '.title, #detail-title':
+            # The note detail's own readiness probe: a page that finished loading (``get_error``
+            # False) has its title, so the wait must return instead of polling out its window.
+            return _TextElement('标题')
         raise NoSuchElementException(selector)
 
     def find_elements(self, by, selector):
